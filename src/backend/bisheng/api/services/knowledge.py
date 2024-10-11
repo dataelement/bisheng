@@ -544,7 +544,7 @@ class KnowledgeService(KnowledgeUtils):
             file_id = one["_source"]["metadata"]["file_id"]
             file_info = file_map.get(file_id, None)
             # 过滤文件名和总结的文档摘要内容
-            result.append(FileChunk(text=one["_source"]["text"].split(KnowledgeUtils.chunk_split, 1)[1],
+            result.append(FileChunk(text=one["_source"]["text"].split(KnowledgeUtils.chunk_split, 1)[-1],
                                     metadata=one["_source"]["metadata"],
                                     parse_type=file_info.parse_type if file_info else None))
         return result, res['hits']['total']['value']
