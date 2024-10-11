@@ -69,7 +69,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
         if (!form.question) {
             return message({
                 variant: 'warning',
-                description: t('enterQuestion')
+                description: t('log.enterQuestion')
             });
         }
         setLoading(true);
@@ -101,7 +101,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
 
             return message({
                 variant: 'warning',
-                description: t('qaLibQuestionAnswerRequired')
+                description: t('log.qaLibQuestionAnswerRequired')
             });
         }
 
@@ -109,13 +109,13 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
         if (_similarQuestions.some((q) => q.length > 100)) {
             return message({
                 variant: 'warning',
-                description: t('max100CharsForSimilarQuestions')
+                description: t('log.max100CharsForSimilarQuestions')
             });
         }
         if (form.answer.length > 1000) {
             return message({
                 variant: 'warning',
-                description: t('max1000CharsForAnswer')
+                description: t('log.max1000CharsForAnswer')
             });
         }
 
@@ -127,7 +127,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
         }).then(res => {
             message({
                 variant: 'success',
-                description: t('saveSuccess')
+                description: t('log.saveSuccess')
             });
         }));
         close();

@@ -52,10 +52,10 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
     const handleSubmit = async () => {
         const errors = [];
         if (knowledgeLib.length === 0) {
-            errors.push(t('qaLibRequired'));
+            errors.push(t('log.qaLibRequired'));
         }
         if (selectedItems.length === 0) {
-            errors.push(t('selectAtLeastOneQuestion'));
+            errors.push(t('log.selectAtLeastOneQuestion'));
         }
         if (errors.length > 0) {
             setError(true);
@@ -68,7 +68,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
         }).then(res => {
             message({
                 variant: 'success',
-                description: t('addSuccess')
+                description: t('log.addSuccess')
             });
             close();
         }));

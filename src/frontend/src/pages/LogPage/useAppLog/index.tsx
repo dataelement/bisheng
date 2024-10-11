@@ -87,7 +87,7 @@ export default function AppUseLog() {
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
                                 {
                                     el.chat_id && <Link
-                                        to={`/log/chatlog/${el.flow_id}/${el.chat_id}`}
+                                        to={`/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                         className="no-underline hover:underline text-primary"
                                         onClick={handleCachePage}
                                     >{t('lib.details')}</Link>

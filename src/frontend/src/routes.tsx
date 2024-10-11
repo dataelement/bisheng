@@ -78,7 +78,7 @@ const privateRouter = [
       { path: "model", element: <Navigate to="management" replace /> },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
-      { path: "log/chatlog/:fid/:cid", element: <AppChatDetail /> },
+      { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },
