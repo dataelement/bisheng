@@ -31,6 +31,7 @@ import SkillsPage from "./pages/SkillPage/tabSkills";
 import SkillToolsPage from "./pages/SkillPage/tabTools";
 import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
+import ResoucePage from "./pages/resoucePage";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -96,6 +97,10 @@ const privateRouter = [
     children: [
       { path: "", element: <EditAssistantPage /> }
     ]
+  },
+  {
+    path: "/resouce/:cid/:mid",
+    element: <ResoucePage />
   },
   // 独立会话页
   { path: "/chat/assistant/auth/:id/", element: <ChatPro type='assistant' /> },
