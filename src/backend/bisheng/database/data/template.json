@@ -20719,5 +20719,2099 @@
     },
     "order_num": 7339982,
     "guide_word": null
+  },
+  {
+    "name": "⭐双路径问答",
+    "description": "先根据用户 query 检索 QA 知识库，如有答案则直接返回结果，如未检索到则查询文档知识库，借助大模型能力生成回复。",
+    "parameters": null,
+    "flow_id": "af3eef25898a4025ad8679503e7f5c63",
+    "api_parameters": null,
+    "id": 18,
+    "data": {
+      "nodes": [
+        {
+          "id": "RuleBasedRouter-apZIq",
+          "data": {
+            "id": "RuleBasedRouter-apZIq",
+            "node": {
+              "template": {
+                "tags": {
+                  "info": "",
+                  "list": true,
+                  "name": "tags",
+                  "show": false,
+                  "type": "str",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "_type": "RuleBasedRouter",
+                "memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory",
+                  "show": true,
+                  "type": "BaseMemory",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "metadata": {
+                  "info": "",
+                  "list": false,
+                  "name": "metadata",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": true,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "langchain.callbacks.base.BaseCallbackHandler",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_node": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_node",
+                  "show": true,
+                  "type": "input",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Preset Question"
+                },
+                "rule_function": {
+                  "info": "",
+                  "list": false,
+                  "name": "rule_function",
+                  "show": true,
+                  "type": "function",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_variables": {
+                  "info": "",
+                  "list": true,
+                  "name": "input_variables",
+                  "show": true,
+                  "type": "str",
+                  "value": [
+                    "result"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "",
+              "base_classes": [
+                "Chain",
+                "RuleBasedRouter",
+                "RouterChain",
+                "function"
+              ],
+              "display_name": "RuleBasedRouter",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "RuleBasedRouter",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 343,
+          "position": {
+            "x": 1090.5431783470826,
+            "y": 1337.4878712865757
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 1090.5431783470826,
+            "y": 1337.4878712865757
+          }
+        },
+        {
+          "id": "PythonFunction-wBU1i",
+          "data": {
+            "id": "PythonFunction-wBU1i",
+            "node": {
+              "template": {
+                "code": {
+                  "info": "",
+                  "list": false,
+                  "name": "code",
+                  "show": true,
+                  "type": "code",
+                  "value": "def rule_fuc(inputs: dict) -> dict:\n    if not len(inputs['result']):\n        return {'destination': None, 'next_inputs': {\"question\": inputs['query']}}\n    else:\n        return {'destination': 'norm', 'next_inputs': inputs}",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": true,
+                  "placeholder": ""
+                },
+                "_type": "PythonFunction"
+              },
+              "description": "Python function to be executed.",
+              "base_classes": [
+                "function"
+              ],
+              "display_name": "PythonFunction",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "PythonFunction",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 255,
+          "position": {
+            "x": 533.0167005389312,
+            "y": 1571.2197796319172
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 533.0167005389312,
+            "y": 1571.2197796319172
+          }
+        },
+        {
+          "id": "PythonFunction-ChvDx",
+          "data": {
+            "id": "PythonFunction-ChvDx",
+            "node": {
+              "template": {
+                "code": {
+                  "info": "",
+                  "list": false,
+                  "name": "code",
+                  "show": true,
+                  "type": "code",
+                  "value": "def func(inputs: dict) -> dict:\n    return {'answer': inputs['result'][0], 'source_documents':''} # 仅取第一个",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": true,
+                  "placeholder": ""
+                },
+                "_type": "PythonFunction"
+              },
+              "description": "Python function to be executed.",
+              "base_classes": [
+                "function"
+              ],
+              "display_name": "PythonFunction",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "PythonFunction",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 255,
+          "position": {
+            "x": 559.9000303533428,
+            "y": 187.7892888367361
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 559.9000303533428,
+            "y": 187.7892888367361
+          }
+        },
+        {
+          "id": "TransformChain-jBTgX",
+          "data": {
+            "id": "TransformChain-jBTgX",
+            "node": {
+              "template": {
+                "tags": {
+                  "info": "",
+                  "list": true,
+                  "name": "tags",
+                  "show": false,
+                  "type": "str",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "_type": "TransformChain",
+                "memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory",
+                  "show": true,
+                  "type": "BaseMemory",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "metadata": {
+                  "info": "",
+                  "list": false,
+                  "name": "metadata",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": true,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "langchain.callbacks.base.BaseCallbackHandler",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "transform": {
+                  "info": "",
+                  "list": false,
+                  "name": "transform",
+                  "show": true,
+                  "type": "function",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_node": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_node",
+                  "show": true,
+                  "type": "input",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Preset Question"
+                },
+                "input_variables": {
+                  "info": "",
+                  "list": true,
+                  "name": "input_variables",
+                  "show": true,
+                  "type": "str",
+                  "value": [
+                    "result"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "output_variables": {
+                  "info": "",
+                  "list": true,
+                  "name": "output_variables",
+                  "show": true,
+                  "type": "str",
+                  "value": [
+                    "answer",
+                    "source_documents"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "Chain transform chain output.",
+              "base_classes": [
+                "TransformChain",
+                "Chain",
+                "function"
+              ],
+              "display_name": "TransformChain",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "TransformChain",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 495,
+          "position": {
+            "x": 1079.9109331081463,
+            "y": 153.32667222210148
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 1079.9109331081463,
+            "y": 153.32667222210148
+          }
+        },
+        {
+          "id": "SequentialChain-ZcqZ1",
+          "data": {
+            "id": "SequentialChain-ZcqZ1",
+            "node": {
+              "template": {
+                "tags": {
+                  "info": "",
+                  "list": true,
+                  "name": "tags",
+                  "show": false,
+                  "type": "str",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "_type": "SequentialChain",
+                "chains": {
+                  "info": "",
+                  "list": true,
+                  "name": "chains",
+                  "show": true,
+                  "type": "Chain",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory",
+                  "show": true,
+                  "type": "BaseMemory",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "metadata": {
+                  "info": "",
+                  "list": false,
+                  "name": "metadata",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": true,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "langchain.callbacks.base.BaseCallbackHandler",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_node": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_node",
+                  "show": true,
+                  "type": "input",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Preset Question"
+                },
+                "return_all": {
+                  "info": "",
+                  "list": false,
+                  "name": "return_all",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "chain_order": {
+                  "info": "",
+                  "list": false,
+                  "name": "chain_order",
+                  "show": true,
+                  "type": "str",
+                  "value": "[\"RetrievalChain-ryEdk\", \"MultiRuleChain-s5i5C\"]",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_variables": {
+                  "info": "",
+                  "list": true,
+                  "name": "input_variables",
+                  "show": true,
+                  "type": "str",
+                  "value": [
+                    "query"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "output_variables": {
+                  "info": "",
+                  "list": true,
+                  "name": "output_variables",
+                  "show": true,
+                  "type": "str",
+                  "value": [
+                    "answer",
+                    "source_documents"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "Chain where the outputs of one chain feed directly into next.",
+              "base_classes": [
+                "SequentialChain",
+                "Chain",
+                "function"
+              ],
+              "display_name": "SequentialChain",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "SequentialChain",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 597,
+          "position": {
+            "x": 2564.3284487322057,
+            "y": 323.87489548587064
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 2564.3284487322057,
+            "y": 323.87489548587064
+          }
+        },
+        {
+          "id": "RetrievalChain-ryEdk",
+          "data": {
+            "id": "RetrievalChain-ryEdk",
+            "node": {
+              "template": {
+                "tags": {
+                  "info": "",
+                  "list": true,
+                  "name": "tags",
+                  "show": false,
+                  "type": "str",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "_type": "RetrievalChain",
+                "memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory",
+                  "show": true,
+                  "type": "BaseMemory",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "metadata": {
+                  "info": "",
+                  "list": false,
+                  "name": "metadata",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": true,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "langchain.callbacks.base.BaseCallbackHandler",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_key": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_key",
+                  "show": true,
+                  "type": "str",
+                  "value": "query",
+                  "advanced": true,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "retriever": {
+                  "info": "",
+                  "list": false,
+                  "name": "retriever",
+                  "show": true,
+                  "type": "BaseRetriever",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_node": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_node",
+                  "show": true,
+                  "type": "input",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Preset Question"
+                },
+                "output_key": {
+                  "info": "",
+                  "list": false,
+                  "name": "output_key",
+                  "show": true,
+                  "type": "str",
+                  "value": "result",
+                  "advanced": true,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "return_source_documents": {
+                  "info": "",
+                  "list": false,
+                  "name": "return_source_documents",
+                  "show": true,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "Chain to use to combine the documents.",
+              "base_classes": [
+                "Chain",
+                "RetrievalChain",
+                "function"
+              ],
+              "display_name": "RetrievalChain",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "RetrievalChain",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 281,
+          "dragging": false,
+          "position": {
+            "x": 2057.497076783311,
+            "y": 258.5734077753632
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 2057.497076783311,
+            "y": 258.5734077753632
+          }
+        },
+        {
+          "id": "Milvus-u5L3K",
+          "data": {
+            "id": "Milvus-u5L3K",
+            "node": {
+              "template": {
+                "_type": "Milvus",
+                "drop_old": {
+                  "info": "",
+                  "list": false,
+                  "name": "drop_old",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "documents": {
+                  "info": "",
+                  "list": true,
+                  "name": "documents",
+                  "show": true,
+                  "type": "Document",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Documents"
+                },
+                "embedding": {
+                  "info": "",
+                  "list": false,
+                  "name": "embedding",
+                  "show": false,
+                  "type": "Embeddings",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Embedding"
+                },
+                "metadatas": {
+                  "info": "",
+                  "list": true,
+                  "name": "metadatas",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "search_type": {
+                  "info": "",
+                  "list": false,
+                  "name": "search_type",
+                  "type": "str",
+                  "value": "similarity",
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "index_params": {
+                  "info": "",
+                  "list": false,
+                  "name": "index_params",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "search_kwargs": {
+                  "info": "",
+                  "list": false,
+                  "name": "search_kwargs",
+                  "show": true,
+                  "type": "code",
+                  "value": "{}",
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "search_params": {
+                  "info": "",
+                  "list": false,
+                  "name": "search_params",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "collection_name": {
+                  "info": "",
+                  "list": false,
+                  "name": "collection_name",
+                  "show": true,
+                  "type": "str",
+                  "value": "毕昇产品文档",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "collection_id": 913
+                },
+                "connection_args": {
+                  "info": "",
+                  "list": false,
+                  "name": "connection_args",
+                  "show": true,
+                  "type": "code",
+                  "value": "",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "consistency_level": {
+                  "info": "",
+                  "list": false,
+                  "name": "consistency_level",
+                  "show": false,
+                  "type": "str",
+                  "value": "Session",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "Create a Milvus collection, indexes it with HNSW, and insert data.",
+              "base_classes": [
+                "Milvus",
+                "VectorStore",
+                "BaseRetriever",
+                "VectorStoreRetriever"
+              ],
+              "display_name": "Milvus",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": "http://192.168.106.116:8030"
+            },
+            "type": "Milvus",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 391,
+          "position": {
+            "x": 530.2426558007749,
+            "y": 1125.7035041561169
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 530.2426558007749,
+            "y": 1125.7035041561169
+          }
+        },
+        {
+          "id": "Milvus-8pykn",
+          "data": {
+            "id": "Milvus-8pykn",
+            "node": {
+              "template": {
+                "_type": "Milvus",
+                "drop_old": {
+                  "info": "",
+                  "list": false,
+                  "name": "drop_old",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "documents": {
+                  "info": "",
+                  "list": true,
+                  "name": "documents",
+                  "show": true,
+                  "type": "Document",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Documents"
+                },
+                "embedding": {
+                  "info": "",
+                  "list": false,
+                  "name": "embedding",
+                  "show": false,
+                  "type": "Embeddings",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Embedding"
+                },
+                "metadatas": {
+                  "info": "",
+                  "list": true,
+                  "name": "metadatas",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "search_type": {
+                  "info": "",
+                  "list": false,
+                  "name": "search_type",
+                  "show": true,
+                  "type": "str",
+                  "value": "similarity_score_threshold",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "index_params": {
+                  "info": "",
+                  "list": false,
+                  "name": "index_params",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "search_kwargs": {
+                  "info": "",
+                  "list": false,
+                  "name": "search_kwargs",
+                  "show": true,
+                  "type": "code",
+                  "value": "{\"k\": 1, \"score_threshold\": 0.9}",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "search_params": {
+                  "info": "",
+                  "list": false,
+                  "name": "search_params",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "collection_name": {
+                  "info": "",
+                  "list": false,
+                  "name": "collection_name",
+                  "show": true,
+                  "type": "str",
+                  "value": "毕昇 QA 知识库",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "collection_id": 1175
+                },
+                "connection_args": {
+                  "info": "",
+                  "list": false,
+                  "name": "connection_args",
+                  "show": true,
+                  "type": "code",
+                  "value": "",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "consistency_level": {
+                  "info": "",
+                  "list": false,
+                  "name": "consistency_level",
+                  "show": false,
+                  "type": "str",
+                  "value": "Session",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "Create a Milvus collection, indexes it with HNSW, and insert data.",
+              "base_classes": [
+                "Milvus",
+                "VectorStore",
+                "BaseRetriever",
+                "VectorStoreRetriever"
+              ],
+              "display_name": "Milvus",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": "http://192.168.106.116:8030"
+            },
+            "type": "Milvus",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 555,
+          "position": {
+            "x": 1580.3969067852756,
+            "y": 20
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 1580.3969067852756,
+            "y": 20
+          }
+        },
+        {
+          "id": "ConversationalRetrievalChain-aS5HY",
+          "data": {
+            "id": "ConversationalRetrievalChain-aS5HY",
+            "node": {
+              "template": {
+                "llm": {
+                  "info": "",
+                  "list": false,
+                  "name": "llm",
+                  "show": true,
+                  "type": "BaseLanguageModel",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "_type": "ConversationalRetrievalChain",
+                "memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory",
+                  "show": true,
+                  "type": "BaseChatMemory",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": false,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "Callbacks",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "retriever": {
+                  "info": "",
+                  "list": false,
+                  "name": "retriever",
+                  "show": true,
+                  "type": "BaseRetriever",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "chain_type": {
+                  "info": "",
+                  "list": true,
+                  "name": "chain_type",
+                  "show": true,
+                  "type": "str",
+                  "value": "stuff",
+                  "options": [
+                    "stuff",
+                    "map_reduce",
+                    "map_rerank",
+                    "refine"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_node": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_node",
+                  "show": true,
+                  "type": "input",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Preset Question"
+                },
+                "document_prompt": {
+                  "info": "",
+                  "list": false,
+                  "name": "document_prompt",
+                  "show": true,
+                  "type": "BasePromptTemplate",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "condense_question_llm": {
+                  "info": "",
+                  "list": false,
+                  "name": "condense_question_llm",
+                  "show": false,
+                  "type": "BaseLanguageModel",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "return_source_documents": {
+                  "info": "",
+                  "list": false,
+                  "name": "return_source_documents",
+                  "show": true,
+                  "type": "bool",
+                  "value": true,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Return source documents"
+                },
+                "condense_question_prompt": {
+                  "info": "",
+                  "list": false,
+                  "name": "condense_question_prompt",
+                  "show": true,
+                  "type": "BasePromptTemplate",
+                  "value": {
+                    "_type": "prompt",
+                    "template": "Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.\n\nChat History:\n{chat_history}\nFollow Up Input: {question}\nStandalone question:",
+                    "output_parser": null,
+                    "input_variables": [
+                      "chat_history",
+                      "question"
+                    ],
+                    "template_format": "f-string",
+                    "partial_variables": {},
+                    "validate_template": true
+                  },
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "combine_docs_chain_kwargs": {
+                  "info": "",
+                  "list": false,
+                  "name": "combine_docs_chain_kwargs",
+                  "show": true,
+                  "type": "BasePromptTemplate",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "prompt"
+                }
+              },
+              "description": "Convenience method to load chain from LLM and retriever.",
+              "base_classes": [
+                "BaseConversationalRetrievalChain",
+                "ConversationalRetrievalChain",
+                "Chain",
+                "function"
+              ],
+              "display_name": "ConversationalRetrievalChain",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": "https://python.langchain.com/docs/modules/chains/popular/chat_vector_db"
+            },
+            "type": "ConversationalRetrievalChain",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 531,
+          "position": {
+            "x": 1086.9760375800056,
+            "y": 720.4023383381091
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 1086.9760375800056,
+            "y": 720.4023383381091
+          }
+        },
+        {
+          "id": "ConversationBufferMemory-i1PuB",
+          "data": {
+            "id": "ConversationBufferMemory-i1PuB",
+            "node": {
+              "template": {
+                "_type": "ConversationBufferMemory",
+                "ai_prefix": {
+                  "info": "",
+                  "list": false,
+                  "name": "ai_prefix",
+                  "show": false,
+                  "type": "str",
+                  "value": "AI",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_key": {
+                  "info": "The variable to be used as Chat Input when more than one variable is available.",
+                  "list": false,
+                  "name": "input_key",
+                  "show": true,
+                  "type": "str",
+                  "value": "",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "memory_key": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory_key",
+                  "show": true,
+                  "type": "str",
+                  "value": "chat_history",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "output_key": {
+                  "info": "The variable to be used as Chat Output (e.g. answer in a ConversationalRetrievalChain)",
+                  "list": false,
+                  "name": "output_key",
+                  "show": true,
+                  "type": "str",
+                  "value": "answer",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "chat_memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "chat_memory",
+                  "show": true,
+                  "type": "BaseChatMessageHistory",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "human_prefix": {
+                  "info": "",
+                  "list": false,
+                  "name": "human_prefix",
+                  "show": false,
+                  "type": "str",
+                  "value": "Human",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "return_messages": {
+                  "info": "",
+                  "list": false,
+                  "name": "return_messages",
+                  "show": true,
+                  "type": "bool",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "Buffer for storing conversation memory.",
+              "base_classes": [
+                "BaseMemory",
+                "ConversationBufferMemory",
+                "BaseChatMemory"
+              ],
+              "display_name": "ConversationBufferMemory",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": "https://python.langchain.com/docs/modules/memory/how_to/buffer"
+            },
+            "type": "ConversationBufferMemory",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 527,
+          "position": {
+            "x": 529.901784761903,
+            "y": 539.0200298494985
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 529.901784761903,
+            "y": 539.0200298494985
+          }
+        },
+        {
+          "id": "MultiRuleChain-s5i5C",
+          "data": {
+            "id": "MultiRuleChain-s5i5C",
+            "node": {
+              "template": {
+                "tags": {
+                  "info": "",
+                  "list": true,
+                  "name": "tags",
+                  "show": false,
+                  "type": "str",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "_type": "MultiRuleChain",
+                "memory": {
+                  "info": "",
+                  "list": false,
+                  "name": "memory",
+                  "show": true,
+                  "type": "BaseMemory",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "metadata": {
+                  "info": "",
+                  "list": false,
+                  "name": "metadata",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "LLMChains": {
+                  "info": "",
+                  "list": true,
+                  "name": "LLMChains",
+                  "show": true,
+                  "type": "Chain",
+                  "value": "[]",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": true,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "langchain.callbacks.base.BaseCallbackHandler",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "input_node": {
+                  "info": "",
+                  "list": false,
+                  "name": "input_node",
+                  "show": true,
+                  "type": "input",
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": "",
+                  "display_name": "Preset Question"
+                },
+                "router_chain": {
+                  "info": "",
+                  "list": false,
+                  "name": "router_chain",
+                  "show": true,
+                  "type": "RouterChain",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "default_chain": {
+                  "info": "",
+                  "list": false,
+                  "name": "default_chain",
+                  "show": true,
+                  "type": "Chain",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "silent_errors": {
+                  "info": "",
+                  "list": false,
+                  "name": "silent_errors",
+                  "show": false,
+                  "type": "bool",
+                  "value": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "output_variables": {
+                  "info": "",
+                  "list": true,
+                  "name": "output_variables",
+                  "show": true,
+                  "type": "str",
+                  "value": [
+                    "source_documents",
+                    "answer"
+                  ],
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "destination_chains": {
+                  "info": "",
+                  "list": false,
+                  "name": "destination_chains",
+                  "show": false,
+                  "type": "code",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                },
+                "destination_chain_name": {
+                  "info": "{chain_id: name}",
+                  "list": true,
+                  "name": "destination_chain_name",
+                  "show": true,
+                  "type": "NestedDict",
+                  "value": "{\"TransformChain-jBTgX\": \"norm\"}",
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "multiline": false,
+                  "placeholder": ""
+                }
+              },
+              "description": "",
+              "base_classes": [
+                "MultiRouteChain",
+                "Chain",
+                "MultiRuleChain",
+                "function"
+              ],
+              "display_name": "MultiRuleChain",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": ""
+            },
+            "type": "MultiRuleChain",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 549,
+          "position": {
+            "x": 1797.4648135923264,
+            "y": 753.8514799486979
+          },
+          "selected": false,
+          "positionAbsolute": {
+            "x": 1797.4648135923264,
+            "y": 753.8514799486979
+          }
+        },
+        {
+          "id": "BishengLLM-90fb5",
+          "data": {
+            "id": "BishengLLM-90fb5",
+            "node": {
+              "beta": false,
+              "template": {
+                "llm": {
+                  "info": "",
+                  "list": false,
+                  "name": "llm",
+                  "show": false,
+                  "type": "BaseChatModel",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Llm",
+                  "model_config": {}
+                },
+                "name": {
+                  "info": "",
+                  "list": false,
+                  "name": "name",
+                  "show": false,
+                  "type": "str",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Name",
+                  "model_config": {}
+                },
+                "tags": {
+                  "info": "",
+                  "list": true,
+                  "name": "tags",
+                  "show": false,
+                  "type": "str",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Tags",
+                  "model_config": {}
+                },
+                "_type": "BishengLLM",
+                "cache": {
+                  "info": "",
+                  "list": false,
+                  "name": "cache",
+                  "show": true,
+                  "type": "bool",
+                  "value": true,
+                  "dynamic": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Cache",
+                  "model_config": {}
+                },
+                "top_p": {
+                  "info": "",
+                  "list": false,
+                  "name": "top_p",
+                  "show": true,
+                  "type": "float",
+                  "value": 1,
+                  "dynamic": false,
+                  "advanced": true,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Top P",
+                  "model_config": {}
+                },
+                "verbose": {
+                  "info": "",
+                  "list": false,
+                  "name": "verbose",
+                  "show": false,
+                  "type": "bool",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Verbose",
+                  "model_config": {}
+                },
+                "metadata": {
+                  "info": "",
+                  "list": false,
+                  "name": "metadata",
+                  "show": false,
+                  "type": "code",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Metadata",
+                  "model_config": {}
+                },
+                "model_id": {
+                  "info": "",
+                  "list": false,
+                  "name": "model_id",
+                  "show": true,
+                  "type": "bisheng_model",
+                  "value": 58,
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": true,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Model Name",
+                  "model_config": {}
+                },
+                "callbacks": {
+                  "info": "",
+                  "list": true,
+                  "name": "callbacks",
+                  "show": false,
+                  "type": "langchain_core.callbacks.base.BaseCallbackHandler",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Callbacks",
+                  "model_config": {}
+                },
+                "streaming": {
+                  "info": "",
+                  "list": false,
+                  "name": "streaming",
+                  "show": true,
+                  "type": "bool",
+                  "value": true,
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Streaming",
+                  "model_config": {}
+                },
+                "model_info": {
+                  "info": "",
+                  "list": false,
+                  "name": "model_info",
+                  "show": false,
+                  "type": "LLMModel",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Model Info",
+                  "model_config": {}
+                },
+                "model_name": {
+                  "info": "",
+                  "list": false,
+                  "name": "model_name",
+                  "show": false,
+                  "type": "str",
+                  "value": "",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Model Name",
+                  "model_config": {}
+                },
+                "server_info": {
+                  "info": "",
+                  "list": false,
+                  "name": "server_info",
+                  "show": false,
+                  "type": "LLMServer",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Server Info",
+                  "model_config": {}
+                },
+                "temperature": {
+                  "info": "",
+                  "list": false,
+                  "name": "temperature",
+                  "show": true,
+                  "type": "float",
+                  "value": 0.3,
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Temperature",
+                  "model_config": {}
+                },
+                "llm_node_type": {
+                  "info": "",
+                  "list": false,
+                  "name": "llm_node_type",
+                  "show": false,
+                  "type": "code",
+                  "value": {
+                    "qwen": "ChatOpenAI",
+                    "vllm": "ChatOpenAI",
+                    "spark": "ChatOpenAI",
+                    "zhipu": "ChatOpenAI",
+                    "ollama": "ChatOllama",
+                    "openai": "ChatOpenAI",
+                    "minimax": "ChatOpenAI",
+                    "qianfan": "ChatWenxin",
+                    "deepseek": "ChatOpenAI",
+                    "llamacpp": "ChatOpenAI",
+                    "anthropic": "ChatAnthropic",
+                    "bisheng_rt": "HostChatGLM",
+                    "xinference": "ChatOpenAI",
+                    "azure_openai": "AzureChatOpenAI"
+                  },
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Llm Node Type",
+                  "model_config": {}
+                },
+                "custom_get_token_ids": {
+                  "info": "",
+                  "list": true,
+                  "name": "custom_get_token_ids",
+                  "show": false,
+                  "type": "str",
+                  "dynamic": false,
+                  "advanced": false,
+                  "password": false,
+                  "required": false,
+                  "file_path": "",
+                  "multiline": false,
+                  "title_case": true,
+                  "placeholder": "",
+                  "display_name": "Custom Get Token Ids",
+                  "model_config": {}
+                }
+              },
+              "description": "Use the llm model that has been launched in model management",
+              "base_classes": [
+                "BaseLanguageModel",
+                "BaseChatModel",
+                "BishengLLM",
+                "BaseLLM"
+              ],
+              "display_name": "BishengLLM",
+              "output_types": [],
+              "custom_fields": {},
+              "documentation": "",
+              "field_formatters": {}
+            },
+            "type": "BishengLLM",
+            "value": null
+          },
+          "type": "genericNode",
+          "width": 384,
+          "height": 427,
+          "position": {
+            "x": 28.23285856810943,
+            "y": 309.62500515920107
+          },
+          "positionAbsolute": {
+            "x": 28.23285856810943,
+            "y": 309.62500515920107
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "reactflow__edge-PythonFunction-wBU1iPythonFunction|PythonFunction-wBU1i|function-RuleBasedRouter-apZIqfunction|rule_function|RuleBasedRouter-apZIq",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "PythonFunction-wBU1i",
+          "target": "RuleBasedRouter-apZIq",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "PythonFunction|PythonFunction-wBU1i|function",
+          "targetHandle": "function|rule_function|RuleBasedRouter-apZIq"
+        },
+        {
+          "id": "reactflow__edge-PythonFunction-ChvDxPythonFunction|PythonFunction-ChvDx|function-TransformChain-jBTgXfunction|transform|TransformChain-jBTgX",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "PythonFunction-ChvDx",
+          "target": "TransformChain-jBTgX",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "PythonFunction|PythonFunction-ChvDx|function",
+          "targetHandle": "function|transform|TransformChain-jBTgX"
+        },
+        {
+          "id": "reactflow__edge-RetrievalChain-ryEdkRetrievalChain|RetrievalChain-ryEdk|Chain|RetrievalChain|function-SequentialChain-ZcqZ1Chain|chains|SequentialChain-ZcqZ1",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "RetrievalChain-ryEdk",
+          "target": "SequentialChain-ZcqZ1",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "RetrievalChain|RetrievalChain-ryEdk|Chain|RetrievalChain|function",
+          "targetHandle": "Chain|chains|SequentialChain-ZcqZ1"
+        },
+        {
+          "id": "reactflow__edge-Milvus-8pyknMilvus|Milvus-8pykn|Milvus|VectorStore|BaseRetriever|VectorStoreRetriever-RetrievalChain-ryEdkBaseRetriever|retriever|RetrievalChain-ryEdk",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "Milvus-8pykn",
+          "target": "RetrievalChain-ryEdk",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "Milvus|Milvus-8pykn|Milvus|VectorStore|BaseRetriever|VectorStoreRetriever",
+          "targetHandle": "BaseRetriever|retriever|RetrievalChain-ryEdk"
+        },
+        {
+          "id": "reactflow__edge-ConversationBufferMemory-i1PuBConversationBufferMemory|ConversationBufferMemory-i1PuB|BaseMemory|ConversationBufferMemory|BaseChatMemory-ConversationalRetrievalChain-aS5HYBaseChatMemory|memory|ConversationalRetrievalChain-aS5HY",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "ConversationBufferMemory-i1PuB",
+          "target": "ConversationalRetrievalChain-aS5HY",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "ConversationBufferMemory|ConversationBufferMemory-i1PuB|BaseMemory|ConversationBufferMemory|BaseChatMemory",
+          "targetHandle": "BaseChatMemory|memory|ConversationalRetrievalChain-aS5HY"
+        },
+        {
+          "id": "reactflow__edge-Milvus-u5L3KMilvus|Milvus-u5L3K|Milvus|VectorStore|BaseRetriever|VectorStoreRetriever-ConversationalRetrievalChain-aS5HYBaseRetriever|retriever|ConversationalRetrievalChain-aS5HY",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "Milvus-u5L3K",
+          "target": "ConversationalRetrievalChain-aS5HY",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "Milvus|Milvus-u5L3K|Milvus|VectorStore|BaseRetriever|VectorStoreRetriever",
+          "targetHandle": "BaseRetriever|retriever|ConversationalRetrievalChain-aS5HY"
+        },
+        {
+          "id": "reactflow__edge-ConversationalRetrievalChain-aS5HYConversationalRetrievalChain|ConversationalRetrievalChain-aS5HY|BaseConversationalRetrievalChain|ConversationalRetrievalChain|Chain|function-MultiRuleChain-s5i5CChain|default_chain|MultiRuleChain-s5i5C",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "ConversationalRetrievalChain-aS5HY",
+          "target": "MultiRuleChain-s5i5C",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "ConversationalRetrievalChain|ConversationalRetrievalChain-aS5HY|BaseConversationalRetrievalChain|ConversationalRetrievalChain|Chain|function",
+          "targetHandle": "Chain|default_chain|MultiRuleChain-s5i5C"
+        },
+        {
+          "id": "reactflow__edge-RuleBasedRouter-apZIqRuleBasedRouter|RuleBasedRouter-apZIq|Chain|RuleBasedRouter|RouterChain|function-MultiRuleChain-s5i5CRouterChain|router_chain|MultiRuleChain-s5i5C",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "RuleBasedRouter-apZIq",
+          "target": "MultiRuleChain-s5i5C",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "RuleBasedRouter|RuleBasedRouter-apZIq|Chain|RuleBasedRouter|RouterChain|function",
+          "targetHandle": "RouterChain|router_chain|MultiRuleChain-s5i5C"
+        },
+        {
+          "id": "reactflow__edge-TransformChain-jBTgXTransformChain|TransformChain-jBTgX|TransformChain|Chain|function-MultiRuleChain-s5i5CChain|LLMChains|MultiRuleChain-s5i5C",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "TransformChain-jBTgX",
+          "target": "MultiRuleChain-s5i5C",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "TransformChain|TransformChain-jBTgX|TransformChain|Chain|function",
+          "targetHandle": "Chain|LLMChains|MultiRuleChain-s5i5C"
+        },
+        {
+          "id": "reactflow__edge-MultiRuleChain-s5i5CMultiRuleChain|MultiRuleChain-s5i5C|MultiRouteChain|Chain|MultiRuleChain|function-SequentialChain-ZcqZ1Chain|chains|SequentialChain-ZcqZ1",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "MultiRuleChain-s5i5C",
+          "target": "SequentialChain-ZcqZ1",
+          "animated": false,
+          "selected": false,
+          "className": "",
+          "sourceHandle": "MultiRuleChain|MultiRuleChain-s5i5C|MultiRouteChain|Chain|MultiRuleChain|function",
+          "targetHandle": "Chain|chains|SequentialChain-ZcqZ1"
+        },
+        {
+          "id": "reactflow__edge-BishengLLM-90fb5BishengLLM|BishengLLM-90fb5|BaseLanguageModel|BaseChatModel|BishengLLM|BaseLLM-ConversationalRetrievalChain-aS5HYBaseLanguageModel|llm|ConversationalRetrievalChain-aS5HY",
+          "style": {
+            "stroke": "#555"
+          },
+          "source": "BishengLLM-90fb5",
+          "target": "ConversationalRetrievalChain-aS5HY",
+          "animated": true,
+          "className": "",
+          "sourceHandle": "BishengLLM|BishengLLM-90fb5|BaseLanguageModel|BaseChatModel|BishengLLM|BaseLLM",
+          "targetHandle": "BaseLanguageModel|llm|ConversationalRetrievalChain-aS5HY"
+        }
+      ],
+      "viewport": {
+        "x": 225.28428971100584,
+        "y": 29.796964200189848,
+        "zoom": 0.4237881536268718
+      }
+    },
+    "order_num": 1,
+    "guide_word": null
   }
 ]
