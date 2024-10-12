@@ -42,3 +42,5 @@ env:
   office_url: http://IP:8701 # onlyoffice 组件地址，需要浏览器能直接访问
   # 是否展示前端界面上的github和帮助链接
   show_github_and_help: true
+  # 是否开启注册
+  enable_registration: true
