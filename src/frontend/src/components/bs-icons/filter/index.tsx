@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Filter } from "./Filter.svg";
+import Filter from "./Filter.svg?react";
 
 export const FilterIcon = forwardRef<
     SVGSVGElement & { className: any },

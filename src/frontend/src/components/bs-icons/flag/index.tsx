@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Flag } from "./Flag.svg";
+import Flag from "./Flag.svg?react";
 
 export const FlagIcon = forwardRef<
     SVGSVGElement & { className: any },

@@ -3,7 +3,7 @@ import { Button } from "@/components/bs-ui/button";
 import { getSSOurlApi } from "@/controllers/API/pro";
 import { useEffect, useRef, useState } from "react";
 //@ts-ignore
-import { ReactComponent as Wxpro } from "./icons/wxpro.svg";
+import Wxpro from "./icons/wxpro.svg?react";
 import { useTranslation } from "react-i18next";
 
 export default function LoginBridge({ onHasLdap }) {

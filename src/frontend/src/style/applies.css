@@ -1008,4 +1008,69 @@
     @apply flex justify-between items-center
   }
 
+  .dragging {
+    background-color: var(--tw-bg-muted);
+    border-color: var(--tw-border-gray-200);
+  }
+
+  .bisheng-node {
+    @apply relative flex w-96 flex-col justify-center shadow-md border rounded-md bg-accent
+  }
+  .bisheng-node.active{
+    @apply border-primary
+  }
+  .bisheng-node-head{
+    overflow: hidden;
+    position: relative;
+    @apply rounded-t-sm
+  }
+  .bisheng-node-head::before{
+    content: '';
+    position: absolute;
+    top: -250px;
+    left: -50%;
+    width: 200%;
+    height: 500px;
+    background-color: #FA8BFF;
+    background-image: linear-gradient(45deg, #024de3 0%, #2BD2FF 90%);
+    animation: rotateBG 4s linear infinite;
+  }
+  .bisheng-node.active .bisheng-node-head::before{
+    /* animation: rotateBG 4s linear infinite; */
+  }
+  @keyframes rotateBG {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .bisheng-flow-handle {
+    @apply h-3 w-3 border-2 border-primary hover:scale-[2] transition translate-x-0 bg-background;
+  }
+  .bisheng-flow-handle::before {
+    content: '';
+    @apply absolute bg-[#fff] w-[1px] h-full top-0 left-1/2 transform -translate-x-1/2 opacity-0 transition-opacity duration-300;
+  }
+  
+  .bisheng-flow-handle::after {
+    content: '';
+    @apply absolute bg-[#fff] h-[1px] w-full left-0 top-1/2 transform -translate-y-1/2 opacity-0 transition-opacity duration-300;
+  }
+  
+  .bisheng-flow-handle:hover {
+    @apply bg-primary;
+  }
+  
+  .bisheng-flow-handle:hover::before,
+  .bisheng-flow-handle:hover::after {
+    @apply opacity-100 ;
+  }
+  /* .bisheng-flow-handle:hover::after{
+    content: '';
+    @apply size-full rounded-full absolute bg-primary top-0 animate-ping pointer-events-none
+  } */
 }

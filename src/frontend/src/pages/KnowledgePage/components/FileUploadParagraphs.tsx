@@ -2,12 +2,13 @@ import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
 import SelectSearch from "@/components/bs-ui/select/select";
 import { delChunkInPreviewApi, previewFileSplitApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { InfoCircledIcon } from "@radix-ui/react-icons";
+import { Info } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ParagraphEdit from "./ParagraphEdit";
 import { ParagraphsItem } from "./Paragraphs";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChange }: any, ref) {
     const { id } = useParams()
@@ -101,7 +102,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     if (loading) return (
         <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>
     )
 
@@ -117,7 +118,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 }}>
             </SelectSearch>
             <div className={`${change ? '' : 'hidden'} flex items-center`}>
-                <InfoCircledIcon className='mr-1 text-red-500' />
+                <Info className='mr-1 text-red-500' />
                 <span className="text-red-500">{t('policyChangeDetected', { ns: 'knowledge' })}</span>
                 <span className="text-primary cursor-pointer" onClick={handleReload}>{t('regeneratePreview', { ns: 'knowledge' })}</span>
             </div>

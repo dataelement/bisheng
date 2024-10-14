@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Dataset } from "./Dataset.svg";
+import Dataset from "./Dataset.svg?react";
 
 export const DatasetIcon = forwardRef<
     SVGSVGElement & { className: any },

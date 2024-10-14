@@ -1,4 +1,7 @@
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
 import { Input } from "../../../components/bs-ui/input";
 import {
@@ -10,11 +13,8 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { addServiceApi, deleteServiceApi, getServicesApi } from "../../../controllers/API";
-import { useCopyText } from "../../../util/hook";
-import { useTranslation } from "react-i18next";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import { PlusIcon } from "@radix-ui/react-icons";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { useCopyText } from "../../../util/hook";
 
 export default function RTConfig({ open, onChange }) {
 
@@ -77,7 +77,7 @@ export default function RTConfig({ open, onChange }) {
             </div>
             <DialogFooter>
                 <div className="flex justify-start mt-4">
-                    <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><PlusIcon className="mr-2" />{t('bs:create')}</Button>
+                    <Button variant='outline' className="flex w-[120px]" onClick={() => setShowAdd(true)}><Plus className="mr-2 size-5" />{t('bs:create')}</Button>
                 </div>
             </DialogFooter>
         </DialogContent>

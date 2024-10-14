@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Log } from "./Log.svg";
+import Log from "./Log.svg?react";
 
 export const LogIcon = forwardRef<
     SVGSVGElement & { className: any },

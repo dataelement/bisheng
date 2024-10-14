@@ -1,10 +1,8 @@
+import { CircleMinus, Eye, EyeOff } from "lucide-react"
 import * as React from "react"
-import { cname } from "../utils"
-import { SearchIcon } from "../../bs-icons/search"
-import { generateUUID } from "../utils"
-import { MinusCircledIcon } from "@radix-ui/react-icons"
-import { EyeOpenIcon, EyeNoneIcon } from "@radix-ui/react-icons"
 import { useState } from "react"
+import { SearchIcon } from "../../bs-icons/search"
+import { cname, generateUUID } from "../utils"
 
 export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
@@ -81,8 +79,8 @@ const PasswordInput = React.forwardRef<HTMLInputElement, InputProps & { inputCla
             <Input type={type} ref={ref} className={cname("pr-8 bg-search-input", inputClassName)} {...props}></Input>
             {
                 type === 'password'
-                    ? <EyeNoneIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)} />
-                    : <EyeOpenIcon onClick={handleShowPwd} className={cname("absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)} />
+                    ? <EyeOff onClick={handleShowPwd} className={cname("size-4 absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)} />
+                    : <Eye onClick={handleShowPwd} className={cname("size-4 absolute right-2 text-gray-950 dark:text-gray-500 cursor-pointer", iconClassName)} />
             }
         </div>
     }
@@ -221,10 +219,11 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                         // }}
                         ></Input>
                         <p className="text-sm text-red-500" style={{ display: 'none' }}></p>
-                        {index !== inputs.length - 1 && <MinusCircledIcon onClick={(e) => {
-                            e.target.previousSibling.style.display = 'none';
-                            handleRemoveInput(item.id)
-                        }} className="absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
+                        {index !== inputs.length - 1 && <CircleMinus
+                            onClick={(e) => {
+                                e.target.previousSibling.style.display = 'none';
+                                handleRemoveInput(item.id)
+                            }} className="w-4 h-4 absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>
                 ))
             }
@@ -232,4 +231,4 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     }
 )
 
-export { Input, SearchInput, PasswordInput, Textarea, InputList }
+export { Input, InputList, PasswordInput, SearchInput, Textarea }

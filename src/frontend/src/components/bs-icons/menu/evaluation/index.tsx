@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Icon } from "./Evaluation.svg";
+import Icon from "./Evaluation.svg?react";
 
 export const EvaluatingIcon = forwardRef<
     SVGSVGElement & { className: any },

@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Tip } from "./icon.svg";
+import Tip from "./icon.svg?react";
 
 export const TipIcon = forwardRef<
     SVGSVGElement & { className: any },

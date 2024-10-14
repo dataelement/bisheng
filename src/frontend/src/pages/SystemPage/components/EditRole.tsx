@@ -16,6 +16,7 @@ import { alertContext } from "../../../contexts/alertContext";
 import { createRole, getGroupResourcesApi, getRolePermissionsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const SearchPanne = ({ groupId, title, type, children }) => {
     const { page, pageSize, data, total, loading, setPage, search } = useTable({ pageSize: 10 }, (params) => {
@@ -47,7 +48,7 @@ const SearchPanne = ({ groupId, title, type, children }) => {
         <div className="mt-4">
             {loading ?
                 <div className="w-full h-[468px] flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <span className="loading loading-infinity loading-lg"></span>
+                    <LoadingIcon />
                 </div>
                 : children(data)}
         </div>

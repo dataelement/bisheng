@@ -2,6 +2,14 @@ import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import CrashErrorComponent from "./components/CrashErrorComponent";
 import MainLayout from "./layout/MainLayout";
+import SkillAssisPage from "./pages/BuildPage/assistant";
+import EditAssistantPage from "./pages/BuildPage/assistant/editAssistant";
+import Templates from "./pages/BuildPage/skillTemps";
+import SkillsPage from "./pages/BuildPage/skills";
+import FlowPage from "./pages/BuildPage/skills/editSkill";
+import FlowPage2 from "./pages/BuildPage/flow";
+import L2Edit from "./pages/BuildPage/skills/l2Edit";
+import SkillToolsPage from "./pages/BuildPage/tools";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatShare from "./pages/ChatAppPage/chatShare";
@@ -10,10 +18,9 @@ import DataSetPage from "./pages/DataSetPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
+import KnowledgePage from "./pages/KnowledgePage";
 import FilesPage from "./pages/KnowledgePage/detail";
 import FilesUpload from "./pages/KnowledgePage/filesUpload";
-import FlowPage from "./pages/FlowPage";
-import KnowledgePage from "./pages/KnowledgePage";
 import QasPage from "./pages/KnowledgePage/qas";
 import LogPage from "./pages/LogPage";
 import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
@@ -24,14 +31,7 @@ import { Finetune } from "./pages/ModelPage/finetune";
 import Management from "./pages/ModelPage/manage";
 import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
-import EditAssistantPage from "./pages/SkillPage/editAssistant";
-import L2Edit from "./pages/SkillPage/l2Edit";
-import SkillAssisPage from "./pages/SkillPage/tabAssistant";
-import SkillsPage from "./pages/SkillPage/tabSkills";
-import SkillToolsPage from "./pages/SkillPage/tabTools";
-import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
-
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
 // const FilesPage = lazy(() => import(/* webpackChunkName: "FilesPage" */ "./pages/FileLibPage/files"));
@@ -89,6 +89,13 @@ const privateRouter = [
     path: "/flow/:id/",
     children: [
       { path: "", element: <ErrorHoc Comp={FlowPage} /> }
+    ]
+  },
+  {
+    // test
+    path: "/gaga/:id/",
+    children: [
+      { path: "", element: <ErrorHoc Comp={FlowPage2} /> }
     ]
   },
   {

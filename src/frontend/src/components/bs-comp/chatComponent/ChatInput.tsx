@@ -6,11 +6,11 @@ import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { formatDate } from "@/util/utils";
-import { StopIcon } from "@radix-ui/react-icons";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
+import { CirclePause } from "lucide-react";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
     const { toast } = useToast()
@@ -339,7 +339,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     setStop({ show: true, disable: true });
                     setAutogenStop(false)
                     sendWsMsg({ "action": "stop" });
-                }}><StopIcon className="mr-2" />Stop</Button>}
+                }}><CirclePause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea

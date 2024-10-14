@@ -1,4 +1,4 @@
-import { IconCheck, IconClipboard, IconDownload } from "@tabler/icons-react";
+import { Download, Check, Clipboard } from 'lucide-react';
 import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
@@ -48,11 +48,11 @@ export function CodeBlock({ language, value }) {
 
         <div className="flex items-center">
           <button className="code-block-modal-button" onClick={copyToClipboard}>
-            {isCopied ? <IconCheck size={18} /> : <IconClipboard size={18} />}
+            {isCopied ? <Check size={18} /> : <Clipboard size={18} />}
             {isCopied ? "Copied!" : "Copy code"}
           </button>
           <button className="code-block-modal-button" onClick={downloadAsFile}>
-            <IconDownload size={18} />
+            <Download size={18} />
           </button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Skill } from "./Skill.svg";
+import Skill from "./Skill.svg?react";
 
 export const SkillIcon = forwardRef<
     SVGSVGElement & { className: any },

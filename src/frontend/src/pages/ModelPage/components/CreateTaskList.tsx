@@ -50,7 +50,7 @@ export default function CreateTaskList({ onChange }) {
                 <Label>{t('finetune.customSampleSize')}</Label>
                 <TooltipProvider>
                     <Tooltip>
-                        <TooltipTrigger><HelpCircle size={18} /></TooltipTrigger>
+                        <TooltipTrigger><HelpCircle size={16} /></TooltipTrigger>
                         <TooltipContent>
                             <p>{t('finetune.customSampleSizeTooltip1')}</p>
                             <p>{t('finetune.customSampleSizeTooltip2')}</p>
@@ -109,7 +109,7 @@ export default function CreateTaskList({ onChange }) {
                                         return newData
                                     })
                                 }}
-                            >{t('delete')}</Button>
+                            >{t('delete', { ns: 'bs' })}</Button>
                             {isCustom ?
                                 <Input
                                     placeholder={t('finetune.sampleSizePlaceholder')}

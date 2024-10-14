@@ -6,6 +6,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModelSelect } from "./KnowledgeModel";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function EvaluationModel({ llmOptions, onBack }) {
     const { t } = useTranslation('model')
@@ -33,7 +34,7 @@ export default function EvaluationModel({ llmOptions, onBack }) {
     };
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <span className="loading loading-infinity loading-lg"></span>
+        <LoadingIcon />
     </div>
 
     return (

@@ -16,6 +16,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -160,7 +161,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
 
     if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {chatId && <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">

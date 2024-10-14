@@ -2,8 +2,7 @@ import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { updateKnowledgeApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Pencil2Icon } from "@radix-ui/react-icons";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, SquarePen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -56,7 +55,7 @@ export default function Header() {
                 {/* edit dialog */}
                 <Dialog open={open} onOpenChange={setOpen} >
                     <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="group-hover:visible invisible"><Pencil2Icon /></Button>
+                        <Button variant="ghost" size="icon" className="group-hover:visible invisible"><SquarePen className="w-4 h-4" /></Button>
                     </DialogTrigger>
                     {
                         open && <KnowledgeBaseSettingsDialog initialName={libInfo.name} initialDesc={libInfo.desc} onSave={handleSave}></KnowledgeBaseSettingsDialog>

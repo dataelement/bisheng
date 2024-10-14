@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Search } from "./Search.svg";
+import Search from "./Search.svg?react";
 
 export const SearchIcon = forwardRef<
     SVGSVGElement & { className: any },

@@ -1,7 +1,7 @@
 import AceEditor from "react-ace";
 // import "ace-builds/webpack-resolver";
 import { useContext, useEffect, useRef, useState } from "react";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
 import BaseModal from "../baseModal";
 import { BookMarked } from "lucide-react";
 import { useTranslation } from "react-i18next";

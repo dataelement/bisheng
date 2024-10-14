@@ -3,7 +3,7 @@ import { KeyPairListComponentType } from "../../types/components";
 
 import cloneDeep from "lodash-es/cloneDeep";
 import { classNames } from "../../util/utils";
-import { Input } from "../ui/input";
+import { Input } from "../bs-ui/input";
 import { Plus, X } from "lucide-react";
 
 export default function KeypairListComponent({

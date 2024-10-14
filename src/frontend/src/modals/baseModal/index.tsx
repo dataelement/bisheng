@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "../../components/ui/dialog";
+} from "../../components/bs-ui/dialog";
 import { modalHeaderType } from "../../types/components";
 
 type ContentProps = { children: ReactNode };

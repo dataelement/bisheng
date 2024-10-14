@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Assistant } from "./icon.svg";
+import Assistant from "./icon.svg?react";
 
 export const AssistantIcon = forwardRef<
     SVGSVGElement & { className: any },

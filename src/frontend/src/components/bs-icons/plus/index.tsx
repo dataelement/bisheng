@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Plus } from "./Plus.svg";
+import Plus from "./Plus.svg?react";
 
 export const PlusIcon = forwardRef<
     SVGSVGElement & { className: any },

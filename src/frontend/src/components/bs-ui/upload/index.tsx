@@ -1,12 +1,12 @@
 import { UploadIcon } from "@/components/bs-icons/upload";
 import axios from "axios";
+import { X } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
-import { useToast } from "../toast/use-toast";
 import { Progress } from "../progress";
+import { useToast } from "../toast/use-toast";
 import { cname } from "../utils";
-import { Cross1Icon } from "@radix-ui/react-icons";
 
 const CancelToken = axios.CancelToken;
 const uploadFileWithProgress = async ({ url, fileName, file, callback, cancel = null }): Promise<any> => {
@@ -184,7 +184,7 @@ const Upload = forwardRef(({
                     <p className={`max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap ${pros.error && 'text-red-400'}`}>{pros.file.name}{pros.file.pros === 1 && <span>{t('code.complete')}</span>}</p>
                     <div className="w-full flex">
                         <Progress error={pros.error} value={pros.pros} />
-                        <Cross1Icon className="hover:bg-gray-200 ml-2 cursor-pointer" onClick={() => {
+                        <X className="hover:bg-gray-200 ml-2 cursor-pointer" onClick={() => {
                             setProgressList((oldState) => oldState.filter(el => el.id !== pros.id));
                             filePathsRef.current = filePathsRef.current.filter(el => el.id !== pros.id)
                             failFilesRef.current = failFilesRef.current.filter(el => el.id !== pros.id)

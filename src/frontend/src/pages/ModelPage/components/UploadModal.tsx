@@ -3,11 +3,12 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/ui/button";
-import { Progress } from "../../../components/ui/progress";
+import { Button } from "../../../components/bs-ui/button";
+import { Progress } from "../../../components/bs-ui/progress";
 import { alertContext } from "../../../contexts/alertContext";
 import { generateUUID } from "../../../utils";
 import { UploadIcon } from "@/components/bs-icons/upload";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 interface IProps {
     accept: string[],
@@ -36,14 +37,12 @@ export default function UploadModal({
         onDrop
     });
 
-    return <dialog
-        className={`modal bg-blur-shared modal-open`}
-        onClick={onClose}
-    >
-        <form method="dialog" className="max-w-[540px] flex flex-col modal-box bg-[#fff] shadow-lg dark:bg-background" onClick={(e) => e.stopPropagation()}>
-            <button className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" onClick={onClose}>✕</button>
-            <h3 className="font-bold text-lg">{t('code.uploadFile')}</h3>
-            <p className="py-4">{desc}</p>
+    return <Dialog open onOpenChange={() => onClose()}>
+        <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+                <DialogTitle>{t('code.uploadFile')}</DialogTitle>
+                <DialogDescription>{desc}</DialogDescription>
+            </DialogHeader>
             <div className="flex flex-wrap justify-center overflow-y-auto no-scrollbar">
                 <div className="w-[460px]">
                     {/* 拖拽区 */}
@@ -56,9 +55,7 @@ export default function UploadModal({
                     <div className=" max-h-[300px] overflow-y-auto no-scrollbar mt-4">
                         {tasks.map((task) => (
                             <div key={task.id}>
-                                <p className={`max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap ${task.error && 'text-red-400'}`}>{task.file.name}
-                                    {/* {task.file.pros === 1 && <span>{t('code.complete')}</span>} */}
-                                </p>
+                                <p className={`max-w-[300px] overflow-hidden text-ellipsis whitespace-nowrap ${task.error && 'text-red-400'}`}>{task.file.name}</p>
                                 <Progress error={task.error} value={task.schedule} className="w-full" />
                             </div>
                         ))}
@@ -67,18 +64,17 @@ export default function UploadModal({
                     <div>
                         {children}
                     </div>
-                    {/* button */}
-                    <div className="flex justify-end gap-4 mt-4">
-                        <Button variant='outline' className="h-8" onClick={onClose}>{t('cancel')}</Button>
-                        <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && onSubmit(getResult())}>
-                            {loading && <span className="loading loading-spinner loading-xs"></span>}
-                            {t('create')}
-                        </Button>
-                    </div>
                 </div>
             </div>
-        </form>
-    </dialog>
+            <DialogFooter>
+                <Button variant='outline' className="h-8" onClick={onClose}>{t('cancel')}</Button>
+                <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && onSubmit(getResult())}>
+                    {loading && <span className="loading loading-spinner loading-xs"></span>}
+                    {t('create')}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 };
 
 interface ProcessItem {

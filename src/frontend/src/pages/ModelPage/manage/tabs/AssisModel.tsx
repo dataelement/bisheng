@@ -6,14 +6,15 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group";
 import { getAssistantModelConfig, updateAssistantModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { PlusIcon } from "@radix-ui/react-icons";
 import uniqBy from "lodash-es/uniqBy";
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModelSelect } from "./KnowledgeModel";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 
 const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
@@ -189,7 +190,7 @@ export default function AssisModel({ llmOptions, onBack }) {
     };
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <span className="loading loading-infinity loading-lg"></span>
+        <LoadingIcon />
     </div>
 
     return (
@@ -226,7 +227,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                         />
                     ))}
                     <Button variant="outline" size="icon" onClick={addNewRow}>
-                        <PlusIcon></PlusIcon>
+                        <Plus className="size-5" />
                     </Button>
                 </div>
             </div>

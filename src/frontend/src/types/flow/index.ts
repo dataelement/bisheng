@@ -1,6 +1,36 @@
 import { ReactFlowJsonObject, XYPosition } from "reactflow";
 import { APIClassType } from "../api/index";
 
+/** 流程 */
+export type FlowState = {
+  edges: {
+    source: string;
+    target: string;
+    /** 来源节点内部的唯一ID，目前只有condition节点需要 */
+    source_internal_id
+  }[];
+  views: FlowNode[];
+  viewport: any;
+}
+
+/** 流程节点 */
+interface FlowNode {
+  id: string;
+  name: string;
+  type: string;
+  inputVariable: { [key: string]: any };
+  outputVariable: { [key: string]: any };
+  data?: {
+    edges: {
+      source: string;
+      target: string;
+    }[];
+    nodes: any[];
+    viewport: any;
+  }
+}
+
+
 export type FlowType = {
   name: string;
   id: string;

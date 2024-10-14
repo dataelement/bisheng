@@ -1,5 +1,6 @@
 
 import { ThunmbIcon } from "@/components/bs-icons";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { SearchInput } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -32,7 +33,7 @@ export default function AppUseLog() {
 
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
             <div className="flex justify-end gap-4 items-center">

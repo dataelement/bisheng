@@ -1,10 +1,9 @@
-import { useState } from "react";
-import HSLitem from "./HSLitem";
-import Example from "./Example";
 import { Button } from "@/components/bs-ui/button";
-import { LoadIcon } from "@/components/bs-icons";
-import { ReloadIcon } from "@radix-ui/react-icons";
 import { saveThemeApi } from "@/controllers/API";
+import { RefreshCw } from "lucide-react";
+import { useState } from "react";
+import Example from "./Example";
+import HSLitem from "./HSLitem";
 
 const defaultTheme = {
     '--background': { h: 0, s: 0, l: 1 },
@@ -88,7 +87,7 @@ export default function Theme() {
         <div className="w-96 py-4 pr-8 border-r ">
             <p className="flex justify-between items-center mb-4">
                 <span className="text-xl">颜色配置</span>
-                <Button className="right" variant="link" onClick={e => applyTheme({ ...defaultTheme })}><ReloadIcon className="mr-1" />还原</Button>
+                <Button className="right" variant="link" onClick={e => applyTheme({ ...defaultTheme })}><RefreshCw className="mr-1 size-4" />还原</Button>
             </p>
             <div className="grid grid-cols-2 gap-2 gap-x-8 mt-10">
                 {

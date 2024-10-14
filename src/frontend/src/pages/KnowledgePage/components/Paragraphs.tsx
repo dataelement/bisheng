@@ -14,11 +14,12 @@ import MultiSelect from "@/components/bs-ui/select/multi"
 import { delChunkApi, getKnowledgeChunkApi, readFileByLibDatabase } from "@/controllers/API"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useTable } from "@/util/hook"
-import { ReaderIcon } from "@radix-ui/react-icons"
+import { FileText } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import ParagraphEdit from "./ParagraphEdit"
+import { LoadingIcon } from "@/components/bs-icons/loading"
 
 export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
     const { t } = useTranslation('knowledge')
@@ -101,7 +102,7 @@ export default function Paragraphs({ fileId }) {
 
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder={t('searchSegments')} onChange={(e) => search(e.target.value)}></SearchInput>
@@ -136,7 +137,7 @@ export default function Paragraphs({ fileId }) {
                         ></ParagraphsItem>
                     )) :
                         <div className="flex justify-center items-center flex-col size-full text-gray-400">
-                            <ReaderIcon width={160} height={160} className="text-border" />
+                            <FileText width={160} height={160} className="text-border" />
                             {t('uploadPrompt')}
                         </div>
                 }

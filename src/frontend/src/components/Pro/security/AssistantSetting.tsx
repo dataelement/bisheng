@@ -2,14 +2,14 @@ import { SettingIcon } from "@/components/bs-icons";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { Switch } from "@/components/bs-ui/switch";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
+import { CircleHelp } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import FormSet from "./FormSet";
 import FormView from "./FormView";
-import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { useTranslation } from "react-i18next";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
-import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 export default function AssistantSetting({ id, type }) {
     const { t } = useTranslation();
@@ -66,7 +66,7 @@ export default function AssistantSetting({ id, type }) {
                         <TooltipProvider delayDuration={0}>
                             <Tooltip>
                                 <TooltipTrigger>
-                                    <QuestionMarkCircledIcon />
+                                    <CircleHelp className="w-4 h-4" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                     <p className="text-slate-50">{t('build.contentSecurityDesc')}</p>

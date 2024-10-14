@@ -22,7 +22,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
-import { map } from "lodash";
+import { map } from "lodash-es";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -34,6 +34,7 @@ import {
   EvaluationTypeLabelMap,
 } from "./types";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();
@@ -84,7 +85,7 @@ export default function EvaluationPage() {
     <div className="relative h-full w-full px-2 py-4">
       {loading && (
         <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-          <span className="loading loading-infinity loading-lg"></span>
+          <LoadingIcon />
         </div>
       )}
       <div className="h-full overflow-y-auto pb-10">

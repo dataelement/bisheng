@@ -1,6 +1,6 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Del } from "./Del.svg";
-import { ReactComponent as Trash } from "./Trash.svg";
+import Del from "./Del.svg?react";
+import Trash from "./Trash.svg?react";
 
 export const DelIcon = forwardRef<
     SVGSVGElement & { className: any },

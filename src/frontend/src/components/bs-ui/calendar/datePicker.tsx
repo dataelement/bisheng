@@ -1,17 +1,16 @@
 "use client"
-
-import * as React from "react"
-import { CalendarIcon } from "@radix-ui/react-icons"
-import { Button } from "../button"
-import { Calendar } from "../calendar"
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
-} from "@/components/ui/popover"
-import { cname } from "../utils"
-import { useMemo } from "react"
+} from "@/components/bs-ui/popover"
 import { formatDate } from "@/util/utils"
+import { CalendarDays } from "lucide-react"
+import * as React from "react"
+import { useMemo } from "react"
+import { Button } from "../button"
+import { Calendar } from "../calendar"
+import { cname } from "../utils"
 
 export function DatePicker({
     value,
@@ -26,7 +25,7 @@ export function DatePicker({
 
     React.useEffect(() => {
         setDate(value)
-    },[value])
+    }, [value])
 
     return (
         <Popover>
@@ -38,7 +37,7 @@ export function DatePicker({
                         !date && "text-muted-foreground"
                     )}
                 >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    <CalendarDays className="mr-2 h-4 w-4" />
                     {dateStr || <span>{placeholder}</span>}
                 </Button>
             </PopoverTrigger>

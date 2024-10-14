@@ -1,3 +1,4 @@
+import CollectionNameComponent from "@/pages/BuildPage/skills/editSkill/CollectionNameComponent";
 import { useContext, useState } from "react";
 import CodeAreaComponent from "../../../../components/codeAreaComponent";
 import DictComponent from "../../../../components/dictComponent";
@@ -13,7 +14,6 @@ import TextAreaComponent from "../../../../components/textAreaComponent";
 import ToggleShadComponent from "../../../../components/toggleShadComponent";
 import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
-import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 
 export default function L2ParameterComponent({

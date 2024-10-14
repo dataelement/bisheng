@@ -14,7 +14,7 @@ import {
     updateLabelApi
 } from "@/controllers/API/label";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Pencil2Icon, PlusIcon } from "@radix-ui/react-icons";
+import { Plus, SquarePen } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -181,13 +181,13 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                         }
                     </div>
                     {user.role === 'admin' && <div className="flex place-items-center gap-2 opacity-0 group-hover:opacity-100">
-                        <Pencil2Icon className="cursor-pointer text-muted-foreground" onClick={() => handleEdit(d.value)} />
+                        <SquarePen className="cursor-pointer text-muted-foreground" onClick={() => handleEdit(d.value)} />
                         <TrashIcon className="cursor-pointer text-muted-foreground" onClick={() => handleDelete(d)} />
                     </div>}
                 </div>)}
                 {(keyword && showAdd && user.role === 'admin') && <div onClick={handleAdd}
                     className="flex group items-center h-8 rounded-sm bg-[#EBF0FF] dark:bg-gray-700 cursor-pointer">
-                    <PlusIcon className="mx-2 text-[#727C8F]" />
+                    <Plus className="mx-2 text-[#727C8F]" />
                     <span>{t('create')}”{keyword}”</span>
                 </div>}
             </div>

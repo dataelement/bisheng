@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Send } from "./Send.svg";
+import Send from "./Send.svg?react";
 
 export const SendIcon = forwardRef<
     SVGSVGElement & { className: any },

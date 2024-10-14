@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Tab } from "./icon.svg";
+import Tab from "./icon.svg?react";
 
 export const TabIcon = forwardRef<
     SVGSVGElement & { className: any },

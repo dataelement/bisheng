@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Prompt } from "./Prompt.svg";
+import Prompt from "./Prompt.svg?react";
 
 export const PromptIcon = forwardRef<
     SVGSVGElement & { className: any },

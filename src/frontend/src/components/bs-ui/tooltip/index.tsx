@@ -1,9 +1,9 @@
 "use client"
 
-import * as React from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+import { CircleHelp } from "lucide-react"
+import * as React from "react"
 import { cname } from "../utils"
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons"
 
 const TooltipProvider = TooltipPrimitive.Provider
 
@@ -27,14 +27,14 @@ const TooltipContent = React.forwardRef<
 ))
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 
 
 export const QuestionTooltip = ({ className = '', content }) => (
     <TooltipProvider delayDuration={100}>
         <Tooltip>
             <TooltipTrigger className={className}>
-                <QuestionMarkCircledIcon />
+                <CircleHelp className="w-3.5 h-3.5" />
             </TooltipTrigger>
             <TooltipContent>
                 <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>

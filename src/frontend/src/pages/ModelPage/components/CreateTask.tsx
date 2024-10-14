@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { Input } from "../../../components/bs-ui/input";
 import { Label } from "../../../components/bs-ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
-import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
+import { RadioGroup, RadioGroupItem } from "../../../components/bs-ui/radio-group";
 import { alertContext } from "../../../contexts/alertContext";
 import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";
@@ -162,7 +162,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
                     <span>{t('finetune.parameterConfiguration')}</span>
                     <TooltipProvider>
                         <Tooltip>
-                            <TooltipTrigger><HelpCircle size={18} /></TooltipTrigger>
+                            <TooltipTrigger><HelpCircle size={16} /></TooltipTrigger>
                             <TooltipContent>
                                 <p>{t('finetune.parameterConfigurationTooltip')}</p>
                             </TooltipContent>

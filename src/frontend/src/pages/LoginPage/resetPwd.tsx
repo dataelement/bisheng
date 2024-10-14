@@ -1,11 +1,11 @@
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { ArrowLeftIcon } from '@radix-ui/react-icons';
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "../../components/bs-ui/button";
 import { PasswordInput } from "../../components/bs-ui/input";
-import { loggedChangePasswordApi, changePasswordApi } from "../../controllers/API/user";
+import { changePasswordApi, loggedChangePasswordApi } from "../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { PWD_RULE, handleEncrypt } from './utils';
 
@@ -81,7 +81,7 @@ export const ResetPwdPage = () => {
                     size='icon'
                     className='absolute left-4 top-4'
                     onClick={() => navigate(-1)}
-                ><ArrowLeftIcon /></Button>}
+                ><ArrowLeft /></Button>}
                 <div className='bg-background-login relative'>
                     <div>
                         <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />

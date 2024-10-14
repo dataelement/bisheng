@@ -138,3 +138,11 @@ proxyTargets['/new-path'] = {
 
 [\u4e00-\u9fa5]+
 
+
+##### 开发模式下，无法访问到静态资源，注释掉以下代码
+目录：node_modules/vite-plugin-html/dist/index.mjs
+
+```javascript
+// 150行的
+server.middlewares.use(history...
+```

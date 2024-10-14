@@ -1,15 +1,15 @@
 import { PlusIcon } from "@/components/bs-icons/plus"
 import { Button } from "@/components/bs-ui/button"
-import { ChevronLeftIcon } from "@radix-ui/react-icons"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { getFlowVersions } from "@/controllers/API/flow"
+import { useDiffFlowStore } from "@/store/diffFlowStore"
+import { FlowVersionItem } from "@/types/flow"
+import { ChevronLeft } from "lucide-react"
+import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useNavigate, useParams } from "react-router-dom"
 import Component from "./components/Component"
 import RunTest from "./components/RunTest"
-import { useDiffFlowStore } from "@/store/diffFlowStore"
-import { useEffect, useState } from "react"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { getFlowVersions } from "@/controllers/API/flow"
-import { FlowVersionItem } from "@/types/flow"
-import { useTranslation } from "react-i18next"
 
 export default function index(params) {
     const { t } = useTranslation()
@@ -40,7 +40,7 @@ export default function index(params) {
     return <div className="bg-gray-100 dark:bg-[#111] h-full relative">
         {/* header */}
         <div className="absolute top-0 w-full h-14 flex justify-between items-center border-b px-4 bg-[#fff] dark:bg-[#222]">
-            <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeftIcon className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
             <span>{t('test.versionEvaluation')}</span>
             <Button type="button" onClick={handleAddVersion}>
                 <PlusIcon className="text-primary" />

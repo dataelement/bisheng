@@ -1,3 +1,6 @@
+import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import ModelSelect from "@/pages/BuildPage/assistant/editAssistant/ModelSelect";
+import CollectionNameComponent from "@/pages/BuildPage/skills/editSkill/CollectionNameComponent";
 import cloneDeep from "lodash-es/cloneDeep";
 import { Info } from "lucide-react";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +25,6 @@ import { TabsContext } from "../../../../contexts/tabsContext";
 import { typesContext } from "../../../../contexts/typesContext";
 import { reloadCustom } from "../../../../controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "../../../../controllers/request";
-import CollectionNameComponent from "../../../../pages/FlowPage/components/CollectionNameComponent";
 import { ParameterComponentType } from "../../../../types/components";
 import { cleanEdges, convertObjToArray, convertValuesToNumbers, hasDuplicateKeys } from "../../../../util/reactflowUtils";
 import {
@@ -33,8 +35,6 @@ import {
   nodeColors,
   nodeIconsLucide
 } from "../../../../utils";
-import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
-import ModelSelect from "@/pages/SkillPage/components/editAssistant/ModelSelect";
 
 export default function ParameterComponent({
   left,

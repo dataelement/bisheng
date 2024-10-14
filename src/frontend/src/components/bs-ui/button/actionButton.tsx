@@ -1,4 +1,4 @@
-import { CaretDownIcon } from "@radix-ui/react-icons";
+import { ChevronDown } from "lucide-react";
 import { Button } from ".";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip";
@@ -35,7 +35,7 @@ export default function ActionButton({
                     size="icon"
                     variant={variant}
                     className="rounded-l-none ml-[1px] [&[data-state=open]>svg]:rotate-180"
-                ><CaretDownIcon /></Button>
+                ><ChevronDown className="size-4" /></Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align={align}>
                 {dropDown}

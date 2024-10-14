@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from ".
 import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -77,7 +78,7 @@ export default function Files({ onPreview }) {
 
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)}></SearchInput>

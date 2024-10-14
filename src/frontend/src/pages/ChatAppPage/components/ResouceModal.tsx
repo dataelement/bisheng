@@ -1,8 +1,7 @@
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
-import { Download, Import } from "lucide-react";
+import { CircleHelp, Download, Import } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
@@ -136,7 +135,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, closeDialo
                         <TooltipProvider delayDuration={100}>
                             <Tooltip>
                                 <TooltipTrigger>
-                                    <QuestionMarkCircledIcon />
+                                    <CircleHelp className="w-4 h-4" />
                                 </TooltipTrigger>
                                 <TooltipContent>
                                     <p className="w-[170px] break-words">{t('chat.tooltipText')}</p>

@@ -3,7 +3,7 @@ import { DictComponentType } from "../../types/components";
 
 import DictAreaModal from "../../modals/dictAreaModal";
 import { classNames } from "../../util/utils";
-import { Input } from "../ui/input";
+import { Input } from "../bs-ui/input";
 
 export default function DictComponent({
     value,

@@ -1,7 +1,7 @@
-import { BookmarkFilledIcon } from "@radix-ui/react-icons";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import LabelSelect, { UPDATETYPE } from "../selectComponent/LabelSelect";
+import { Bookmark } from "lucide-react";
 
 export default function LabelShow({ data, user, all, type, onChange }) {
   const { t } = useTranslation()
@@ -70,7 +70,7 @@ export default function LabelShow({ data, user, all, type, onChange }) {
         isOperator ? (
           <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
             <div onClick={(e) => e.stopPropagation()} className="mb-[10px] max-w-[100%] flex place-items-center rounded-sm p-1 border border-transparent group-hover:bg-search-input group-hover:border-input">
-              <BookmarkFilledIcon className="mr-2 text-muted-foreground" />
+              <Bookmark className="w-4 h-4 mr-2 text-muted-foreground" />
               <div className="text-sm text-muted-foreground max-w-[250px] truncate">
                 {freshData.map((l, index) => <span>{l.label}{index !== freshData.length - 1 && '，'}</span>)}
               </div>
@@ -78,7 +78,7 @@ export default function LabelShow({ data, user, all, type, onChange }) {
           </LabelSelect>
         ) : (
           <div className="mb-[10px] flex place-items-center max-w-[100%] rounded-sm p-1">
-            <BookmarkFilledIcon className="mr-2 text-muted-foreground" />
+            <Bookmark className="w-4 h-4 mr-2 text-muted-foreground" />
             <div className="text-sm text-muted-foreground max-w-[250px] truncate">
               {freshData.map((l, index) => <span>{l.label}{index !== freshData.length - 1 && '，'}</span>)}
             </div>
@@ -88,7 +88,7 @@ export default function LabelShow({ data, user, all, type, onChange }) {
         isOperator ? (
           <LabelSelect onUpdate={handleUpdate} labels={labels} resource={resource} all={allData}>
             <div onClick={(e) => e.stopPropagation()} className="mb-[10px] flex place-items-center rounded-sm p-1 opacity-0 border border-transparent group-hover:bg-search-input group-hover:border-input group-hover:opacity-100">
-              <BookmarkFilledIcon className="mr-2 text-muted-foreground" />
+              <Bookmark className="w-4 h-4 mr-2 text-muted-foreground" />
               <div className="text-sm text-muted-foreground">
                 <span>{t('tag.addLabel')}</span>
               </div>

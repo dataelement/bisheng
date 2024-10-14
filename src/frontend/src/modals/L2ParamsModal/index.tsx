@@ -2,7 +2,7 @@ import { PenLine } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
 import {
     Dialog,
     DialogContent,
@@ -11,9 +11,9 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "../../components/ui/dialog";
-import { Label } from "../../components/ui/label";
-import { Switch } from "../../components/ui/switch";
+} from "../../components/bs-ui/dialog";
+import { Label } from "../../components/bs-ui/label";
+import { Switch } from "../../components/bs-ui/switch";
 import { TemplateVariableType } from "../../types/api";
 import { FlowType } from "../../types/flow";
 import { classNames } from "../../utils";

@@ -1,8 +1,7 @@
 import React, { ChangeEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import { Textarea } from "../../components/ui/textarea";
+import { Input, Textarea } from "../../components/bs-ui/input";
+import { Label } from "../../components/bs-ui/label";
 
 type InputProps = {
   name: string | null;

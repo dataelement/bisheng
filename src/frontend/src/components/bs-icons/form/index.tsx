@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Form } from "./Form.svg";
+import Form from "./Form.svg?react";
 
 export const FormIcon = forwardRef<
     SVGSVGElement & { className: any },

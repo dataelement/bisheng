@@ -3,7 +3,7 @@ import { Button } from "@/components/bs-ui/button";
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
+import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
@@ -56,10 +56,10 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                     </div>
                 </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2">
                     <span></span>
-                    <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
-                        {!running && <Pencil2Icon className="hover:text-gray-500" onClick={() => handleResend(false)} />}
-                        {!running && <ReloadIcon className="hover:text-gray-500" onClick={() => handleResend(true)} />}
-                        {appConfig.dialogQuickSearch && <MagnifyingGlassIcon className="hover:text-gray-500" onClick={handleSearch} />}
+                    <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
+                        {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
+                        {!running && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
+                        {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
                     </div>
                 </div>)
             }
