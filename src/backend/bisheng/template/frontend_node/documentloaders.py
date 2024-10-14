@@ -276,15 +276,23 @@ class DocumentLoaderFrontNode(FrontendNode):
             self.template.add_field(
                 TemplateField(field_type='dict',
                               multiline=True,
-                              required=True,
+                              required=False,
                               show=True,
                               name='params'))
             self.template.add_field(
                 TemplateField(field_type='str',
                               multiline=True,
-                              required=True,
+                              required=False,
                               show=True,
                               name='api_key'))
+            self.template.add_field(
+                TemplateField(field_type='str',
+                              multiline=True,
+                              required=True,
+                              value='crawl',
+                              options=['crawl', 'scrape'],
+                              show=True,
+                              name='mode'))
         elif self.template.type_name in {
                 'WebBaseLoader',
                 'AZLyricsLoader',
