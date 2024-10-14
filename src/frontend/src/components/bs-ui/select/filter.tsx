@@ -1,8 +1,30 @@
-import React from 'react';
+import { FilterIcon } from "@/components/bs-icons/filter";
 import { Button } from "@/components/bs-ui/button";
 import { Checkbox } from "@/components/bs-ui/checkBox";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import React from 'react';
 import { useTranslation } from "react-i18next";
+import { Select, SelectContent, SelectGroup, SelectItem } from '.';
 import { SearchInput } from "../../../components/bs-ui/input";
+
+export const TableHeadEnumFilter = ({ options, onChange }: { options: { label: string, value: string }[], onChange: (value: string) => void }) => {
+  const [open, setOpen] = React.useState(false)
+  const [value, setValue] = React.useState<string>('')
+
+  return <Select value={value} onOpenChange={setOpen} onValueChange={(v) => { setValue(v); onChange(v) }}>
+    <SelectPrimitive.Trigger className='outline-none' >
+      <FilterIcon onClick={() => setOpen(!open)} className={value ? 'text-primary ml-3' : 'text-gray-400 ml-3'} />
+    </SelectPrimitive.Trigger>
+    <SelectContent>
+      <SelectGroup>
+        {options.map(el => (
+          <SelectItem key={el.value} value={el.value}>{el.label}</SelectItem>
+        ))}
+      </SelectGroup>
+    </SelectContent>
+  </Select>
+}
+
 
 // 定义组件的 props 类型
 interface FilterUserGroupProps {

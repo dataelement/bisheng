@@ -317,7 +317,7 @@
     "libraryName": "知识库名称",
     "description": "描述",
     "model": "模型",
-    "fileData": "文件数据",
+    "fileData": "文档知识库",
     "structuredData": "结构化数据",
     "qaData": "QA知识库",
     "libraryCollection": "知识库集合",

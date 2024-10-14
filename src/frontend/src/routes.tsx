@@ -10,11 +10,14 @@ import DataSetPage from "./pages/DataSetPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
-import FilesPage from "./pages/KnowledgePage/detail";
-import FilesUpload from "./pages/KnowledgePage/filesUpload";
 import FlowPage from "./pages/FlowPage";
 import KnowledgePage from "./pages/KnowledgePage";
+import FilesPage from "./pages/KnowledgePage/detail";
+import FilesUpload from "./pages/KnowledgePage/filesUpload";
 import QasPage from "./pages/KnowledgePage/qas";
+import LabelPage from "./pages/LabelPage";
+import TaskAppChats from "./pages/LabelPage/taskAppChats";
+import TaskApps from "./pages/LabelPage/taskApps";
 import LogPage from "./pages/LogPage";
 import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
 import { LoginPage } from "./pages/LoginPage/login";
@@ -83,6 +86,9 @@ const privateRouter = [
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },
+      { path: "label", element: <LabelPage /> },
+      { path: "label/:id", element: <TaskApps /> },
+      { path: "label/chat/:fid/:cid/:type", element: <TaskAppChats /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },
