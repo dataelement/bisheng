@@ -279,6 +279,12 @@ class DocumentLoaderFrontNode(FrontendNode):
                               required=True,
                               show=True,
                               name='params'))
+            self.template.add_field(
+                TemplateField(field_type='str',
+                              multiline=True,
+                              required=True,
+                              show=True,
+                              name='api_key'))
         elif self.template.type_name in {
                 'WebBaseLoader',
                 'AZLyricsLoader',
