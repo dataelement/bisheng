@@ -10,7 +10,7 @@ import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
+export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => {} }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 

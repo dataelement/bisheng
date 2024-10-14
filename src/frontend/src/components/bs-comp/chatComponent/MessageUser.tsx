@@ -1,13 +1,15 @@
 import { FlagIcon } from "@/components/bs-icons";
+import { Button } from "@/components/bs-ui/button";
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
 import { MagnifyingGlassIcon, Pencil2Icon, ReloadIcon } from "@radix-ui/react-icons";
 import { useContext } from "react";
+import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
-import { Button } from "@/components/bs-ui/button";
 
 export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
+    const { t } = useTranslation()
     const msg = data.message[data.chatKey]
 
     const { appConfig } = useContext(locationContext)
@@ -49,7 +51,7 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                     <div className="flex gap-2 text-gray-400 cursor-pointer self-end">
                         {'question' === data.category && <Button className="h-6 text-xs group-hover:opacity-100 opacity-0" onClick={onMarkClick}>
                             <FlagIcon width={12} height={12} className="cursor-pointer" />
-                            <span>添加相似问题</span>
+                            <span>{t('addSimilarQuestion')}</span>
                         </Button>}
                     </div>
                 </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2">

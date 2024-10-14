@@ -84,6 +84,8 @@ chains:
   DalleGeneratorChain:
     documentation: ""
 documentloaders:
+  FireCrawlLoader:
+    documentation: ""
   CustomKVLoader:
     documentation: ""
   UniversalKVLoader:

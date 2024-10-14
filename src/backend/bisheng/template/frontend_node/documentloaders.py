@@ -262,6 +262,29 @@ class DocumentLoaderFrontNode(FrontendNode):
             self.template.add_field(self.file_path_templates[self.template.type_name])
         elif self.template.type_name in self.file_path_templates:
             self.template.add_field(self.file_path_templates[self.template.type_name])
+        elif self.template.type_name in {'FireCrawlLoader'}:
+            self.template.add_field(
+                TemplateField(
+                    field_type='str',
+                    required=True,
+                    show=True,
+                    name='url',
+                    value='',
+                    display_name='URL',
+                    advanced=False,
+                ))
+            self.template.add_field(
+                TemplateField(field_type='dict',
+                              multiline=True,
+                              required=True,
+                              show=True,
+                              name='params'))
+            self.template.add_field(
+                TemplateField(field_type='str',
+                              multiline=True,
+                              required=True,
+                              show=True,
+                              name='api_key'))
         elif self.template.type_name in {
                 'WebBaseLoader',
                 'AZLyricsLoader',
