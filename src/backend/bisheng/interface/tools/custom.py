@@ -2,7 +2,7 @@ from typing import Callable, Optional
 
 from bisheng.interface.importing.utils import get_function
 from bisheng.utils import validate
-from langchain.agents.tools import Tool
+from langchain_community.tools import Tool
 from pydantic import BaseModel, validator
 
 

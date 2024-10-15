@@ -8,7 +8,8 @@ from bisheng.interface.importing.utils import import_class
 from bisheng_langchain import chat_models
 from bisheng_langchain import document_loaders as contribute_loader
 from bisheng_langchain import embeddings as contribute_embeddings
-from langchain import llms, memory, requests, text_splitter
+from langchain import llms, memory, text_splitter
+from langchain_community.utilities import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_community import agent_toolkits, document_loaders, embeddings
 from langchain_community.chat_models import ChatVertexAI, MiniMaxChat, ChatOllama
@@ -49,7 +50,8 @@ toolkit_type_to_cls_dict: dict[str, Any] = {
 
 # Memories
 memory_type_to_cls_dict: dict[str, Any] = {
-    memory_name: import_class(f'langchain.memory.{memory_name}')
+    memory_name: import_class(f'langchain.memory.{memory_name}') if memory_name.find("ChatMessageHistory") == -1 else
+    import_class(f"langchain_community.chat_message_histories.{memory_name}")
     for memory_name in memory.__all__
 }
 

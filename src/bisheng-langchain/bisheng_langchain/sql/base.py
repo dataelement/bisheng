@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.llm import LLMChain
 from langchain.prompts.prompt import PromptTemplate
-from langchain.tools.sql_database.prompt import QUERY_CHECKER
+from langchain_community.tools.sql_database.prompt import QUERY_CHECKER
 from langchain_experimental.sql import SQLDatabaseChain as SQLDatabaseChainExperimental
 
 INTERMEDIATE_STEPS_KEY = 'intermediate_steps'

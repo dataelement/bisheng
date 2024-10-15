@@ -12,9 +12,9 @@ from typing import List, Optional, Union
 import fitz
 import numpy as np
 from bisheng_langchain.document_loaders.parsers import LayoutParser
-from langchain.docstore.document import Document
-from langchain.document_loaders.blob_loaders import Blob
-from langchain.document_loaders.pdf import BasePDFLoader
+from langchain_community.docstore.document import Document
+from langchain_community.document_loaders.blob_loaders import Blob
+from langchain_community.document_loaders.pdf import BasePDFLoader
 from shapely import Polygon
 from shapely import box as Rect
 

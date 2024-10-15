@@ -7,7 +7,7 @@ from langchain.base_language import BaseLanguageModel
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.chains import ConversationChain, LLMChain
 from langchain.chains.summarize import load_summarize_chain
-from langchain.memory.buffer import ConversationBufferMemory
+from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
 from langchain.schema import BaseMemory
 from langchain.schema.prompt_template import BasePromptTemplate
