@@ -80,7 +80,7 @@ def import_inputoutput(input_output: str) -> Any:
 
 def import_output_parser(output_parser: str) -> Any:
     """Import output parser from output parser name"""
-    return import_module(f'from langchain.output_parsers import {output_parser}')
+    return import_module(f'from langchain_community.output_parsers import {output_parser}')
 
 
 def import_chat_llm(llm: str) -> BaseChatModel:
@@ -109,6 +109,9 @@ def import_autogenRoles(autogen: str) -> Any:
 
 def import_memory(memory: str) -> Any:
     """Import memory from memory name"""
+    from bisheng.interface.memories.base import memory_creator
+    if memory in memory_creator.type_to_loader_dict:
+        return memory_creator.type_to_loader_dict[memory]
     return import_module(f'from langchain.memory import {memory}')
 
 

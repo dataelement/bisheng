@@ -8,7 +8,7 @@ from uuid import uuid4
 import numpy as np
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
-from langchain.vectorstores.utils import maximal_marginal_relevance
+from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain
 from pymilvus.exceptions import ConnectionNotExistException
 

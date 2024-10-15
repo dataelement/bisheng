@@ -86,7 +86,7 @@ def set_langchain_cache(settings):
     from bisheng.interface.importing.utils import import_class
 
     cache_type = os.getenv('bisheng_LANGCHAIN_CACHE')
-    cache_class = import_class(f'langchain.cache.{cache_type or settings.cache}')
+    cache_class = import_class(f'langchain_community.cache.{cache_type or settings.cache}')
 
     logger.debug(f'Setting up LLM caching with {cache_class.__name__}')
     langchain.llm_cache = cache_class()

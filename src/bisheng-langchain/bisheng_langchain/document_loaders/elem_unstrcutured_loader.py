@@ -6,8 +6,8 @@ import os
 from typing import List
 
 import requests
-from langchain.docstore.document import Document
-from langchain.document_loaders.pdf import BasePDFLoader
+from langchain_community.docstore.document import Document
+from langchain_community.document_loaders.pdf import BasePDFLoader
 
 logger = logging.getLogger(__name__)
 

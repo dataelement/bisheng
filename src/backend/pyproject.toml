@@ -18,14 +18,14 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.3.6.dev1"
+bisheng_langchain = {file="bisheng_langchain-0.3.6.dev1-py3-none-any.whl"}
 bisheng_pyautogen = "0.3.2"
-langchain = "0.1.12"
+langchain = "^0.2.16"
 langchain_experimental = "*"
-langchain_openai = "0.1.5"
-langchain-community = "0.0.28"
-openai = "1.14.3"
-langchain-google-genai = "^0.0.6"
+langchain_openai = "^0.1.25"
+langchain-community = "^0.2.17"
+openai = "^1.51.2"
+langchain-google-genai = "^1.0.10"
 langchain-anthropic = "^0.1.4"
 minio = "7.2.0"
 loguru = "^0.7.1"
@@ -91,6 +91,7 @@ tenacity = "<8.4.0"
 bisheng-ragas = { version = "^1.0.0", source = "dataelem-index" }
 qianfan = "^0.4.4"
 dashscope = "^1.20.3"
+langgraph = "0.2.37"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
