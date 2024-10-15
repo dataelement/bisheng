@@ -407,6 +407,7 @@
   },
   "build": {
     "create": "创建",
+    "app": "应用",
     "assistant": "助手",
     "skill": "技能",
     "tools": "工具",

@@ -88,7 +88,7 @@ export default function l2Edit() {
             guide_word: guideWords
         }, user.user_name).then(newFlow => {
             setFlow('l2 create flow', newFlow)
-            navigate("/flow/" + newFlow.id, { replace: true }); // l3
+            navigate("/skill/" + newFlow.id, { replace: true }); // l3
             // 创建技能后在保存
             flowSettingSaveRef.current?.(newFlow.id)
         }))
@@ -100,16 +100,16 @@ export default function l2Edit() {
     // 编辑回填参数
     const handleJumpFlow = async () => {
         // 上线技能直接跳转L3
-        if (flow.status === 2) return navigate('/flow/' + id, { replace: true })
+        if (flow.status === 2) return navigate('/skill/' + id, { replace: true })
         // 高级配置信息有误直接跳转L3
-        if (isParamError(name, description)) return navigate('/flow/' + id, { replace: true })
+        if (isParamError(name, description)) return navigate('/skill/' + id, { replace: true })
         // 保存在跳
         setLoading(true)
         formRef.current?.save()
 
         await saveFlow({ ...flow, name, description, guide_word: guideWords, logo })
         setLoading(false)
-        navigate('/flow/' + id, { replace: true })
+        navigate('/skill/' + id, { replace: true })
     }
 
     const handleSave = async () => {

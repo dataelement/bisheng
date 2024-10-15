@@ -107,11 +107,15 @@ export default function CardComponent<T>({
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
-      <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
-      <CardTitle className="">{title}</CardTitle>
+      <CardTitle>
+        <div className="flex gap-2 items-center">
+          <div className="justify-between"><PlusIcon className="group-hover:text-primary transition-none" /></div>
+          <span>{title}</span>
+        </div>
+      </CardTitle>
     </CardHeader>
-    <CardContent className="h-0 overflow-auto scrollbar-hide p-2">
-      <CardDescription>{description}</CardDescription>
+    <CardContent className="h-fit max-h-[44px] overflow-auto scrollbar-hide">
+      <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-end h-10">
       <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
@@ -158,7 +162,7 @@ export default function CardComponent<T>({
     </CardFooter>
   </Card>
 
-  // 技能组件
+  // 助手&技能&工作流列表卡片组件
   return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
@@ -197,7 +201,7 @@ export default function CardComponent<T>({
           && <div className="hidden group-hover:flex">
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
             {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
-            <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
+            {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>
         }
       </div>

@@ -7,18 +7,18 @@ export default function HeaderMenu({ }) {
     const location = useLocation();
     console.log('location.pathname :>> ', location.pathname);
 
-    if (['/build/assist', '/build/skills', '/build/tools'].includes(location.pathname)) {
+    if (['/build/apps', '/build/tools'].includes(location.pathname)) {
         return <div className="build-tab flex justify-center h-[65px] items-center relative">
-            <div className="px-4">
+            {/* <div className="px-4">
                 <NavLink to={'build/assist'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
                     <TabIcon className="text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]"></TabIcon>
                     <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">{t('build.assistant')}</span>
                 </NavLink>
-            </div>
+            </div> */}
             <div className="px-4">
-                <NavLink to={'build/skills'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
+                <NavLink to={'build/apps'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
                     <TabIcon className="text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]"></TabIcon>
-                    <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">{t('build.skill')}</span>
+                    <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">{t('build.app')}</span>
                 </NavLink>
             </div>
             <div className="px-4">

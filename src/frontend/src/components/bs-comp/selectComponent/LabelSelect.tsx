@@ -48,6 +48,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
     }
 
     const handleChecked = (id) => {
+        // TODO 增加工作流type
         const type = resource.type === 'assist' ? 3 : 2
         setData(pre => {
             const newData = pre.map(d => d.value === id ? { ...d, selected: !d.selected } : d)
@@ -181,7 +182,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
                         }
                     </div>
                     {user.role === 'admin' && <div className="flex place-items-center gap-2 opacity-0 group-hover:opacity-100">
-                        <SquarePen className="cursor-pointer text-muted-foreground" onClick={() => handleEdit(d.value)} />
+                        <SquarePen className="size-4 cursor-pointer text-muted-foreground" onClick={() => handleEdit(d.value)} />
                         <TrashIcon className="cursor-pointer text-muted-foreground" onClick={() => handleDelete(d)} />
                     </div>}
                 </div>)}

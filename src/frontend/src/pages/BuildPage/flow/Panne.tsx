@@ -42,7 +42,7 @@ export default function Panne({ flow }: { flow: FlowState }) {
      */
     useEffect(() => {
         if (reactFlowInstance && flow) {
-            console.log('数据更新 :>> ', reactFlowInstance.toObject());
+            // console.log('数据更新 :>> ', reactFlowInstance.toObject());
             // flow.data = 
             // setFlowData()
         }

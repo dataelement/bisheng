@@ -1,15 +1,15 @@
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { useContext, useEffect, useState } from "react";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { AppType } from "@/types/app";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
 import { Input, Textarea } from "../../../components/bs-ui/input";
-import { alertContext } from "../../../contexts/alertContext";
 import { createTempApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { FlowType } from "../../../types/flow";
 
-export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: FlowType, open: boolean, setOpen: any, onCreated?: any }) {
-    const { setErrorData, setSuccessData } = useContext(alertContext);
+export default function CreateTemp({ flow, open, type, setOpen, onCreated }: { flow: FlowType, type: AppType, open: boolean, setOpen: any, onCreated?: any }) {
     const { t } = useTranslation()
 
     const [data, setData] = useState({
@@ -24,21 +24,32 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
         })
     }, [open])
 
+    const { message } = useToast()
     const handleSubmit = () => {
+        const nameMap = {
+            [AppType.FLOW]: '工作流',
+            [AppType.SKILL]: '技能名称',
+            [AppType.ASSISTANT]: '助手',
+        }
+        const labelName = nameMap[type]
         const errorlist = []
+
         const { name, description } = data
-        if (!name) errorlist.push(t('skills.skillNameRequired'))
-        if (name.length > 30) errorlist.push(t('skills.skillNameTooLong'))
-        if (!description) errorlist.push(t('skills.skillDescRequired')) // 加些描述能够快速让别人理解您创造的技能')
-        if (description.length > 200) errorlist.push(t('skills.skillDescTooLong'))
-        if (errorlist.length) setErrorData({
-            title: t('skills.errorTitle'),
-            list: errorlist,
+        if (!name) errorlist.push(`请填写${labelName}名称`)
+        if (name.length > 30) errorlist.push(`${labelName}名称过长，不要超过50字`)
+        if (!description) errorlist.push(`加些描述能够快速让别人理解您创造的${labelName}`)
+        if (description.length > 200) errorlist.push(`${labelName}描述不可超过 200 字`)
+        if (errorlist.length) message({
+            variant: 'error',
+            description: errorlist
         });
-        // rq
+        // TODO 三类模板
         captureAndAlertRequestErrorHoc(createTempApi({ ...data, flow_id: flow.id }).then(res => {
             setOpen(false)
-            setSuccessData({ title: t('skills.createSuccessTitle') });
+            message({
+                variant: 'success',
+                description: '模板创建成功'
+            })
             onCreated?.()
         }))
     }
@@ -50,7 +61,7 @@ export default function CreateTemp({ flow, open, setOpen, onCreated }: { flow: F
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">{t('skills.skillName')}</label>
+                    <label htmlFor="name" className="bisheng-label">{AppType.SKILL === type ? t('skills.skillName') : AppType.ASSISTANT === type ? '助手名称' : '工作流名称'}</label>
                     <Input name="name" className="mt-2" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} />
                     {/* {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>} */}
                 </div>

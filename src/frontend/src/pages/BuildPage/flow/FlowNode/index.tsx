@@ -16,7 +16,7 @@ function CustomNode({ data, selected, isConnectable }) {
         console.log(evt.target.value);
     }, []);
 
-    console.log('data :>> ', data);
+    // console.log('data :>> ', data);
 
     return (
         <div>

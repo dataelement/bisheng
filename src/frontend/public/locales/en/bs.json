@@ -410,6 +410,7 @@
   },
   "build": {
     "create": "Create",
+    "app": "App",
     "assistant": "Assistant",
     "skill": "Skill",
     "tools": "Tools",

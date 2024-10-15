@@ -2,12 +2,13 @@ import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import CrashErrorComponent from "./components/CrashErrorComponent";
 import MainLayout from "./layout/MainLayout";
+import Templates from "./pages/BuildPage/appTemps";
+import Apps from "./pages/BuildPage/apps";
 import SkillAssisPage from "./pages/BuildPage/assistant";
 import EditAssistantPage from "./pages/BuildPage/assistant/editAssistant";
-import Templates from "./pages/BuildPage/skillTemps";
+import FlowPage from "./pages/BuildPage/flow";
 import SkillsPage from "./pages/BuildPage/skills";
-import FlowPage from "./pages/BuildPage/skills/editSkill";
-import FlowPage2 from "./pages/BuildPage/flow";
+import SkillPage from "./pages/BuildPage/skills/editSkill";
 import L2Edit from "./pages/BuildPage/skills/l2Edit";
 import SkillToolsPage from "./pages/BuildPage/tools";
 import SkillChatPage from "./pages/ChatAppPage";
@@ -65,14 +66,15 @@ const privateRouter = [
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
+      { path: "build/apps", element: <Apps />, permission: 'build', },
       { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
       { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
-      { path: "build", element: <Navigate to="assist" replace /> },
+      { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
-      { path: "build/temps", element: <Templates />, permission: 'build', },
+      { path: "build/temps/:type", element: <Templates />, permission: 'build', },
       { path: "model/management", element: <Management /> },
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
@@ -86,16 +88,15 @@ const privateRouter = [
   },
   { path: "model/doc", element: <Doc /> },
   {
-    path: "/flow/:id/",
+    path: "/skill/:id/",
     children: [
-      { path: "", element: <ErrorHoc Comp={FlowPage} /> }
+      { path: "", element: <ErrorHoc Comp={SkillPage} /> }
     ]
   },
   {
-    // test
-    path: "/gaga/:id/",
+    path: "/flow/:id/",
     children: [
-      { path: "", element: <ErrorHoc Comp={FlowPage2} /> }
+      { path: "", element: <ErrorHoc Comp={FlowPage} /> }
     ]
   },
   {

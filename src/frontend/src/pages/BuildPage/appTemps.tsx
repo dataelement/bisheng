@@ -1,6 +1,8 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../components/bs-ui/button";
 import {
     Table,
@@ -12,8 +14,8 @@ import {
 } from "../../components/bs-ui/table";
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useNavigate } from "react-router-dom";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { SelectType } from "./apps";
+import { AppType } from "@/types/app";
 
 export default function Templates() {
     const navigate = useNavigate()
@@ -21,10 +23,12 @@ export default function Templates() {
     const onChange = () => { }
     const { t } = useTranslation()
 
+    const { type } = useParams()
     const [temps, setTemps] = useState([])
     useEffect(() => {
+        // 根据type筛选
         readTempsDatabase().then(setTemps)
-    }, [])
+    }, [type])
 
     const handleDragEnd = ({ source, destination }: any) => {
         if (!destination || source.index === destination.index) {
@@ -49,14 +53,22 @@ export default function Templates() {
         const currentItem = updatedList[destination.index]
         currentItem.order_num = sort
         const { name, description, order_num } = currentItem
+        // TODO 排序三类
         captureAndAlertRequestErrorHoc(updateTempApi(currentItem.id, { name, description, order_num }).then(onChange))
     }
 
     const handleDelTemp = (index: number, id: number) => {
+        const nameMap = {
+            [AppType.FLOW]: '工作流',
+            [AppType.SKILL]: '技能名称',
+            [AppType.ASSISTANT]: '助手',
+        }
+        const labelName = nameMap[type]
         bsConfirm({
-            desc: t('skills.confirmText'),
+            desc: `是否确认删除该${labelName}模板？`,
             okTxt: t('delete'),
             onOk(next) {
+                // TODO 三类模板删除
                 captureAndAlertRequestErrorHoc(deleteTempApi(id).then((res) => {
                     onChange(res)
                     setTemps(temps.filter((temp, i) => index !== i));
@@ -68,8 +80,9 @@ export default function Templates() {
 
     return <div className="px-2 py-4 h-full relative">
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
-            <div className="flex justify-end">
-                <Button className="h-10 px-8 text-[white]" size="sm" onClick={() => navigate('/build/skills')}>{t('skills.backToSkillList')}</Button>
+            <div className="flex justify-between">
+                <SelectType defaultValue={type} onChange={(v) => navigate(`/build/temps/${v}`)} />
+                <Button size="sm" onClick={() => navigate('/build/apps')}>返回应用列表</Button>
             </div>
             <Table className="mb-[50px]">
                 <TableHeader>
@@ -96,7 +109,7 @@ export default function Templates() {
                                                 <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                                 <TableCell className={snapshot.isDragging ? 'break-words' : `max-w-0 break-words`}>{temp.description}</TableCell>
                                                 <TableCell className="text-right pr-5">
-                                                    <Button variant="link" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
+                                                    <Button variant="link" className="text-destructive" onClick={() => handleDelTemp(index, temp.id)}>{t('delete')}</Button>
                                                 </TableCell>
                                             </tr>
                                         )}
@@ -110,7 +123,7 @@ export default function Templates() {
         </div>
         {/* footer */}
         <div className="flex justify-between items-center absolute bottom-0 right-0 w-full py-4 pl-[16px] h-[60px] bg-background-login">
-            <p className="text-gray-500 text-sm">{t('skills.skillTemplateManagement')}</p>
+            <p className="text-gray-500 text-sm">应用模板管理，模板对所有用户可见，支持拖拽排序、删除操作</p>
             <span></span>
         </div>
     </div>
