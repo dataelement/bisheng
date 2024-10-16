@@ -4,6 +4,7 @@ from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
+from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request)
@@ -34,6 +35,8 @@ async def create(task_create: MarkTaskCreate,login_user: UserPayload = Depends(g
 
 
     user_app = [MarkAppUser(create_id=login_user.user_id,app_id=app, user_id=user) for app in task_create.app_list for user in task_create.user_list]
+    logger.info("user_app{}",user_app)
+    
     MarkAppUserDao.create_task(user_app)
     return resp_200(data="ok")
 
