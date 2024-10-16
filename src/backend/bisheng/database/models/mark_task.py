@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.mark_app_user import MarkAppUserBase
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
@@ -39,9 +40,6 @@ class MarkTaskBase(SQLModelSerializable):
 class MarkTask(MarkTaskBase,table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
-class MarkTaskCreate(MarkTaskBase):
-    app_list: List[str]
-    user_list: List[int]
 
 
 class MarkTaskDao(MarkTaskBase):

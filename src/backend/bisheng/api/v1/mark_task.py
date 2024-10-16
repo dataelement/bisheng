@@ -1,7 +1,8 @@
 import json
+from bisheng.api.v1.schema.mark_schema import MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
-from bisheng.database.models.mark_task import  MarkTask, MarkTaskCreate, MarkTaskDao
+from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from fastapi_jwt_auth import AuthJWT
 from bisheng.api.services.user_service import UserPayload, get_login_user
