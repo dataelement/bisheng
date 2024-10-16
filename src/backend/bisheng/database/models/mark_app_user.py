@@ -34,12 +34,12 @@ class MarkAppUserBase(SQLModelSerializable):
                                             index=True)
 
 
-class MarkAppUser(MarkAppUserBase):
+class MarkAppUser(MarkAppUserBase,table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
 
-class MarkAppUserDao(MarkAppUser):
+class MarkAppUserDao(MarkAppUserBase):
 
     @classmethod
     def create_task(cls, task_info: List[MarkAppUser]) -> List[MarkAppUser]:

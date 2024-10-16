@@ -36,7 +36,7 @@ class MarkRecordBase(SQLModelSerializable):
                                             index=True)
 
 
-class MarkRecord(MarkRecordBase):
+class MarkRecord(MarkRecordBase,table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 

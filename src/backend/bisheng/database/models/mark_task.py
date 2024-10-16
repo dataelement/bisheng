@@ -36,10 +36,10 @@ class MarkTaskBase(SQLModelSerializable):
                                             index=True)
 
 
-class MarkTask(MarkTaskBase):
+class MarkTask(MarkTaskBase,table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
-class MarkTaskCreate(MarkTask):
+class MarkTaskCreate(MarkTaskBase):
     app_list: List[str]
     user_list: List[int]
 
