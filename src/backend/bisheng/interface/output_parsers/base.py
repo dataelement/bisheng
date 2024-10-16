@@ -22,17 +22,14 @@ class OutputParserCreator(LangChainTypeCreator):
     @property
     def type_to_loader_dict(self) -> Dict:
         if self.type_dict is None:
-            self.type_dict = {
-                output_parser_name: import_class(f'langchain.output_parsers.{output_parser_name}')
-                # if output_parser_name is not lower case it is a class
-                for output_parser_name in output_parsers.__all__
-            }
-
-            self.type_dict = {
-                name: output_parser
-                for name, output_parser in self.type_dict.items()
-                if name in settings.output_parsers or settings.dev
-            }
+            self.type_dict = {}
+            for output_parser_name in output_parsers.__all__:
+                if not settings.dev and output_parser_name not in settings.output_parsers:
+                    continue
+                if output_parser_name == "GuardrailsOutputParser":
+                    self.type_dict[output_parser_name] = import_class(f'langchain_community.output_parsers.rail_parser.{output_parser_name}')
+                else:
+                    self.type_dict[output_parser_name] = import_class(f'langchain.output_parsers.{output_parser_name}')
         return self.type_dict
 
     def get_signature(self, name: str) -> Optional[Dict]:
