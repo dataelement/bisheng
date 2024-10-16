@@ -33,9 +33,14 @@ async def create(task_create: MarkTaskCreate,login_user: UserPayload = Depends(g
     应用和用户是多对多对关系，依赖一条主任务记录
     """
 
+    task = MarkTask(create_id=login_user.user_id,
+                    create_user=login_user.user_name,
+                    app_id=",".join(task_create.app_list),
+                    process_users=",".join(task_create.user_list)
+                    )
+    MarkTaskDao.create_task(task)
 
-    user_app = [MarkAppUser(create_id=login_user.user_id,app_id=app, user_id=user) for app in task_create.app_list for user in task_create.user_list]
-    logger.info("user_app{}",user_app)
+    user_app = [MarkAppUser(task_id=task.id,create_id=login_user.user_id,app_id=app, user_id=user) for app in task_create.app_list for user in task_create.user_list]
     
     MarkAppUserDao.create_task(user_app)
     return resp_200(data="ok")

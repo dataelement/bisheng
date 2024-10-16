@@ -23,6 +23,7 @@ class MarkTaskStatus(Enum):
 class MarkAppUserBase(SQLModelSerializable):
     app_id: str = Field(index=True)
     user_id: int = Field(index=True)
+    task_id: int = Field(index=True)
     create_id: int = Field(index=True)
     status: Optional[int] = Field(index=False, default=1)
     update_time: Optional[datetime] = Field(
@@ -44,7 +45,6 @@ class MarkAppUserDao(MarkAppUserBase):
     @classmethod
     def create_task(cls, task_info: List[MarkAppUser]) -> List[MarkAppUser]:
         with session_getter() as session:
-            session.add(task_info)
+            session.add_all(task_info)
             session.commit()
-            session.refresh(task_info)
             return task_info 

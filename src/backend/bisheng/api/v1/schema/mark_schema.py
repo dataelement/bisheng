@@ -8,4 +8,4 @@ from pydantic import BaseModel
 
 class MarkTaskCreate(BaseModel):
     app_list: List[str]
-    user_list: List[int]
+    user_list: List[str]
