@@ -64,7 +64,7 @@ class MarkTaskDao(MarkTaskBase):
     @classmethod
     def get_task_list(cls, user_id: int) -> List[MarkTask]:
         with session_getter() as session:
-            statement = select(MarkTask).where(MarkTask.status==MarkTaskStatus.ING)
+            statement = select(MarkTask).where(MarkTask.status==MarkTaskStatus.ING.value)
             if user_id:
                 statement = statement.where(MarkTask.user_id == user_id)
             return session.exec(statement).all()
