@@ -55,6 +55,8 @@ def get_app_chat_list(*,
     """通过消息表进行聊天App统计，全量表查询，"""
     """性能问题后续优化"""
 
+    # TODO: 这里需要修改为 查询的是自己的或者是未标注的
+
     group_flow_ids = []
     if not login_user.is_admin():
         # 判断下是否是用户组管理员

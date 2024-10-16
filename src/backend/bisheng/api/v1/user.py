@@ -792,6 +792,24 @@ async def change_password_public(*,
     clear_error_password_key(username)
     return resp_200()
 
+@router.get('/user/mark', status_code=200)
+async def has_mark_access(*,request: Request, login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取当前用户是否有标注权限,判断当前用户是否为admin 或者是用户组管理员
+    """
+    user_groups = UserGroupDao.get_user_group(login_user.user_id)
+    user_group_ids = [one.group_id for one in user_groups]
+
+    has_mark_access = True
+    # 检查是否有分组的管理权限
+    if not login_user.check_groups_admin(user_group_ids):
+        has_mark_access = False
+
+    if login_user.is_admin():
+        has_mark_access = True
+
+    return resp_200(data=has_mark_access)
+
 
 @router.post('/user/create', status_code=200)
 async def create_user(*,
