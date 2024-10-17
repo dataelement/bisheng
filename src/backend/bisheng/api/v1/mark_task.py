@@ -29,8 +29,8 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     else:
         task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
 
-    for task in task_list:
-        task.mark_process = "lzs:123"
+    # for task in task_list:
+    #     task.mark_process = "lzs:123"
 
     result = {"list":task_list,"total":count}
     return resp_200(data=result)
