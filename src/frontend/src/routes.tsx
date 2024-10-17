@@ -88,7 +88,7 @@ const privateRouter = [
       { path: "dataset", element: <DataSetPage /> },
       { path: "label", element: <LabelPage /> },
       { path: "label/:id", element: <TaskApps /> },
-      { path: "label/chat/:fid/:cid/:type", element: <TaskAppChats /> },
+      { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },
