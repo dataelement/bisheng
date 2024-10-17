@@ -97,9 +97,7 @@ def del_task(request: Request,task_id:int,Authorize: AuthJWT = Depends() ):
     """
     Authorize.jwt_required()
 
-    task = MarkTask(id=task_id)
-
-    MarkTaskDao.delete_task(task)
+    MarkTaskDao.delete_task(task_id)
     MarkRecordDao.del_record(task_id)
 
     return resp_200(data="ok")
