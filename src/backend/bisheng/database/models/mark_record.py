@@ -10,7 +10,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAcce
 from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
 from pydantic import validator
-from sqlalchemy import Column, DateTime, String, and_, func, or_, text
+from sqlalchemy import Column, DateTime, String, and_, delete, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
 
@@ -50,6 +50,15 @@ class MarkRecordDao(MarkRecordBase):
             session.commit()
             session.refresh(record_info)
             return record_info 
+
+
+    @classmethod
+    def del_record(cls,task_id:int):
+        with session_getter() as session:
+            st = delete(MarkRecord).where(MarkRecord.task_id==task_id)
+            session.exec(st)
+            session.commit()
+            return
 
 
     @classmethod
