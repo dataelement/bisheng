@@ -25,11 +25,14 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     """
     Authorize.jwt_required()
     if login_user.is_admin():
-        task_List,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
+        task_list,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
     else:
-        task_List,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
+        task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
 
-    result = {"list":task_List,"total":count}
+    for task in task_list:
+        task.mark_process = "lzs:123"
+
+    result = {"list":task_list,"total":count}
     return resp_200(data=result)
 
 
