@@ -60,7 +60,7 @@ async def get_session(id:str, type:str):
     return resp_200(data="")
 
 @router.post('/mark')
-async def mark(session_id:str ,task_id:int,
+async def mark(session_id:str ,task_id:int,status:int,
                login_user: UserPayload = Depends(get_login_user)):
 
     """
@@ -71,11 +71,17 @@ async def mark(session_id:str ,task_id:int,
     if record:
         return resp_500(data="已经标注过了")
 
-    record_info = MarkRecord(create_id=login_user.user_id,session_id=session_id,task_id=task_id)
+    record_info = MarkRecord(create_id=login_user.user_id,session_id=session_id,task_id=task_id,status=status)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
 
     return resp_200(data="ok")
+
+@router.get('/get_record')
+async def get_record(chat_id:str , task_id:int):
+    record = MarkRecordDao.get_record(task_id,chat_id)
+    return resp_200(data=record)
+
 
 @router.delete('/del')
 def del_task(request: Request,task_id:int,Authorize: AuthJWT = Depends() ):

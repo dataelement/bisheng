@@ -14,10 +14,10 @@ from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
 
-class MarkTaskStatus(Enum):
+class MarkRecordStatus(Enum):
     DEFAULT = 1
     DONE = 2
-    ING = 3
+    NO = 3
 
 
 class MarkRecordBase(SQLModelSerializable):

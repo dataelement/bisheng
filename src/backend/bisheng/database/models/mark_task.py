@@ -75,5 +75,5 @@ class MarkTaskDao(MarkTaskBase):
             statement = select(MarkTask).where(MarkTask.status==MarkTaskStatus.DEFAULT.value)
             if user_id:
                 statement = statement.where(or_(MarkTask.user_id == user_id))
-            statement = statement.limit(page_size).offset((page_num) * page_size)
+            statement = statement.limit(page_size).offset((page_num - 1) * page_size)
             return session.exec(statement).all()
