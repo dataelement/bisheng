@@ -62,6 +62,19 @@ class MarkRecordDao(MarkRecordBase):
 
 
     @classmethod
+    def get_list_by_taskid(cls,task_id:int):
+        with session_getter() as session:
+            statement = select(MarkRecord).where(MarkRecord.task_id==task_id)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_count(cls,task_id:int,user_id:int):
+        with session_getter() as session:
+            query = session.query(MarkRecord).filter(MarkRecord.task_id==task_id).filter(MarkRecord.create_id==user_id)
+            return query.all()
+
+
+    @classmethod
     def get_record(cls,task_id:int,session_id:str) -> MarkRecord:
 
         with session_getter() as session:
