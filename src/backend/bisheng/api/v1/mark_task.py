@@ -1,6 +1,6 @@
 import json
 from typing import Optional
-from bisheng.api.v1.schema.mark_schema import MarkTaskCreate
+from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead
@@ -67,18 +67,18 @@ async def get_session(id:str, type:str):
     return resp_200(data="")
 
 @router.post('/mark')
-async def mark(session_id:str ,task_id:int,status:int,
+async def mark(data: MarkData,
                login_user: UserPayload = Depends(get_login_user)):
 
     """
     标记任务为当前用户，并且其他人不能进行覆盖
     """
 
-    record = MarkRecordDao.get_record(task_id,session_id)
+    record = MarkRecordDao.get_record(data.task_id,data.session_id)
     if record:
         return resp_500(data="已经标注过了")
 
-    record_info = MarkRecord(create_id=login_user.user_id,session_id=session_id,task_id=task_id,status=status)
+    record_info = MarkRecord(create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
 
