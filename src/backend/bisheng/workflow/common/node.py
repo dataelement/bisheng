@@ -1,4 +1,7 @@
 from enum import Enum
+from typing import Optional, Any
+
+from pydantic import BaseModel, Field
 
 
 class NodeType(Enum):
@@ -17,3 +20,5 @@ class NodeType(Enum):
     TOOL = "tool"
 
 
+class BaseNodeData(BaseModel):
+    pass
