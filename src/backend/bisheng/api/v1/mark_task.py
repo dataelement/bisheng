@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
@@ -15,6 +16,7 @@ router = APIRouter(prefix='/mark', tags=['Mark'])
 
 @router.get('/list')
 def list(request: Request,Authorize: AuthJWT = Depends(),
+                status:Optional[int] = None,
                 page_size: int = 10,
                 page_num: int = 1,
          login_user: UserPayload = Depends(get_login_user)):
@@ -23,11 +25,12 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     """
     Authorize.jwt_required()
     if login_user.is_admin():
-        task_List = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num)
+        task_List,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
     else:
-        task_List = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num)
+        task_List,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
 
-    return resp_200(data=task_List)
+    result = {"list":task_List,"total":count}
+    return resp_200(data=result)
 
 
 @router.post('/create_task')

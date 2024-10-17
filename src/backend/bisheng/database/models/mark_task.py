@@ -68,12 +68,19 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def get_task_list(cls, user_id: int,
+                      status:int,
                       page_size: int = 10,
                       page_num: int = 1,
-                      ) -> List[MarkTask]:
+                      ): 
         with session_getter() as session:
-            statement = select(MarkTask).where(MarkTask.status==MarkTaskStatus.DEFAULT.value)
+            statement = select(MarkTask)
+
+            if status:
+                statement = statement.where(MarkTask.status==status)
             if user_id:
                 statement = statement.where(or_(MarkTask.user_id == user_id))
+            # 计算总任务数
+            total_count_query = select(func.count()).select_from(statement.alias("subquery"))
+            total_count = session.execute(total_count_query).scalar()
             statement = statement.limit(page_size).offset((page_num - 1) * page_size)
-            return session.exec(statement).all()
+            return session.exec(statement).all(),total_count
