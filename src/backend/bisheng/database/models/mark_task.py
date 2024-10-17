@@ -49,7 +49,7 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def update_task(cls,task_id:int,status:int):
-        st = update(MarkTask).where(MarkTask.id==task_id).values(MarkTask.status==status)
+        st = update(MarkTask).where(MarkTask.id==task_id).values(status==status)
         with session_getter() as session:
             session.exec(st)
             session.commit()
@@ -77,6 +77,11 @@ class MarkTaskDao(MarkTaskBase):
             statement = select(MarkTask).where(MarkTask.id==task_id)
             return session.exec(statement).first()
 
+    @classmethod
+    def get_task(cls,user_id:int) -> MarkTask:
+        with session_getter() as session:
+            statement = select(MarkTask).where(MarkTask.process_users.like("%{}%".format(user_id)))
+            return session.exec(statement).first()
 
     @classmethod
     def get_task_list(cls, user_id: int,
