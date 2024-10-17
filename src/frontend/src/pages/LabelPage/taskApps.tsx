@@ -1,10 +1,11 @@
 import ColFilterUser from "@/components/bs-comp/tableComponent/ColFilterUser";
 import { ThunmbIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
+import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { getChatLabelsApi } from "@/controllers/API/log";
+import { getChatLabelsApi, getMarkChatsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { ArrowLeft } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
@@ -12,8 +13,11 @@ import { Link, useParams } from "react-router-dom";
 export default function taskApps() {
     const { id } = useParams()
 
-    const { data: datalist, loading, filterData } = useTable({}, (param) =>
-        getChatLabelsApi(param).then(res => ({ ...res, pageSize: param, data: res.list }))
+    const { page, pageSize, total, data: datalist, loading, setPage, filterData } = useTable({}, (param) =>
+        getMarkChatsApi({
+            ...param,
+            task_id: id
+        }).then(res => ({ ...res, pageSize: param, data: res.list }))
     )
 
     return <div className="h-full">
@@ -65,7 +69,7 @@ export default function taskApps() {
                         {datalist.map((el, index) => (
                             <TableRow key={index}>
                                 <TableCell>{el.flow_name}</TableCell>
-                                <TableCell>{el.create_time}</TableCell>
+                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="break-all flex gap-2">
                                     <div className="text-center text-xs relative">
                                         <ThunmbIcon
@@ -89,8 +93,8 @@ export default function taskApps() {
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell>{el.flow_name}</TableCell>
-                                <TableCell>{el.flow_name}</TableCell>
+                                <TableCell>{ }</TableCell>
+                                <TableCell>{el.user_name}</TableCell>
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     // window.libname = el.name;
@@ -98,7 +102,7 @@ export default function taskApps() {
                                     {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
                                     {
                                         el.chat_id && <Link
-                                            to={`/label/chat/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
+                                            to={`/label/chat/${id}/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                             className="no-underline hover:underline text-primary"
                                         // onClick={handleCachePage}
                                         >查看</Link>
@@ -108,6 +112,16 @@ export default function taskApps() {
                         ))}
                     </TableBody>
                 </Table>
+            </div>
+            <div className="bisheng-table-footer bg-background-login px-2">
+                {/* <p className="desc">xxxx</p> */}
+                <AutoPagination
+                    className="float-right justify-end w-full mr-6"
+                    page={page}
+                    pageSize={pageSize}
+                    total={total}
+                    onChange={(newPage) => setPage(newPage)}
+                />
             </div>
         </div>
     </div>;
