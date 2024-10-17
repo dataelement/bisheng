@@ -3,7 +3,7 @@ from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
-from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao
+from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
@@ -29,10 +29,11 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     else:
         task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
 
-    # for task in task_list:
-    #     task.mark_process = "lzs:123"
+    result_list = [] 
+    for task in task_list:
+        result_list.append(MarkTaskRead(**task.model_dump(),mark_process=["lzs:1234"]))
 
-    result = {"list":task_list,"total":count}
+    result = {"list":result_list,"total":count}
     return resp_200(data=result)
 
 

@@ -11,7 +11,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAcce
 from bisheng.database.models.user_role import UserRoleDao
 # if TYPE_CHECKING:
 from pydantic import validator
-from sqlalchemy import Column, DateTime, String, and_, func, or_, text
+from sqlalchemy import Column, DateTime, String, and_, delete, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
 
@@ -40,6 +40,9 @@ class MarkTaskBase(SQLModelSerializable):
 class MarkTask(MarkTaskBase,table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
+class MarkTaskRead(MarkTaskBase):
+    id: Optional[int]
+    mark_process:Optional[List[str]]
 
 
 class MarkTaskDao(MarkTaskBase):
@@ -53,9 +56,10 @@ class MarkTaskDao(MarkTaskBase):
             return task_info 
 
     @classmethod
-    def delete_task(cls, task_info: MarkTask) -> MarkTask:
+    def delete_task(cls, task_id: int):
         with session_getter() as session:
-            session.delete(task_info)
+            st = delete(MarkTask).where(MarkTask.id = task_id)
+            session.exec(st)
             session.commit()
             return task_info
 
