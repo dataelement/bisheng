@@ -58,10 +58,9 @@ class MarkTaskDao(MarkTaskBase):
     @classmethod
     def delete_task(cls, task_id: int):
         with session_getter() as session:
-            st = delete(MarkTask).where(MarkTask.id = task_id)
+            st = delete(MarkTask).where(MarkTask.id == task_id)
             session.exec(st)
             session.commit()
-            return task_info
 
     @classmethod
     def get_task_byid(cls,task_id:int) -> MarkTask:
