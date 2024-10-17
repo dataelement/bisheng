@@ -74,7 +74,7 @@ def get_app_chat_list(*,
     flow_ids, user_ids = [], []
     if keyword:
         flows = FlowDao.get_flow_list_by_name(name=keyword)
-        assistants = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
+        assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
         users = UserDao.search_user_by_name(user_name=keyword)
         if flows:
             flow_ids = [flow.id for flow in flows]
