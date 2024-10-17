@@ -14,11 +14,6 @@ from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
 
 
-class MarkTaskStatus(Enum):
-    DEFAULT = 1
-    DONE = 2
-    ING = 3
-
 
 class MarkAppUserBase(SQLModelSerializable):
     app_id: str = Field(index=True)

@@ -3,7 +3,7 @@ from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
-from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead
+from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
@@ -81,6 +81,7 @@ async def mark(data: MarkData,
     record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
+    MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
 
     return resp_200(data="ok")
 

@@ -48,6 +48,15 @@ class MarkTaskRead(MarkTaskBase):
 class MarkTaskDao(MarkTaskBase):
 
     @classmethod
+    def update_task(cls,task_id:int,status:int):
+        st = update(MarkTask).where(MarkTask.id==task_id).values(MarkTask.status==status)
+        with session_getter() as session:
+            session.exec(st)
+            session.commit()
+        return
+
+
+    @classmethod
     def create_task(cls, task_info: MarkTask) -> MarkTask:
         with session_getter() as session:
             session.add(task_info)
@@ -81,7 +90,7 @@ class MarkTaskDao(MarkTaskBase):
             if status:
                 statement = statement.where(MarkTask.status==status)
             if user_id:
-                statement = statement.where(or_(MarkTask.user_id == user_id))
+                statement = statement.where(or_(MarkTask.process_users.like('%{}%'.format(user_id))))
             # 计算总任务数
             total_count_query = select(func.count()).select_from(statement.alias("subquery"))
             total_count = session.execute(total_count_query).scalar()
