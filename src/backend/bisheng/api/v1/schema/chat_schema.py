@@ -17,7 +17,7 @@ class AppChatList(BaseModel):
     copied_count: int
     flow_type: str  # flow、assistant、workflow
     mark_user: Optional[str]
-    mark_status: Optional[str]
+    mark_status: Optional[int]
 
 
 class APIAddQAParam(BaseModel):

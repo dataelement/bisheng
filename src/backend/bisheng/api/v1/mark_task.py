@@ -78,7 +78,7 @@ async def mark(data: MarkData,
     if record:
         return resp_500(data="已经标注过了")
 
-    record_info = MarkRecord(create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status)
+    record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
 
@@ -89,6 +89,12 @@ async def get_record(chat_id:str , task_id:int):
     record = MarkRecordDao.get_record(task_id,chat_id)
     return resp_200(data=record)
 
+@router.get("/next")
+async def pre_or_next(action:str):
+    """
+    prev or next 
+    """
+    return resp_200()
 
 @router.delete('/del')
 def del_task(request: Request,task_id:int,Authorize: AuthJWT = Depends() ):

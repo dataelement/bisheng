@@ -26,7 +26,7 @@ class MarkRecordBase(SQLModelSerializable):
     app_id: int = Field(index=True)
     task_id: int = Field(index=True)
     session_id: str = Field(index=True)
-    status: Optional[int] = Field(index=False, default=1)
+    status: int = Field(index=False, default=1)
     update_time: Optional[datetime] = Field(
         sa_column=Column(DateTime,
                          nullable=True,

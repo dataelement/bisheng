@@ -24,6 +24,7 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.mark_record import MarkRecordDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
 from bisheng.database.models.user import UserDao
@@ -50,6 +51,8 @@ expire = 600  # reids 60s 过期
             status_code=200)
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
+                      mark_user: Optional[int] = None,
+                      mark_status: Optional[int] = None,
                       task_id: int,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
@@ -111,6 +114,8 @@ def get_app_chat_list(*,
     flow_map = {flow.id: flow.name for flow in flow_list}
     assistant_map = {assistant.id: assistant.name for assistant in assistant_list}
 
+
+
     flow_map.update(assistant_map)
     res_obj = PageList(list=[
         AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
@@ -119,6 +124,14 @@ def get_app_chat_list(*,
                     **one) for one in res
     ],
                        total=count)
+
+    for o in res_obj.list:
+        mark = MarkRecordDao.get_record(task_id,o.chat_id)
+        o.mark_user = mark.create_user
+        o.mark_status = mark.status
+
+
+
     return resp_200(res_obj)
 
 
