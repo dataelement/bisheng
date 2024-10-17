@@ -49,11 +49,9 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def update_task(cls,task_id:int,status:int):
+        st = update(MarkTask).where(MarkTask.id==task_id).values(status=status)
         with session_getter() as session:
-            st = select(MarkTask).where(MarkTask.id==task_id)
-            task = session.exec(st).first()
-            task.status = status
-            session.refresh(task)
+            session.exec(st)
             session.commit()
         return
 
