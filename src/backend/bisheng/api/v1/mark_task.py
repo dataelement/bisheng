@@ -14,15 +14,18 @@ router = APIRouter(prefix='/mark', tags=['Mark'])
 
 
 @router.get('/list')
-def list(request: Request,Authorize: AuthJWT = Depends(),login_user: UserPayload = Depends(get_login_user)):
+def list(request: Request,Authorize: AuthJWT = Depends(),
+                page_size: int = 10,
+                page_num: int = 1,
+         login_user: UserPayload = Depends(get_login_user)):
     """
     非admin 只能查看自己已标注和未标注的
     """
     Authorize.jwt_required()
     if login_user.is_admin():
-        task_List = MarkTaskDao.get_task_list(user_id=None)
+        task_List = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num)
     else:
-        task_List = MarkTaskDao.get_task_list(user_id=login_user.user_id)
+        task_List = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num)
 
     return resp_200(data=task_List)
 

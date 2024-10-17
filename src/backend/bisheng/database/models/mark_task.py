@@ -60,9 +60,20 @@ class MarkTaskDao(MarkTaskBase):
             return task_info
 
     @classmethod
-    def get_task_list(cls, user_id: int) -> List[MarkTask]:
+    def get_task_byid(cls,task_id:int) -> MarkTask:
+        with session_getter() as session:
+            statement = select(MarkTask).where(MarkTask.id==task_id)
+            return session.exec(statement).first()
+
+
+    @classmethod
+    def get_task_list(cls, user_id: int,
+                      page_size: int = 10,
+                      page_num: int = 1,
+                      ) -> List[MarkTask]:
         with session_getter() as session:
             statement = select(MarkTask).where(MarkTask.status==MarkTaskStatus.DEFAULT.value)
             if user_id:
                 statement = statement.where(or_(MarkTask.user_id == user_id))
+            statement = statement.limit(page_size).offset((page_num) * page_size)
             return session.exec(statement).all()

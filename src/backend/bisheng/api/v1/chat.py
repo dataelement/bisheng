@@ -24,6 +24,7 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -49,13 +50,14 @@ expire = 600  # reids 60s 过期
             status_code=200)
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
+                      task_id: int,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
     """通过消息表进行聊天App统计，全量表查询，"""
     """性能问题后续优化"""
 
-    # TODO: 这里需要修改为 查询的是自己的或者是未标注的
+    # TODO: 这里需要修改为 查询的是自己的或者是未标注的 查询任务下，关联的所有应用的列表
 
     group_flow_ids = []
     if not login_user.is_admin():
@@ -65,9 +67,13 @@ def get_app_chat_list(*,
             raise UnAuthorizedError.http_exception()
         user_group_ids = [user_group.group_id for user_group in user_groups]
         # 获取分组下的所有资源ID
-        resources = GroupResourceDao.get_groups_resource(
-            user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
-        group_flow_ids = [one.third_id for one in resources]
+        # update 这里要改为 task下面关联的应用
+        # resources = GroupResourceDao.get_groups_resource(
+        #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+        # group_flow_ids = [one.third_id for one in resources]
+
+        task = MarkTaskDao.get_task_byid(task_id)
+        group_flow_ids = task.app_id.split(",")
         if not group_flow_ids:
             return resp_200(PageList(list=[], total=0))
 
