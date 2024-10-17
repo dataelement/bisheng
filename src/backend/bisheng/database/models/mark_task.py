@@ -26,7 +26,7 @@ class MarkTaskBase(SQLModelSerializable):
     create_id: int = Field(index=True)
     app_id: str = Field(index=True)
     process_users: str = Field(index=False) #23,2323
-    mark_user: str = Field(index=True,nullable=True) 
+    mark_user: Optional[str] = Field(index=True,nullable=True) 
     status: Optional[int] = Field(index=False, default=1)
     update_time: Optional[datetime] = Field(
         sa_column=Column(DateTime,
