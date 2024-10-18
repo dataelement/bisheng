@@ -107,11 +107,13 @@ export async function deleteMarkApi(task_id) {
 }
 
 // 标注会话列表
-export async function getMarkChatsApi({ task_id, keyword, page, pageSize }) {
+export async function getMarkChatsApi({ task_id, keyword, page, pageSize, mark_status, mark_user }) {
     return await axios.get('/api/v1/chat/app/list', {
         params: {
             task_id,
             keyword,
+            mark_status,
+            mark_user: mark_user?.join(','),
             page_num: page,
             page_size: pageSize
         }

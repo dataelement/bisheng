@@ -44,8 +44,8 @@ export default function taskApps() {
                             <TableHead>应用名称</TableHead>
                             <TableHead>会话创建时间</TableHead>
                             <TableHead>用户反馈</TableHead>
-                            <TableHead>
-                                <div className="flex items-center w-[144px]">
+                            <TableHead className="w-[120px]">
+                                <div className="flex items-center">
                                     标注状态
                                     <TableHeadEnumFilter options={[
                                         { label: '全部', value: '0' },
@@ -53,13 +53,13 @@ export default function taskApps() {
                                         { label: '已标注', value: '2' },
                                         { label: '无需标注', value: '3' }
                                     ]}
-                                        onChange={(v) => filterData({ hehe: v })} />
+                                        onChange={(v) => filterData({ mark_status: v })} />
                                 </div>
                             </TableHead>
                             <TableHead>
                                 <div className="flex items-center">
                                     标注人
-                                    <ColFilterUser onFilter={(ids) => filterData({ users: ids })}></ColFilterUser>
+                                    <ColFilterUser onFilter={(ids) => filterData({ mark_user: ids })}></ColFilterUser>
                                 </div>
                             </TableHead>
                             <TableHead className="text-right">操作</TableHead>
@@ -93,8 +93,8 @@ export default function taskApps() {
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell>{ }</TableCell>
-                                <TableCell>{el.user_name}</TableCell>
+                                <TableCell>{['', '未标注', '已标注', '无需标注'][el.mark_status || 1]}</TableCell>
+                                <TableCell>{el.mark_user || '-'}</TableCell>
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     // window.libname = el.name;
