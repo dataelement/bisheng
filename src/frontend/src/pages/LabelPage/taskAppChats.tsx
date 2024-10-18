@@ -6,23 +6,26 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { useAssistantStore } from "@/store/assistantStore";
 import { ArrowLeft } from "lucide-react";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import AddSimilarQuestions from "../LogPage/useAppLog/AddSimilarQuestions";
 import SaveQaLibForm from "../LogPage/useAppLog/SaveQaLibForm";
+import { getMarkPermissionApi, updateMarkStatusApi } from "@/controllers/API/log";
 
 // 标注状态
 const enum LabelStatus {
-    Unlabeled = '0',
-    Labeled = '1',
-    Unnecessary = '2'
+    Unlabeled = '1',
+    Labeled = '2',
+    Unnecessary = '3'
 }
 
 export default function index() {
-    const { fid, cid, type } = useParams()
+    const { id, fid, cid, type } = useParams()
     // console.log('fid, cid :>> ', fid, cid);
     const { t } = useTranslation()
+
+    const mark = useAuth()
 
     const [status, setStatus] = React.useState(LabelStatus.Unlabeled)
     const loading = false;
@@ -51,6 +54,17 @@ export default function index() {
         }
     }
 
+    // 完成标注
+    const handleMarkAfter = () => {
+        if (status === LabelStatus.Unlabeled) {
+            changeMarkStatus(LabelStatus.Labeled)
+        }
+    }
+    const changeMarkStatus = (status: LabelStatus) => {
+        updateMarkStatusApi({ session_id: cid, task_id: Number(id), status: Number(status) })
+        setStatus(status)
+    }
+
     const navigate = useNavigate()
     const jumpToNext = (way: number) => {
         navigate(`/label/chat/${fid}/${cid}/${type}`)
@@ -73,15 +87,15 @@ export default function index() {
                     <span className=" text-gray-700 text-sm font-black pl-4">返回列表</span>
                 </div>
                 <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
-                    onValueChange={(value: LabelStatus) => setStatus(value)}>
+                    onValueChange={(value: LabelStatus) => changeMarkStatus(value)}>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled value={LabelStatus.Unlabeled} />未标注
+                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unlabeled} />未标注
                     </Label>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled value={LabelStatus.Labeled} />已标注
+                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Labeled} />已标注
                     </Label>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled value={LabelStatus.Unnecessary} />无需标注
+                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unnecessary} />无需标注
                     </Label>
                 </RadioGroup>
                 <div className="flex gap-2">
@@ -99,15 +113,25 @@ export default function index() {
                 </div>
             </div>
             <div className="h-[calc(100vh-132px)]">
-                <MessagePanne mark logo='' useName='' guideWord=''
+                <MessagePanne mark={mark} logo='' useName='' guideWord=''
                     loadMore={() => loadMoreHistoryMsg(fid, true)}
                     onMarkClick={handleMarkClick}
                 ></MessagePanne>
             </div>
         </div>
         {/* 问题 */}
-        <SaveQaLibForm ref={qaFormRef} />
+        <SaveQaLibForm ref={qaFormRef} onMarked={handleMarkAfter} />
         {/* 答案 */}
-        <AddSimilarQuestions ref={similarFormRef} />
+        <AddSimilarQuestions ref={similarFormRef} onMarked={handleMarkAfter} />
     </div>
 };
+
+// 权限
+const useAuth = () => {
+    const [mark, setMark] = useState(false);
+    useEffect(() => {
+        getMarkPermissionApi().then(setMark)
+    }, [])
+
+    return mark
+}

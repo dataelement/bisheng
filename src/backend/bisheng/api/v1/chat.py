@@ -24,6 +24,8 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.mark_record import MarkRecordDao
+from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -49,6 +51,9 @@ expire = 600  # reids 60s 过期
             status_code=200)
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
+                      mark_user: Optional[List[int]] = None,
+                      mark_status: Optional[int] = None,
+                      task_id: int,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
@@ -56,33 +61,44 @@ def get_app_chat_list(*,
     """性能问题后续优化"""
 
     group_flow_ids = []
+    flow_ids, user_ids = [], []
     if not login_user.is_admin():
         # 判断下是否是用户组管理员
         user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        if not user_groups:
-            raise UnAuthorizedError.http_exception()
-        user_group_ids = [user_group.group_id for user_group in user_groups]
-        # 获取分组下的所有资源ID
-        resources = GroupResourceDao.get_groups_resource(
-            user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
-        group_flow_ids = [one.third_id for one in resources]
-        if not group_flow_ids:
-            return resp_200(PageList(list=[], total=0))
+        if user_groups:
+            # user_group_ids = [user_group.group_id for user_group in user_groups]
+            # 获取分组下的所有资源ID
+            # update 这里要改为 task下面关联的应用
+            # resources = GroupResourceDao.get_groups_resource(
+            #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+            # group_flow_ids = [one.third_id for one in resources]
 
-    flow_ids, user_ids = [], []
-    if keyword:
-        flows = FlowDao.get_flow_list_by_name(name=keyword)
-        assistants = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
-        users = UserDao.search_user_by_name(user_name=keyword)
-        if flows:
-            flow_ids = [flow.id for flow in flows]
-        if assistants:
-            flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
-        if user_ids:
-            user_ids = [user.user_id for user in users]
-        # 检索内容为空
-        if not flow_ids and not user_ids:
-            return resp_200(PageList(list=[], total=0))
+            task = MarkTaskDao.get_task_byid(task_id)
+            #TODO: 加入筛选条件
+            group_flow_ids = task.app_id.split(",")
+            if not group_flow_ids:
+                return resp_200(PageList(list=[], total=0))
+        else:
+            #普通用户
+            user_ids = [login_user.user_id]
+
+    else:
+        group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+
+    # if keyword:
+    #     flows = FlowDao.get_flow_list_by_name(name=keyword)
+    #     assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
+    #     users = UserDao.search_user_by_name(user_name=keyword)
+    #     if flows:
+    #         flow_ids = [flow.id for flow in flows]
+    #     if assistants:
+    #         flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
+    #     if user_ids:
+    #         user_ids = [user.user_id for user in users]
+    #     # 检索内容为空
+    #     if not flow_ids and not user_ids:
+    #         return resp_200(PageList(list=[], total=0))
+
     if group_flow_ids:
         if flow_ids:
             flow_ids = list(set(flow_ids) & set(group_flow_ids))
@@ -103,6 +119,8 @@ def get_app_chat_list(*,
     flow_map = {flow.id: flow.name for flow in flow_list}
     assistant_map = {assistant.id: assistant.name for assistant in assistant_list}
 
+
+
     flow_map.update(assistant_map)
     res_obj = PageList(list=[
         AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
@@ -111,6 +129,15 @@ def get_app_chat_list(*,
                     **one) for one in res
     ],
                        total=count)
+
+    # for o in res_obj.list:
+    #     mark = MarkRecordDao.get_record(task_id,o.chat_id)
+    #     if mark:
+    #         o.mark_user = mark.create_user
+    #         o.mark_status = mark.status
+
+
+
     return resp_200(res_obj)
 
 
@@ -364,6 +391,7 @@ def get_online_chat(*,
                                name=one.name,
                                desc=one.desc,
                                logo=one.logo,
+                               count=10,
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='assistant'))
@@ -375,6 +403,7 @@ def get_online_chat(*,
                                name=one['name'],
                                desc=one['description'],
                                logo=one['logo'],
+                               count=10,
                                create_time=one['create_time'],
                                update_time=one['update_time'],
                                flow_type='flow'))
