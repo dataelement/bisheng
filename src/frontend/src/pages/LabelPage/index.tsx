@@ -7,12 +7,13 @@ import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { userContext } from "@/contexts/userContext";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { createMarkApi, deleteMarkApi, getMarksApi } from "@/controllers/API/log";
 import { getUsersApi } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -143,6 +144,8 @@ function CreateModal({ open, setOpen, onSuccess }) {
 
 export default function Tasks() {
     const [open, setOpen] = useState(false);
+    const { user } = useContext(userContext);
+
     // 获取任务数据
     const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
         getMarksApi({
@@ -168,9 +171,9 @@ export default function Tasks() {
         <div className="relative px-2 pt-4 h-full">
             <div className="h-full overflow-y-auto pb-20">
                 <div className="flex justify-end gap-6">
-                    <Button onClick={() => setOpen(true)}>
+                    {user.role === 'group_admin' && <Button onClick={() => setOpen(true)}>
                         创建标注任务
-                    </Button>
+                    </Button>}
                 </div>
                 <Table className="mb-[50px]">
                     <TableHeader>
