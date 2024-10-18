@@ -23,5 +23,12 @@ class GraphEngine:
         for node in nodes:
             if not node["id"]:
                 raise Exception("node must have attribute id")
-            node_instance = NodeFactory.instance_node(**node)
-            self.nodes_map[node['id']] = node
+            node_instance = NodeFactory.instance_node(**node, graph=self)
+            self.nodes_map[node['id']] = node_instance
+
+        # init edges
+        for edge in self.edges:
+            if not edge["from"]:
+                raise Exception("edge must have attribute from")
+            if not edge["to"]:
+                raise Exception("edge must have attribute to")
