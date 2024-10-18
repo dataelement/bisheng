@@ -130,11 +130,11 @@ def get_app_chat_list(*,
     ],
                        total=count)
 
-    for o in res_obj.list:
-        mark = MarkRecordDao.get_record(task_id,o.chat_id)
-        if mark:
-            o.mark_user = mark.create_user
-            o.mark_status = mark.status
+    # for o in res_obj.list:
+    #     mark = MarkRecordDao.get_record(task_id,o.chat_id)
+    #     if mark:
+    #         o.mark_user = mark.create_user
+    #         o.mark_status = mark.status
 
 
 
