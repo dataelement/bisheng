@@ -295,6 +295,11 @@ def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
         raise HTTPException(status_code=404, detail='知识库类型错误')
 
+    for q in QACreate.questions:
+        db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(q)
+        if db_q:
+            return resp_500(data=q+":该问题已被标注过")
+
     add_qa(db_knowledge=db_knowledge, data=QACreate)
     return resp_200()
 

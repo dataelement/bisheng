@@ -216,6 +216,11 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
+    def get_qa_knowledge_by_name(cls, question: str) -> QAKnowledge:
+        with session_getter() as session:
+            return session.exec(select(QAKnowledge).where(QAKnowledge.questions == question)).first()
+
+    @classmethod
     def update(cls, qa_knowledge: QAKnowledge):
         if qa_knowledge.id is None:
             raise ValueError('id不能为空')

@@ -51,7 +51,7 @@ expire = 600  # reids 60s 过期
             status_code=200)
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
-                      mark_user: Optional[int] = None,
+                      mark_user: Optional[List[int]] = None,
                       mark_status: Optional[int] = None,
                       task_id: int,
                       page_num: Optional[int] = 1,
@@ -60,40 +60,45 @@ def get_app_chat_list(*,
     """通过消息表进行聊天App统计，全量表查询，"""
     """性能问题后续优化"""
 
-    # TODO: 这里需要修改为 查询的是自己的或者是未标注的 查询任务下，关联的所有应用的列表
-
     group_flow_ids = []
+    flow_ids, user_ids = [], []
     if not login_user.is_admin():
         # 判断下是否是用户组管理员
         user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        if not user_groups:
-            raise UnAuthorizedError.http_exception()
-        user_group_ids = [user_group.group_id for user_group in user_groups]
-        # 获取分组下的所有资源ID
-        # update 这里要改为 task下面关联的应用
-        # resources = GroupResourceDao.get_groups_resource(
-        #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
-        # group_flow_ids = [one.third_id for one in resources]
+        if user_groups:
+            # user_group_ids = [user_group.group_id for user_group in user_groups]
+            # 获取分组下的所有资源ID
+            # update 这里要改为 task下面关联的应用
+            # resources = GroupResourceDao.get_groups_resource(
+            #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+            # group_flow_ids = [one.third_id for one in resources]
 
-        task = MarkTaskDao.get_task_byid(task_id)
-        group_flow_ids = task.app_id.split(",")
-        if not group_flow_ids:
-            return resp_200(PageList(list=[], total=0))
+            task = MarkTaskDao.get_task_byid(task_id)
+            #TODO: 加入筛选条件
+            group_flow_ids = task.app_id.split(",")
+            if not group_flow_ids:
+                return resp_200(PageList(list=[], total=0))
+        else:
+            #普通用户
+            user_ids = [login_user.user_id]
 
-    flow_ids, user_ids = [], []
-    if keyword:
-        flows = FlowDao.get_flow_list_by_name(name=keyword)
-        assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
-        users = UserDao.search_user_by_name(user_name=keyword)
-        if flows:
-            flow_ids = [flow.id for flow in flows]
-        if assistants:
-            flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
-        if user_ids:
-            user_ids = [user.user_id for user in users]
-        # 检索内容为空
-        if not flow_ids and not user_ids:
-            return resp_200(PageList(list=[], total=0))
+    else:
+        group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+
+    # if keyword:
+    #     flows = FlowDao.get_flow_list_by_name(name=keyword)
+    #     assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
+    #     users = UserDao.search_user_by_name(user_name=keyword)
+    #     if flows:
+    #         flow_ids = [flow.id for flow in flows]
+    #     if assistants:
+    #         flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
+    #     if user_ids:
+    #         user_ids = [user.user_id for user in users]
+    #     # 检索内容为空
+    #     if not flow_ids and not user_ids:
+    #         return resp_200(PageList(list=[], total=0))
+
     if group_flow_ids:
         if flow_ids:
             flow_ids = list(set(flow_ids) & set(group_flow_ids))

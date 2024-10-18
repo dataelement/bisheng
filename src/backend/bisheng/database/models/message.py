@@ -6,13 +6,15 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, text, update
+from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, or_, text, update
 from sqlmodel import Field, delete, select
 
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
     source: Optional[int] = Field(index=False, description='是否支持溯源')
+    mark_status: Optional[int] = Field(index=False,default=1 description='标记状态')
+    mark_user: Optional[int] = Field(index=False, description='标记用户')
     message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
     extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
@@ -95,8 +97,11 @@ class MessageDao(MessageBase):
                 count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
                 sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
             if user_ids:
-                count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
-                sql = sql.where(ChatMessage.user_id.in_(user_ids))
+                count_stat = count_stat.where(or_(
+                    ChatMessage.mark_user.in_(user_ids),
+                    ChatMessage.mark_status==1,
+                                                 ))
+                sql = sql.where(ChatMessage.mark_user.in_(user_ids))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
                 func.max(ChatMessage.create_time).desc()).offset(
