@@ -8,6 +8,7 @@ from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRe
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import UserDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -27,9 +28,11 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     非admin 只能查看自己已标注和未标注的
     """
     Authorize.jwt_required()
-    if login_user.is_admin():
+    groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+    if groups:
         task_list,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
     else:
+
         task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
 
     result_list = [] 
@@ -97,6 +100,10 @@ async def mark(data: MarkData,
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
     MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
+    msg = ChatMessageDao.get_msg_by_chat_id(data.session_id)
+    msg.mark_status = data.status
+    ChatMessageDao.update_message_model(msg)
+
 
     return resp_200(data="ok")
 
