@@ -32,7 +32,6 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     if groups:
         task_list,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
     else:
-
         task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
 
     result_list = [] 
