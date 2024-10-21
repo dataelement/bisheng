@@ -102,7 +102,8 @@ class MessageDao(MessageBase):
                     ChatMessage.mark_user.in_(user_ids),
                     ChatMessage.mark_status==1,
                                                  ))
-                sql = sql.where(ChatMessage.mark_user.in_(user_ids))
+                sql = sql.where(or_(ChatMessage.mark_user.in_(user_ids),
+                                    ChatMessage.mark_status==1))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
                 func.max(ChatMessage.create_time).desc()).offset(
