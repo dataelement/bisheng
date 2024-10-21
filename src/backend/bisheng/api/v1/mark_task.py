@@ -128,7 +128,7 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","))
         if msg:
             
-            flow = FlowDao.get_flow_by_id(msg.flow_id)
+            flow = FlowDao.get_flow_by_idstr(msg.flow_id)
             if flow:
                 result['flow_type'] = 'flow'
             else:
