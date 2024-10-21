@@ -59,7 +59,7 @@ export default function taskApps() {
                             <TableHead>
                                 <div className="flex items-center">
                                     标注人
-                                    <ColFilterUser onFilter={(ids) => filterData({ mark_user: ids })}></ColFilterUser>
+                                    <ColFilterUser label={id} onFilter={(ids) => filterData({ mark_user: ids })}></ColFilterUser>
                                 </div>
                             </TableHead>
                             <TableHead className="text-right">操作</TableHead>
