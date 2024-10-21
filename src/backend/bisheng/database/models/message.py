@@ -171,6 +171,13 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_msg_by_chat_id(cls, chat_id: str):
+        with session_getter() as session:
+            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
+            return session.exec(statement).all()
+
+
+    @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
         if user_id is None or chat_id is None:
             logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)

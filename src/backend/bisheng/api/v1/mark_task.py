@@ -116,7 +116,7 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
     if action == "prev":
         record = MarkRecordDao.get_prev_task(login_user.user_id)
         if record:
-            chat = ChatMessageDao.get_message_by_id(record.session_id)
+            chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
             return resp_200(data=chat)
     else:
         task = MarkTaskDao.get_task_byid(task_id)
