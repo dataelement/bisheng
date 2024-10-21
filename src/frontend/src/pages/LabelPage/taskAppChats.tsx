@@ -11,7 +11,47 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import AddSimilarQuestions from "../LogPage/useAppLog/AddSimilarQuestions";
 import SaveQaLibForm from "../LogPage/useAppLog/SaveQaLibForm";
-import { getMarkPermissionApi, updateMarkStatusApi } from "@/controllers/API/log";
+import { getMarkPermissionApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
+
+const PageChange = () => {
+    const { id, cid } = useParams()
+    const [hasPrev, setHasPrev] = useState(false)
+    const [hasNext, setHasNext] = useState(false)
+    const prevInfoRef = useRef<any>(null)
+    const nextInfoRef = useRef<any>(null)
+    useEffect(() => {
+        getNextMarkChatApi({ action: 'prev', task_id: id }).then(res => {
+            setHasPrev(!!res)
+            prevInfoRef.current = res
+        })
+        getNextMarkChatApi({ action: 'next', task_id: id }).then(res => {
+            setHasNext(!!res)
+            nextInfoRef.current = res
+        })
+    }, [cid])
+
+    const navigate = useNavigate()
+    const jumpToNext = (way: number) => {
+        const info = way === -1 ? prevInfoRef.current : nextInfoRef.current
+        const { flow_id, chat_id, flow_type } = info
+        navigate(`/label/chat/${id}/${flow_id}/${chat_id}/${flow_type}`)
+    }
+
+    return <div className="flex gap-2">
+        <Button
+            variant="outline"
+            disabled={!hasPrev}
+            className="border-primary text-primary text-xs h-8"
+            onClick={() => jumpToNext(-1)}
+        >上一条会话</Button>
+        <Button
+            variant="outline"
+            disabled={!hasNext}
+            className="border-primary text-primary text-xs h-8"
+            onClick={() => jumpToNext(1)}
+        >下一条会话</Button>
+    </div>
+}
 
 // 标注状态
 const enum LabelStatus {
@@ -44,7 +84,7 @@ export default function index() {
             clearMsgs()
             type === 'assistant' && destroy()
         }
-    }, [])
+    }, [cid])
 
     const handleMarkClick = (type: 'question' | 'answer', msgId: string, qa) => {
         if (type === 'question') {
@@ -63,11 +103,6 @@ export default function index() {
     const changeMarkStatus = (status: LabelStatus) => {
         updateMarkStatusApi({ session_id: cid, task_id: Number(id), status: Number(status) })
         setStatus(status)
-    }
-
-    const navigate = useNavigate()
-    const jumpToNext = (way: number) => {
-        navigate(`/label/chat/${fid}/${cid}/${type}`)
     }
 
     return <div>
@@ -98,19 +133,7 @@ export default function index() {
                         <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unnecessary} />无需标注
                     </Label>
                 </RadioGroup>
-                <div className="flex gap-2">
-                    <Button
-                        variant="outline"
-                        disabled
-                        className="border-primary text-primary text-xs h-8"
-                        onClick={() => jumpToNext(-1)}
-                    >上一条会话</Button>
-                    <Button
-                        variant="outline"
-                        className="border-primary text-primary text-xs h-8"
-                        onClick={() => jumpToNext(1)}
-                    >下一条会话</Button>
-                </div>
+                <PageChange />
             </div>
             <div className="h-[calc(100vh-132px)]">
                 <MessagePanne mark={mark} logo='' useName='' guideWord=''
