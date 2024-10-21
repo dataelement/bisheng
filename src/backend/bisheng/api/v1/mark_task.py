@@ -2,9 +2,11 @@ import json
 from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
@@ -84,13 +86,14 @@ async def mark(data: MarkData,
 
     """
     标记任务为当前用户，并且其他人不能进行覆盖
+    flow_type flow assistant
     """
 
     record = MarkRecordDao.get_record(data.task_id,data.session_id)
     if record:
         return resp_500(data="已经标注过了")
 
-    record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status)
+    record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
     MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
@@ -103,10 +106,37 @@ async def get_record(chat_id:str , task_id:int):
     return resp_200(data=record)
 
 @router.get("/next")
-async def pre_or_next(action:str):
+async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(get_login_user)):
     """
     prev or next 
     """
+
+    if action not in ["prev","next"]:
+        return resp_500(data="action参数错误")
+
+    result = {"task_id":task_id}
+
+    if action == "prev":
+        record = MarkRecordDao.get_prev_task(login_user.user_id)
+        if record:
+            chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
+            result["chat_id"] = chat.chat_id
+            result["flow_type"] = chat.type
+            return resp_200(data=result)
+    else:
+        task = MarkTaskDao.get_task_byid(task_id)
+        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","))
+        if msg:
+            
+            flow = FlowDao.get_flow_by_idstr(msg.flow_id)
+            if flow:
+                result['flow_type'] = 'flow'
+            else:
+                result['flow_type'] = 'assistant'
+
+            result["chat_id"] = msg.chat_id
+        return resp_200(data=result)
+
     return resp_200()
 
 @router.delete('/del')

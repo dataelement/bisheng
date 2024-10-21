@@ -171,7 +171,7 @@ export default function Tasks() {
         <div className="relative px-2 pt-4 h-full">
             <div className="h-full overflow-y-auto pb-20">
                 <div className="flex justify-end gap-6">
-                    {user.role === 'group_admin' && <Button onClick={() => setOpen(true)}>
+                    {['admin', 'group_admin'].includes(user.role) && <Button onClick={() => setOpen(true)}>
                         创建标注任务
                     </Button>}
                 </div>
@@ -193,7 +193,7 @@ export default function Tasks() {
                             </TableHead>
                             <TableHead>创建时间</TableHead>
                             <TableHead>创建人</TableHead>
-                            <TableHead className="w-[144px]">标注情况</TableHead>
+                            <TableHead className="w-[144px]">标注进度</TableHead>
                             <TableHead className="text-right w-[164px]">操作</TableHead>
                         </TableRow>
                     </TableHeader>

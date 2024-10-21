@@ -102,7 +102,8 @@ class MessageDao(MessageBase):
                     ChatMessage.mark_user.in_(user_ids),
                     ChatMessage.mark_status==1,
                                                  ))
-                sql = sql.where(ChatMessage.mark_user.in_(user_ids))
+                sql = sql.where(or_(ChatMessage.mark_user.in_(user_ids),
+                                    ChatMessage.mark_status==1))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
                 func.max(ChatMessage.create_time).desc()).offset(
@@ -162,6 +163,20 @@ class ChatMessageDao(MessageBase):
                 statement = statement.where(ChatMessage.category.in_(category_list))
             statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
             return session.exec(statement).all()
+
+    @classmethod
+    def get_last_msg_by_flow_id(cls, flow_id: List[str]):
+        with session_getter() as session:
+            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(ChatMessage.mark_status == 1).group_by(ChatMessage.chat_id).order_by(
+                ChatMessage.create_time).limit(1)
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_msg_by_chat_id(cls, chat_id: str):
+        with session_getter() as session:
+            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
+            return session.exec(statement).all()
+
 
     @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):

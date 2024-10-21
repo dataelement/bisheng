@@ -22,6 +22,7 @@ class MarkRecordStatus(Enum):
 
 class MarkRecordBase(SQLModelSerializable):
     create_user: str = Field(index=True)
+    flow_type: str = Field(index=True)
     create_id: int = Field(index=True)
     app_id: int = Field(index=True)
     task_id: int = Field(index=True)
@@ -42,6 +43,15 @@ class MarkRecord(MarkRecordBase,table=True):
 
 
 class MarkRecordDao(MarkRecordBase):
+
+
+    @classmethod
+    def get_prev_task(cls,user_id:int):
+        with session_getter() as session:
+            statement = select(MarkRecord).where(MarkRecord.create_id==user_id).order_by(MarkRecord.id.desc()).limit(1)
+            return session.exec(statement).first()
+
+
 
     @classmethod
     def create_record(cls, record_info: MarkRecord) -> MarkRecord:
