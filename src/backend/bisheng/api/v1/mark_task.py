@@ -5,6 +5,7 @@ from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
+from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -61,15 +62,21 @@ async def create(task_create: MarkTaskCreate,login_user: UserPayload = Depends(g
     return resp_200(data="ok")
 
 
-@router.get('/get_session')
-async def get_session(id:str, type:str):
+@router.get('/get_user')
+async def get_user(task_id:int):
     """
-    查询此应用下 所有的会话记录
+    查询此应用下 所有的用户
     """
 
     #根据type 查询不同的会话
+    task = MarkTaskDao.get_task_byid(task_id)
+    user_list = []
 
-    return resp_200(data="")
+    for u in task.process_users.split(","):
+        user = UserDao.get_user(int(u))
+        user_list.append(user)
+
+    return resp_200(data=user_list)
 
 @router.post('/mark')
 async def mark(data: MarkData,
