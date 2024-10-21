@@ -128,6 +128,7 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
             result["chat_id"] = chat.chat_id
             result["flow_type"] = chat.type
+            result["flow_id"] = chat.flow_id
             return resp_200(data=result)
     else:
         task = MarkTaskDao.get_task_byid(task_id)
@@ -141,6 +142,7 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
                 result['flow_type'] = 'assistant'
 
             result["chat_id"] = msg.chat_id
+            result["flow_id"] = msg.flow_id
         return resp_200(data=result)
 
     return resp_200()
