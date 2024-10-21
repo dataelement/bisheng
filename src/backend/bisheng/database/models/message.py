@@ -164,6 +164,13 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_last_msg_by_flow_id(cls, flow_id: List[str]):
+        with session_getter() as session:
+            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(ChatMessage.mark_status == 1).group_by(ChatMessage.chat_id).order_by(
+                ChatMessage.create_time).limit(1)
+            return session.exec(statement).first()
+
+    @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
         if user_id is None or chat_id is None:
             logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)
