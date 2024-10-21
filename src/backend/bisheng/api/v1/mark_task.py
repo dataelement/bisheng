@@ -113,16 +113,22 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
     if action not in ["prev","next"]:
         return resp_500(data="action参数错误")
 
+    result = {"task_id":task_id}
+
     if action == "prev":
         record = MarkRecordDao.get_prev_task(login_user.user_id)
         if record:
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
-            return resp_200(data=chat)
+            result["chat_id"] = chat.chat_id
+            result["flow_type"] = chat.type
+            return resp_200(data=result)
     else:
         task = MarkTaskDao.get_task_byid(task_id)
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","))
-        chat = ChatMessageDao.get_message_by_id(msg.chat_id)
-        return resp_200(data=chat)
+        if msg:
+            result["chat_id"] = msg.chat_id
+            result["flow_type"] = msg.type
+        return resp_200(data=result)
 
     return resp_200()
 
