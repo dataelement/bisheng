@@ -11,3 +11,17 @@ class Workflow:
         self.graph_config = graph_config
 
         self.graph_engine = GraphEngine(user_id=user_id, graph_config=graph_config)
+
+        self.first_run = True
+
+    def run(self):
+        while True:
+            if self.first_run:
+                self.first_run = False
+                self.graph_engine.run()
+                continue
+            if self.graph_engine.status == 1:
+                self.graph_engine.run()
+            else:
+                break
+

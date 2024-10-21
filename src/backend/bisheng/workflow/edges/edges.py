@@ -15,7 +15,7 @@ class EdgeBase(BaseModel):
     targetType: Optional[str] = Field(..., description="target node type")
 
 
-class Edge:
+class EdgeManage:
 
     def __init__(self, edges: List[Any]):
         self.edges: List[EdgeBase] = [EdgeBase(**one) for one in edges]
@@ -37,7 +37,10 @@ class Edge:
         """ get target node id by source node id"""
         if source not in self.source_map:
             return None
+        return [one.target for one in self.source_map[source]]
 
-
-
-
+    def get_source_node(self, target: str) -> List[str] | None:
+        """ get source node id by target node id"""
+        if target not in self.target_map:
+            return None
+        return [one.source for one in self.target_map[target]]
