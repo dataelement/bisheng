@@ -2,6 +2,7 @@ import json
 from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
@@ -126,8 +127,14 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
         task = MarkTaskDao.get_task_byid(task_id)
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","))
         if msg:
+            
+            flow = FlowDao.get_flow_by_id(msg.flow_id)
+            if flow:
+                result['flow_type'] = 'flow'
+            else:
+                result['flow_type'] = 'assistant'
+
             result["chat_id"] = msg.chat_id
-            result["flow_type"] = msg.type
         return resp_200(data=result)
 
     return resp_200()
