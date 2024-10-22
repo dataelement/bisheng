@@ -168,6 +168,7 @@ def get_app_chat_list(*,
     if mark_user:
         res_obj.list = [one for one in res_obj.list if one.mark_user in mark_user]
 
+    res_obj.total = len(res_obj.list)
 
 
     return resp_200(res_obj)
