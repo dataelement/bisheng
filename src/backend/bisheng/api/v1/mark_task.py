@@ -37,8 +37,9 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     result_list = [] 
     for task in task_list:
         count = MarkRecordDao.get_count(task.id,task.create_id)
-        process_count = "{}:{}".format(task.create_user,count[0].user_count)
-        result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_count))
+        if count:
+            process_count = "{}:{}".format(task.create_user,count[0].user_count)
+            result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_count))
 
     result = {"list":result_list,"total":count}
     return resp_200(data=result)
