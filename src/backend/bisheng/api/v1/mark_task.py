@@ -107,8 +107,8 @@ async def mark(data: MarkData,
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
     MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
-    msg.mark_status = data.status
-    ChatMessageDao.update_message_model(msg)
+    # msg.mark_status = data.status
+    # ChatMessageDao.update_message_model(msg)
 
 
     return resp_200(data="ok")
