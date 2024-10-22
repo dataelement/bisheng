@@ -5,19 +5,14 @@ from urllib.parse import unquote, urlparse
 from bisheng.api.services.llm import LLMService
 from bisheng.api.v1.schemas import ChatMessage
 from bisheng.database.base import session_getter
-from bisheng.database.models.model_deploy import ModelDeploy
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.interface.importing import import_by_type
-from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.processing.base import get_result_and_steps
 from bisheng.utils.logger import logger
-from bisheng_langchain.chat_models import HostQwenChat
 from fastapi import WebSocket
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.schema.document import Document
-from sqlmodel import select
 
 
 async def process_graph(langchain_object,

@@ -1,9 +1,10 @@
 import json
 import math
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid1
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services import chat_imp
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
@@ -13,7 +14,7 @@ from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schema.base_schema import PageList
-from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, FlowGptsOnlineList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
@@ -44,6 +45,30 @@ router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
 flow_data_store = redis_client
 expire = 600  # reids 60s 过期
+
+
+@router.post('/chat/completions', response_class=StreamingResponse)
+async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depends()):
+
+    # messages 为openai 格式。目前不支持openai的复杂多轮，先临时处理
+    message = None
+    if request.messages:
+        last_message = request.messages[-1]
+        if 'content' in last_message:
+            message = last_message['content']
+        else:
+            logger.info('last_message={}', last_message)
+            message = last_message
+    session_id = request.session_id or uuid1().hex
+
+    payload = {'user_name': 'root', 'user_id': 1, 'role': 'admin'}
+    access_token = Authorize.create_access_token(subject=json.dumps(payload), expires_time=864000)
+    url = f'ws://127.0.0.1:7860/api/v1/chat/{request.model}?chat_id={session_id}&t={access_token}'
+    web_conn = await chat_imp.get_connection(url, session_id)
+
+    return StreamingResponse(chat_imp.event_stream(web_conn, message, session_id, request.model,
+                                                   request.streaming),
+                             media_type='text/event-stream')
 
 
 @router.get('/chat/app/list',

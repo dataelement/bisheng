@@ -181,7 +181,6 @@ class Handler:
                               user_id=None):
         # Process the graph data and chat message
         chat_inputs = payload.pop('inputs', {})
-        chat_inputs.pop('id', '')
         is_begin = payload.get('is_begin', True)
         key = get_cache_key(client_id, chat_id)
 
@@ -282,6 +281,7 @@ class Handler:
                 response.message_id,
                 result,
             )
+
         return result
 
     async def process_file(self, session: ChatManager, client_id: str, chat_id: str, payload: dict,
