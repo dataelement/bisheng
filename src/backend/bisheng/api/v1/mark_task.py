@@ -29,21 +29,23 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     """
     Authorize.jwt_required()
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-    if login_user.is_admin() or groups:
-        task_list,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
+    if login_user.is_admin():
+        task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=None)
     else:
-        task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)
+        task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=login_user.user_id if groups else None)
 
     result_list = [] 
     for task in task_list:
-        record_list = MarkRecordDao.get_list_by_taskid(task.id)
-        process_count = []
-        for r in record_list:
-            count = MarkRecordDao.get_count(task.id,r.create_id)
-            process_count.append("{}:{}".format(r.create_user,len(count)))
-        result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_count))
+        record= MarkRecordDao.get_count(task.id)
+        process_list= []
+        for c in record:
+            process_count = "{}:{}".format(c.create_user,c.user_count)
+            process_list.append(process_count)
+
+        result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_list))
 
     result = {"list":result_list,"total":count}
+    logger.info(result)
     return resp_200(data=result)
 
 
