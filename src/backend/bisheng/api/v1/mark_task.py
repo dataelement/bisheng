@@ -42,10 +42,10 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
             process_count = "{}:{}".format(c.create_user,c.user_count)
             process_list.append(process_count)
 
-        logger.info(process_list)
         result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_list))
 
     result = {"list":result_list,"total":count}
+    logger.info(result)
     return resp_200(data=result)
 
 
