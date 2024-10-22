@@ -162,6 +162,13 @@ def get_app_chat_list(*,
             o.mark_status = mark.status
 
 
+    if mark_status:
+        res_obj.list = [one for one in res_obj.list if one.mark_status == mark_status]
+
+    if mark_user:
+        res_obj.list = [one for one in res_obj.list if one.mark_user in mark_user]
+
+
 
     return resp_200(res_obj)
 
