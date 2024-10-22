@@ -411,24 +411,26 @@ def get_online_chat(*,
                                       page_size=limit)
     flows = flows.data.get('data')
     for one in all_assistant:
+        msg= ChatMessageDao.get_msg_by_flow(one.id)
         res.append(
             FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
                                logo=one.logo,
-                               count=10,
+                               count=len(msg),
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='assistant'))
 
     # 获取用户可见的所有已上线的技能
     for one in flows:
+        msg= ChatMessageDao.get_msg_by_flow(one['id'])
         res.append(
             FlowGptsOnlineList(id=one['id'],
                                name=one['name'],
                                desc=one['description'],
                                logo=one['logo'],
-                               count=10,
+                               count=len(msg),
                                create_time=one['create_time'],
                                update_time=one['update_time'],
                                flow_type='flow'))

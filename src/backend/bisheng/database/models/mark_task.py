@@ -101,6 +101,7 @@ class MarkTaskDao(MarkTaskBase):
                 statement = statement.where(or_(MarkTask.process_users.like('%{}%'.format(user_id))))
             # 计算总任务数
             total_count_query = select(func.count()).select_from(statement.alias("subquery"))
+            statement = statement.order_by(MarkTask.create_time.desc())
             total_count = session.execute(total_count_query).scalar()
             statement = statement.limit(page_size).offset((page_num - 1) * page_size)
             return session.exec(statement).all(),total_count
