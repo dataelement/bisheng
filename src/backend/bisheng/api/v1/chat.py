@@ -157,6 +157,8 @@ def get_app_chat_list(*,
 
     for o in res_obj.list:
         mark = MarkRecordDao.get_record(task_id,o.chat_id)
+        o.mark_user = ""
+        o.mark_status = 1
         if mark:
             o.mark_user = mark.create_user if mark.create_user is not None else ""
             o.mark_status =  mark.status if mark.status is not None else 1 
