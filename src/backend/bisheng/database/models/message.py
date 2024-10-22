@@ -177,6 +177,12 @@ class ChatMessageDao(MessageBase):
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             return session.exec(statement).all()
 
+    @classmethod
+    def get_msg_by_flow(cls, flow_id: str):
+        with session_getter() as session:
+            # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
+            st = select(ChatMessage).where(ChatMessage.flow_id == flow_id).group_by(ChatMessage.chat_id)
+            return session.exec(st).all()
 
     @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
