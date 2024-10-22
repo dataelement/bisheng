@@ -1,11 +1,12 @@
-from typing import Dict, Annotated, Any
+from typing import Dict, Any
 
 from loguru import logger
-from langgraph.checkpoint.memory import MemorySaver
 from typing_extensions import TypedDict
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 
+from bisheng.workflow.callback.event import UserInputData
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from bisheng.workflow.edges.edges import EdgeManage
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -125,19 +126,41 @@ class GraphEngine:
     def run(self):
         self._run({"flag": True})
 
-    def continue_run(self, data: Any):
+    def continue_run(self, data: Any = None):
+        """
+        接收用户的输入
+        data：{node_id: {key: value}}
+        """
         # 接收用户输入后，继续执行
-        # TODO 处理对应节点的用户输入
+        if data is None:
+            data = {}
+
+        # 将用户输入赋值给对应的节点
+        for node_id, node_params in data.items():
+            node_instance = self.nodes_map[node_id]
+            node_instance.handle_input(node_params)
+
+        # 继续执行graph
         self._run(None)
 
     def judge_status(self):
         # 判断状态
         snapshot = self.graph.get_state(self.graph_config)
         next_nodes = snapshot.next
+        # 说明执行已完成
         if len(next_nodes) == 0:
             self.status = WorkflowStatus.SUCCESS.value
             return
 
         # 判断需要执行的node类型，设置对应的引擎状态
         for node_id in next_nodes:
-            pass
+            node_instance = self.nodes_map[node_id]
+            if node_instance.type in [NodeType.INPUT.value, NodeType.OUTPUT.value]:
+                input_schema = node_instance.get_input_schema()
+                if input_schema:
+                    # 回调需要用户输入的事件
+                    self.status = WorkflowStatus.INPUT.value
+                    self.callback.user_input(UserInputData(node_id=node_id, group_params=input_schema))
+                else:
+                    # 说明是无需用户输入，继续执行
+                    self.continue_run(None)

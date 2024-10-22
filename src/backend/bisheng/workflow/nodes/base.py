@@ -17,7 +17,7 @@ class BaseNode(ABC):
         # 节点全部的数据
         self.node_data = node_data
 
-        # 存储节点所需的参数
+        # 存储节点所需的参数 处理后的可直接用的参数
         self.node_params = {}
 
         # 用来判断是否运行超过最大次数
@@ -43,6 +43,10 @@ class BaseNode(ABC):
         """
         raise NotImplementedError
 
+    def handle_input(self, user_input: dict) -> Any:
+        # 将用户输入的数据更新到节点数里
+        self.node_params.update(user_input)
+
     def route_node(self, state: dict) -> str:
         """
         对应的langgraph的condition_edge的function，只有特殊节点需要
@@ -57,7 +61,10 @@ class BaseNode(ABC):
         """
         # todo start exec node event
         print(f"start exec node: {self.id}")
+        if self.current_step >= self.max_steps:
+            raise Exception(f"node {self.name} exceeded more than max steps")
         result = self._run()
+        self.current_step += 1
         print(f"end exec node: {self.id}")
         # todo end exec node event
         return state
