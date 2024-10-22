@@ -424,7 +424,7 @@ def get_online_chat(*,
 
     # 获取用户可见的所有已上线的技能
     for one in flows:
-        msg= ChatMessageDao.get_msg_by_flow(one.id)
+        msg= ChatMessageDao.get_msg_by_flow(one['id'])
         res.append(
             FlowGptsOnlineList(id=one['id'],
                                name=one['name'],
