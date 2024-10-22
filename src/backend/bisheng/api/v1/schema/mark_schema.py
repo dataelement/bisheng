@@ -14,5 +14,5 @@ class MarkData(BaseModel):
     session_id: str
     task_id: int
     status: int
-    flow_type: str
+    # flow_type: str
 
