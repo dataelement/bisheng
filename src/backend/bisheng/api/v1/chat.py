@@ -170,8 +170,9 @@ def get_app_chat_list(*,
 
     if mark_user:
         users = mark_user.split(",")
+        users_int = [int(user) for user in users]
         logger.info(f"users={users}")
-        res_obj.list = [one for one in res_obj.list if one.mark_id in users]
+        res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
 
     res_obj.total = len(res_obj.list)
 
