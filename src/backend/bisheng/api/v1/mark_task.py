@@ -29,7 +29,7 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     """
     Authorize.jwt_required()
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-    if groups:
+    if login_user.is_admin() or groups:
         task_list,count = MarkTaskDao.get_task_list(user_id=None,page_size=page_size,page_num=page_num,status=status)
     else:
         task_list,count = MarkTaskDao.get_task_list(user_id=login_user.user_id,page_size=page_size,page_num=page_num,status=status)

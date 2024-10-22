@@ -129,3 +129,13 @@ export async function getMarkPermissionApi(): Promise<boolean> {
 export async function updateMarkStatusApi(data: { session_id: string, task_id: number, status: number }) {
     return await axios.post('/api/v1/mark/mark', data)
 }
+
+// 获取下一个标注会话
+export async function getNextMarkChatApi({ action, task_id }) {
+    return await axios.get('/api/v1/mark/next', {
+        params: {
+            action,
+            task_id
+        }
+    })
+}
