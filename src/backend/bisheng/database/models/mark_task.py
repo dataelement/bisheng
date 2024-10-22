@@ -76,6 +76,16 @@ class MarkTaskDao(MarkTaskBase):
             statement = select(MarkTask).where(MarkTask.process_users.like("%{}%".format(user_id)))
             return session.exec(statement).first()
 
+
+    @classmethod
+    def update_task(cls,task_id:int,status:int):
+        with session_getter() as session:
+            st = update(MarkTask).where(MarkTask.id==task_id).values(status=status)
+            session.exec(st)
+            session.commit()
+
+
+
     @classmethod
     def get_task_list(cls, user_id: int,
                       status:int,
