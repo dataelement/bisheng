@@ -87,7 +87,7 @@ class MarkTaskDao(MarkTaskBase):
 
 
     @classmethod
-    def get_task_list(cls, user_id: int,
+    def get_task_list(cls, 
                       status:int,
                       create_id: Optional[int],
                       page_size: int = 10,
@@ -100,8 +100,8 @@ class MarkTaskDao(MarkTaskBase):
                 statement = statement.where(MarkTask.status==status)
             if create_id:
                 statement = statement.where(MarkTask.create_id==create_id)
-            if user_id:
-                statement = statement.where(or_(MarkTask.process_users.like('%{}%'.format(user_id))))
+            # if user_id:
+                # statement = statement.where(or_(MarkTask.process_users.like('%{}%'.format(user_id))))
             # 计算总任务数
             total_count_query = select(func.count()).select_from(statement.alias("subquery"))
             statement = statement.order_by(MarkTask.create_time.desc())
