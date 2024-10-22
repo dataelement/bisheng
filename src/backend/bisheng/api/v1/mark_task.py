@@ -95,11 +95,18 @@ async def mark(data: MarkData,
     if record:
         return resp_500(data="已经标注过了")
 
+    msg = ChatMessageDao.get_msg_by_chat_id(data.session_id)
+
+    flow = FlowDao.get_flow_by_idstr(msg[0].flow_id)
+    if flow:
+        data.flow_type = "flow"
+    else:
+        data.flow_type = "assistant"
+
     record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
     MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
-    msg = ChatMessageDao.get_msg_by_chat_id(data.session_id)
     msg.mark_status = data.status
     ChatMessageDao.update_message_model(msg)
 
