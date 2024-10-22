@@ -76,7 +76,7 @@ async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depe
             status_code=200)
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
-                      mark_user: Optional[List[int]] = None,
+                      mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
                       task_id: int,
                       page_num: Optional[int] = 1,
@@ -157,10 +157,24 @@ def get_app_chat_list(*,
 
     for o in res_obj.list:
         mark = MarkRecordDao.get_record(task_id,o.chat_id)
+        o.mark_user = ""
+        o.mark_status = 1
         if mark:
-            o.mark_user = mark.create_user
-            o.mark_status = mark.status
+            o.mark_user = mark.create_user if mark.create_user is not None else ""
+            o.mark_status =  mark.status if mark.status is not None else 1 
+            o.mark_id = mark.create_id
 
+
+    if mark_status:
+        res_obj.list = [one for one in res_obj.list if one.mark_status == mark_status]
+
+    if mark_user:
+        users = mark_user.split(",")
+        users_int = [int(user) for user in users]
+        logger.info(f"users={users}")
+        res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
+
+    res_obj.total = len(res_obj.list)
 
 
     return resp_200(res_obj)
