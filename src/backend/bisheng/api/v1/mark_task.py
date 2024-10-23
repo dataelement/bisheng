@@ -48,6 +48,16 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     return resp_200(data=result)
 
 
+@router.get('/get_status')
+async def get_status(task_id:int,chat_id:str):
+
+    record = MarkRecordDao.get_record(task_id,chat_id)
+    if record:
+        return resp_200(data=record.status)
+
+    return resp_200()
+
+
 @router.post('/create_task')
 async def create(task_create: MarkTaskCreate,login_user: UserPayload = Depends(get_login_user)):
     """
@@ -132,7 +142,7 @@ async def get_record(chat_id:str , task_id:int):
     return resp_200(data=record)
 
 @router.get("/next")
-async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(get_login_user)):
+async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload = Depends(get_login_user)):
     """
     prev or next 
     """
@@ -143,7 +153,7 @@ async def pre_or_next(action:str,task_id:int,login_user: UserPayload = Depends(g
     result = {"task_id":task_id}
 
     if action == "prev":
-        record = MarkRecordDao.get_prev_task(login_user.user_id)
+        record = MarkRecordDao.get_prev_task(login_user.user_id,chat_id)
         if record:
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
             result["chat_id"] = record.session_id
