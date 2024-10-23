@@ -106,7 +106,7 @@ def get_app_chat_list(*,
                 task = MarkTaskDao.get_task_byid(task_id)
                 #TODO: 加入筛选条件
                 group_flow_ids = task.app_id.split(",")
-                group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
+                # group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
                 if not group_flow_ids:
                     return resp_200(PageList(list=[], total=0))
             else:
