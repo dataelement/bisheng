@@ -131,10 +131,21 @@ export async function updateMarkStatusApi(data: { session_id: string, task_id: n
 }
 
 // 获取下一个标注会话
-export async function getNextMarkChatApi({ action, task_id }) {
+export async function getNextMarkChatApi({ action, chat_id, task_id }) {
     return await axios.get('/api/v1/mark/next', {
         params: {
             action,
+            chat_id,
+            task_id
+        }
+    })
+}
+
+// 获取会话标注状态
+export async function getMarkStatusApi({ chat_id, task_id }) {
+    return await axios.get('/api/v1/mark/get_status', {
+        params: {
+            chat_id,
             task_id
         }
     })

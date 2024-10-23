@@ -48,7 +48,7 @@ class MarkRecordDao(MarkRecordBase):
     @classmethod
     def get_prev_task(cls,user_id:int,chat_id:str):
         with session_getter() as session:
-            statement = select(MarkRecord).where(MarkRecord.create_id==user_id).and_(MarkRecord.session_id!=chat_id).order_by(MarkRecord.id.desc()).limit(1)
+            statement = select(MarkRecord).where(MarkRecord.create_id==user_id).where(MarkRecord.session_id!=chat_id).order_by(MarkRecord.id.desc()).limit(1)
             return session.exec(statement).first()
 
 
