@@ -90,7 +90,10 @@ def get_app_chat_list(*,
 
     if not task_id:
         task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
-        group_flow_ids = [app_id for one in task_list for app_id in one.app_id.split(",")]
+        for t in task_list:
+            group_flow_ids.extend(t.app_id.split(","))
+
+        # group_flow_ids = [app_id for one in task_list for app_id in one.app_id.split(",")]
     else:
         if not login_user.is_admin():
             # 判断下是否是用户组管理员
