@@ -78,7 +78,7 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: int,
+                      task_id: Optional[int],
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
