@@ -104,8 +104,10 @@ def get_app_chat_list(*,
                 # group_flow_ids = [one.third_id for one in resources]
 
                 task = MarkTaskDao.get_task_byid(task_id)
+                t_list= MarkTaskDao.get_task_list_byuid(login_user.user_id)
                 #TODO: 加入筛选条件
                 group_flow_ids = task.app_id.split(",")
+                group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
                 if not group_flow_ids:
                     return resp_200(PageList(list=[], total=0))
             else:
@@ -137,7 +139,6 @@ def get_app_chat_list(*,
         else:
             flow_ids = group_flow_ids
 
-    logger.info("lzs {}",flow_ids)
     res, count = MessageDao.app_list_group_by_chat_id(page_size=page_size,
                                                       page_num=page_num,
                                                       flow_ids=flow_ids,
