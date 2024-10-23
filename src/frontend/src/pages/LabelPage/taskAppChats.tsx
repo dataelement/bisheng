@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import AddSimilarQuestions from "../LogPage/useAppLog/AddSimilarQuestions";
 import SaveQaLibForm from "../LogPage/useAppLog/SaveQaLibForm";
-import { getMarkPermissionApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
+import { getMarkPermissionApi, getMarkStatusApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
 
 const PageChange = () => {
     const { id, cid } = useParams()
@@ -20,11 +20,11 @@ const PageChange = () => {
     const prevInfoRef = useRef<any>(null)
     const nextInfoRef = useRef<any>(null)
     useEffect(() => {
-        getNextMarkChatApi({ action: 'prev', task_id: id }).then(res => {
+        getNextMarkChatApi({ action: 'prev', chat_id: cid, task_id: id }).then(res => {
             setHasPrev(!!res)
             prevInfoRef.current = res
         })
-        getNextMarkChatApi({ action: 'next', task_id: id }).then(res => {
+        getNextMarkChatApi({ action: 'next', chat_id: cid, task_id: id }).then(res => {
             setHasNext(!!res)
             nextInfoRef.current = res
         })
@@ -80,6 +80,10 @@ export default function index() {
             lastMsg: ''
         })
         changeChatId(cid)
+
+        // get status
+        getMarkStatusApi({ task_id: Number(id), chat_id: cid }).then(res => setStatus(String(res || 1)))
+
         return () => {
             clearMsgs()
             type === 'assistant' && destroy()
