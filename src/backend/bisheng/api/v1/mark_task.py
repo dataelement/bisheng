@@ -30,9 +30,9 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     Authorize.jwt_required()
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
     if login_user.is_admin():
-        task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=None)
+        task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=None,user_id=None)
     else:
-        task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=login_user.user_id if groups else None)
+        task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=login_user.user_id if groups else None,user_id=login_user.user_id)
 
     result_list = [] 
     for task in task_list:
@@ -45,7 +45,6 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
         result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_list))
 
     result = {"list":result_list,"total":count}
-    logger.info(result)
     return resp_200(data=result)
 
 
