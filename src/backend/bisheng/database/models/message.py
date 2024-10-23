@@ -185,6 +185,13 @@ class ChatMessageDao(MessageBase):
             return session.exec(st).all()
 
     @classmethod
+    def get_msg_by_flows(cls, flow_id: List[str]):
+        with session_getter() as session:
+            # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
+            st = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).group_by(ChatMessage.chat_id)
+            return session.exec(st).all()
+
+    @classmethod
     def delete_by_user_chat_id(cls, user_id: int, chat_id: str):
         if user_id is None or chat_id is None:
             logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)

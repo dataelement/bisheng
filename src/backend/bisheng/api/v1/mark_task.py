@@ -107,7 +107,19 @@ async def mark(data: MarkData,
     record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
     #创建一条 用户标注记录 
     MarkRecordDao.create_record(record_info)
-    MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
+
+    task = MarkTaskDao.get_task_byid(task_id=data.task_id) 
+    msg_list = ChatMessageDao.get_msg_by_flows(task.app_id.split(","))
+    m_list = [msg.chat_id for msg in msg_list]
+    r_list = MarkRecordDao.get_list_by_taskid(data.task_id)
+    app_record = [r.session_id for r in r_list ]
+
+    if m_list == app_record:
+        MarkTaskDao.update_task(data.task_id,MarkTaskStatus.DONE.value)
+    else:
+        MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
+
+
     # msg.mark_status = data.status
     # ChatMessageDao.update_message_model(msg)
 
