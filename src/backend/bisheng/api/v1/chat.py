@@ -88,13 +88,13 @@ def get_app_chat_list(*,
     group_flow_ids = []
     flow_ids, user_ids = [], []
 
+    user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
     if not task_id:
         task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
         group_flow_ids = [app_id for one in task_list[0] for app_id in one.app_id.split(",")]
     else:
         if not login_user.is_admin():
             # 判断下是否是用户组管理员
-            user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
             if user_groups:
                 # user_group_ids = [user_group.group_id for user_group in user_groups]
                 # 获取分组下的所有资源ID
@@ -104,10 +104,9 @@ def get_app_chat_list(*,
                 # group_flow_ids = [one.third_id for one in resources]
 
                 task = MarkTaskDao.get_task_byid(task_id)
-                t_list= MarkTaskDao.get_task_list_byuid(login_user.user_id)
                 #TODO: 加入筛选条件
                 group_flow_ids = task.app_id.split(",")
-                group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
+                # group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
                 if not group_flow_ids:
                     return resp_200(PageList(list=[], total=0))
             else:
@@ -180,8 +179,11 @@ def get_app_chat_list(*,
     if mark_user:
         users = mark_user.split(",")
         users_int = [int(user) for user in users]
-        logger.info(f"users={users}")
         res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
+
+    if not user_groups and not login_user.is_admin():
+        res_obj.list = [one for one in res_obj.list if one.mark_id==login_user.user_id]
+
 
     res_obj.total = len(res_obj.list)
 
