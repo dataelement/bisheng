@@ -110,6 +110,11 @@ def get_app_chat_list(*,
     else:
         group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
 
+    if not task_id:
+        task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
+        group_flow_ids = [app_id for one in task_list for app_id in one.app_id.split(",")]
+
+
     # if keyword:
     #     flows = FlowDao.get_flow_list_by_name(name=keyword)
     #     assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
