@@ -78,7 +78,7 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: Optional[int],
+                      task_id: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
@@ -90,7 +90,7 @@ def get_app_chat_list(*,
 
     if not task_id:
         task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
-        group_flow_ids = [app_id for one in task_list for app_id in one.app_id.split(",")]
+        group_flow_ids = [app_id for one in task_list[0] for app_id in one.app_id.split(",")]
     else:
         if not login_user.is_admin():
             # 判断下是否是用户组管理员
@@ -104,8 +104,10 @@ def get_app_chat_list(*,
                 # group_flow_ids = [one.third_id for one in resources]
 
                 task = MarkTaskDao.get_task_byid(task_id)
+                t_list= MarkTaskDao.get_task_list_byuid(login_user.user_id)
                 #TODO: 加入筛选条件
                 group_flow_ids = task.app_id.split(",")
+                group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
                 if not group_flow_ids:
                     return resp_200(PageList(list=[], total=0))
             else:
