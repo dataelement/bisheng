@@ -77,9 +77,9 @@ class MarkTaskDao(MarkTaskBase):
             return session.exec(statement).first()
 
     @classmethod
-    def get_task_list_byuid(cls,user_id:int) -> List[MarkTask]:
+    def get_task_list_byuid(cls,user_id:int,task_id:int) -> List[MarkTask]:
         with session_getter() as session:
-            statement = select(MarkTask).where(MarkTask.process_users.like("%{}%".format(user_id)))
+            statement = select(MarkTask).where(MarkTask.process_users.like("%{}%".format(user_id))).where(MarkTask.id==task_id)
             return session.exec(statement).all()
 
     @classmethod
