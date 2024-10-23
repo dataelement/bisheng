@@ -91,29 +91,29 @@ def get_app_chat_list(*,
     if not task_id:
         task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
         group_flow_ids = [app_id for one in task_list for app_id in one.app_id.split(",")]
-
-    if not login_user.is_admin():
-        # 判断下是否是用户组管理员
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        if user_groups:
-            # user_group_ids = [user_group.group_id for user_group in user_groups]
-            # 获取分组下的所有资源ID
-            # update 这里要改为 task下面关联的应用
-            # resources = GroupResourceDao.get_groups_resource(
-            #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
-            # group_flow_ids = [one.third_id for one in resources]
-
-            task = MarkTaskDao.get_task_byid(task_id)
-            #TODO: 加入筛选条件
-            group_flow_ids = task.app_id.split(",")
-            if not group_flow_ids:
-                return resp_200(PageList(list=[], total=0))
-        else:
-            #普通用户
-            user_ids = [login_user.user_id]
-
     else:
-        group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+        if not login_user.is_admin():
+            # 判断下是否是用户组管理员
+            user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+            if user_groups:
+                # user_group_ids = [user_group.group_id for user_group in user_groups]
+                # 获取分组下的所有资源ID
+                # update 这里要改为 task下面关联的应用
+                # resources = GroupResourceDao.get_groups_resource(
+                #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+                # group_flow_ids = [one.third_id for one in resources]
+
+                task = MarkTaskDao.get_task_byid(task_id)
+                #TODO: 加入筛选条件
+                group_flow_ids = task.app_id.split(",")
+                if not group_flow_ids:
+                    return resp_200(PageList(list=[], total=0))
+            else:
+                #普通用户
+                user_ids = [login_user.user_id]
+
+        else:
+            group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
 
 
 
