@@ -7,7 +7,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
 from pydantic import validator
-from sqlalchemy import JSON, Column, DateTime, String, text
+from sqlalchemy import JSON, Column, DateTime, String, or_, text
 from sqlmodel import Field, delete, func, select
 
 
@@ -216,9 +216,13 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
-    def get_qa_knowledge_by_name(cls, question: str) -> QAKnowledge:
+    def get_qa_knowledge_by_name(cls, question: List[str]) -> QAKnowledge:
         with session_getter() as session:
-            return session.exec(select(QAKnowledge).where(QAKnowledge.questions == question)).first()
+            group_filters = []
+            for one in question:
+                group_filters.append(func.json_contains(QAKnowledge.questions, str(one)))
+            statement =select(QAKnowledge).where(or_(*group_filters))
+            return session.exec(statement).first()
 
     @classmethod
     def update(cls, qa_knowledge: QAKnowledge):
