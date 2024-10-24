@@ -337,6 +337,9 @@ def qa_append(
     """ 增加知识库信息. """
     QA_list = QAKnoweldgeDao.select_list(ids)
     knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    for q in QA_list:
+        if question in q.questions:
+            raise KnowledgeQAError.http_exception()
     for qa in QA_list:
         qa.questions.append(question)
         knowledge_imp.add_qa(knowledge, qa)
