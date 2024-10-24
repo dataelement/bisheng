@@ -186,9 +186,10 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_msg_by_flows(cls, flow_id: List[str]):
+        ids = [UUID(i) for i in flow_id]
         with session_getter() as session:
             # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
-            st = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).group_by(ChatMessage.chat_id)
+            st = select(ChatMessage).where(ChatMessage.flow_id.in_(ids)).group_by(ChatMessage.chat_id)
             return session.exec(st).all()
 
     @classmethod
