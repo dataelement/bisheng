@@ -57,6 +57,9 @@ async def get_status(task_id:int,chat_id:str,
                 login_user: UserPayload = Depends(get_login_user)):
 
     record = MarkRecordDao.get_record(task_id,chat_id)
+    if not record:
+        return resp_200()
+
     if login_user.user_id == record.create_id:
         is_self = True
     else:
@@ -65,7 +68,6 @@ async def get_status(task_id:int,chat_id:str,
     if record:
         return resp_200(result)
 
-    return resp_200()
 
 
 @router.post('/create_task')
