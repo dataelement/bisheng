@@ -216,12 +216,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
-    def get_qa_knowledge_by_name(cls, question: List[str]) -> QAKnowledge:
+    def get_qa_knowledge_by_name(cls, question: List[str], knowledge_id: int) -> QAKnowledge:
         with session_getter() as session:
             group_filters = []
             for one in question:
-                group_filters.append(func.json_contains(QAKnowledge.questions, str(one)))
-            statement =select(QAKnowledge).where(or_(*group_filters))
+                group_filters.append(func.json_contains(QAKnowledge.questions, '"{}"'.format(one)))
+            statement =select(QAKnowledge).where(or_(*group_filters)).where(QAKnowledge.knowledge_id== knowledge_id)
             return session.exec(statement).first()
 
     @classmethod
