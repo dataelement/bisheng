@@ -27,7 +27,6 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     """
     非admin 只能查看自己已标注和未标注的
     """
-    Authorize.jwt_required()
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
     if login_user.is_admin():
         task_list,count = MarkTaskDao.get_task_list(page_size=page_size,page_num=page_num,status=status,create_id=None,user_id=None)

@@ -90,8 +90,9 @@ def get_app_chat_list(*,
 
     user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
     if not task_id:
-        task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
-        group_flow_ids = [app_id for one in task_list[0] for app_id in one.app_id.split(",")]
+        # task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
+        # group_flow_ids = [app_id for one in task_list[0] for app_id in one.app_id.split(",")]
+        group_flow_ids = []
     else:
         if not login_user.is_admin():
             # 判断下是否是用户组管理员
@@ -110,6 +111,9 @@ def get_app_chat_list(*,
                 if not group_flow_ids:
                     return resp_200(PageList(list=[], total=0))
             else:
+                task = MarkTaskDao.get_task_byid(task_id)
+                if login_user.user_id not in task.process_users.split(","):
+                    raise HTTPException(status_code=403, detail="没有权限")
                 #普通用户
                 user_ids = [login_user.user_id]
 
@@ -175,17 +179,19 @@ def get_app_chat_list(*,
 
     if mark_status:
         res_obj.list = [one for one in res_obj.list if one.mark_status == mark_status]
+        res_obj.total = len(res_obj.list)
 
     if mark_user:
         users = mark_user.split(",")
         users_int = [int(user) for user in users]
         res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
+        res_obj.total = len(res_obj.list)
 
     if not user_groups and not login_user.is_admin():
         res_obj.list = [one for one in res_obj.list if one.mark_id==login_user.user_id]
+        res_obj.total = len(res_obj.list)
 
 
-    res_obj.total = len(res_obj.list)
 
 
     return resp_200(res_obj)
