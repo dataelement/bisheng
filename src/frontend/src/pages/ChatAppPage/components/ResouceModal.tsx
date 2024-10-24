@@ -10,7 +10,7 @@ import { downloadFile } from "../../../util/utils";
 import FileViewPanne from "./ FileViewPanne";
 
 // 顶部答案区
-const Anwser = ({ id, msg, onInit, onAdd }) => {
+const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     const [html, setHtml] = useState('')
     const pRef = useRef(null)
 
@@ -44,14 +44,15 @@ const Anwser = ({ id, msg, onInit, onAdd }) => {
         return () => pRef.current?.removeEventListener('click', handleclick)
     }, [])
 
-    return <div className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 overflow-y-auto">
+    return <div className="bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 max-h-24 mb-4 overflow-y-auto" style={{ display: fullScreen ? 'none' : 'block' }}>
         <p ref={pRef} className="anwser-souce" dangerouslySetInnerHTML={{ __html: html }}></p>
     </div>
 }
 
 // 
 let timer = null
-const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, closeDialog }: { chatId: string, words: string[], data: any, onClose: any, onAdd: any, children: any, closeDialog: () => void }) => {
+const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen = false, closeDialog }:
+    { chatId: string, words: string[], data: any, onClose: any, fullScreen: boolean, onAdd: any, children: any, closeDialog: () => void }) => {
     const { t } = useTranslation()
     const [editCustomKey, setEditCustomKey] = useState(false)
     const inputRef = useRef(null)
@@ -114,7 +115,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, closeDialo
         setTimeout(() => document.getElementById('taginput')?.focus(), 0);
     }
 
-    return <div className="flex gap-4 mt-4" style={!isMobile ? { height: 'calc(100vh - 10rem)' } : { height: 'calc(100vh - 4rem)' }}>
+    return <div className="flex gap-4" style={{ height: fullScreen ? '100vh' : !isMobile ? 'calc(100vh - 10rem)' : 'calc(100vh - 4rem)' }}>
         {
             isMobile && <div className="absolute top-2 left-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
                 {!collapse && <span onClick={() => { setCollapse(true) }} className="">收起</span>}
@@ -198,11 +199,9 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, closeDialo
     </div>
 }
 
-const ResouceModal = forwardRef((props, ref) => {
-    // labels
+export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     const { t } = useTranslation()
 
-    const [open, setOpen] = useState(false)
     const [keywords, setKeywords] = useState([])
     const handleAddWord = (word: string) => {
         // 去重 更新
@@ -213,6 +212,37 @@ const ResouceModal = forwardRef((props, ref) => {
         setKeywords(keywords.filter((wd, i) => i !== index))
     }
 
+    return <div>
+        <Anwser
+            id={data.messageId}
+            fullScreen={fullScreen}
+            msg={data.message}
+            onInit={setKeywords}
+            onAdd={handleAddWord}></Anwser>
+        <ResultPanne
+            words={keywords}
+            fullScreen={fullScreen}
+            chatId={data.chatId}
+            data={data}
+            onClose={handleDelKeyword}
+            onAdd={handleAddWord}
+            closeDialog={() => setOpen(false)}
+        >
+            {
+                (file) => file.fileUrl ? <FileViewPanne file={file} /> :
+                    <div className="flex-1 bg-gray-100 dark:bg-[#3C4048] rounded-md text-center">
+                        <p className="text-gray-500 text-md mt-[40%]">{t('chat.fileStorageFailure')}</p>
+                    </div>
+            }
+        </ResultPanne>
+    </div>
+};
+
+
+const ResouceModal = forwardRef((props, ref) => {
+    // labels
+
+    const [open, setOpen] = useState(false)
     const [data, setData] = useState<any>({})
     useImperativeHandle(ref, () => ({
         openModal: (data) => {
@@ -227,17 +257,7 @@ const ResouceModal = forwardRef((props, ref) => {
             {/* <DialogHeader>
                 <DialogTitle>{t('chat.feedback')}</DialogTitle>
             </DialogHeader> */}
-            {open && <div>
-                <Anwser id={data.messageId} msg={data.message} onInit={setKeywords} onAdd={handleAddWord}></Anwser>
-                <ResultPanne words={keywords} chatId={data.chatId} data={data} onClose={handleDelKeyword} onAdd={handleAddWord} closeDialog={() => setOpen(false)}>
-                    {
-                        (file) => file.fileUrl ? <FileViewPanne file={file} /> :
-                            <div className="flex-1 bg-gray-100 dark:bg-[#3C4048] rounded-md text-center">
-                                <p className="text-gray-500 text-md mt-[40%]">{t('chat.fileStorageFailure')}</p>
-                            </div>
-                    }
-                </ResultPanne>
-            </div>}
+            {open && <ResouceContent data={data} setOpen={setOpen} />}
         </DialogContent>
     </Dialog>
 });

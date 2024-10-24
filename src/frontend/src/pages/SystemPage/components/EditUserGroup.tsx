@@ -66,14 +66,14 @@ function FlowRadio({ limit, onChange }) {
                     <RadioGroupItem className="mr-2" value={LimitType.LIMITED} />{t('system.limit')}
                 </Label>
             </div>
-            {status === LimitType.LIMITED && <div className="mt-[-3px]">
-                <Label>{t('system.maximum')}</Label>
+            {status === LimitType.LIMITED && <div className="mt-[-3px] flex items-center">
+                <Label className="whitespace-nowrap">{t('system.maximum')}</Label>
                 <Input
                     type="number"
                     value={limitState}
                     className="inline h-5 w-[70px] font-medium"
                     onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)} />
-                <Label>{t('system.perMinute')}</Label>
+                <Label className="whitespace-nowrap">{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>
     </div>

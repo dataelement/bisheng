@@ -20,3 +20,8 @@ class KnowledgeChunkError(BaseErrorCode):
 class KnowledgeSimilarError(BaseErrorCode):
     Code: int = 10920
     Msg: str = '未配置QA知识库相似问模型'
+
+
+class KnowledgeQAError(BaseErrorCode):
+    Code: int = 10930
+    Msg: str = '该问题已被标注过'

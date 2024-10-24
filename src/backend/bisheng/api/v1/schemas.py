@@ -135,6 +135,7 @@ class FlowGptsOnlineList(BaseModel):
     create_time: datetime = None
     update_time: datetime = None
     flow_type: str = None  # flow: 技能 assistant：gpts助手
+    count:int=0
 
 
 class ChatMessage(BaseModel):

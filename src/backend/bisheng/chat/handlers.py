@@ -282,6 +282,7 @@ class Handler:
                 response.message_id,
                 result,
             )
+
         return result
 
     async def process_file(self, session: ChatManager, client_id: str, chat_id: str, payload: dict,

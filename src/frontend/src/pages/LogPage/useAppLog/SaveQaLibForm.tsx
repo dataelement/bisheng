@@ -16,7 +16,7 @@ const DEFAULT_FORM = {
     answer: ''
 };
 
-const SaveQaLibForm = forwardRef(({ }, ref) => {
+const SaveQaLibForm = forwardRef(({ onMarked }, ref) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [form, setForm] = useState({ ...DEFAULT_FORM });
@@ -129,6 +129,7 @@ const SaveQaLibForm = forwardRef(({ }, ref) => {
                 variant: 'success',
                 description: t('log.saveSuccess')
             });
+            onMarked?.()
         }));
         close();
     };
