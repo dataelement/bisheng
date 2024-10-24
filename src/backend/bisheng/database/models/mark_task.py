@@ -126,7 +126,7 @@ class MarkTaskDao(MarkTaskBase):
             if filter and not filter_or:
                 statement = statement.filter(*filter)
             if filter_or:
-                statement = statement.filter(or_(*filter_or,and_(*filter)))
+                statement = statement.filter(and_(*filter,or_(*filter_or)))
 
             # 计算总任务数
             total_count_query = select(func.count()).select_from(statement.alias("subquery"))
