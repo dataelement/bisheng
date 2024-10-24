@@ -221,7 +221,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             group_filters = []
             for one in question:
                 group_filters.append(func.json_contains(QAKnowledge.questions, '"{}"'.format(one)))
-            statement =select(QAKnowledge).where(or_(*group_filters)).where(QAKnowledge.id == knowledge_id)
+            statement =select(QAKnowledge).where(or_(*group_filters)).where(QAKnowledge.knowledge_id== knowledge_id)
             return session.exec(statement).first()
 
     @classmethod
