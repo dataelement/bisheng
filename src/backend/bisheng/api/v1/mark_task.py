@@ -42,6 +42,11 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
             process_count = "{}:{}".format(c.create_user,c.user_count)
             process_list.append(process_count)
 
+        if not record:
+            for c in task.process_users.split(","):
+                user = UserDao.get_user(int(c))
+                process_count = "{}:{}".format(user.user_name,0)
+                process_list.append(process_count)
         result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_list))
 
     result = {"list":result_list,"total":count}
