@@ -176,17 +176,19 @@ def get_app_chat_list(*,
 
     if mark_status:
         res_obj.list = [one for one in res_obj.list if one.mark_status == mark_status]
+        res_obj.total = len(res_obj.list)
 
     if mark_user:
         users = mark_user.split(",")
         users_int = [int(user) for user in users]
         res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
+        res_obj.total = len(res_obj.list)
 
     if not user_groups and not login_user.is_admin():
         res_obj.list = [one for one in res_obj.list if one.mark_id==login_user.user_id]
+        res_obj.total = len(res_obj.list)
 
 
-    res_obj.total = len(res_obj.list)
 
 
     return resp_200(res_obj)
