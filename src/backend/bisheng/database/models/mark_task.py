@@ -115,12 +115,18 @@ class MarkTaskDao(MarkTaskBase):
         with session_getter() as session:
             statement = select(MarkTask)
 
+            filter = []
+            filter_or = []
             if status:
-                statement = statement.where(MarkTask.status==status)
+                filter.append(MarkTask.status==status)
             if create_id:
-                statement = statement.where(MarkTask.create_id==create_id)
+                filter.append(MarkTask.create_id==create_id)
             if user_id:
-                statement = statement.where(or_(MarkTask.process_users.like('%{}%'.format(user_id))))
+                filter_or.append(MarkTask.process_users.like('%{}%'.format(user_id)))
+                statement = statement.filter(and_(*filter),or_(*filter_or))
+            else:
+                statement = statement.filter(and_(*filter))
+
             # 计算总任务数
             total_count_query = select(func.count()).select_from(statement.alias("subquery"))
             statement = statement.order_by(MarkTask.create_time.desc())
