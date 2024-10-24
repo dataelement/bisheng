@@ -112,7 +112,7 @@ def get_app_chat_list(*,
                     return resp_200(PageList(list=[], total=0))
             else:
                 task = MarkTaskDao.get_task_byid(task_id)
-                if login_user.user_id not in task.process_users.split(","):
+                if str(login_user.user_id) not in task.process_users.split(","):
                     raise HTTPException(status_code=403, detail="没有权限")
                 #普通用户
                 user_ids = [login_user.user_id]
