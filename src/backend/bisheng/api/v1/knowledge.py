@@ -3,6 +3,7 @@ import urllib.parse
 from typing import List, Optional
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.knowledge import KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -297,7 +298,7 @@ def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get
 
     db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
     if db_q:
-        return resp_500(data=":该问题已被标注过")
+        raise KnowledgeQAError.http_exception()
 
     add_qa(db_knowledge=db_knowledge, data=QACreate)
     return resp_200()
