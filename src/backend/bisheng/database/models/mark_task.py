@@ -123,9 +123,10 @@ class MarkTaskDao(MarkTaskBase):
                 filter.append(MarkTask.create_id==create_id)
             if user_id:
                 filter_or.append(MarkTask.process_users.like('%{}%'.format(user_id)))
-                statement = statement.filter(and_(*filter),or_(*filter_or))
-            else:
-                statement = statement.filter(and_(*filter))
+            if filter:
+                statement = statement.filter(*filter)
+            if filter_or:
+                statement = statement.filter(or_(*filter_or))
 
             # 计算总任务数
             total_count_query = select(func.count()).select_from(statement.alias("subquery"))
