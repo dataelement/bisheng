@@ -220,7 +220,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         with session_getter() as session:
             group_filters = []
             for one in question:
-                group_filters.append(func.json_contains(QAKnowledge.questions, '"{}"'.format(one))
+                group_filters.append(func.json_contains(QAKnowledge.questions, '"{}"'.format(one)))
             statement =select(QAKnowledge).where(or_(*group_filters))
             return session.exec(statement).first()
 
