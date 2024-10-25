@@ -189,6 +189,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
                     break
                 queue.append(r)
 
+            if len(queue) == 0:
+                return resp_200()
             record = queue.pop()
             logger.info("queue={} record={}",queue,record)
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
