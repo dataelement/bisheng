@@ -58,4 +58,6 @@ class InputNode(BaseNode):
                                                                    ["\n\n", "\n"], ["after", "after"],
                                                                    1000, 500)
 
+        # 4、上传到milvus和es
+
 

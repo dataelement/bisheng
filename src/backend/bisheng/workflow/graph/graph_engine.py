@@ -22,9 +22,10 @@ class TempState(TypedDict):
 
 
 class GraphEngine:
-    def __init__(self, user_id: str = None, workflow_data: Dict = None, max_steps: int = 0,
-                 callback: BaseCallback = None):
+    def __init__(self, user_id: str = None, workflow_id: str = None, workflow_data: Dict = None,
+                 max_steps: int = 0, callback: BaseCallback = None):
         self.user_id = user_id
+        self.workflow_id = workflow_id
         self.workflow_data = workflow_data
         self.max_steps = max_steps
         # 回调
@@ -88,6 +89,7 @@ class GraphEngine:
             if not node_data.id:
                 raise Exception("node must have attribute id")
             node_instance = NodeFactory.instance_node(node_type=node_data.type, node_data=node_data,
+                                                      workflow_id=self.workflow_id, graph_state=self.graph_state,
                                                       max_steps=self.max_steps, callback=self.callback)
             self.nodes_map[node_data.id] = node_instance
 

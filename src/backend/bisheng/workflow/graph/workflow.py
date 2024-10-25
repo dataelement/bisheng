@@ -10,15 +10,18 @@ from bisheng.workflow.graph.graph_engine import GraphEngine
 
 class Workflow:
 
-    def __init__(self, user_id: str = None, workflow_data: Dict = None,
+    def __init__(self, workflow_id: str, user_id: str = None, workflow_data: Dict = None,
                  max_steps: int = 0, timeout: int = 0, callback: BaseCallback = None,
                  input_queue: Queue = None):
+
+        # 运行的唯一标识，保存到数据库的唯一ID
+        self.workflow_id = workflow_id
         self.user_id = user_id
 
         # 超时时间，多久没有接收到用户输入终止workflow运行（单位：分钟）
         self.timeout = timeout
 
-        self.graph_engine = GraphEngine(user_id=user_id, workflow_data=workflow_data,
+        self.graph_engine = GraphEngine(user_id=user_id, workflow_id=workflow_id, workflow_data=workflow_data,
                                         max_steps=max_steps, callback=callback)
         self.graph_status = WorkflowStatus.RUNNING.value
         self.graph_reason = ""
@@ -59,4 +62,3 @@ class Workflow:
                 self.graph_engine.continue_run(None)
 
         return self.graph_status, self.graph_reason
-
