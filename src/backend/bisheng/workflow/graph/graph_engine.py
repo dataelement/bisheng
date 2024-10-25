@@ -165,12 +165,22 @@ class GraphEngine:
         # 判断需要执行的node类型，设置对应的引擎状态
         for node_id in next_nodes:
             node_instance = self.nodes_map[node_id]
-            if node_instance.type in [NodeType.INPUT.value, NodeType.OUTPUT.value]:
+            if node_instance.type == NodeType.INPUT.value:
                 input_schema = node_instance.get_input_schema()
                 if input_schema:
                     # 回调需要用户输入的事件
                     self.status = WorkflowStatus.INPUT.value
-                    self.callback.user_input(UserInputData(node_id=node_id, group_params=input_schema))
+                    self.callback.on_user_input(UserInputData(node_id=node_id, group_params=input_schema))
+                return
+            elif node_instance.type == NodeType.OUTPUT.value:
+                intput_schema = node_instance.get_intput_schema()
+                if intput_schema:
+                    # output 节点需要用户输入
+                    self.status = WorkflowStatus.INPUT.value
+                    node_instance.pre_run()
                 else:
-                    # 说明是无需用户输入，继续执行
                     self.continue_run(None)
+                return
+        self.continue_run(None)
+
+

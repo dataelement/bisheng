@@ -45,5 +45,14 @@ class GraphState(BaseModel):
         var_key = tmp_list[1]
         if var_key.find("#") != -1:
             var_key = var_key.split("#")[0]
-        return self.get_variable(node_id, var_key)
+        variable_val = self.get_variable(node_id, var_key)
 
+        # 数组变量的处理
+        if var_key.find("#") != -1:
+            variable_val_index = int(var_key.split("#")[1])
+            if not isinstance(variable_val, list) or len(variable_val) <= variable_val_index:
+                raise Exception(f"variable {contact_key} is not array or index out of range")
+            return variable_val[variable_val_index]
+
+        # todo 某些特殊变量的处理
+        return variable_val

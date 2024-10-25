@@ -1,3 +1,7 @@
+from typing import Any
+
+from loguru import logger
+
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
 from bisheng.api.utils import md5_hash
 from bisheng.cache.utils import file_download
@@ -9,11 +13,10 @@ class InputNode(BaseNode):
 
     def init_data(self):
         # 对话框形式只有一个输出变量
-        if self.node_data.tab.value == "input":
+        if self.node_data.tab['value'] == "input":
             self.node_params["user_input"] = ""
             return
 
-        # 表单形式
         # 记录这个变量是什么类型的
         self.node_params_map = {}
         for one in self.node_data.group_params:
@@ -23,25 +26,29 @@ class InputNode(BaseNode):
                 self.node_params[value_info.key] = value_info.value
                 self.node_params_map[value_info.key] = value_info
 
+    def get_input_schema(self) -> Any:
+        return self.node_data.group_params
+
     def _run(self):
-        if self.node_data.tab.value == "input":
+        if self.node_data.tab['value'] == "input":
             return {"user_input": self.node_params["user_input"]}
 
-        ret = {}
         # 表单形式的需要去处理对应的文件上传
-        for key, value in self.node_param.items():
+        for key, value in self.node_params.items():
             key_info = self.node_params_map[key]
             if key_info.type == "file":
-                self.parse_upload_file(key, value)
+                file_metadata = self.parse_upload_file(key, value)
+                self.node_params[key] = file_metadata
 
         return self.node_params
 
-    def parse_upload_file(self, key: str, value: str):
-        """ 将文件上传到milvus后 """
+    def parse_upload_file(self, key: str, value: str) -> dict | None:
+        """
+         将文件上传到milvus后
+         记录文件的metadata数据
+        """
         if not value:
-            return
-
-        # 将文件上传到milvus和es
+            return None
 
         # 1、获取默认的embedding模型
         embeddings = LLMService.get_knowledge_default_embedding()
@@ -53,11 +60,29 @@ class InputNode(BaseNode):
 
         # 3、解析文件
         filepath, file_name = file_download(value)
-        # file_name = md5_hash(f"{key}:{value}")
+        file_id = md5_hash(f"{key}:{value}")
         texts, metadatas, parse_type, partitions = read_chunk_text(filepath, file_name,
                                                                    ["\n\n", "\n"], ["after", "after"],
                                                                    1000, 500)
+        if len(texts) == 0:
+            raise ValueError('文件解析为空')
 
+        for metadata in metadatas:
+            metadata.update({
+                'file_id': file_id,
+                'knowledge_id': self.workflow_id,
+                'extra': '',
+                'bbox': None,  # 临时文件不能溯源，因为没有持久化存储源文件
+            })
         # 4、上传到milvus和es
+        logger.info(f'workflow_add_vectordb file={key} file_name={file_name}')
+        # 存入milvus
+        vector_client.add_texts(texts=texts, metadatas=metadatas)
 
+        logger.info(f'workflow_add_es file={key} file_name={file_name}')
+        # 存入es
+        es_client.add_texts(texts=texts, metadatas=metadatas)
 
+        logger.info(f'workflow_record_file_metadata file={key} file_name={file_name}')
+        # 记录文件metadata，其他节点根据metadata数据去检索对应的文件
+        return metadatas[0]

@@ -1,3 +1,4 @@
+import copy
 import uuid
 from abc import abstractmethod, ABC
 from typing import Any, Dict
@@ -33,6 +34,8 @@ class BaseNode(ABC):
 
         # 回调，用来处理节点执行过程中的各种事件
         self.callback_manager = callback
+        # 是否发送节点开始和结束的事件
+        self.node_start_end_event = True
 
         # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
         self.tmp_collection_name = "tmp_workflow_data"
@@ -46,7 +49,7 @@ class BaseNode(ABC):
 
         for one in self.node_data.group_params:
             for param_info in one.params:
-                self.node_params[param_info.key] = param_info.value
+                self.node_params[param_info.key] = copy.deepcopy(param_info.value)
 
     @abstractmethod
     def _run(self) -> Dict[str, Any]:
@@ -76,11 +79,13 @@ class BaseNode(ABC):
         Run node entry
         :return:
         """
-        exec_id = uuid.UUID().hex
-        self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
-
         if self.current_step >= self.max_steps:
             raise Exception(f"node {self.name} exceeded more than max steps")
+
+        exec_id = uuid.UUID().hex
+        start_end_event = self.node_start_end_event
+        if start_end_event:
+            self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
         result = self._run()
 
