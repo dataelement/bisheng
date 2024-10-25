@@ -123,6 +123,7 @@ class MarkTaskDao(MarkTaskBase):
                 filter.append(MarkTask.create_id==create_id)
             if user_id:
                 filter_or.append(MarkTask.process_users.like('%{}%'.format(user_id)))
+                filter_or.append(MarkTask.status==status)
             if filter and not filter_or:
                 statement = statement.filter(*filter)
             if filter_or:
