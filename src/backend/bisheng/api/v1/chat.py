@@ -95,6 +95,9 @@ def get_app_chat_list(*,
         group_flow_ids = []
     else:
         if not login_user.is_admin():
+            task = MarkTaskDao.get_task_byid(task_id)
+            if str(login_user.user_id) not in task.process_users.split(","):
+                raise HTTPException(status_code=403, detail="没有权限")
             # 判断下是否是用户组管理员
             if user_groups:
                 # user_group_ids = [user_group.group_id for user_group in user_groups]

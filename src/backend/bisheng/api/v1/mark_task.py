@@ -201,7 +201,9 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
     else:
         task = MarkTaskDao.get_task_byid(task_id)
         record = MarkRecordDao.get_list_by_taskid(task_id)
-        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),[r.session_id for r in record])
+        chat_list = [r.session_id for r in record]
+        chat_list.append(chat_id)
+        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
         if msg:
             flow = FlowDao.get_flow_by_idstr(msg.flow_id)
             if flow:
