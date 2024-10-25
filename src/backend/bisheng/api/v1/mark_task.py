@@ -1,3 +1,5 @@
+from collections import deque
+import itertools
 import json
 from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
@@ -58,7 +60,7 @@ async def get_status(task_id:int,chat_id:str,
 
     record = MarkRecordDao.get_record(task_id,chat_id)
     if not record:
-        return resp_200()
+        return resp_200(data={"status":""})
 
     if login_user.user_id == record.create_id:
         is_self = True
@@ -114,9 +116,9 @@ async def mark(data: MarkData,
     flow_type flow assistant
     """
 
-    record = MarkRecordDao.get_record(data.task_id,data.session_id)
-    if record:
-        return resp_500(data="已经标注过了")
+    # record = MarkRecordDao.get_record(data.task_id,data.session_id)
+    # if record:
+    #     return resp_500(data="已经标注过了")
 
     msg = ChatMessageDao.get_msg_by_chat_id(data.session_id)
 
@@ -126,9 +128,15 @@ async def mark(data: MarkData,
     else:
         data.flow_type = "assistant"
 
-    record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
-    #创建一条 用户标注记录 
-    MarkRecordDao.create_record(record_info)
+    db_r = MarkRecordDao.get_record(data.task_id,data.session_id)
+    if db_r:
+        db_r.status = data.status
+        MarkRecordDao.update_record(db_r)
+
+    else:
+        record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
+        #创建一条 用户标注记录 
+        MarkRecordDao.create_record(record_info)
 
     task = MarkTaskDao.get_task_byid(task_id=data.task_id) 
     msg_list = ChatMessageDao.get_msg_by_flows(task.app_id.split(","))
@@ -136,14 +144,22 @@ async def mark(data: MarkData,
     r_list = MarkRecordDao.get_list_by_taskid(data.task_id)
     app_record = [r.session_id for r in r_list ]
 
+    m_list = [s.strip() for s in m_list if s.strip()]
+    app_record = [s.strip() for s in app_record if s.strip()]
+
+    m_list.sort()
+    app_record.sort()
+
+
+    logger.info("m_list={} app_record={}",m_list,app_record)
+
     if m_list == app_record:
         MarkTaskDao.update_task(data.task_id,MarkTaskStatus.DONE.value)
     else:
         MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
 
 
-    # msg.mark_status = data.status
-    # ChatMessageDao.update_message_model(msg)
+    # ChatMessageDao.update_message_mark(data.session_id,MarkTaskStatus.DONE.value)
 
 
     return resp_200(data="ok")
@@ -165,8 +181,18 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
     result = {"task_id":task_id}
 
     if action == "prev":
-        record = MarkRecordDao.get_prev_task(login_user.user_id,chat_id)
+        record = MarkRecordDao.get_prev_task(login_user.user_id,task_id)
         if record:
+            queue = deque()
+            for r in record:
+                if r.session_id == chat_id:
+                    break
+                queue.append(r)
+
+            if len(queue) == 0:
+                return resp_200()
+            record = queue.pop()
+            logger.info("queue={} record={}",queue,record)
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
             result["chat_id"] = record.session_id
             result["flow_type"] = record.flow_type
@@ -174,7 +200,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
             return resp_200(data=result)
     else:
         task = MarkTaskDao.get_task_byid(task_id)
-        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_id)
+        record = MarkRecordDao.get_list_by_taskid(task_id)
+        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),[r.session_id for r in record])
         if msg:
             flow = FlowDao.get_flow_by_idstr(msg.flow_id)
             if flow:
@@ -184,7 +211,7 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
 
             result["chat_id"] = msg.chat_id
             result["flow_id"] = msg.flow_id
-        return resp_200(data=result)
+            return resp_200(data=result)
 
     return resp_200()
 

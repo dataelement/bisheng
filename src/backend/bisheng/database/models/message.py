@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
+from sqlalchemy.sql import not_
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
@@ -165,9 +167,9 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_last_msg_by_flow_id(cls, flow_id: List[str],chat_id:str):
+    def get_last_msg_by_flow_id(cls, flow_id: List[str],chat_id:List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(ChatMessage.chat_id != chat_id).group_by(ChatMessage.chat_id).order_by(
+            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
                 ChatMessage.create_time).limit(1)
             return session.exec(statement).first()
 
@@ -259,5 +261,12 @@ class ChatMessageDao(MessageBase):
     def update_message_copied(cls, message_id: int, copied: int):
         with session_getter() as session:
             statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def update_message_mark(cls, chat_id: str, status: int):
+        with session_getter() as session:
+            statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
             session.exec(statement)
             session.commit()

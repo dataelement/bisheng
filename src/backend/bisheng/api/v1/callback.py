@@ -509,6 +509,10 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         # 从tool cache中获取input信息
         input_info = self.tool_cache.get(kwargs.get('run_id').hex)
         if input_info:
+            if not self.chat_id:
+                # 说明是调试界面，不用持久化数据
+                self.tool_cache.pop(kwargs.get('run_id').hex)
+                return
             output_info.update(input_info['input'])
             intermediate_steps = f'{input_info["steps"]}\n\n{intermediate_steps}'
             ChatMessageDao.insert_one(
@@ -541,6 +545,10 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
             await self.websocket.send_json(resp.dict())
 
             # 保存工具调用记录
+            if not self.chat_id:
+                # 说明是调试界面，不用持久化数据
+                self.tool_cache.pop(kwargs.get('run_id').hex)
+                return
             tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
             self.tool_cache.pop(kwargs.get('run_id').hex)
             ChatMessageDao.insert_one(

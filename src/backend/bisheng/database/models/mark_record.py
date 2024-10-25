@@ -46,10 +46,18 @@ class MarkRecordDao(MarkRecordBase):
 
 
     @classmethod
-    def get_prev_task(cls,user_id:int,chat_id:str):
+    def update_record(cls, record_info: MarkRecord) -> MarkRecord:
         with session_getter() as session:
-            statement = select(MarkRecord).where(MarkRecord.create_id==user_id).where(MarkRecord.session_id!=chat_id).order_by(MarkRecord.id.desc()).limit(1)
-            return session.exec(statement).first()
+            session.add(record_info)
+            session.commit()
+            session.refresh(record_info)
+            return record_info
+
+    @classmethod
+    def get_prev_task(cls,user_id:int,task_id:int):
+        with session_getter() as session:
+            statement = select(MarkRecord).where(MarkRecord.create_id==user_id).where(MarkRecord.task_id==task_id).order_by(MarkRecord.id)
+            return session.exec(statement).all()
 
 
 
