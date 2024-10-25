@@ -126,9 +126,15 @@ async def mark(data: MarkData,
     else:
         data.flow_type = "assistant"
 
-    record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
-    #创建一条 用户标注记录 
-    MarkRecordDao.create_record(record_info)
+    db_r = MarkRecordDao.get_record(data.task_id,data.session_id)
+    if db_r:
+        db_r.status = data.status
+        MarkRecordDao.update_record(db_r)
+
+    else:
+        record_info = MarkRecord(create_user=login_user.user_name,create_id=login_user.user_id,session_id=data.session_id,task_id=data.task_id,status=data.status,flow_type=data.flow_type)
+        #创建一条 用户标注记录 
+        MarkRecordDao.create_record(record_info)
 
     task = MarkTaskDao.get_task_byid(task_id=data.task_id) 
     msg_list = ChatMessageDao.get_msg_by_flows(task.app_id.split(","))
