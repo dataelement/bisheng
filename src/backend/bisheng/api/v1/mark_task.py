@@ -202,17 +202,21 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         task = MarkTaskDao.get_task_byid(task_id)
         record = MarkRecordDao.get_list_by_taskid(task_id)
         chat_list = [r.session_id for r in record]
-        chat_list.append(chat_id)
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
-        if msg:
-            flow = FlowDao.get_flow_by_idstr(msg.flow_id)
+        for m in msg:
+            pick = m
+            if m.chat_id == chat_id:
+                break
+
+        if pick:
+            flow = FlowDao.get_flow_by_idstr(pick.flow_id)
             if flow:
                 result['flow_type'] = 'flow'
             else:
                 result['flow_type'] = 'assistant'
 
-            result["chat_id"] = msg.chat_id
-            result["flow_id"] = msg.flow_id
+            result["chat_id"] = pick.chat_id
+            result["flow_id"] = pick.flow_id
             return resp_200(data=result)
 
     return resp_200()
