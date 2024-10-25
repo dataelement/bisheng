@@ -181,7 +181,7 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
     result = {"task_id":task_id}
 
     if action == "prev":
-        record = MarkRecordDao.get_prev_task(login_user.user_id,chat_id)
+        record = MarkRecordDao.get_prev_task(login_user.user_id,task_id)
         if record:
             queue = deque()
             for r in record:
@@ -190,6 +190,7 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
                 queue.append(r)
 
             record = queue.pop()
+            logger.info("queue={} record={}",queue,record)
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
             result["chat_id"] = record.session_id
             result["flow_type"] = record.flow_type
