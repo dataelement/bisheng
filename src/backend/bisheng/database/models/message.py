@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
+from sqlalchemy.sql import not_
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from loguru import logger
@@ -167,7 +169,7 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str],chat_id:List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(ChatMessage.chat_id.not_in_(chat_id).group_by(ChatMessage.chat_id).order_by(
+            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
                 ChatMessage.create_time).limit(1)
             return session.exec(statement).first()
 
