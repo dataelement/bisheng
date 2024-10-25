@@ -136,6 +136,10 @@ async def mark(data: MarkData,
     r_list = MarkRecordDao.get_list_by_taskid(data.task_id)
     app_record = [r.session_id for r in r_list ]
 
+    m_list = [s.strip() for s in m_list if s.strip()]
+    app_record = [s.strip() for s in app_record if s.strip()]
+
+
     logger.info("m_list={} app_record={}",m_list,app_record)
 
     if m_list == app_record:
