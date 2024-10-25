@@ -1,3 +1,5 @@
+from collections import deque
+import itertools
 import json
 from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
@@ -160,7 +162,6 @@ async def mark(data: MarkData,
     # ChatMessageDao.update_message_mark(data.session_id,MarkTaskStatus.DONE.value)
 
 
-
     return resp_200(data="ok")
 
 @router.get('/get_record')
@@ -182,6 +183,13 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
     if action == "prev":
         record = MarkRecordDao.get_prev_task(login_user.user_id,chat_id)
         if record:
+            queue = deque()
+            for r in record:
+                if r.session_id == chat_id:
+                    break
+                queue.append(r)
+
+            record = queue.pop()
             chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
             result["chat_id"] = record.session_id
             result["flow_type"] = record.flow_type
