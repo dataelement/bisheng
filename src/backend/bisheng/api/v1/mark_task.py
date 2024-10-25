@@ -114,9 +114,9 @@ async def mark(data: MarkData,
     flow_type flow assistant
     """
 
-    record = MarkRecordDao.get_record(data.task_id,data.session_id)
-    if record:
-        return resp_500(data="已经标注过了")
+    # record = MarkRecordDao.get_record(data.task_id,data.session_id)
+    # if record:
+    #     return resp_500(data="已经标注过了")
 
     msg = ChatMessageDao.get_msg_by_chat_id(data.session_id)
 
@@ -136,14 +136,16 @@ async def mark(data: MarkData,
     r_list = MarkRecordDao.get_list_by_taskid(data.task_id)
     app_record = [r.session_id for r in r_list ]
 
+    logger.info("m_list={} app_record={}",m_list,app_record)
+
     if m_list == app_record:
         MarkTaskDao.update_task(data.task_id,MarkTaskStatus.DONE.value)
     else:
         MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
 
 
-    # msg.mark_status = data.status
-    # ChatMessageDao.update_message_model(msg)
+    # ChatMessageDao.update_message_mark(data.session_id,MarkTaskStatus.DONE.value)
+
 
 
     return resp_200(data="ok")
@@ -174,7 +176,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
             return resp_200(data=result)
     else:
         task = MarkTaskDao.get_task_byid(task_id)
-        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_id)
+        record = MarkRecordDao.get_list_by_taskid(task_id)
+        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),[r.session_id for r in record])
         if msg:
             flow = FlowDao.get_flow_by_idstr(msg.flow_id)
             if flow:
