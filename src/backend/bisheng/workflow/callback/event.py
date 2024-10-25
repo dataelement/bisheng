@@ -10,13 +10,20 @@ class NodeStartData(BaseModel):
     name: str = Field(..., description='Node name')
 
 
-class NodeEndData(BaseModel):
-    unique_id: str
-    node_id: str
-    name: str
+class NodeEndData(NodeStartData):
+    pass
 
 
 class UserInputData(BaseModel):
     node_id: str = Field(..., description='Node unique id')
     group_params: Any = Field(..., description='User input data')
 
+
+class GuideWordData(BaseModel):
+    node_id: str = Field(..., description='Node unique id')
+    guide_word: str = Field(..., description='Guide word')
+
+
+class GuideQuestionData(BaseModel):
+    node_id: str = Field(..., description='Node unique id')
+    guide_question: str = Field(..., description='Guide question')

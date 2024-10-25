@@ -59,7 +59,7 @@ class AssistantLink(AssistantLinkBase, table=True):
     pass
 
 
-class AssistantDao(Assistant):
+class AssistantDao(AssistantBase):
 
     @classmethod
     def create_assistant(cls, data: Assistant) -> Assistant:

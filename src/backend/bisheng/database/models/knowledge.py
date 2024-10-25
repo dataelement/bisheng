@@ -58,7 +58,6 @@ class KnowledgeCreate(KnowledgeBase):
 
 
 class KnowledgeDao(KnowledgeBase):
-    from bisheng.database.models.role_access import RoleAccess
 
     @classmethod
     def insert_one(cls, data: Knowledge) -> Knowledge:

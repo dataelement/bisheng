@@ -1,5 +1,6 @@
 from typing import Dict, Any
 
+from bisheng.workflow.graph.graph_state import GraphState
 from loguru import logger
 from typing_extensions import TypedDict
 from langgraph.checkpoint.memory import MemorySaver
@@ -26,14 +27,13 @@ class GraphEngine:
         self.user_id = user_id
         self.workflow_data = workflow_data
         self.max_steps = max_steps
+        # 回调
         self.callback = callback
 
         # node_id: NodeInstance
         self.nodes_map = {}
         self.edges = None
-
-        self.build_edges()
-        self.build_nodes()
+        self.graph_state = GraphState()
 
         # init langgraph state graph
         self.graph_builder = StateGraph(TempState)
@@ -43,12 +43,17 @@ class GraphEngine:
         self.status = WorkflowStatus.RUNNING.value
         self.reason = ""  # 失败原因
 
+        self.build_edges()
+        self.build_nodes()
+
     def build_edges(self):
         # init edges
         self.edges = EdgeManage(self.workflow_data.get('edges', []))
 
     def add_node_edge(self, node_instance: BaseNode):
         """  把节点的边链接起来  """
+        if node_instance.type == NodeType.END.value:
+            return
         # get target nodes
         target_node_ids = self.edges.get_target_node(node_instance.id)
         source_node_ids = self.edges.get_source_node(node_instance.id)
@@ -82,7 +87,8 @@ class GraphEngine:
             node_data = BaseNodeData(**node)
             if not node_data.id:
                 raise Exception("node must have attribute id")
-            node_instance = NodeFactory.instance_node(node_data=node_data, max_steps=self.max_steps, graph=self)
+            node_instance = NodeFactory.instance_node(node_type=node_data.type, node_data=node_data,
+                                                      max_steps=self.max_steps, callback=self.callback)
             self.nodes_map[node_data.id] = node_instance
 
             # add node into langgraph
@@ -112,10 +118,12 @@ class GraphEngine:
             checkpointer=MemorySaver(),
             interrupt_before=interrupt_nodes
         )
+        with open("graph.png", "wb") as f:
+            f.write(self.graph.get_graph().draw_mermaid_png())
 
     def _run(self, input_data: Any):
         try:
-            for _ in self.graph.stream({"flag": True}):
+            for _ in self.graph.stream({"flag": True}, config=self.graph_config):
                 pass
             self.judge_status()
         except Exception as e:

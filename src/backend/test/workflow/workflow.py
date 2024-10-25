@@ -1,4 +1,5 @@
 import json
+import os
 from queue import Queue
 from typing import Dict
 
@@ -16,6 +17,7 @@ def main(workflow_data: Dict = None):
 
 
 if __name__ == '__main__':
-    with open('test/workflow/workflow_data.json', 'r', encoding='utf-8') as f:
+    print(os.getcwd())
+    with open('./workflow_data.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
     main(data)

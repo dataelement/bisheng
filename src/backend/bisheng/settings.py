@@ -82,7 +82,12 @@ class ObjectStore(BaseModel):
     minio: MinioConf = Field(default_factory=MinioConf, description="minio 配置")
 
 
-class Settings(BaseSettings):
+class Settings(BaseModel):
+    class Config:
+        validate_assignment = True
+        arbitrary_types_allowed = True
+        extra = 'ignore'
+
     chains: dict = {}
     agents: dict = {}
     prompts: dict = {}
@@ -113,8 +118,8 @@ class Settings(BaseSettings):
     default_llm: dict = {}
     jwt_secret: str = 'secret'
     gpts: dict = {}
-    openai_conf = {}
-    minio_conf = {}
+    openai_conf: dict = {}
+    minio_conf: dict = {}
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
     system_login_method: SystemLoginMethod = {}
@@ -161,10 +166,6 @@ class Settings(BaseSettings):
                     new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
                     values['redis_url'] = new_redis_url
         return values
-
-    class Config:
-        validate_assignment = True
-        extra = 'ignore'
 
     @root_validator()
     def validate_lists(cls, values):

@@ -1,5 +1,49 @@
+from typing import List, Any, Optional, Dict
+
 from pydantic import BaseModel
+from langchain.memory import ConversationBufferWindowMemory
 
 
 class GraphState(BaseModel):
-    pass
+    """ 所有节点的 全局状态管理 """
+
+    # 存储聊天历史
+    history_memory: Optional[ConversationBufferWindowMemory]
+
+    # 全局变量池
+    variables_pool: Dict[str, Dict[str, Any]] = {}
+
+    def get_history_memory(self) -> str:
+        """ 获取聊天历史记录 """
+        return self.history_memory.load_memory_variables({})[self.history_memory.memory_key]
+
+    def save_context(self, question: str, answer: str) -> None:
+        """  保存聊天记录 """
+        self.history_memory.save_context({"input": question}, {"output": answer})
+
+    def set_variable(self, node_id: str, key: str, value: Any):
+        """ 将节点产生的数据放到全局变量里 """
+        if node_id not in self.variables_pool:
+            self.variables_pool[node_id] = {}
+        self.variables_pool[node_id][key] = value
+
+    def get_variable(self, node_id: str, key: str) -> Any:
+        """ 从全局变量中获取数据 """
+        if node_id not in self.variables_pool:
+            return None
+
+        # todo 某些特殊变量的处理 chat_history、source_document等
+        return self.variables_pool[node_id].get(key)
+
+    def get_variable_by_str(self, contact_key: str) -> Any:
+        """
+        从全局变量中获取数据
+        contact_key: node_id.key#index  #index不一定需要
+        """
+        tmp_list = contact_key.split(".")
+        node_id = tmp_list[0]
+        var_key = tmp_list[1]
+        if var_key.find("#") != -1:
+            var_key = var_key.split("#")[0]
+        return self.get_variable(node_id, var_key)
+

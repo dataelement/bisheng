@@ -25,7 +25,6 @@ from bisheng.database.models.role_access import RoleAccess, AccessType
 
 def init_default_data():
     """初始化数据库"""
-    return
 
     if redis_client.setNx('init_default_data', '1'):
         try:

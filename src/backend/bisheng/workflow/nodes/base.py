@@ -1,18 +1,24 @@
+import uuid
 from abc import abstractmethod, ABC
-from typing import Any
+from typing import Any, Dict
 
 from bisheng.workflow.callback.base_callback import BaseCallback
+from bisheng.workflow.callback.event import NodeStartData, NodeEndData
 from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.graph.graph_state import GraphState
 
 
 class BaseNode(ABC):
 
-    def __init__(self, node_data: BaseNodeData, max_steps: int, callback: BaseCallback, **kwargs: Any):
+    def __init__(self, node_data: BaseNodeData, max_steps: int, callback: BaseCallback,
+                 graph_state: GraphState, **kwargs: Any):
         self.id = node_data.id
         self.type = node_data.type
         self.name = node_data.name
         self.description = node_data.description
+
+        # 全局状态管理
+        self.graph_state = graph_state
 
         # 节点全部的数据
         self.node_data = node_data
@@ -27,21 +33,31 @@ class BaseNode(ABC):
         # 回调，用来处理节点执行过程中的各种事件
         self.callback_manager = callback
 
+        # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
+        self.tmp_collection_name = "tmp_workflow_data"
+
         self.init_data()
 
     def init_data(self):
         """ 节点有特殊数据需要处理的，可以继承此函数处理 """
+        if not self.node_data.group_params:
+            return
+
         for one in self.node_data.group_params:
             for param_info in one.params:
                 self.node_params[param_info.key] = param_info.value
 
     @abstractmethod
-    def _run(self) -> Any:
+    def _run(self) -> Dict[str, Any]:
         """
-        Run node
+        Run node 返回的结果会存储到全局的变量管理里，可以被其他节点使用
         :return:
         """
         raise NotImplementedError
+
+    def get_input_schema(self) -> Any:
+        """ 返回用户需要输入的表单描述信息 """
+        return None
 
     def handle_input(self, user_input: dict) -> Any:
         # 将用户输入的数据更新到节点数里
@@ -59,12 +75,19 @@ class BaseNode(ABC):
         Run node entry
         :return:
         """
-        # todo start exec node event
-        print(f"start exec node: {self.id}")
+        exec_id = uuid.UUID().hex
+        self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
+
         if self.current_step >= self.max_steps:
             raise Exception(f"node {self.name} exceeded more than max steps")
+
         result = self._run()
+
+        # 把节点输出存储到全局变量中
+        if result:
+            for key, value in result.items():
+                self.graph_state.set_variable(self.id, key, value)
+
         self.current_step += 1
-        print(f"end exec node: {self.id}")
-        # todo end exec node event
+        self.callback_manager.on_node_end(data=NodeEndData(unique_id=exec_id, node_id=self.id, name=self.name))
         return state

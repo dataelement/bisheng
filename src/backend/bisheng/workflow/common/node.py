@@ -39,10 +39,10 @@ class NodeGroupParams(BaseModel):
 
 
 class BaseNodeData(BaseModel):
-    id: Optional[str] = Field(default="", description="Unique id for node")
+    id: str = Field(default="", description="Unique id for node")
     type: str = Field(..., description="Node type")
     name: Optional[str] = Field(default="", description="Node name")
     description: Optional[str] = Field(default="", description="Node description")
-    group_params: List[NodeGroupParams] = Field(..., description="Node group params")
+    group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
     tab: Optional[dict] = Field({}, description="tab config")
     tool_id: Optional[int] = Field(0, description="unique tool id, only for tool node")
