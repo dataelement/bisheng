@@ -58,7 +58,7 @@ async def get_status(task_id:int,chat_id:str,
 
     record = MarkRecordDao.get_record(task_id,chat_id)
     if not record:
-        return resp_200()
+        return resp_200(data={"status":""})
 
     if login_user.user_id == record.create_id:
         is_self = True
