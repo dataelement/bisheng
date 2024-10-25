@@ -8,10 +8,11 @@ import ShadTooltip from "@/components/ShadTooltipComponent";
 import { getChatLabelsApi, getMarkChatsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { ArrowLeft } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 export default function taskApps() {
     const { id } = useParams()
+    const navigator = useNavigate()
 
     const { page, pageSize, total, data: datalist, loading, setPage, filterData } = useTable({}, (param) =>
         getMarkChatsApi({
@@ -31,7 +32,7 @@ export default function taskApps() {
                         <Button
                             className="w-[36px] px-2 rounded-full"
                             variant="outline"
-                            onClick={() => window.history.back()}
+                            onClick={() => navigator('/label')}
                         ><ArrowLeft className="side-bar-button-size" /></Button>
                     </ShadTooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">{id}</span>
