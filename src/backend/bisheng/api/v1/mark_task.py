@@ -204,9 +204,9 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         chat_list = [r.session_id for r in record]
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
         for m in msg:
-            pick = m
             if m.chat_id == chat_id:
                 break
+            pick = m
 
         if pick:
             flow = FlowDao.get_flow_by_idstr(pick.flow_id)
