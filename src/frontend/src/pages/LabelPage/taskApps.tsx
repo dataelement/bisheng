@@ -3,7 +3,7 @@ import { ThunmbIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { getChatLabelsApi, getMarkChatsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
@@ -56,13 +56,13 @@ export default function taskApps() {
                                         onChange={(v) => filterData({ mark_status: v })} />
                                 </div>
                             </TableHead>
-                            <TableHead>
+                            <TableHead className="w-[140px]">
                                 <div className="flex items-center">
                                     标注人
                                     <ColFilterUser label={id} onFilter={(ids) => filterData({ mark_user: ids })}></ColFilterUser>
                                 </div>
                             </TableHead>
-                            <TableHead className="text-right">操作</TableHead>
+                            <TableHead className="w-[80px] text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -111,6 +111,13 @@ export default function taskApps() {
                             </TableRow>
                         ))}
                     </TableBody>
+                    <TableFooter>
+                        {!datalist.length && (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center text-gray-400">暂无数据</TableCell>
+                            </TableRow>
+                        )}
+                    </TableFooter>
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">

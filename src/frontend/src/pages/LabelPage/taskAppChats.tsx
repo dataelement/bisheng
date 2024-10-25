@@ -64,10 +64,12 @@ export default function index() {
     const { id, fid, cid, type } = useParams()
     // console.log('fid, cid :>> ', fid, cid);
     const { t } = useTranslation()
+    const navigator = useNavigate()
 
     const mark = useAuth()
 
     const [status, setStatus] = React.useState(LabelStatus.Unlabeled)
+    const [isSelf, setIsSelf] = useState(false)
     const loading = false;
     const { loadAssistantState, destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
@@ -82,7 +84,10 @@ export default function index() {
         changeChatId(cid)
 
         // get status
-        getMarkStatusApi({ task_id: Number(id), chat_id: cid }).then(res => setStatus(String(res || 1)))
+        getMarkStatusApi({ task_id: Number(id), chat_id: cid }).then((res: any) => {
+            setStatus(String(res.status || 1))
+            setIsSelf(res.is_self)
+        })
 
         return () => {
             clearMsgs()
@@ -120,13 +125,13 @@ export default function index() {
                         <Button
                             className="w-[36px] px-2 rounded-full"
                             variant="outline"
-                            onClick={() => window.history.back()}
+                            onClick={() => navigator('/label/' + id)}
                         ><ArrowLeft className="side-bar-button-size" /></Button>
                     </ShadTooltip>
                     <span className=" text-gray-700 text-sm font-black pl-4">返回列表</span>
                 </div>
                 <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
-                    onValueChange={(value: LabelStatus) => changeMarkStatus(value)}>
+                    onValueChange={(value: LabelStatus) => changeMarkStatus(value)} disabled={!isSelf && status !== LabelStatus.Unlabeled}>
                     <Label className="flex justify-center">
                         <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unlabeled} />未标注
                     </Label>
