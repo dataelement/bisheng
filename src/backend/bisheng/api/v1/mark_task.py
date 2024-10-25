@@ -142,7 +142,7 @@ async def mark(data: MarkData,
 
     logger.info("m_list={} app_record={}",m_list,app_record)
 
-    if m_list == app_record:
+    if sorted(m_list)== sorted(app_record):
         MarkTaskDao.update_task(data.task_id,MarkTaskStatus.DONE.value)
     else:
         MarkTaskDao.update_task(data.task_id,MarkTaskStatus.ING.value)
