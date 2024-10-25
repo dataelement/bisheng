@@ -187,7 +187,7 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
 
             result["chat_id"] = msg.chat_id
             result["flow_id"] = msg.flow_id
-        return resp_200(data=result)
+            return resp_200(data=result)
 
     return resp_200()
 
