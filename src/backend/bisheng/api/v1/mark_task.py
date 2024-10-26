@@ -11,6 +11,7 @@ from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.utils.linked_list import DoubleLinkList
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -203,20 +204,20 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         record = MarkRecordDao.get_list_by_taskid(task_id)
         chat_list = [r.session_id for r in record]
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
+        linked = DoubleLinkList()
         for m in msg:
-            if m.chat_id == chat_id:
-                break
-            pick = m
+            linked.append(m.chat_id)
 
-        if pick:
-            flow = FlowDao.get_flow_by_idstr(pick.flow_id)
+        cur = linked.find(chat_id)
+        if cur:
+            flow = FlowDao.get_flow_by_idstr(cur.data.flow_id)
             if flow:
                 result['flow_type'] = 'flow'
             else:
                 result['flow_type'] = 'assistant'
 
-            result["chat_id"] = pick.chat_id
-            result["flow_id"] = pick.flow_id
+            result["chat_id"] = cur.data.chat_id
+            result["flow_id"] = cur.data.flow_id
             return resp_200(data=result)
 
     return resp_200()
