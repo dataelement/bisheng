@@ -76,7 +76,7 @@ export default function index() {
     const qaFormRef = useRef(null)
     const similarFormRef = useRef(null)
     useEffect(() => {
-        type === 'assistant' && loadAssistantState(fid, 'v1')
+        // type === 'assistant' && loadAssistantState(fid, 'v1') 禁用助手详情,涉及权限403问题
         loadHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ''

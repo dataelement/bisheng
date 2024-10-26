@@ -11,6 +11,7 @@ from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.utils.linked_list import DoubleLinkList
 from bisheng.utils.logger import logger
 from fastapi_jwt_auth import AuthJWT
 from bisheng.api.services.user_service import UserPayload, get_login_user
@@ -39,15 +40,20 @@ def list(request: Request,Authorize: AuthJWT = Depends(),
     for task in task_list:
         record= MarkRecordDao.get_count(task.id)
         process_list= []
+        user_count = {}
+
+        for c in task.process_users.split(","):
+            user = UserDao.get_user(int(c))
+            process_count = "{}:{}".format(user.user_name,0)
+            user_count[int(c)] = process_count
+
         for c in record:
             process_count = "{}:{}".format(c.create_user,c.user_count)
-            process_list.append(process_count)
+            user_count[c.create_id] = process_count
 
-        if not record:
-            for c in task.process_users.split(","):
-                user = UserDao.get_user(int(c))
-                process_count = "{}:{}".format(user.user_name,0)
-                process_list.append(process_count)
+        for c in user_count:
+            process_list.append(user_count[c])
+
         result_list.append(MarkTaskRead(**task.model_dump(),mark_process=process_list))
 
     result = {"list":result_list,"total":count}
@@ -202,17 +208,30 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         task = MarkTaskDao.get_task_byid(task_id)
         record = MarkRecordDao.get_list_by_taskid(task_id)
         chat_list = [r.session_id for r in record]
-        chat_list.append(chat_id)
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
-        if msg:
-            flow = FlowDao.get_flow_by_idstr(msg.flow_id)
+        linked = DoubleLinkList()
+        k_list = {}
+        for m in msg:
+            k_list[m.chat_id] = m
+            linked.append(m.chat_id)
+
+        cur = linked.find(chat_id)
+
+        logger.info("k_list={} cur={}",k_list,cur.data)
+
+        if cur:
+            if cur.next is None:
+                cur = k_list[linked.head().data]
+            else:
+                cur = k_list[cur.next.data]
+            flow = FlowDao.get_flow_by_idstr(cur.flow_id)
             if flow:
                 result['flow_type'] = 'flow'
             else:
                 result['flow_type'] = 'assistant'
 
-            result["chat_id"] = msg.chat_id
-            result["flow_id"] = msg.flow_id
+            result["chat_id"] = cur.chat_id
+            result["flow_id"] = cur.flow_id
             return resp_200(data=result)
 
     return resp_200()
