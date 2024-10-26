@@ -88,7 +88,7 @@ class MarkRecordDao(MarkRecordBase):
     @classmethod
     def get_count(cls,task_id:int):
         with session_getter() as session:
-            sql = text("select create_user,count(*) as user_count from markrecord where task_id=:task_id group by create_id")
+            sql = text("select create_user,count(*) as user_count,create_id from markrecord where task_id=:task_id group by create_id")
             query = session.execute(sql,{"task_id":task_id}).fetchall()
             return query
 
