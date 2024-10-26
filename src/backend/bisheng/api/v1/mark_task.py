@@ -212,7 +212,7 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
 
         cur = linked.find(chat_id)
 
-        logger.info("k_list={} cur={}",linked.travel(),cur)
+        logger.info("k_list={} cur={}",k_list,cur.data)
 
         if cur:
             if cur.next is None:
