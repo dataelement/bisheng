@@ -17,6 +17,9 @@ class DoubleNode(object):
 class DoubleLinkList(object):
     """双链表"""
 
+    def head(self):
+        return self.__head
+
     def __init__(self, node=None):
         # 私有属性头结点
         self.__head = node
@@ -161,6 +164,7 @@ if __name__ == '__main__':
     node = double_link_list.find('0:hello')
     t = {}
     t["abc"]="abc"
+    t["abc1"]="abc1"
 
     print("{}",node.next.data)
 
