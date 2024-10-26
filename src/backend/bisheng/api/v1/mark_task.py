@@ -212,10 +212,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
 
         cur = linked.find(chat_id)
 
-        logger.info("link={} cur={}",linked,cur)
-
         if cur:
-            cur = k_list[cur.data]
+            cur = k_list[cur.next.data]
             flow = FlowDao.get_flow_by_idstr(cur.flow_id)
             if flow:
                 result['flow_type'] = 'flow'
