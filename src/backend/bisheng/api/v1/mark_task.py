@@ -205,7 +205,9 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         chat_list = [r.session_id for r in record]
         msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
         linked = DoubleLinkList()
+        k_list = {}
         for m in msg:
+            k_list[m.chat_id] = m
             linked.append(m.chat_id)
 
         cur = linked.find(chat_id)
@@ -213,14 +215,15 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         logger.info("link={} cur={}",linked,cur)
 
         if cur:
-            flow = FlowDao.get_flow_by_idstr(cur.data.flow_id)
+            cur = k_list[cur.data]
+            flow = FlowDao.get_flow_by_idstr(cur.flow_id)
             if flow:
                 result['flow_type'] = 'flow'
             else:
                 result['flow_type'] = 'assistant'
 
-            result["chat_id"] = cur.data.chat_id
-            result["flow_id"] = cur.data.flow_id
+            result["chat_id"] = cur.chat_id
+            result["flow_id"] = cur.flow_id
             return resp_200(data=result)
 
     return resp_200()
