@@ -406,7 +406,7 @@ class FinetuneService:
             sub_data = {'step': None, 'loss': None}
             elem = elem.strip()
             elem_data = json.loads(elem)
-            if elem_data['loss'] is None:
+            if elem_data.get('loss', None) is None:
                 continue
             sub_data['step'] = elem_data['current_steps']
             sub_data['loss'] = elem_data['loss']
