@@ -221,6 +221,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
 
         if cur:
             if cur.next is None:
+                if linked.length() == 1 and linked.head().data == chat_id:
+                    return resp_200()
                 cur = k_list[linked.head().data]
             else:
                 cur = k_list[cur.next.data]
