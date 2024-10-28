@@ -141,7 +141,7 @@ class ChatMessage(BaseModel):
     """Chat message schema."""
 
     is_bot: bool = False
-    message: Union[str, None, dict] = ''
+    message: Union[str, None, dict, list] = ''
     type: str = 'human'
     category: str = 'processing'  # system processing answer tool
     intermediate_steps: str = None

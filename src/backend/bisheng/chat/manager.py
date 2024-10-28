@@ -18,6 +18,7 @@ from bisheng.cache.manager import Subject
 from bisheng.chat.client import ChatClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
+from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
@@ -197,15 +198,25 @@ class ChatManager:
             websocket: WebSocket,
             graph_data: dict = None):
         client_key = uuid.uuid4().hex
-        chat_client = ChatClient(request,
-                                 client_key,
-                                 client_id,
-                                 chat_id,
-                                 login_user.user_id,
-                                 login_user,
-                                 work_type,
-                                 websocket,
-                                 graph_data=graph_data)
+        if work_type == WorkType.GPTS:
+            chat_client = ChatClient(request,
+                                     client_key,
+                                     client_id,
+                                     chat_id,
+                                     login_user.user_id,
+                                     login_user,
+                                     work_type,
+                                     websocket,
+                                     graph_data=graph_data)
+        else:
+            chat_client = WorkflowClient(request,
+                                         client_key,
+                                         client_id,
+                                         chat_id,
+                                         login_user.user_id,
+                                         login_user,
+                                         work_type,
+                                         websocket)
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(
             f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')

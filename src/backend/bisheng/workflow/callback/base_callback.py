@@ -1,6 +1,7 @@
 from abc import ABC
 
-from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData
+from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
+    OutputMsgData
 
 
 class BaseCallback(ABC):
@@ -27,3 +28,6 @@ class BaseCallback(ABC):
     def on_guide_question(self, data: GuideQuestionData):
         """ guide question event """
         print(f"guide question: {data}")
+
+    def on_output_msg(self, data: OutputMsgData):
+        print(f"output msg: {data}")

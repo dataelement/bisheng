@@ -11,7 +11,7 @@ def main(workflow_data: Dict = None):
     base_callback = BaseCallback()
     input_queue = Queue()
 
-    workflow = Workflow(user_id='1', workflow_data=workflow_data, max_steps=10, timeout=1,
+    workflow = Workflow(workflow_id='zgq_1', user_id='1', workflow_data=workflow_data, max_steps=10, timeout=1,
                         callback=base_callback, input_queue=input_queue)
     print(workflow.run())
 

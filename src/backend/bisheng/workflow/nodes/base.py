@@ -1,22 +1,24 @@
 import copy
 import uuid
 from abc import abstractmethod, ABC
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData
 from bisheng.workflow.common.node import BaseNodeData
+from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.graph_state import GraphState
 
 
 class BaseNode(ABC):
 
     def __init__(self, node_data: BaseNodeData, workflow_id: str, graph_state: GraphState,
-                 max_steps: int, callback: BaseCallback, **kwargs: Any):
+                 target_edges: List[EdgeBase], max_steps: int, callback: BaseCallback, **kwargs: Any):
         self.id = node_data.id
         self.type = node_data.type
         self.name = node_data.name
         self.description = node_data.description
+        self.target_edges = target_edges
 
         # 全局状态管理
         self.workflow_id = workflow_id
@@ -82,18 +84,23 @@ class BaseNode(ABC):
         if self.current_step >= self.max_steps:
             raise Exception(f"node {self.name} exceeded more than max steps")
 
-        exec_id = uuid.UUID().hex
+        exec_id = uuid.uuid4().hex
         start_end_event = self.node_start_end_event
         if start_end_event:
             self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
-        result = self._run()
-
-        # 把节点输出存储到全局变量中
-        if result:
-            for key, value in result.items():
-                self.graph_state.set_variable(self.id, key, value)
-
-        self.current_step += 1
-        self.callback_manager.on_node_end(data=NodeEndData(unique_id=exec_id, node_id=self.id, name=self.name))
+        reason = None
+        try:
+            result = self._run()
+            # 把节点输出存储到全局变量中
+            if result:
+                for key, value in result.items():
+                    self.graph_state.set_variable(self.id, key, value)
+            self.current_step += 1
+        except Exception as e:
+            reason = str(e)
+            raise e
+        finally:
+            self.callback_manager.on_node_end(
+                data=NodeEndData(unique_id=exec_id, node_id=self.id, name=self.name, reason=reason))
         return state

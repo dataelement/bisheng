@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional, List
 
 from pydantic import BaseModel, Field
 
@@ -11,7 +11,7 @@ class NodeStartData(BaseModel):
 
 
 class NodeEndData(NodeStartData):
-    pass
+    reason: Optional[str] = Field(None, description='Reason for node exec error')
 
 
 class UserInputData(BaseModel):
@@ -26,4 +26,10 @@ class GuideWordData(BaseModel):
 
 class GuideQuestionData(BaseModel):
     node_id: str = Field(..., description='Node unique id')
-    guide_question: str = Field(..., description='Guide question')
+    guide_question: List[str] = Field(..., description='Guide question')
+
+
+class OutputMsgData(BaseModel):
+    node_id: str = Field(..., description='Node unique id')
+    msg: str = Field(..., description='Output msg')
+    group_params: Optional[Any] = Field(None, description='User input data, if not need input, use None')

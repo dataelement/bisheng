@@ -44,3 +44,16 @@ class EdgeManage:
         if target not in self.target_map:
             return None
         return [one.source for one in self.target_map[target]]
+
+    def get_source_edges(self, target: str) -> List[EdgeBase] | None:
+        """ get source edges by target node id"""
+        if target not in self.target_map:
+            return None
+        return self.target_map[target]
+
+    def get_target_edges(self, source: str) -> List[EdgeBase] | None:
+        """ get target edges by source node id"""
+        if source not in self.source_map:
+            return None
+        return self.source_map[source]
+

@@ -12,31 +12,32 @@ from bisheng.api.services.llm import LLMService
 class InputNode(BaseNode):
 
     def init_data(self):
-        # 对话框形式只有一个输出变量
-        if self.node_data.tab['value'] == "input":
-            self.node_params["user_input"] = ""
-            return
+        super().init_data()
+        self.tab = self.node_data.tab['value']
 
         # 记录这个变量是什么类型的
+        new_node_params = {}
         self.node_params_map = {}
-        for one in self.node_data.group_params:
-            if one.key != "form_input":
-                continue
-            for value_info in one.value:
-                self.node_params[value_info.key] = value_info.value
-                self.node_params_map[value_info.key] = value_info
+        if self.tab == "input":
+            new_node_params["user_input"] = self.node_params["user_input"]
+        else:
+            for one in self.node_params["form_input"]:
+                for value_info in one["value"]:
+                    new_node_params[value_info["key"]] = value_info["value"]
+                    self.node_params_map[value_info["key"]] = value_info
+        self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
         return self.node_data.group_params
 
     def _run(self):
-        if self.node_data.tab['value'] == "input":
+        if self.tab == "input":
             return {"user_input": self.node_params["user_input"]}
 
         # 表单形式的需要去处理对应的文件上传
         for key, value in self.node_params.items():
             key_info = self.node_params_map[key]
-            if key_info.type == "file":
+            if key_info["type"] == "file":
                 file_metadata = self.parse_upload_file(key, value)
                 self.node_params[key] = file_metadata
 

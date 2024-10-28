@@ -72,6 +72,8 @@ class ChatClient:
         try:
             # 执行处理函数
             await fn(*args, **kwargs)
+        except Exception as e:
+            logger.exception("handle message error")
         finally:
             # 执行完成后将任务id从列表移除
             self.task_ids.remove(task_id)

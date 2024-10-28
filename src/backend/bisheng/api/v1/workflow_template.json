@@ -1,0 +1,655 @@
+[
+  {
+    "id": "start_xxx",
+    "name": "开始",
+    "description": "工作流运行的起始节点",
+    "type": "start",
+    "group_params": [
+      {
+        "name": "开场引导",
+        "params": [
+          {
+            "key": "guide_word",
+            "label": "开场白",
+            "global": "key",
+            "value": "",
+            "type": "textarea"
+          },
+          {
+            "key": "guide_question",
+            "label": "引导问题",
+            "value": [],
+            "type": "input_list",
+            "help": "为用户提供推荐问题，引导用户输入，超过3个时将随机选取3个"
+          }
+        ]
+      },
+      {
+        "name": "全局变量",
+        "params": [
+          {
+            "key": "current_time",
+            "global": "key",
+            "label": "当前时间",
+            "type": "var",
+            "value": ""
+          },
+          {
+            "key": "chat_history",
+            "global": "key",
+            "type": "chat_history_num",
+            "value": 10
+          },
+          {
+            "key": "preset_question",
+            "label": "预置问题列表",
+            "type": "input_list",
+            "value": [
+              "你好",
+              "你好吗？"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "input_xxx",
+    "name": "输入",
+    "description": "工作流运行到此结束",
+    "type": "input",
+    "tab": {
+      "value": "input",
+      "options": [
+        {
+          "label": "对话框输入",
+          "key": "input"
+        },
+        {
+          "label": "表单输入",
+          "key": "form"
+        }
+      ]
+    },
+    "group_params": [
+      {
+        "name": "输入",
+        "params": [
+          {
+            "key": "user_input",
+            "global": "key",
+            "label": "用户输入的内容",
+            "type": "var",
+            "tab": "input"
+          },
+          {
+            "key": "form_input",
+            "label": "+ 添加表单项",
+            "type": "form",
+            "value": [
+              {
+                "key": "test_01",
+                "type": "txt, select, file",
+                "value": "",
+                "required": false,
+                "multi": false,
+                "options": []
+              }
+            ],
+            "tab": "form"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "output_xxx",
+    "name": "输出",
+    "description": "可向用户发送消息，并且支持进行更丰富的交互，例如请求用户批准进行某项敏感操作、允许用户在模型输出内容的基础上直接修改并提交",
+    "type": "output",
+    "group_params": [
+      {
+        "params": [
+          {
+            "key": "output_msg",
+            "label": "发送消息内容",
+            "type": "var_textarea_file",
+            "value": {
+              "msg": "你好{{#start.cuurent_time#}}，xxxx",
+              "files": [
+                {
+                  "path": "bisheng/workflow/output/aaa.jpg",
+                  "name": "xxx.jpg"
+                },
+                {
+                  "path": "bisheng/workflow/output/ffff.docx",
+                  "name": "abc.docx"
+                }
+              ]
+            }
+          },
+          {
+            "key": "output_type",
+            "label": "交互类型",
+            "type": "output_form",
+            "value": {
+              "type": "input",
+              "value": ""
+            },
+            "options": [
+              {
+                "id": "abcd_2_1",
+                "label": "选项1",
+                "value": ""
+              },
+              {
+                "id": "abcd_2_2",
+                "label": "选项2",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "code_xxx",
+    "name": "代码",
+    "description": "自定义需要执行的代码",
+    "type": "code",
+    "group_params": [
+      {
+        "name": "入参",
+        "params": [
+          {
+            "key": "code_input",
+            "type": "code_input",
+            "value": [
+              {
+                "key": "arg1",
+                "type": "ref / input",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "执行代码",
+        "params": [
+          {
+            "key": "code",
+            "type": "code",
+            "value": ""
+          }
+        ]
+      },
+      {
+        "name": "出参",
+        "params": [
+          {
+            "key": "code_output",
+            "type": "code_output",
+            "value": [
+              {
+                "key": "arg1",
+                "type": "str / list",
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "llm_xxx",
+    "name": "大模型",
+    "description": "调用大模型回答用户问题或者处理任务",
+    "type": "llm",
+    "tab": {
+      "value": "single",
+      "options": [
+        {
+          "label": "单次运行",
+          "key": "single"
+        },
+        {
+          "label": "批量运行",
+          "key": "batch"
+        }
+      ]
+    },
+    "group_params": [
+      {
+        "params": [
+          {
+            "key": "batch_variable",
+            "label": "批处理变量",
+            "global": "self",
+            "type": "user_question",
+            "value": [
+              {
+                "key": "xxxx",
+                "label": "yyyy"
+              }
+            ],
+            "required": true,
+            "linkage": "output",
+            "placeholder": "请选择批处理变量",
+            "help": "选择需要批处理的变量，将会多次运行本节点，每次运行时从选择的变量中取一项赋值给batch_variable进行处理。",
+            "tab": "batch"
+          }
+        ]
+      },
+      {
+        "name": "模型设置",
+        "params": [
+          {
+            "key": "model_id",
+            "label": "模型",
+            "type": "bisheng_model",
+            "value": 1
+          },
+          {
+            "key": "temperature",
+            "label": "温度",
+            "type": "slide",
+            "value": 0.6
+          }
+        ]
+      },
+      {
+        "name": "提示词",
+        "params": [
+          {
+            "key": "system_prompt",
+            "label": "系统提示词",
+            "type": "var_textarea",
+            "value": ""
+          },
+          {
+            "key": "user_prompt",
+            "label": "用户提示词",
+            "type": "var_textarea",
+            "value": ""
+          }
+        ]
+      },
+      {
+        "name": "输出",
+        "params": [
+          {
+            "key": "output_user",
+            "label": "将输出结果展示在会话中",
+            "type": "switch",
+            "help": "xxxx",
+            "value": false
+          },
+          {
+            "key": "output",
+            "label": "输出变量",
+            "type": "var",
+            "value": [
+              {
+                "key": "output",
+                "label": "输出变量"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "rag_xxx",
+    "name": "RAG",
+    "description": "",
+    "type": "rag",
+    "group_params": [
+      {
+        "name": "知识库检索设置",
+        "params": [
+          {
+            "key": "user_question",
+            "label": "用户问题",
+            "type": "user_question",
+            "required": true,
+            "help": "xxxx",
+            "linkage": "output_user_input",
+            "value": [
+              {
+                "key": "xxxx",
+                "label": "yyyy"
+              }
+            ],
+            "placeholder": "请选择用户问题"
+          },
+          {
+            "key": "knowledge_id",
+            "label": "检索范围",
+            "type": "knowledge_select_multi",
+            "value": {
+              "tab": "knowledge",
+              "value": [
+                {
+                  "key": "xxx",
+                  "label": "xxx"
+                }
+              ]
+            }
+          },
+          {
+            "key": "user_auth",
+            "label": "用户知识库权限校验",
+            "type": "switch",
+            "value": false,
+            "help": "开启后，只会对用户有使用权限的知识库进行检索。"
+          },
+          {
+            "key": "chunk_max_size",
+            "label": "检索结果长度",
+            "type": "number",
+            "value": 15000
+          }
+        ]
+      },
+      {
+        "name": "AI回复生成设置",
+        "params": [
+          {
+            "key": "system_prompt",
+            "label": "系统提示词",
+            "type": "var_textarea",
+            "value": "你好哈哈哈{{$start.current_time$}}"
+          },
+          {
+            "key": "user_prompt",
+            "label": "用户提示词",
+            "type": "var_textarea",
+            "value": "你好哈哈哈{{$start.current_time$}}"
+          },
+          {
+            "key": "model_id",
+            "label": "模型",
+            "type": "bisheng_model",
+            "value": 1
+          },
+          {
+            "key": "tempareture",
+            "label": "温度",
+            "type": "slide",
+            "value": 0.6
+          }
+        ]
+      },
+      {
+        "name": "输出",
+        "params": [
+          {
+            "key": "output_user",
+            "label": "将输出结果展示在会话中",
+            "type": "switch",
+            "value": true
+          },
+          {
+            "key": "output_user_input",
+            "label": "输出变量",
+            "type": "var",
+            "value": [
+              {
+                "key": "xxxx",
+                "label": "yyyy"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "qa_retrieverxxx",
+    "name": "QA知识库检索",
+    "description": "从 QA 知识库中检索问题以及对应的答案",
+    "type": "qa_retriever",
+    "group_params": [
+      {
+        "name": "检索设置",
+        "params": [
+          {
+            "key": "user_question",
+            "label": "输入变量",
+            "type": "var_select",
+            "value": "start_xxx.currtent_time",
+            "placeholder": "请选择检索问题"
+          },
+          {
+            "key": "qa_knowledge_id",
+            "label": "输入变量",
+            "type": "qa_select_multi",
+            "value": [
+              1,
+              2
+            ]
+          },
+          {
+            "key": "score",
+            "label": "相似度阈值",
+            "type": "slide",
+            "value": "0.6"
+          }
+        ]
+      },
+      {
+        "name": "输出",
+        "params": [
+          {
+            "key": "retrieval_result",
+            "label": "检索结果",
+            "type": "var",
+            "value": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "agent_xxx",
+    "name": "助手",
+    "description": "AI 自主进行任务规划，选择合适的知识库或工具进行调用",
+    "type": "agent",
+    "tab": {
+      "value": "single",
+      "options": [
+        {
+          "label": "单次运行",
+          "key": "single"
+        },
+        {
+          "label": "批量运行",
+          "key": "batch"
+        }
+      ]
+    },
+    "group_params": [
+      {
+        "params": [
+          {
+            "key": "batch_variable",
+            "label": "批处理变量",
+            "type": "user_question",
+            "value": [
+              "start.xxx"
+            ],
+            "placeholder": "请选择批处理变量"
+          }
+        ]
+      },
+      {
+        "name": "模型设置",
+        "params": [
+          {
+            "key": "model_id",
+            "label": "模型",
+            "type": "bisheng_model",
+            "value": 1
+          },
+          {
+            "key": "temperature",
+            "label": "温度",
+            "type": "slide",
+            "value": 0.6
+          }
+        ]
+      },
+      {
+        "name": "提示词",
+        "params": [
+          {
+            "key": "system_prompt",
+            "label": "系统提示词",
+            "type": "var_textarea",
+            "value": "hello {{#start.current_time#}}",
+            "placeholder": "助手画像"
+          },
+          {
+            "key": "user_prompt",
+            "label": "用户提示词",
+            "type": "var_textarea",
+            "value": "hello {{#start.current_time#}}",
+            "placeholder": "用户消息内容"
+          },
+          {
+            "key": "chat_history_flag",
+            "label": "历史聊天记录",
+            "type": "slide_switch",
+            "value": {
+              "flag": false,
+              "number": 50
+            },
+            "help": "是否携带历史对话记录"
+          }
+        ]
+      },
+      {
+        "name": "知识库",
+        "params": [
+          {
+            "key": "knowledge_id",
+            "label": "检索知识库范围",
+            "type": "knowledge_select_multi",
+            "value": {
+              "tab": "knowledge / tmp",
+              "value": []
+            }
+          }
+        ]
+      },
+      {
+        "name": "工具",
+        "params": [
+          {
+            "key": "tool_list",
+            "label": "+ 添加工具",
+            "type": "add_tool",
+            "value": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      {
+        "name": "输出",
+        "params": [
+          {
+            "key": "output_user",
+            "label": "将输出结果展示在会话中",
+            "type": "switch",
+            "value": false
+          },
+          {
+            "key": "output",
+            "label": "输出变量",
+            "type": "var",
+            "value": "",
+            "tab": "single"
+          },
+          {
+            "key": "output",
+            "label": "输出变量",
+            "type": "user_question_output",
+            "value": [],
+            "tab": "batch"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "condition_xxx",
+    "name": "条件分支",
+    "description": "根据条件表达式执行不同的分支",
+    "type": "condition",
+    "group_params": [
+      {
+        "params": [
+          {
+            "key": "condition",
+            "label": "",
+            "type": "condition",
+            "value": {
+              "cases": [
+                {
+                  "id": "xxxxxx",
+                  "operator": "and / or",
+                  "conditions": [
+                    {
+                      "id": "xxxx",
+                      "left_var": "input_xxx.aaa",
+                      "compare_type": ">, <",
+                      "right_value_type": "ref / input",
+                      "right_value": "xxxx"
+                    }
+                  ]
+                },
+                {
+                  "id": "xxxx_else"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "report_xxx",
+    "name": "报告",
+    "description": "按照预设的word模板生成报告",
+    "type": "report",
+    "group_params": [
+      {
+        "params": [
+          {
+            "key": "report_info",
+            "label": "报告名称",
+            "type": "report",
+            "value": {
+              "file_name": "文件名",
+              "file_path": "bisheng/workflow/report/xxxx.doxc"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "end_xxx",
+    "name": "结束",
+    "description": "工作流运行到此结束",
+    "type": "end",
+    "group_params": []
+  }
+]

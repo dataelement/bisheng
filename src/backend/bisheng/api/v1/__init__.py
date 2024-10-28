@@ -17,6 +17,7 @@ from bisheng.api.v1.audit import router as audit_router
 from bisheng.api.v1.evaluation import router as evaluation_router
 from bisheng.api.v1.tag import router as tag_router
 from bisheng.api.v1.llm import router as llm_router
+from bisheng.api.v1.workflow import router as workflow_router
 
 __all__ = [
     'chat_router',
@@ -38,4 +39,5 @@ __all__ = [
     'audit_router',
     'tag_router',
     'llm_router',
+    'workflow_router',
 ]

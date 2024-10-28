@@ -7,6 +7,8 @@ class WorkType(Enum):
     FLOW = 'flow'
     # 助手会话业务
     GPTS = 'assistant'
+    # workflow 业务
+    WORKFLOW = 'workflow'
 
 
 class IgnoreException(Exception):
