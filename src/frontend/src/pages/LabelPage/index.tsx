@@ -209,7 +209,7 @@ export default function Tasks() {
                                 }</TableCell>
                                 <TableCell className="text-right">
                                     <Link to={`/label/${task.id}`}><Button variant="link" className="px-0 pl-4" >查看</Button></Link>
-                                    <Button variant="link" onClick={() => handleDelete(task.id)} className="text-red-500 px-0 pl-4">删除</Button>
+                                    {/* <Button variant="link" onClick={() => handleDelete(task.id)} className="text-red-500 px-0 pl-4">删除</Button> */}
                                 </TableCell>
                             </TableRow>
                         ))}
