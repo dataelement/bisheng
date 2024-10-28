@@ -81,3 +81,72 @@ export async function getChatLabelsApi(params) {
         }
     })
 }
+
+// 标注任务列表
+export async function getMarksApi({ status, pageSize, page }): Promise<{}> {
+    return await axios.get('/api/v1/mark/list', {
+        params: {
+            page_num: page,
+            page_size: pageSize,
+            status
+        }
+    }).then(res => {
+        res.data = res.list
+        return res
+    })
+}
+
+// 创建标注任务
+export async function createMarkApi(data: { app_list: string[], user_list: string[] }) {
+    return await axios.post('/api/v1/mark/create_task', data)
+}
+
+// 删除标注任务
+export async function deleteMarkApi(task_id) {
+    return await axios.delete('/api/v1/mark/del', { params: { task_id } })
+}
+
+// 标注会话列表
+export async function getMarkChatsApi({ task_id, keyword, page, pageSize, mark_status, mark_user }) {
+    return await axios.get('/api/v1/chat/app/list', {
+        params: {
+            task_id,
+            keyword,
+            mark_status,
+            mark_user: mark_user?.join(','),
+            page_num: page,
+            page_size: pageSize
+        }
+    })
+}
+
+// 获取用户标注权限
+export async function getMarkPermissionApi(): Promise<boolean> {
+    return await axios.get('/api/v1/user/mark')
+}
+
+// 更新标注状态
+export async function updateMarkStatusApi(data: { session_id: string, task_id: number, status: number }) {
+    return await axios.post('/api/v1/mark/mark', data)
+}
+
+// 获取下一个标注会话
+export async function getNextMarkChatApi({ action, chat_id, task_id }) {
+    return await axios.get('/api/v1/mark/next', {
+        params: {
+            action,
+            chat_id,
+            task_id
+        }
+    })
+}
+
+// 获取会话标注状态
+export async function getMarkStatusApi({ chat_id, task_id }) {
+    return await axios.get('/api/v1/mark/get_status', {
+        params: {
+            chat_id,
+            task_id
+        }
+    })
+}

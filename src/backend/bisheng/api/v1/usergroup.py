@@ -1,7 +1,12 @@
 # build router
 import json
 from typing import Annotated, List, Optional
+from uuid import UUID
 
+from bisheng.database.models.assistant import AssistantDao
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.gpts_tools import GptsToolsDao
+from bisheng.database.models.knowledge import KnowledgeDao
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi_jwt_auth import AuthJWT
 
@@ -10,7 +15,7 @@ from bisheng.api.services.role_group_service import RoleGroupService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.group import Group, GroupCreate, GroupRead
 from bisheng.database.models.user import User
@@ -106,6 +111,42 @@ async def get_user_group(user_id: int, Authorize: AuthJWT = Depends()):
     # await check_permissions(Authorize, ['admin'])
     return resp_200(RoleGroupService().get_user_groups_list(user_id))
 
+
+@router.get('/get_app_list')
+async def get_app_list(
+                         page_size: int = None,
+                         page_num: int = None,
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取用户管理的用户组下所有的应用
+    """
+
+    groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+    all_resources = []
+    for gruop_id in groups:
+        resource = GroupResourceDao.get_group_all_resource(gruop_id)
+        all_resources.extend(resource)
+
+    for r in all_resources:
+        if r.type.value == ResourceTypeEnum.FLOW.value:
+            r.name = FlowDao.get_flow_by_id(r.third_id).name
+        elif r.type.value == ResourceTypeEnum.KNOWLEDGE.value:
+            r.name =KnowledgeDao.query_by_id(r.third_id).name
+        elif r.type.value == ResourceTypeEnum.ASSISTANT.value:
+            r.name =AssistantDao.get_one_assistant(UUID(r.third_id)).name
+        elif r.type.value == ResourceTypeEnum.GPTS_TOOL.value:
+            r.name =GptsToolsDao.get_one_tool(r.third_id).name
+
+
+    all_user = []
+
+    for g in groups:
+        user_list = RoleGroupService().get_group_user_list(g.id, page_size, page_num)
+        all_user.extend(user_list)
+
+    data = {"app_list": all_resources, "user_list": all_user,"un_mark":100}
+
+    return resp_200(data=data)
 
 @router.get('/get_group_user', response_model=UnifiedResponseModel[List[User]], status_code=200)
 async def get_group_user(group_id: int,

@@ -124,6 +124,12 @@ class FlowDao(FlowBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_flow_by_idstr(cls, flow_id: str) -> Optional[Flow]:
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.id == flow_id)
+            return session.exec(statement).first()
+
+    @classmethod
     def get_flow_by_ids(cls, flow_ids: List[str]) -> List[Flow]:
         if not flow_ids:
             return []
