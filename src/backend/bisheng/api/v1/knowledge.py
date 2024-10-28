@@ -289,7 +289,7 @@ async def get_file_bbox(request: Request,
 
 
 @router.post('/qa/add', status_code=200)
-def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
+async def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
     """ 增加知识库信息. """
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
