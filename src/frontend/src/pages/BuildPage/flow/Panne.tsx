@@ -1,24 +1,21 @@
-import { FlowState } from "@/types/flow";
+import { generateUUID } from "@/components/bs-ui/utils";
+import { WorkFlow, WorkflowNode } from "@/types/flow";
 import { useCopyPaste, useUndoRedo } from "@/util/hook";
 import cloneDeep from "lodash-es/cloneDeep";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactFlow, { Background, BackgroundVariant, Connection, Controls, addEdge, applyEdgeChanges, applyNodeChanges } from 'reactflow';
+import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-import CustomEdge from "./FlowEdge";
 
 
-const initialNodes = [
-    { id: 'a', type: 'flowNode', position: { x: 0, y: 0 }, data: { value: 'Node A' } },
-    { id: 'b', type: 'flowNode', position: { x: 0, y: 100 }, data: { value: 'Node B' } },
-];
+const initialNodes = [];
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
 // 流程编排面板
-export default function Panne({ flow }: { flow: FlowState }) {
-    const [flowData, setFlowData] = useState(flow);
+export default function Panne({ flow }: { flow: WorkFlow }) {
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     useEffect(() => {
         return () => {
@@ -27,9 +24,9 @@ export default function Panne({ flow }: { flow: FlowState }) {
     }, [])
 
     const { reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, { nodes: initialNodes })
+        setNodes, onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, { nodes: initialNodes })
 
-    useUndoRedo(flowData,
+    useUndoRedo(nodes,
         (data) => {
             console.log('undo :>> ', data);
         }, (data) => {
@@ -42,9 +39,11 @@ export default function Panne({ flow }: { flow: FlowState }) {
      */
     useEffect(() => {
         if (reactFlowInstance && flow) {
-            // console.log('数据更新 :>> ', reactFlowInstance.toObject());
-            // flow.data = 
-            // setFlowData()
+            console.log('数据更新 :>> ', reactFlowInstance.toObject());
+            const { nodes, edges, viewport } = reactFlowInstance.toObject()
+            flow.nodes = nodes
+            flow.edges = edges
+            flow.viewport = viewport
         }
     }, [nodes, edges]);
 
@@ -60,11 +59,13 @@ export default function Panne({ flow }: { flow: FlowState }) {
         }
     };
 
-
     return <div className="flex flex-col h-full overflow-hidden">
         <Header flow={flow}></Header>
         <div className="flex-1 min-h-0 overflow-hidden relative">
-            <Sidebar />
+            <Sidebar onInitStartNode={node => {
+                // TODO 判断 新flow
+                setNodes([{ id: `${node.type}_${generateUUID(5)}`, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }])
+            }} />
             <main className="h-full flex flex-1 bg-gray-50" ref={keyBoardPanneRef}>
                 <div className="size-full" ref={reactFlowWrapper}>
                     <div className="size-full">
@@ -109,6 +110,7 @@ export default function Panne({ flow }: { flow: FlowState }) {
                         // 框选 (group)
                         // onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}
                         // onSelectionEnd={() => setSelectionEnded(true)}
+                        // style={{ backgroundImage: 'url(/test.svg)' }}
                         >
                             <Background className="bg-background" color='#999' variant={BackgroundVariant.Dots} />
                             <Controls></Controls>
@@ -127,6 +129,7 @@ const useFlow = (_reactFlowInstance, data) => {
 
     const [nodes, setNodes] = useState(data.nodes);
     const [edges, setEdges] = useState([]);
+    console.log('nodes edges:>> ', nodes, edges);
 
     // 绑定快捷键
     const { keyBoardPanneRef, setLastSelection } = useKeyBoard(reactFlowWrapper, setNodes)
@@ -141,6 +144,7 @@ const useFlow = (_reactFlowInstance, data) => {
     );
     const onConnect = useCallback(
         (params: Connection) => {
+            console.log('conect :>> ', params);
             setEdges((eds) => {
                 return addEdge(
                     {
@@ -172,17 +176,18 @@ const useFlow = (_reactFlowInstance, data) => {
             event.preventDefault();
             if (event.dataTransfer.types.some((t) => t === "flownodedata")) {
                 const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
-                let data: { type: string; node?: any } = JSON.parse(
+                let data: { type: string; node?: WorkflowNode } = JSON.parse(
                     event.dataTransfer.getData("flownodedata")
                 );
-                console.log('data :>> ', data);
+
                 const position = _reactFlowInstance.project({
                     x: event.clientX - reactflowBounds.left,
                     y: event.clientY - reactflowBounds.top,
                 });
+                console.log('object :>> ', position, data);
 
                 setNodes((nds) => nds.concat(
-                    { id: 'c', type: 'flowNode', position, data: { value: 'Node B' } }
+                    { id: `${data.node.id}_${generateUUID(5)}`, type: 'flowNode', position, data: data.node }
                 ));
             } else if (event.dataTransfer.types.some((t) => t === "Files")) {
                 // 拖拽上传
@@ -205,10 +210,27 @@ const useFlow = (_reactFlowInstance, data) => {
         ));
     }, [setNodes, _reactFlowInstance])
 
-    // 监听来自edge的添加节点
+    // 监听来自自定义节点的Chang value
     useEffect(() => {
+        // 定义事件监听器
+        const handleNodeUpdate = (event) => {
+            const { nodeId, newData } = event.detail;
+            // 根据 nodeId 和 newData 更新节点状态
+            setNodes((nds) =>
+                nds.map((node) =>
+                    node.id === nodeId ? { ...node, data: { ...node.data, ...newData } } : node
+                )
+            );
+        };
 
-    }, [])
+        // 监听自定义事件
+        window.addEventListener('nodeUpdate', handleNodeUpdate);
+
+        // 在组件卸载时移除事件监听
+        return () => {
+            window.removeEventListener('nodeUpdate', handleNodeUpdate);
+        };
+    }, []);
 
     // 选中节点
     const onSelectionChange = useCallback((data) => {
@@ -217,7 +239,7 @@ const useFlow = (_reactFlowInstance, data) => {
 
     return {
         reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        onNodesChange, onEdgesChange, onConnect, onDragOver, onDrop, onSelectionChange, onEdgeSelect
+        onNodesChange, onEdgesChange, onConnect, onDragOver, onDrop, onSelectionChange, onEdgeSelect, setNodes
     }
 }
 

@@ -239,7 +239,7 @@ const MultiSelect = ({
             />}
         </SelectTrigger>
         <SelectContent
-            className={contentClassName}
+            className={contentClassName + ' overflow-visible'}
             headNode={
                 <div className="p-2">
                     {tabs}

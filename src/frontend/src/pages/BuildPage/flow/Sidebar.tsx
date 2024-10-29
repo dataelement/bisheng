@@ -1,43 +1,52 @@
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { Code, Keyboard, ListVideo, SprayCan } from "lucide-react";
-import { useState } from "react";
+import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
+import { BookOpenTextIcon, Bot, Brain, Code, Code2, FileDown, FileSearch, FlagTriangleRight, GitBranch, Home, Keyboard, ListVideo, LucideNetwork, MessagesSquareIcon, Split, SprayCan } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "react-query";
 
-export default function Sidebar({ dropdown = false, onClick = (k) => { } }) {
+export const Icons = {
+    'start': Home,
+    'input': Keyboard,
+    'output': MessagesSquareIcon,
+    'code': Code2,
+    'llm': Brain,
+    'rag': BookOpenTextIcon,
+    'qa_retriever': FileSearch,
+    'agent': Bot,
+    'end': FlagTriangleRight,
+    'condition': Split,
+    'report': FileDown
+}
+export const Colors = {
+}
+export default function Sidebar({ dropdown = false, onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
+    const { data: tempData, refetch } = useQuery({
+        queryKey: "QueryWorkFlowTempKey",
+        queryFn: () => getWorkflowNodeTemplate()
+    });
 
-    const nodeTemps = [
-        {
-            type: 'input',
-            name: '输入',
-            icon: <Keyboard className="size-5 text-green-500" />,
-            desc: '输入节点，用于输入文本'
-        },
-        {
-            type: 'output',
-            name: '输出',
-            icon: <SprayCan className="size-5" />,
-            desc: '输出节点，用于输出文本'
-        },
-        {
-            type: 'knowledge',
-            name: '知识库检索增强生成',
-            icon: <SprayCan className="size-5" />,
-            desc: '知识库检索增强生成节点，用于知识库检索增强生成'
-        },
-        {
-            type: 'code',
-            name: '代码',
-            icon: <Code className="size-5 text-primary" />,
-            desc: '代码节点，用于代码生成'
-        },
-        {
-            type: 'end',
-            name: '结束',
-            icon: <SprayCan className="size-5" />,
-            desc: '结束节点，用于结束流程'
-        },
-    ]
+    const getNodeDataByTemp = (temp) => {
+        const IconComp = Icons[temp.type] || SprayCan
+        const color = Colors[temp.type] || 'text-gray-950'
+
+        return {
+            type: temp.type,
+            name: temp.name,
+            icon: <IconComp className={`size-5 ${color}`} />,
+            desc: temp.description
+        }
+    }
+
+    const nodeTemps = useMemo(() => {
+        if (!tempData) return []
+        return tempData.reduce((list, temp) => {
+            const newNode = getNodeDataByTemp(temp)
+            temp.type === 'start' ? onInitStartNode(temp) : list.push(newNode)
+            return list
+        }, [])
+    }, [tempData])
 
     const [expand, setExpand] = useState(true)
 
@@ -88,7 +97,7 @@ export default function Sidebar({ dropdown = false, onClick = (k) => { } }) {
                                         }}
                                         draggable={!dropdown}
                                         onDragStart={(event) => {
-                                            onDragStart(event, { type: 'hahaha' })
+                                            onDragStart(event, { type: item.type, node: tempData.find(tmp => tmp.type === item.type) })
                                         }}
                                         onDragEnd={(event) => {
                                             document.body.removeChild(

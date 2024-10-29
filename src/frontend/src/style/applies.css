@@ -1069,6 +1069,9 @@
   .bisheng-flow-handle:hover::after {
     @apply opacity-100 ;
   }
+  .textarea-badge{
+    @apply border rounded-md px-1 bg-border
+  }
   /* .bisheng-flow-handle:hover::after{
     content: '';
     @apply size-full rounded-full absolute bg-primary top-0 animate-ping pointer-events-none

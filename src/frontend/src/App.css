@@ -252,3 +252,21 @@
 	padding: 2px 4px !important;
 	word-break: break-all !important;
 }
+
+
+/* .react-flow.theme-attribution {
+	animation: scrollBackground 10s linear infinite;
+  }
+
+  @keyframes scrollBackground {
+	from {
+	  background-position: 0 0;
+	}
+	to {
+	  background-position: 100% 100%;
+	}
+  }
+
+  .react-flow__panel.react-flow__attribution{
+	display: none !important;
+  } */

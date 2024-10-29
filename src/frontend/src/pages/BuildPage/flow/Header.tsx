@@ -2,9 +2,25 @@ import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import { AssistantIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Bell, CircleEllipsis, LogOut, PenLine, Play, Rocket } from "lucide-react";
+import { useRef } from "react";
+import { TestSheet } from "./FlowChat/TestSheet";
 
-const Header = () => {
+const Header = ({ flow }) => {
+    const { message } = useToast()
+    const testRef = useRef(null)
+
+    const handleRunClick = () => {
+        // 记录错误日志
+        message({
+            variant: 'warning',
+            description: "跳过校验,启动会话"
+        })
+
+        testRef.current?.run(flow)
+    }
+
     return (
         <header className="flex justify-between items-center p-4 py-2 bg-background shadow-md border-b">
             {/* Left Section with Back Button and Title */}
@@ -43,7 +59,7 @@ const Header = () => {
                 <Button size="icon" variant="ghost" className="">
                     <CircleEllipsis />
                 </Button>
-                <Button variant="outline" size="sm" className="ml-4">
+                <Button variant="outline" size="sm" className="ml-4" onClick={handleRunClick}>
                     <Play className="size-3.5 mr-1" />
                     运行
                 </Button>
@@ -54,6 +70,7 @@ const Header = () => {
                     上线
                 </Button>
             </div>
+            <TestSheet ref={testRef} />
         </header>
     );
 };

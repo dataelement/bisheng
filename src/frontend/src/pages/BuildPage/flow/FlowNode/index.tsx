@@ -3,20 +3,57 @@ import { Input, Textarea } from '@/components/bs-ui/input';
 import EditTitle from '@/components/bs-ui/input/editTitle';
 import { Label } from '@/components/bs-ui/label';
 import { cn } from '@/utils';
-import { House } from 'lucide-react';
-import { useCallback } from 'react';
+import { House, SprayCan } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { Handle, NodeToolbar, Position } from 'reactflow';
 import NodeToolbarComponent from './NodeToolbarComponent';
-import Parameter from './Parameter';
 import ParameterGroup from './ParameterGroup';
+import { WorkflowNode } from '@/types/flow';
+import { Icons } from '../Sidebar';
+import NodeTabs from './NodeTabs';
 
 
-function CustomNode({ data, selected, isConnectable }) {
+function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNode, selected: boolean, isConnectable: boolean }) {
+    const [focusUpdate, setFocusUpdate] = useState(false)
     const onChange = useCallback((evt) => {
         console.log(evt.target.value);
     }, []);
+    const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.options[0].key)
+    console.log('currentTab :>> ', currentTab);
 
-    // console.log('data :>> ', data);
+    const handleUpdate = () => {
+        // 创建并触发自定义事件，传递需要更新的节点 id 和数据
+        const event = new CustomEvent('nodeUpdate', {
+            detail: {
+                nodeId: node.id,
+                newData: { label: `Updated at ${new Date().toLocaleTimeString()}` }
+            }
+        });
+        window.dispatchEvent(event);
+    };
+
+    const CompIcon = Icons[node.type] || SprayCan
+
+    useEffect(() => {
+        window.node = node
+    }, [])
+
+    // 部分节点动态修改输出项内容
+    const handleChangeOutPut = (key: string, value: any) => {
+        node.group_params.some(group => {
+            return group.params.some(param => {
+                if (param.key === key) {
+                    param.value = value.map(item => ({
+                        key: 'output_' + item.key,
+                        label: 'output_' + item.label
+                    }))
+                    return true
+                }
+            })
+        })
+        setFocusUpdate(!focusUpdate) // render
+        console.log('node :>> ', key, value, node);
+    }
 
     return (
         <div>
@@ -29,51 +66,36 @@ function CustomNode({ data, selected, isConnectable }) {
                 {/* head */}
                 <div className='p-4 bisheng-node-head'>
                     <div className='relative z-10 flex gap-2'>
-                        <House className='text-blue-700' />
-                        <EditTitle str="开始" className={'text-background'} onChange={() => { }}>
+                        <CompIcon className='text-blue-700' />
+                        <EditTitle str={node.name} className={'text-background'} onChange={() => { }}>
                             {(val) => <p className='text-gray-50 font-bold'>{val}</p>}
                         </EditTitle>
                     </div>
                 </div>
-                <p className='text-xs p-2 bg-background text-muted-foreground'>程池内同步任务是否会阻塞，导致性能差，减少同步任务对性能的影响</p>
+                <p className='text-xs p-2 bg-background text-muted-foreground'>{node.description}</p>
                 {/* body */}
-                <div className='px-4 pb-4 border-b-8 border-background'>
-                    <Badge className='my-2'>开场引导</Badge>
-                    <div className='item'>
-                        <Label className='bisheng-label'>开场白</Label>
-                        <Textarea></Textarea>
-                    </div>
-                    <div className='item'>
-                        <Label className='bisheng-label'>引导问题</Label>
-                        <Input></Input>
-                    </div>
-                </div>
-                <div className='px-4 pb-4 border-b-8 border-background'>
-                    <Badge className='my-2'>开场引导</Badge>
-                    <div className='item'>
-                        <Label className='bisheng-label'>开场白</Label>
-                        <Textarea></Textarea>
-                    </div>
-                    <div className='item'>
-                        <Label className='bisheng-label'>引导问题</Label>
-                        <Input></Input>
-                    </div>
+
+                <div className='-nowheel'>
+                    {node.tab && <NodeTabs data={node.tab} onChange={setCurrentTab} />}
+                    {node.group_params.map(group =>
+                        <ParameterGroup nodeId={node.id} key={group.name} tab={currentTab} cate={group} onOutPutChange={handleChangeOutPut} />
+                    )}
                 </div>
                 {/* footer */}
-                <Handle
-                    id="a"
+                {node.type !== 'start' && <Handle
+                    id="left_handle"
                     type="target"
                     position={Position.Left}
                     className='bisheng-flow-handle'
-                    style={{left: -8}}
-                />
-                <Handle
-                    id="b"
+                    style={{ left: -8 }}
+                />}
+                {!['condition', 'output', 'end'].includes(node.type) && <Handle
+                    id="right_handle"
                     type="source"
                     position={Position.Right}
                     className='bisheng-flow-handle'
-                    style={{right: -8}}
-                />
+                    style={{ right: -8 }}
+                />}
             </div>
         </div>
     );

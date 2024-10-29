@@ -1,0 +1,117 @@
+import { Label } from "@/components/bs-ui/label";
+import MultiSelect from "@/components/bs-ui/select/multi";
+import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { readFileLibDatabase } from "@/controllers/API";
+import { memo, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+const TabsHead = memo(({ onChange }) => {
+
+    return <Tabs defaultValue="knowledge" className="mb-2" onValueChange={onChange}>
+        <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
+            <TabsTrigger value="knowledge" className="text-xs">文档知识库</TabsTrigger>
+            <TabsTrigger value="tmp" className="text-xs">临时会话文件<QuestionTooltip content={'存储用户在当前会话中发送的文件'} /></TabsTrigger>
+        </TabsList>
+    </Tabs>
+})
+
+const enum KnowledgeType {
+    Knowledge = 'knowledge',
+    Temp = 'tmp'
+}
+type KnowledgeTypeValues = `${KnowledgeType}`;
+
+export default function KnowledgeSelectItem({ data, onChange }) {
+    const [tabType, setTabType] = useState<KnowledgeTypeValues>(KnowledgeType.Knowledge)
+    const [value, setValue] = useState<any>(() => data.value.value.map(el => {
+        return { label: el.label, value: el.key }
+    }))
+
+    const { t } = useTranslation()
+    const [options, setOptions] = useState<any>([]);
+    const [fileOptions, setFileOptions] = useState<any>([])
+    const originOptionsRef = useRef([])
+
+    const pageRef = useRef(1)
+    const reload = (page, name) => {
+        readFileLibDatabase({ page, pageSize: 60, name, type: 0 }).then(res => {
+            pageRef.current = page
+            originOptionsRef.current = res.data
+            const opts = res.data.map(el => ({ label: el.name, value: el.id }))
+            setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
+        })
+    }
+    // input文件变量s
+    const loadFiles = () => {
+        // TODO
+        const files = []
+        // tempData.forEach(node => {
+        //     if (node.type !== 'input') return
+        //     node.group_params.forEach(group => {
+        //         group.params.forEach(param => {
+        //             if (param.key === 'form_input') {
+        //                 param.value.forEach(val => {
+        //                     val.type === 'file' && files.push({
+        //                         label: val.value,
+        //                         value: val.key
+        //                     })
+        //                 })
+        //             }
+        //         })
+        //     })
+        // })
+        setFileOptions(files)
+    }
+
+    useEffect(() => {
+        reload(1, '')
+        loadFiles()
+    }, [])
+
+    // const handleChange = (res) => {
+    //     // id => obj
+    //     onChange(res.map(el => originOptionsRef.current.find(el2 => el2.id === el)))
+    // }
+
+    // 加载更多
+    const loadMore = (name) => {
+        reload(pageRef.current + 1, name)
+    }
+
+    const handleTabChange = (val) => {
+        KnowledgeType.Knowledge === val ? reload(1, '') : loadFiles()
+
+        setTabType(val)
+        const inputDom = document.getElementById('knowledge-select-item')
+        if (inputDom) {
+            inputDom.value = ''
+        }
+    }
+
+    return <div className='node-item mb-2'>
+        <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
+        <MultiSelect
+            id="knowledge-select-item"
+            tabs={<TabsHead onChange={handleTabChange} />}
+            multiple
+            className={''}
+            value={value}
+            options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
+            placeholder={t('build.selectKnowledgeBase')}
+            searchPlaceholder={t('build.searchBaseName')}
+            onChange={(vals) => onChange({
+                tab: tabType,
+                value: vals.map(el => ({ // 夸类型先清空value
+                    key: el.value,
+                    label: el.label
+                }))
+            })}
+            onLoad={() => reload(1, '')}
+            onSearch={(val) => reload(1, val)}
+            onScrollLoad={(val) => loadMore(val)}
+        >
+            {/* {children?.(reload)} */}
+        </MultiSelect>
+    </div>
+};

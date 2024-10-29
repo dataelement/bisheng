@@ -8,7 +8,7 @@ export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> { }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-    ({ className, type, maxLength, value, defaultValue, onChange, ...props }, ref) => {
+    ({ className, boxClassName, type, maxLength, value, defaultValue, onChange, ...props }, ref) => {
         // 用于存储当前的输入值
         const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
 
@@ -31,7 +31,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             value === undefined ? {} : { value: currentValue }
 
         return (
-            <div className="relative w-full">
+            <div className={cname("relative w-full", boxClassName)}>
                 <input
                     type={type}
                     className={cname(
