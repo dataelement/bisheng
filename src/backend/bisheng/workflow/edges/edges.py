@@ -8,11 +8,11 @@ class EdgeBase(BaseModel):
 
     source: str = Field(..., description="source node id")
     sourceHandle: str = Field(..., description="source node handle")
-    sourceType: Optional[str] = Field(..., description="source node type")
+    sourceType: Optional[str] = Field("", description="source node type")
 
     target: str = Field(..., description="target node id")
     targetHandle: str = Field(..., description="target node handle")
-    targetType: Optional[str] = Field(..., description="target node type")
+    targetType: Optional[str] = Field("", description="target node type")
 
 
 class EdgeManage:

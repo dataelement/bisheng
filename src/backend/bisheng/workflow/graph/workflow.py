@@ -1,5 +1,7 @@
+import asyncio
+import time
 from queue import Queue, Empty
-from typing import Dict
+from typing import Dict, Any
 
 from loguru import logger
 
@@ -11,8 +13,7 @@ from bisheng.workflow.graph.graph_engine import GraphEngine
 class Workflow:
 
     def __init__(self, workflow_id: str, user_id: str = None, workflow_data: Dict = None,
-                 max_steps: int = 0, timeout: int = 0, callback: BaseCallback = None,
-                 input_queue: Queue = None):
+                 max_steps: int = 0, timeout: int = 0, callback: BaseCallback = None):
 
         # 运行的唯一标识，保存到数据库的唯一ID
         self.workflow_id = workflow_id
@@ -20,45 +21,22 @@ class Workflow:
 
         # 超时时间，多久没有接收到用户输入终止workflow运行（单位：分钟）
         self.timeout = timeout
+        self.current_time = None
 
         self.graph_engine = GraphEngine(user_id=user_id, workflow_id=workflow_id, workflow_data=workflow_data,
                                         max_steps=max_steps, callback=callback)
-        self.graph_status = WorkflowStatus.RUNNING.value
-        self.graph_reason = ""
 
-        self.first_run = True
-        # todo 定义个queue基类，支持不同实现的queue
-        self.input_queue = input_queue
-
-    def run(self) -> (str, str):
+    def run(self, input_data: dict = None) -> (str, str):
         """
+        params:
+            input_data: user input data 不为空则执行continue
         return: workflow_status, reason
         """
-        while True:
-            if self.first_run:
-                self.first_run = False
-                self.graph_engine.run()
-                continue
-            # 判断graph的状态
-            if self.graph_engine.status in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
-                self.graph_status = self.graph_engine.status
-                self.graph_reason = self.graph_engine.reason
-                break
-            elif self.graph_engine.status == WorkflowStatus.INPUT.value:
-                # 等待用户输入
-                try:
-                    input_data = self.input_queue.get(block=True, timeout=self.timeout * 60)
-                    self.graph_engine.continue_run(data=input_data)
-                except Empty:
-                    self.graph_status = WorkflowStatus.FAILED.value
-                    self.graph_reason = "user input timeout"
-                    break
-                except Exception as e:
-                    self.graph_status = WorkflowStatus.FAILED.value
-                    self.graph_reason = str(e)
-                    break
-            else:  # 不应该出现的情况
-                logger.warning("graph status error: %s", self.graph_engine.status)
-                self.graph_engine.continue_run(None)
-
-        return self.graph_status, self.graph_reason
+        # 执行workflow
+        if input_data is not None:
+            self.graph_engine.continue_run(input_data)
+        else:
+            # 首次运行时间
+            self.current_time = time.time()
+            self.graph_engine.run()
+        return self.graph_engine.status, self.graph_engine.reason

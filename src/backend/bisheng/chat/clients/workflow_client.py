@@ -1,5 +1,5 @@
 from queue import Queue
-from typing import Dict
+from typing import Dict, Any
 
 from fastapi import WebSocket, Request
 from loguru import logger
@@ -9,6 +9,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.clients.workflow_callback import WorkflowWsCallback
 from bisheng.chat.types import WorkType
+from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.workflow import Workflow
 
 
@@ -18,7 +19,6 @@ class WorkflowClient(BaseClient):
         super().__init__(request, client_key, client_id, chat_id, user_id, login_user, work_type, websocket, **kwargs)
 
         self.workflow = None
-        self.input_queue = Queue()
         self.callback = WorkflowWsCallback(websocket=self.websocket,
                                            chat_id=self.chat_id,
                                            workflow_id=self.client_id,
@@ -35,14 +35,25 @@ class WorkflowClient(BaseClient):
             logger.warning("not support action: %s", message.get("action"))
 
     async def init_workflow(self, workflow_data: dict):
+        if self.workflow is not None:
+            return
         # todo max_steps and timeout 放到系统配置内
         await self.send_response('processing', 'begin', '')
         self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data,
-                                 50, 60, self.callback, self.input_queue)
+                                 50, 60, self.callback)
         logger.debug("init workflow over")
         # 运行workflow
-        status, reason = self.workflow.run()
-        await self.send_response('processing', 'close', reason)
+        await self.workflow_run()
 
-    async def handle_user_input(self, data):
-        self.input_queue.put(data)
+    async def workflow_run(self, input_data: dict = None):
+        status, reason = self.workflow.run(input_data)
+        if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+            self.workflow = None
+            if status == WorkflowStatus.FAILED.value:
+                await self.send_response('error', 'over', reason)
+            await self.send_response('processing', 'close', '')
+        # 否则就是需要用户输入
+
+    async def handle_user_input(self, data: dict):
+        logger.info(f"get user input: {data}", )
+        await self.workflow_run(data)

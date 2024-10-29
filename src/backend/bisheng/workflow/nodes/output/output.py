@@ -38,9 +38,7 @@ class OutputNode(BaseNode):
         # 需要交互，则通过pre_run已提前执行过节点的处理逻辑
         if self.output_type != "":
             if self.output_type == "choose":
-                for one in self.target_edges:
-                    if one.sourceHandle == self.node_params["submitted_result"]["value"]:
-                        self.next_node_id = one.target
+                self.next_node_id = self.get_next_node_id(self.node_params["submitted_result"]["value"])
             return self.node_params
 
         # 不需要交互，执行节点的

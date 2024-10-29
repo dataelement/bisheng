@@ -1,9 +1,43 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from typing import Callable, cast, List, Coroutine, Any
+
+from loguru import logger
 
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData
+
+
+def _run_coros(coros: List[Coroutine[Any, Any, Any]]) -> None:
+    if hasattr(asyncio, "Runner"):
+        # Python 3.11+
+        # Run the coroutines in a new event loop, taking care to
+        # - install signal handlers
+        # - run pending tasks scheduled by `coros`
+        # - close asyncgens and executors
+        # - close the loop
+        with asyncio.Runner() as runner:
+            # Run the coroutine, get the result
+            for coro in coros:
+                try:
+                    runner.run(coro)
+                except Exception as e:
+                    logger.warning(f"Error in callback coroutine: {repr(e)}")
+
+            # Run pending tasks scheduled by coros until they are all done
+            while pending := asyncio.all_tasks(runner.get_loop()):
+                runner.run(asyncio.wait(pending))
+    else:
+        # Before Python 3.11 we need to run each coroutine in a new event loop
+        # as the Runner api is not available.
+        for coro in coros:
+            try:
+                asyncio.run(coro)
+            except Exception as e:
+                logger.warning(f"Error in callback coroutine: {repr(e)}")
 
 
 class WorkflowWsCallback(BaseCallback):
@@ -15,9 +49,10 @@ class WorkflowWsCallback(BaseCallback):
         self.user_id = kwargs.get('user_id')
 
     def send_chat_response(self, chat_response: ChatResponse):
-        loop = asyncio.get_event_loop()
-        coroutine = self.websocket.send_json(chat_response.dict())
-        asyncio.run_coroutine_threadsafe(coroutine, loop)
+        with ThreadPoolExecutor(1) as executor:
+            executor.submit(
+                cast(Callable, copy_context().run), _run_coros, [self.websocket.send_json(chat_response.dict())]
+            ).result()
 
     def on_node_start(self, data: NodeStartData):
         """ node start event """

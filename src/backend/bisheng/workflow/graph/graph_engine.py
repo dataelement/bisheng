@@ -1,3 +1,4 @@
+import datetime
 from typing import Dict, Any
 
 from bisheng.workflow.graph.graph_state import GraphState
@@ -85,7 +86,7 @@ class GraphEngine:
         interrupt_nodes = []
         # init nodes
         for node in nodes:
-            node_data = BaseNodeData(**node)
+            node_data = BaseNodeData(**node.get('data', {}))
             if not node_data.id:
                 raise Exception("node must have attribute id")
 
@@ -122,12 +123,12 @@ class GraphEngine:
             checkpointer=MemorySaver(),
             interrupt_before=interrupt_nodes
         )
-        with open("graph.png", "wb") as f:
+        with open(f"graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png", "wb") as f:
             f.write(self.graph.get_graph().draw_mermaid_png())
 
     def _run(self, input_data: Any):
         try:
-            for _ in self.graph.stream({"flag": True}, config=self.graph_config):
+            for _ in self.graph.stream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
         except Exception as e:

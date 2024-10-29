@@ -44,10 +44,7 @@
             "key": "preset_question",
             "label": "预置问题列表",
             "type": "input_list",
-            "value": [
-              "你好",
-              "你好吗？"
-            ]
+            "value": []
           }
         ]
       }
@@ -86,16 +83,7 @@
             "key": "form_input",
             "label": "+ 添加表单项",
             "type": "form",
-            "value": [
-              {
-                "key": "test_01",
-                "type": "txt, select, file",
-                "value": "",
-                "required": false,
-                "multi": false,
-                "options": []
-              }
-            ],
+            "value": [],
             "tab": "form"
           }
         ]
@@ -115,17 +103,8 @@
             "label": "发送消息内容",
             "type": "var_textarea_file",
             "value": {
-              "msg": "你好{{#start.cuurent_time#}}，xxxx",
-              "files": [
-                {
-                  "path": "bisheng/workflow/output/aaa.jpg",
-                  "name": "xxx.jpg"
-                },
-                {
-                  "path": "bisheng/workflow/output/ffff.docx",
-                  "name": "abc.docx"
-                }
-              ]
+              "msg": "",
+              "files": []
             }
           },
           {
@@ -133,21 +112,10 @@
             "label": "交互类型",
             "type": "output_form",
             "value": {
-              "type": "input",
+              "type": "",
               "value": ""
             },
-            "options": [
-              {
-                "id": "abcd_2_1",
-                "label": "选项1",
-                "value": ""
-              },
-              {
-                "id": "abcd_2_2",
-                "label": "选项2",
-                "value": ""
-              }
-            ]
+            "options": []
           }
         ]
       }
@@ -168,7 +136,7 @@
             "value": [
               {
                 "key": "arg1",
-                "type": "ref / input",
+                "type": "ref",
                 "value": ""
               }
             ]
@@ -194,7 +162,7 @@
             "value": [
               {
                 "key": "arg1",
-                "type": "str / list",
+                "type": "str",
                 "value": ""
               }
             ]
@@ -229,12 +197,7 @@
             "label": "批处理变量",
             "global": "self",
             "type": "user_question",
-            "value": [
-              {
-                "key": "xxxx",
-                "label": "yyyy"
-              }
-            ],
+            "value": [],
             "required": true,
             "linkage": "output",
             "placeholder": "请选择批处理变量",
@@ -250,7 +213,7 @@
             "key": "model_id",
             "label": "模型",
             "type": "bisheng_model",
-            "value": 1
+            "value": ""
           },
           {
             "key": "temperature",
@@ -284,19 +247,21 @@
             "key": "output_user",
             "label": "将输出结果展示在会话中",
             "type": "switch",
-            "help": "xxxx",
+            "help": "",
             "value": false
           },
           {
             "key": "output",
             "label": "输出变量",
             "type": "var",
-            "value": [
-              {
-                "key": "output",
-                "label": "输出变量"
-              }
-            ]
+            "value": [],
+            "tab": "single"
+          },
+          {
+            "key": "output_batch",
+            "label": "输出变量",
+            "type": "user_question_output",
+            "tab": "batch"
           }
         ]
       }
@@ -316,14 +281,9 @@
             "label": "用户问题",
             "type": "user_question",
             "required": true,
-            "help": "xxxx",
+            "help": "",
             "linkage": "output_user_input",
-            "value": [
-              {
-                "key": "xxxx",
-                "label": "yyyy"
-              }
-            ],
+            "value": [],
             "placeholder": "请选择用户问题"
           },
           {
@@ -331,13 +291,8 @@
             "label": "检索范围",
             "type": "knowledge_select_multi",
             "value": {
-              "tab": "knowledge",
-              "value": [
-                {
-                  "key": "xxx",
-                  "label": "xxx"
-                }
-              ]
+              "type": "knowledge",
+              "value": []
             }
           },
           {
@@ -362,22 +317,22 @@
             "key": "system_prompt",
             "label": "系统提示词",
             "type": "var_textarea",
-            "value": "你好哈哈哈{{$start.current_time$}}"
+            "value": ""
           },
           {
             "key": "user_prompt",
             "label": "用户提示词",
             "type": "var_textarea",
-            "value": "你好哈哈哈{{$start.current_time$}}"
+            "value": ""
           },
           {
             "key": "model_id",
             "label": "模型",
             "type": "bisheng_model",
-            "value": 1
+            "value": ""
           },
           {
-            "key": "tempareture",
+            "key": "temperature",
             "label": "温度",
             "type": "slide",
             "value": 0.6
@@ -397,19 +352,14 @@
             "key": "output_user_input",
             "label": "输出变量",
             "type": "var",
-            "value": [
-              {
-                "key": "xxxx",
-                "label": "yyyy"
-              }
-            ]
+            "value": []
           }
         ]
       }
     ]
   },
   {
-    "id": "qa_retrieverxxx",
+    "id": "qa_retriever_xxx",
     "name": "QA知识库检索",
     "description": "从 QA 知识库中检索问题以及对应的答案",
     "type": "qa_retriever",
@@ -421,23 +371,20 @@
             "key": "user_question",
             "label": "输入变量",
             "type": "var_select",
-            "value": "start_xxx.currtent_time",
+            "value": "",
             "placeholder": "请选择检索问题"
           },
           {
             "key": "qa_knowledge_id",
             "label": "输入变量",
             "type": "qa_select_multi",
-            "value": [
-              1,
-              2
-            ]
+            "value": []
           },
           {
             "key": "score",
             "label": "相似度阈值",
             "type": "slide",
-            "value": "0.6"
+            "value": 0.6
           }
         ]
       },
@@ -479,9 +426,7 @@
             "key": "batch_variable",
             "label": "批处理变量",
             "type": "user_question",
-            "value": [
-              "start.xxx"
-            ],
+            "value": [],
             "placeholder": "请选择批处理变量"
           }
         ]
@@ -493,7 +438,7 @@
             "key": "model_id",
             "label": "模型",
             "type": "bisheng_model",
-            "value": 1
+            "value": ""
           },
           {
             "key": "temperature",
@@ -510,14 +455,14 @@
             "key": "system_prompt",
             "label": "系统提示词",
             "type": "var_textarea",
-            "value": "hello {{#start.current_time#}}",
+            "value": "",
             "placeholder": "助手画像"
           },
           {
             "key": "user_prompt",
             "label": "用户提示词",
             "type": "var_textarea",
-            "value": "hello {{#start.current_time#}}",
+            "value": "",
             "placeholder": "用户消息内容"
           },
           {
@@ -540,7 +485,7 @@
             "label": "检索知识库范围",
             "type": "knowledge_select_multi",
             "value": {
-              "tab": "knowledge / tmp",
+              "tab": "knowledge",
               "value": []
             }
           }
@@ -553,10 +498,7 @@
             "key": "tool_list",
             "label": "+ 添加工具",
             "type": "add_tool",
-            "value": [
-              1,
-              2
-            ]
+            "value": []
           }
         ]
       },
@@ -603,16 +545,8 @@
               "cases": [
                 {
                   "id": "xxxxxx",
-                  "operator": "and / or",
-                  "conditions": [
-                    {
-                      "id": "xxxx",
-                      "left_var": "input_xxx.aaa",
-                      "compare_type": ">, <",
-                      "right_value_type": "ref / input",
-                      "right_value": "xxxx"
-                    }
-                  ]
+                  "operator": "and",
+                  "conditions": []
                 },
                 {
                   "id": "xxxx_else"
@@ -636,10 +570,7 @@
             "key": "report_info",
             "label": "报告名称",
             "type": "report",
-            "value": {
-              "file_name": "文件名",
-              "file_path": "bisheng/workflow/report/xxxx.doxc"
-            }
+            "value": {}
           }
         ]
       }

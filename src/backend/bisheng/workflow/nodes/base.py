@@ -76,6 +76,11 @@ class BaseNode(ABC):
         """
         raise NotImplementedError
 
+    def get_next_node_id(self, source_handle: str) -> str | None:
+        for one in self.target_edges:
+            if one.sourceHandle == source_handle:
+                return one.target
+
     def run(self, state: dict) -> Any:
         """
         Run node entry

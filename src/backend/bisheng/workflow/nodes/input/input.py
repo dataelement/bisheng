@@ -21,10 +21,9 @@ class InputNode(BaseNode):
         if self.tab == "input":
             new_node_params["user_input"] = self.node_params["user_input"]
         else:
-            for one in self.node_params["form_input"]:
-                for value_info in one["value"]:
-                    new_node_params[value_info["key"]] = value_info["value"]
-                    self.node_params_map[value_info["key"]] = value_info
+            for value_info in self.node_params["form_input"]:
+                new_node_params[value_info["key"]] = value_info["value"]
+                self.node_params_map[value_info["key"]] = value_info
         self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
@@ -73,7 +72,7 @@ class InputNode(BaseNode):
                 'file_id': file_id,
                 'knowledge_id': self.workflow_id,
                 'extra': '',
-                'bbox': None,  # 临时文件不能溯源，因为没有持久化存储源文件
+                'bbox': '',  # 临时文件不能溯源，因为没有持久化存储源文件
             })
         # 4、上传到milvus和es
         logger.info(f'workflow_add_vectordb file={key} file_name={file_name}')
