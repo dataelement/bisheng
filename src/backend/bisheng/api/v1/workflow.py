@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
@@ -18,7 +19,9 @@ router = APIRouter(prefix='/workflow', tags=['Workflow'])
 @router.get('/template', response_model=UnifiedResponseModel, status_code=200)
 def get_template():
     """ 获取节点模板的接口 """
-    with open("./api/v1/workflow_template.json", 'r', encoding='utf-8') as f:
+    # todo: 改为template class 管理
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    with open(f"{current_path}/workflow_template.json", 'r', encoding='utf-8') as f:
         data = json.load(f)
     return resp_200(data=data)
 
