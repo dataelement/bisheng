@@ -263,6 +263,7 @@
           {
             "key": "user_question",
             "label": "用户问题",
+            "global": "self",
             "type": "user_question",
             "required": true,
             "help": "",
@@ -271,8 +272,9 @@
             "placeholder": "请选择用户问题"
           },
           {
-            "key": "knowledge_id",
+            "key": "retrieved_result",
             "label": "检索范围",
+            "global": "self",
             "type": "knowledge_select_multi",
             "value": {
               "type": "knowledge",

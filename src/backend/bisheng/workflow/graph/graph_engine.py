@@ -103,6 +103,7 @@ class GraphEngine:
                 raise Exception("node must have attribute id")
 
             node_instance = NodeFactory.instance_node(node_type=node_data.type, node_data=node_data,
+                                                      user_id=self.user_id,
                                                       workflow_id=self.workflow_id, graph_state=self.graph_state,
                                                       target_edges=self.edges.get_target_edges(node_data.id),
                                                       max_steps=self.max_steps, callback=self.callback)

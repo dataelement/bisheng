@@ -107,6 +107,7 @@ class Milvus(MilvusLangchain):
                  search_params: Optional[dict] = None,
                  drop_old: Optional[bool] = False,
                  partition_key: Optional[str] = None,
+                 metadata_expr: Optional[str] = None,
                  *,
                  primary_field: str = 'pk',
                  text_field: str = 'text',
@@ -198,6 +199,8 @@ class Milvus(MilvusLangchain):
         #  partion key for multi-tenancy
         self._partition_field = partition_field
         self.partition_key = partition_key
+
+        self.metadata_expr = metadata_expr
 
         self.fields: list[str] = []
         # Create the connection to the server
@@ -711,6 +714,9 @@ class Milvus(MilvusLangchain):
                 expr = f"{expr} and {self._partition_field}==\"{self.partition_key}\""
             else:
                 expr = f"{self._partition_field}==\"{self.partition_key}\""
+        if expr and self.metadata_expr:
+            expr = f"{expr} and ({self.metadata_expr})"
+
 
         # Perform the search.
         res = self.col.search(

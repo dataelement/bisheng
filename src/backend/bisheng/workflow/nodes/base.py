@@ -12,13 +12,16 @@ from bisheng.workflow.graph.graph_state import GraphState
 
 class BaseNode(ABC):
 
-    def __init__(self, node_data: BaseNodeData, workflow_id: str, graph_state: GraphState,
+    def __init__(self, node_data: BaseNodeData, workflow_id: str, user_id: str, graph_state: GraphState,
                  target_edges: List[EdgeBase], max_steps: int, callback: BaseCallback, **kwargs: Any):
         self.id = node_data.id
         self.type = node_data.type
         self.name = node_data.name
         self.description = node_data.description
         self.target_edges = target_edges
+
+        # 执行用户的唯一标识
+        self.user_id = user_id
 
         # 全局状态管理
         self.workflow_id = workflow_id
