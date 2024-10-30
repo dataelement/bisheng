@@ -15,6 +15,7 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.nodes.base import BaseNode
+from bisheng.workflow.nodes.output.output_fake import OutputFakeNode
 
 
 class TempState(TypedDict):
@@ -54,7 +55,7 @@ class GraphEngine:
 
     def add_node_edge(self, node_instance: BaseNode):
         """  把节点的边链接起来  """
-        if node_instance.type == NodeType.END.value:
+        if node_instance.type == NodeType.END.value or node_instance.type == NodeType.FAKE_OUTPUT.value:
             return
         # get target nodes
         target_node_ids = self.edges.get_target_node(node_instance.id)
@@ -63,8 +64,19 @@ class GraphEngine:
         if not target_node_ids and not source_node_ids:
             raise Exception(f"node {node_instance.name} must have at least one edge")
 
+        # output 节点后跟一个fake 节点用来处理中断
+        if node_instance.type == NodeType.OUTPUT.value:
+            fake_node = self.nodes_map[f"{node_instance.id}_fake"]
+            self.nodes_map[fake_node.id] = fake_node
+            self.graph_builder.add_node(fake_node.id, fake_node.run)
+            self.graph_builder.add_edge(node_instance.id, fake_node.id)
+            self.graph_builder.add_conditional_edges(fake_node.id, node_instance.route_node, {
+                node_id: node_id for node_id in target_node_ids
+            })
+            return
+
         # condition 和 output 节点后面需要接 langgraph的 edge_condition
-        if node_instance.type in [NodeType.CONDITION.value, NodeType.OUTPUT.value]:
+        if node_instance.type == NodeType.CONDITION.value:
             self.graph_builder.add_conditional_edges(node_instance.id, node_instance.route_node, {
                 node_id: node_id for node_id in target_node_ids
             })
@@ -104,9 +116,16 @@ class GraphEngine:
                 start_node = node_instance.id
             elif node_instance.type == NodeType.END.value:
                 end_node = node_instance.id
-            elif node_instance.type in [NodeType.INPUT.value, NodeType.OUTPUT.value]:
+            elif node_instance.type == NodeType.INPUT.value:
                 # 需要中止接收用户输入的节点
                 interrupt_nodes.append(node_instance.id)
+            elif node_instance.type == NodeType.OUTPUT.value:
+                # 需要中止接收用户输入的节点
+                fake_node = OutputFakeNode(id=f"{node_instance.id}_fake",
+                                           output_node=node_instance,
+                                           type=NodeType.FAKE_OUTPUT.value)
+                self.nodes_map[fake_node.id] = fake_node
+                interrupt_nodes.append(fake_node.id)
 
         if not start_node:
             raise Exception("workflow must have start node")
@@ -123,7 +142,7 @@ class GraphEngine:
             checkpointer=MemorySaver(),
             interrupt_before=interrupt_nodes
         )
-        with open(f"graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png", "wb") as f:
+        with open(f"./data/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png", "wb") as f:
             f.write(self.graph.get_graph().draw_mermaid_png())
 
     def _run(self, input_data: Any):
@@ -175,15 +194,12 @@ class GraphEngine:
                     self.status = WorkflowStatus.INPUT.value
                     self.callback.on_user_input(UserInputData(node_id=node_id, group_params=input_schema))
                 return
-            elif node_instance.type == NodeType.OUTPUT.value:
-                intput_schema = node_instance.get_intput_schema()
+            elif node_instance.type == NodeType.FAKE_OUTPUT.value:
+                intput_schema = node_instance.get_input_schema()
                 if intput_schema:
                     # output 节点需要用户输入
                     self.status = WorkflowStatus.INPUT.value
-                    node_instance.pre_run()
                 else:
                     self.continue_run(None)
                 return
         self.continue_run(None)
-
-

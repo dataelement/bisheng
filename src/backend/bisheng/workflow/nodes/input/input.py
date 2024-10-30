@@ -11,31 +11,33 @@ from bisheng.api.services.llm import LLMService
 
 class InputNode(BaseNode):
 
-    def init_data(self):
-        super().init_data()
-        self.tab = self.node_data.tab['value']
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # 记录是对话还是表单
+        self._tab = self.node_data.tab['value']
 
         # 记录这个变量是什么类型的
+        self._node_params_map = {}
         new_node_params = {}
-        self.node_params_map = {}
-        if self.tab == "input":
+        if self._tab == "input":
             new_node_params["user_input"] = self.node_params["user_input"]
         else:
             for value_info in self.node_params["form_input"]:
                 new_node_params[value_info["key"]] = value_info["value"]
-                self.node_params_map[value_info["key"]] = value_info
+                self._node_params_map[value_info["key"]] = value_info
         self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
         return self.node_data.group_params
 
     def _run(self):
-        if self.tab == "input":
+        if self._tab == "input":
             return {"user_input": self.node_params["user_input"]}
 
         # 表单形式的需要去处理对应的文件上传
         for key, value in self.node_params.items():
-            key_info = self.node_params_map[key]
+            key_info = self._node_params_map[key]
             if key_info["type"] == "file":
                 file_metadata = self.parse_upload_file(key, value)
                 self.node_params[key] = file_metadata

@@ -152,7 +152,7 @@ class ChatMessage(BaseModel):
     sender: str = None
     receiver: dict = None
     liked: int = 0
-    extra: str = '{}'
+    extra: str | dict = '{}'
     flow_id: str = None
     chat_id: str = None
 
@@ -171,7 +171,7 @@ class ChatResponse(ChatMessage):
         """
         end_cover: 结束并覆盖上一条message
         """
-        if v not in ['start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover']:
+        if v not in ['start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover', "over"]:
             raise ValueError('type must be start, stream, end, error, info, or file')
         return v
 

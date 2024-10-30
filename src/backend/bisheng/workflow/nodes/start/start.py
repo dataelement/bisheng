@@ -8,8 +8,8 @@ from langchain.memory import ConversationBufferWindowMemory
 
 class StartNode(BaseNode):
 
-    def init_data(self):
-        super().init_data()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         # 初始化当前时间
         self.node_params["current_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")

@@ -14,6 +14,7 @@ class NodeType(Enum):
     CONDITION = "condition"
     LLM = "llm"
     OUTPUT = "output"
+    FAKE_OUTPUT = "fake_output"
     QA_RETRIEVER = "qa_retriever"
     RAG = "rag"
     REPORT = "report"

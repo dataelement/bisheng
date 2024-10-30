@@ -11,7 +11,6 @@
           {
             "key": "guide_word",
             "label": "开场白",
-            "global": "key",
             "value": "",
             "type": "textarea"
           },
@@ -43,6 +42,7 @@
           {
             "key": "preset_question",
             "label": "预置问题列表",
+            "global": "index",
             "type": "input_list",
             "value": []
           }
@@ -108,8 +108,9 @@
             }
           },
           {
-            "key": "output_type",
+            "key": "submitted_result",
             "label": "交互类型",
+            "global": "value.type=input",
             "type": "output_form",
             "value": {
               "type": "",
@@ -133,13 +134,7 @@
           {
             "key": "code_input",
             "type": "code_input",
-            "value": [
-              {
-                "key": "arg1",
-                "type": "ref",
-                "value": ""
-              }
-            ]
+            "value": []
           }
         ]
       },
@@ -159,13 +154,7 @@
           {
             "key": "code_output",
             "type": "code_output",
-            "value": [
-              {
-                "key": "arg1",
-                "type": "str",
-                "value": ""
-              }
-            ]
+            "value": []
           }
         ]
       }
@@ -230,13 +219,15 @@
             "key": "system_prompt",
             "label": "系统提示词",
             "type": "var_textarea",
-            "value": ""
+            "value": "",
+            "required": true
           },
           {
             "key": "user_prompt",
             "label": "用户提示词",
             "type": "var_textarea",
-            "value": ""
+            "value": "",
+            "required": true
           }
         ]
       },
@@ -254,14 +245,7 @@
             "key": "output",
             "label": "输出变量",
             "type": "var",
-            "value": [],
-            "tab": "single"
-          },
-          {
-            "key": "output_batch",
-            "label": "输出变量",
-            "type": "user_question_output",
-            "tab": "batch"
+            "value": []
           }
         ]
       }
@@ -293,7 +277,8 @@
             "value": {
               "type": "knowledge",
               "value": []
-            }
+            },
+            "required": true
           },
           {
             "key": "user_auth",
@@ -303,7 +288,7 @@
             "help": "开启后，只会对用户有使用权限的知识库进行检索。"
           },
           {
-            "key": "chunk_max_size",
+            "key": "max_chunk_size",
             "label": "检索结果长度",
             "type": "number",
             "value": 15000
@@ -317,13 +302,15 @@
             "key": "system_prompt",
             "label": "系统提示词",
             "type": "var_textarea",
-            "value": ""
+            "value": "",
+            "required": true
           },
           {
             "key": "user_prompt",
             "label": "用户提示词",
             "type": "var_textarea",
-            "value": ""
+            "value": "",
+            "required": true
           },
           {
             "key": "model_id",
@@ -519,7 +506,7 @@
             "tab": "single"
           },
           {
-            "key": "output",
+            "key": "output_batch",
             "label": "输出变量",
             "type": "user_question_output",
             "value": [],
@@ -542,16 +529,7 @@
             "label": "",
             "type": "condition",
             "value": {
-              "cases": [
-                {
-                  "id": "xxxxxx",
-                  "operator": "and",
-                  "conditions": []
-                },
-                {
-                  "id": "xxxx_else"
-                }
-              ]
+              "cases": []
             }
           }
         ]

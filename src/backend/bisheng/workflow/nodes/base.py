@@ -36,16 +36,15 @@ class BaseNode(ABC):
 
         # 回调，用来处理节点执行过程中的各种事件
         self.callback_manager = callback
-        # 是否发送节点开始和结束的事件
-        self.node_start_end_event = True
 
         # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
         self.tmp_collection_name = "tmp_workflow_data"
 
+        # 简单参数解析
         self.init_data()
 
     def init_data(self):
-        """ 节点有特殊数据需要处理的，可以继承此函数处理 """
+        """ 统一的参数处理，节点有特殊需求的可以，自己初始化时处理 """
         if not self.node_data.group_params:
             return
 
@@ -90,9 +89,7 @@ class BaseNode(ABC):
             raise Exception(f"node {self.name} exceeded more than max steps")
 
         exec_id = uuid.uuid4().hex
-        start_end_event = self.node_start_end_event
-        if start_end_event:
-            self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
+        self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
         reason = None
         try:

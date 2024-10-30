@@ -80,7 +80,7 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(ChatResponse(
             message=data.dict(),
             category='user_input',
-            type='end',
+            type='over',
             flow_id=self.workflow_id,
             chat_id=self.chat_id))
 
@@ -90,7 +90,7 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(ChatResponse(
             message=data.guide_word,
             category='guide_word',
-            type='end',
+            type='over',
             flow_id=self.workflow_id,
             chat_id=self.chat_id))
 
@@ -100,7 +100,7 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(ChatResponse(
             message=data.guide_question,
             category='guide_question',
-            type='end',
+            type='over',
             flow_id=self.workflow_id,
             chat_id=self.chat_id))
 
@@ -110,6 +110,6 @@ class WorkflowWsCallback(BaseCallback):
             message=data.msg,
             category='output_msg',
             extra=data.dict(),
-            type='end',
+            type='over',
             flow_id=self.workflow_id,
             chat_id=self.chat_id))

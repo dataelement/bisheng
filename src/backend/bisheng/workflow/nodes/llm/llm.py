@@ -8,14 +8,13 @@ from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 class LLMNode(BaseNode):
 
-    def init_data(self):
-        super().init_data()
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # 判断是单次还是批量
-        self.tab = self.node_data.tab['value']
+        self._tab = self.node_data.tab['value']
 
         # 是否输出结果给用户
-        self.output_user = self.node_params.get("output_user", False)
+        self._output_user = self.node_params.get("output_user", False)
 
         # 初始化prompt
         self.system_prompt = PromptTemplateParser(template=self.node_params["system_prompt"])
@@ -24,8 +23,7 @@ class LLMNode(BaseNode):
         self.user_variables = self.user_prompt.extract()
 
         # 初始化llm对象
-        self.llm = LLMService.get_bisheng_llm(model_id=self.node_params["model_id"],
-                                              temperature=self.node_params.get("temperature", 0.3))
+        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params["model_id"])
 
     def _run(self):
         result = {}
