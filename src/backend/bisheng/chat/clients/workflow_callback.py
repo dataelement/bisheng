@@ -7,7 +7,7 @@ from loguru import logger
 
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.workflow.callback.base_callback import BaseCallback
-from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
+from bisheng.workflow.callback.event import NodeStartData, NodeEndData, OutputMsgChooseData, OutputMsgInputData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData
 
 
@@ -109,7 +109,30 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(ChatResponse(
             message=data.msg,
             category='output_msg',
-            extra=data.dict(),
+            extra="",
             type='over',
             flow_id=self.workflow_id,
-            chat_id=self.chat_id))
+            chat_id=self.chat_id,
+            files=data.files))
+
+    def on_output_choose(self, data: OutputMsgChooseData):
+        print(f"output choose: {data}")
+        self.send_chat_response(ChatResponse(
+            message=data.dict(),
+            category='output_choose_msg',
+            extra="",
+            type='over',
+            flow_id=self.workflow_id,
+            chat_id=self.chat_id,
+            files=data.files))
+
+    def on_output_input(self, data: OutputMsgInputData):
+        print(f"output input: {data}")
+        self.send_chat_response(ChatResponse(
+            message=data.dict(),
+            category='output_input_msg',
+            extra="",
+            type='over',
+            flow_id=self.workflow_id,
+            chat_id=self.chat_id,
+            files=data.files))

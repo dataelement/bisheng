@@ -31,6 +31,8 @@ class NodeParams(BaseModel):
     help: Optional[str] = Field("", description="变量帮助文本")
     tab: Optional[str] = Field("", description="变量所属的tab，为空则都展示")
     placeholder: Optional[str] = Field("", description="变量的占位提示文本")
+    required: Optional[bool] = Field(False, description="是否必填")
+    options: Optional[Any] = Field(None, description="变量的选项")
 
 
 class NodeGroupParams(BaseModel):
@@ -47,3 +49,10 @@ class BaseNodeData(BaseModel):
     group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
     tab: Optional[dict] = Field({}, description="tab config")
     tool_id: Optional[int] = Field(0, description="unique tool id, only for tool node")
+
+    def get_variable_info(self, variable_key: str) -> NodeParams | None:
+        for param_info in self.group_params:
+            for one in param_info:
+                if one.key == variable_key:
+                    return one
+

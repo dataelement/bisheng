@@ -2,7 +2,7 @@ from typing import Any
 import uuid
 
 from bisheng.utils.minio_client import MinioClient
-from bisheng.workflow.callback.event import OutputMsgData, NodeStartData, NodeEndData
+from bisheng.workflow.callback.event import OutputMsgChooseData, OutputMsgData, NodeStartData, NodeEndData, OutputMsgInputData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
@@ -61,8 +61,19 @@ class OutputNode(BaseNode):
 
     def send_output_msg(self):
         """ 发送output节点的消息 """
-        group_params = self.get_input_schema()
+        msg_params = {
+            "node_id":self.id,
+            "msg":self.node_params["output_msg"]["msg"],
+            "files":self.node_params["output_msg"]["files"]
+        }
         # 需要交互则有group_params
-        self.callback_manager.on_output_msg(OutputMsgData(node_id=self.id,
-                                                          msg=self.node_params["output_msg"]["msg"],
-                                                          group_params=group_params))
+        if self._output_type == "input":
+            msg_params["key"] = "submitted_result"
+            msg_params["input_msg"] = self.node_params["submitted_result"]["value"]
+            self.callback_manager.on_output_input(data=OutputMsgInputData(**msg_params))
+        elif self._output_type == "choose":
+            msg_params["key"] = "submitted_result"
+            msg_params["input_msg"] = self.node_data.get_variable_info("submitted_result").options
+            self.callback_manager.on_output_choose(data=OutputMsgChooseData(**msg_params))
+        else:
+            self.callback_manager.on_output_msg(OutputMsgData(**msg_params))

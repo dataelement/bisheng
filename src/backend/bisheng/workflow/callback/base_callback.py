@@ -1,6 +1,6 @@
 from abc import ABC
 
-from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
+from bisheng.workflow.callback.event import NodeStartData, NodeEndData, OutputMsgChooseData, OutputMsgInputData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData
 
 
@@ -31,3 +31,9 @@ class BaseCallback(ABC):
 
     def on_output_msg(self, data: OutputMsgData):
         print(f"output msg: {data}")
+
+    def on_output_choose(self, data: OutputMsgChooseData):
+        print(f"output choose: {data}")
+
+    def on_output_input(self, data: OutputMsgInputData):
+        print(f"output input: {data}")

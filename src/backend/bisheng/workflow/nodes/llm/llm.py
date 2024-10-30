@@ -31,7 +31,7 @@ class LLMNode(BaseNode):
         if self._tab == "single":
             result["output"] = self._run_once(None)
         else:
-            for index, one in enumerate(self.node_params["user_question"]):
+            for index, one in enumerate(self.node_params["batch_variable"]):
                 output_key = self.node_params["output"][index]["key"]
                 result[output_key] = self._run_once(one)
 
