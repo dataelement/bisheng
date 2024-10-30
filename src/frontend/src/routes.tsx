@@ -155,6 +155,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
+  { path: "/resouce/:cid/:mid", element: <ResoucePage /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],
