@@ -51,8 +51,8 @@ class BaseNodeData(BaseModel):
     tool_id: Optional[int] = Field(0, description="unique tool id, only for tool node")
 
     def get_variable_info(self, variable_key: str) -> NodeParams | None:
-        for param_info in self.group_params:
-            for one in param_info:
+        for group_info in self.group_params:
+            for one in group_info.params:
                 if one.key == variable_key:
                     return one
 
