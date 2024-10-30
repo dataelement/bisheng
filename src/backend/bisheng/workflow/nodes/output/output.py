@@ -73,7 +73,7 @@ class OutputNode(BaseNode):
             self.callback_manager.on_output_input(data=OutputMsgInputData(**msg_params))
         elif self._output_type == "choose":
             msg_params["key"] = "submitted_result"
-            msg_params["input_msg"] = self.node_data.get_variable_info("submitted_result").options
+            msg_params["options"] = self.node_data.get_variable_info("submitted_result").options
             self.callback_manager.on_output_choose(data=OutputMsgChooseData(**msg_params))
         else:
             self.callback_manager.on_output_msg(OutputMsgData(**msg_params))
