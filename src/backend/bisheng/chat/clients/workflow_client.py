@@ -56,4 +56,10 @@ class WorkflowClient(BaseClient):
 
     async def handle_user_input(self, data: dict):
         logger.info(f"get user input: {data}", )
+        if not self.workflow:
+            logger.warning("workflow is over")
+            return
+        if self.workflow.graph_engine.status != WorkflowStatus.INPUT.value:
+            logger.warning("workflow is not in input status")
+            return
         await self.workflow_run(data)
