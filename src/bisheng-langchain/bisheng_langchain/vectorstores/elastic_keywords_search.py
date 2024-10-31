@@ -107,6 +107,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         elasticsearch_url: str,
         index_name: str,
         drop_old: Optional[bool] = False,
+        post_filter: Optional[Any] = None,
         *,
         ssl_verify: Optional[Dict[str, Any]] = None,
         llm_chain: Optional[LLMChain] = None,
@@ -120,6 +121,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         self.index_name = index_name
         self.llm_chain = llm_chain
         self.drop_old = drop_old
+        self.post_filter = post_filter
         _ssl_verify = ssl_verify or {}
         self.elasticsearch_url = elasticsearch_url
         self.ssl_verify = _ssl_verify
@@ -322,9 +324,22 @@ class ElasticKeywordsSearch(VectorStore, ABC):
         version_num = client.info()['version']['number'][0]
         version_num = int(version_num)
         if version_num >= 8:
-            response = client.search(index=index_name, query=script_query, size=size)
+            params = {
+                "index": index_name,
+                "query": script_query,
+                "size": size
+            }
+            if self.post_filter:
+                params["post_filter"] = self.post_filter
+            response = client.search(**params)
         else:
-            response = client.search(index=index_name, body={'query': script_query, 'size': size})
+            body = {
+                'query': script_query,
+                'size': size
+            }
+            if self.post_filter:
+                body["post_filter"] = self.post_filter
+            response = client.search(index=index_name, body=body)
         return response
 
     def delete_index(self, **kwargs: Any) -> None:

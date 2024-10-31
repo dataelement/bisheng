@@ -715,7 +715,9 @@ class Milvus(MilvusLangchain):
             else:
                 expr = f"{self._partition_field}==\"{self.partition_key}\""
         if expr and self.metadata_expr:
-            expr = f"{expr} and ({self.metadata_expr})"
+            expr = f"{expr} and {self.metadata_expr}"
+        elif self.metadata_expr and not expr:
+            expr = self.metadata_expr
 
 
         # Perform the search.
