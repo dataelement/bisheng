@@ -101,7 +101,7 @@ class RagNode(BaseNode):
             node_type = "MilvusWithPermissionCheck"
             params = {
                 "user_name": self._user_info.user_name,
-                "collection_name": self._knowledge_value,  # 知识库id列表
+                "collection_name": [{"key": one} for one in self._knowledge_value],  # 知识库id列表
                 "_is_check_auth": self._knowledge_auth
             }
         else:
@@ -131,7 +131,7 @@ class RagNode(BaseNode):
             node_type = "ElasticsearchWithPermissionCheck"
             params = {
                 "user_name": self._user_info.user_name,
-                "index_name": self._knowledge_value,  # 知识库id列表
+                "index_name": [{"key": one} for one in self._knowledge_value],  # 知识库id列表
                 "_is_check_auth": self._knowledge_auth
             }
         else:
