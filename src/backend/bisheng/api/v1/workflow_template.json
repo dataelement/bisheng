@@ -202,7 +202,8 @@
             "key": "model_id",
             "label": "模型",
             "type": "bisheng_model",
-            "value": ""
+            "value": "",
+            "required": true
           },
           {
             "key": "temperature",
@@ -263,7 +264,7 @@
           {
             "key": "user_question",
             "label": "用户问题",
-            "global": "self",
+            "global": "self.user_prompt",
             "type": "user_question",
             "required": true,
             "help": "",
@@ -274,7 +275,7 @@
           {
             "key": "retrieved_result",
             "label": "检索范围",
-            "global": "self",
+            "global": "self.user_prompt",
             "type": "knowledge_select_multi",
             "value": {
               "type": "knowledge",
@@ -318,7 +319,8 @@
             "key": "model_id",
             "label": "模型",
             "type": "bisheng_model",
-            "value": ""
+            "value": "",
+            "required": true
           },
           {
             "key": "temperature",

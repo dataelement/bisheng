@@ -7,6 +7,7 @@ from bisheng.api.services.llm import LLMService
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
@@ -56,11 +57,19 @@ class RagNode(BaseNode):
             sort_by_source_and_index=self._sort_chunks,
             return_source_documents=True,
         )
+        user_questions = self.init_user_question()
+        ret = {}
+        for index, question in enumerate(user_questions):
+            result = retriever.run(question)
+            if self.node_params["output_user"]:
+                self.callback_manager.on_output_msg(OutputMsgData(node_id=self.id, msg=result["result"]))
+            ret[self.node_params["output_user_input"][index]["key"]] = result
+        return ret
 
     def init_user_question(self) -> List[str]:
         ret = []
         for one in self.node_params["user_question"]:
-            ret.append(self.graph_state.get_variable_by_str(one))
+            ret.append(self.graph_state.get_variable_by_str(one["key"]))
         return ret
 
     def init_qa_prompt(self):
