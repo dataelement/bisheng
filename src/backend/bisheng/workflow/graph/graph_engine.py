@@ -1,5 +1,6 @@
 import datetime
-from typing import Dict, Any
+import operator
+from typing import Annotated, Dict, Any
 
 from bisheng.workflow.graph.graph_state import GraphState
 from loguru import logger
@@ -20,7 +21,7 @@ from bisheng.workflow.nodes.output.output_fake import OutputFakeNode
 
 class TempState(TypedDict):
     # not use, only for langgraph state graph
-    flag: bool
+    flag: Annotated[bool, operator.add]
 
 
 class GraphEngine:

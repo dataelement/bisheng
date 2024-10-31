@@ -264,7 +264,7 @@
           {
             "key": "user_question",
             "label": "用户问题",
-            "global": "self.user_prompt",
+            "global": "self=user_prompt",
             "type": "user_question",
             "required": true,
             "help": "",
@@ -275,7 +275,7 @@
           {
             "key": "retrieved_result",
             "label": "检索范围",
-            "global": "self.user_prompt",
+            "global": "self=user_prompt",
             "type": "knowledge_select_multi",
             "value": {
               "type": "knowledge",

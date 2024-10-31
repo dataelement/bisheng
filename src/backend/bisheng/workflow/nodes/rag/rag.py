@@ -60,7 +60,7 @@ class RagNode(BaseNode):
         user_questions = self.init_user_question()
         ret = {}
         for index, question in enumerate(user_questions):
-            result = retriever.run(question)
+            result = retriever._call({"query":question})
             if self.node_params["output_user"]:
                 self.callback_manager.on_output_msg(OutputMsgData(node_id=self.id, msg=result["result"]))
             ret[self.node_params["output_user_input"][index]["key"]] = result

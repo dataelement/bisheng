@@ -14,6 +14,7 @@ from langchain.text_splitter import TextSplitter
 
 
 class BaselineVectorRetriever(BaseRetriever):
+    
     vector_store: Milvus
     text_splitter: TextSplitter
     search_type: str = 'similarity'
