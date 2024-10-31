@@ -167,7 +167,7 @@ export default function App() {
   }, [user])
 
   // 免登录列表
-  const noAuthPages = ['chat']
+  const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.split('/')?.[1] || ''
 
   // 动态路由根据权限
