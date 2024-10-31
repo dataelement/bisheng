@@ -69,7 +69,7 @@ class RagNode(BaseNode):
     def init_user_question(self) -> List[str]:
         ret = []
         for one in self.node_params["user_question"]:
-            ret.append(self.graph_state.get_variable_by_str(one["key"]))
+            ret.append(self.graph_state.get_variable_by_str(one))
         return ret
 
     def init_qa_prompt(self):
