@@ -8,23 +8,42 @@ import SelectVar from "./SelectVar";
 export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }) {
     const [value, setValue] = React.useState(data.value)
 
-    const handleDelete = (key) => {
-        const newValue = value.filter(el => el.key !== key)
-        onOutPutChange(data.linkage, newValue)
-        setValue(newValue)
-        onChange(newValue)
+    const handleDelete = (val) => {
+        const newValues = value.filter(el => el !== val)
+        const outputVar = valueToOutput(newValues)
+
+        onOutPutChange(data.linkage, outputVar)
+        setValue(newValues)
+        onChange(newValues)
     }
 
     const handleChange = (item, v) => {
-        console.log('item, v :>> ', item, v);
-        if (value.some(el => el.key === v.value)) return
-        const newValue = [...value, {
-            key: v.value,
-            label: v.label
-        }]
-        onOutPutChange(data.linkage, newValue)
-        setValue(newValue)
-        onChange(newValue)
+        // [nodeId.xxx]
+        const itemVar = `${item.id}.${v.value}`
+        if (value.includes(itemVar)) return
+        const newValues = [...value, itemVar]
+        // varZh  {nodeId.xxx: '中文'}
+        if (data.varZh) {
+            data.varZh[itemVar] = `${item.name}/${v.label}`
+        } else {
+            data.varZh = { [itemVar]: `${item.name}/${v.label}` }
+        }
+        // output {key: xxx , label: '中文'}[]
+        const outputVar = valueToOutput(newValues)
+
+        onOutPutChange(data.linkage, outputVar)
+        setValue(newValues)
+        onChange(newValues)
+    }
+
+    const valueToOutput = (newValues) => {
+        return newValues.map(el => {
+            const labelName = data.varZh[el]
+            return {
+                key: data.varZh[el].split('.')[1],
+                label: labelName.split('/')[1]
+            }
+        })
     }
 
     return <div className='node-item mb-2' data-key={data.key}>
@@ -36,12 +55,12 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }
             </Label>
             <Badge variant="outline" className="bg-input text-muted-foreground">{data.key}</Badge>
         </div>
-        <SelectVar nodeId={nodeId} onSelect={handleChange}>
+        <SelectVar nodeId={nodeId} itemKey={data.key} onSelect={handleChange}>
             <div className="no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
                 <div className="flex flex-wrap size-full overflow-y-auto">
-                    {value.map(item => <Badge onPointerDown={(e) => e.stopPropagation()} key={item.key} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
-                        {item.label}
-                        <X className="h-3 w-3" onClick={() => handleDelete(item.key)}></X>
+                    {value.map(item => <Badge onPointerDown={(e) => e.stopPropagation()} key={item} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
+                        {data.varZh[item]}
+                        <X className="h-3 w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
                     )}
                 </div>

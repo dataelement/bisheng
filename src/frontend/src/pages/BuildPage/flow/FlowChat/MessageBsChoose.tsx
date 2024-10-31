@@ -63,6 +63,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type:
         setInputSended(true)
         const myEvent = new CustomEvent('outputMsgEvent', {
             detail: {
+                nodeId: data.message.node_id,
                 data: {
                     [data.message.key]: val
                 }

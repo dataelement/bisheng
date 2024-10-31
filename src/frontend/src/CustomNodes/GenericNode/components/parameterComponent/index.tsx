@@ -5,7 +5,7 @@ import cloneDeep from "lodash-es/cloneDeep";
 import { Info } from "lucide-react";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Handle, Position, useUpdateNodeInternals } from "reactflow";
+import { Handle, Position, useUpdateNodeInternals } from "@xyflow/react";
 import ShadTooltip from "../../../../components/ShadTooltipComponent";
 import VariablesComponent from "../../../../components/VariablesComponent";
 import CodeAreaComponent from "../../../../components/codeAreaComponent";

@@ -25,7 +25,7 @@ const findKeyByValue = (obj, value) => {
     return value;
 };
 
-export default function VarInput({ nodeId, flowNode, value, children = null, onUpload = undefined, onChange }) {
+export default function VarInput({ nodeId, itemKey, flowNode, value, children = null, onUpload = undefined, onChange }) {
     const textareaRef = useRef(null);
     const textAreaHtmlRef = useRef(null);
     const textMsgRef = useRef(value || '');
@@ -132,7 +132,7 @@ export default function VarInput({ nodeId, flowNode, value, children = null, onU
         ></div>
 
         <div className="absolute top-0 right-2 flex gap-1">
-            <SelectVar nodeId={nodeId} onSelect={handleInsertVariable}>
+            <SelectVar nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
                 <Variable size={18} className="text-muted-foreground hover:text-gray-800" />
             </SelectVar>
             {onUpload && <Button variant="ghost" className="p-0 h-8 text-muted-foreground" onClick={onUpload}>

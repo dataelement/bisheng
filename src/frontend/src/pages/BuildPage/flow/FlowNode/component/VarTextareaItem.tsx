@@ -7,6 +7,7 @@ export default function VarTextareaItem({ nodeId, data, onChange }) {
         <div className='node-item mb-2 nodrag' data-key={data.key}>
             <Label className='bisheng-label'>{data.label}</Label>
             <VarInput
+                itemKey={data.key}
                 nodeId={nodeId}
                 flowNode={data}
                 value={data.value}

@@ -5,7 +5,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useMemo, useState } from "react";
 import DragOptions from "./DragOptions";
 import VarInput from "./VarInput";
-import { Handle, Position } from "reactflow";
+import { Handle, Position } from "@xyflow/react";
 
 const OutputItem = ({ nodeId, data, onChange }) => {
     const [interactionType, setInteractionType] = useState<string>(data.value.type || "none"); // 交互类型状态
@@ -40,7 +40,7 @@ const OutputItem = ({ nodeId, data, onChange }) => {
                         <Label className='bisheng-label'>用户输入框展示内容</Label>
                         <Badge variant="outline" className="bg-input text-muted-foreground">{data.key}</Badge>
                     </div>
-                    <VarInput nodeId={nodeId} flowNode={data} value={data.value.value} onChange={(msg) => onChange({ type: interactionType, value: msg })} />
+                    <VarInput nodeId={nodeId} itemKey={data.key} flowNode={data} value={data.value.value} onChange={(msg) => onChange({ type: interactionType, value: msg })} />
                 </div>
             default:
                 return null;

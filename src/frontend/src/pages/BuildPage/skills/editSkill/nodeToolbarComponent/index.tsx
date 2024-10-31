@@ -13,7 +13,7 @@ import cloneDeep from "lodash-es/cloneDeep";
 import { AlarmClock, Combine, Copy, Download, MoreHorizontal, SaveAll, Settings2, Trash2 } from "lucide-react";
 import { useContext, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useReactFlow } from "reactflow";
+import { useReactFlow } from "@xyflow/react";
 // 组件头部按钮组
 const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
   const [nodeLength, setNodeLength] = useState(

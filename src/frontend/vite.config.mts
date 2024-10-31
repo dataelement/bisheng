@@ -63,7 +63,7 @@ export default defineConfig(() => {
         output: {
           manualChunks: {
             acebuilds: ['react-ace', 'ace-builds', 'react-syntax-highlighter', 'rehype-mathjax', 'react-markdown'],
-            reactflow: ['reactflow'],
+            reactflow: ['@xyflow/react'],
             pdfjs: ['pdfjs-dist'],
             reactdrop: ['react-window', 'react-beautiful-dnd', 'react-dropzone']
           }

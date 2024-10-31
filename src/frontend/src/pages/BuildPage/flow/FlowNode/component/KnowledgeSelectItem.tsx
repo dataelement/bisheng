@@ -26,8 +26,8 @@ type KnowledgeTypeValues = `${KnowledgeType}`;
 export default function KnowledgeSelectItem({ data, onChange }) {
     const { flow } = useFlowStore()
 
-    const currentTabRef = useRef(data.value.tab)
-    const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.tab)
+    const currentTabRef = useRef(data.value.type)
+    const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.type)
     const [value, setValue] = useState<any>(() => data.value.value.map(el => {
         return { label: el.label, value: el.key }
     }))
@@ -96,7 +96,7 @@ export default function KnowledgeSelectItem({ data, onChange }) {
         const resVals = currentTabRef.current === tabType ? vals : [vals[vals.length - 1]]
         setValue(resVals)
         onChange({
-            tab: tabType,
+            type: tabType,
             value: resVals.map(el => ({ // 夸类型先清空value
                 key: el.value,
                 label: el.label

@@ -4,7 +4,12 @@ import { useMemo, useRef, useState } from "react"
 import { Colors, Icons } from "../../Sidebar"
 import useFlowStore from "../../flowStore"
 
-export default function SelectVar({ nodeId, children, onSelect }) {
+const isMatch = (obj, expression) => {
+    const fn = new Function('value', `return ${expression}`);
+    return fn(obj.value);
+};
+
+export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
 
@@ -12,20 +17,24 @@ export default function SelectVar({ nodeId, children, onSelect }) {
         const IconComp = Icons[temp.type] || SprayCan
         const color = Colors[temp.type] || 'text-gray-950'
 
+        const hasChild = temp.group_params.some(group =>
+            group.params.some(param => param.global)
+        )
+
         return {
             id: temp.id,
             type: temp.type,
             name: temp.name,
             icon: <IconComp className={`size-5 ${color}`} />,
             desc: temp.description,
-            data: temp.group_params
+            data: hasChild ? temp.group_params : null
         }
     }
     const nodeTemps = useMemo(() => {
         if (!flow.nodes || !open) return []
         return flow.nodes.reduce((list, temp) => {
             const newNode = getNodeDataByTemp(temp.data)
-            list.push(newNode)
+            newNode.data && list.push(newNode)
             return list
         }, [])
     }, [open])
@@ -34,26 +43,64 @@ export default function SelectVar({ nodeId, children, onSelect }) {
     const [vars, setVars] = useState([])
     const currentMenuRef = useRef(null)
     const handleShowVars = (item) => {
+        console.log('123 :>> ', 123);
         currentMenuRef.current = item
-        console.log('1 :>> ', 1);
         // start节点 preset_question#0(中文)
         // input节点 key
         // agent xxx#0
         const _vars = []
         item.data.forEach(group => {
             group.params.forEach(param => {
-                // TODO index dict
+                // 不能选自己(相同变量名视为self) param.key
+                if (param.key === itemKey) return
+
                 if (param.global === 'key'
                     || (param.global === 'self' && nodeId === item.id)) {
                     _vars.push({
                         label: param.key,
                         value: param.key
                     })
+                } else if (param.global === 'index') {
+                    _vars.push({
+                        param,
+                        label: `${param.key}`,
+                        value: `${param.key}`
+                    })
+                } else if (param.global && param.global.indexOf('=') !== -1) {
+                    const [key, value] = param.global.split('=')
+                    // 特殊逻辑
+                    // 私有变量
+                    if (key === 'self') {
+                        if (nodeId === item.id && value.indexOf(item.key) !== -1) {
+                            _vars.push({
+                                label: param.key,
+                                value: param.key
+                            })
+                        }
+                    } else {
+                        // 从自身找是否满足表达式的条件
+                        const result = isMatch(param, param.global.replace(/=(.*)/, "=== '$1'"));
+                        result && _vars.push({
+                            label: param.key,
+                            value: param.key
+                        })
+                    }
                 }
             });
         });
 
         setVars(_vars)
+        setQuestions([])
+    }
+
+    // 三级变量 预置问题
+    const [questions, setQuestions] = useState([])
+    const handleShowQuestions = (param) => {
+        const values = param.value.filter(e => e)
+        setQuestions(values.map((el, index) => ({
+            label: el,
+            value: `${param.key}#${index}`
+        })))
     }
 
     return <Select open={open} onOpenChange={setOpen}>
@@ -79,14 +126,30 @@ export default function SelectVar({ nodeId, children, onSelect }) {
                         <div
                             className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                             onClick={() => {
+                                if (v.param) return
                                 onSelect(currentMenuRef.current, v)
                                 setOpen(false)
-                            }}>
+                            }}
+                            onMouseEnter={() => v.param && handleShowQuestions(v.param)}>
                             <span className="w-28 overflow-hidden text-ellipsis">{v.label}</span>
-                            {/* {!isLeaf && (loading ? <LoadIcon className="text-foreground" /> : <ChevronRight className="size-4" />)} */}
+                            {v.param && <ChevronRight className="size-4" />}
                         </div>
                     )}
                 </div>}
+                {
+                    !!questions.length && <div className="w-36 border-l first:border-none">
+                        {questions.map(q =>
+                            <div
+                                className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                onClick={() => {
+                                    onSelect(currentMenuRef.current, q)
+                                    setOpen(false)
+                                }}>
+                                <span className="w-28 overflow-hidden text-ellipsis">{q.label}</span>
+                            </div>
+                        )}
+                    </div>
+                }
             </div>
         </SelectContent>
     </Select>

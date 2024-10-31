@@ -3,7 +3,7 @@ import NodeToolbarComponent from "@/pages/BuildPage/skills/editSkill/nodeToolbar
 import { Zap } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { NodeToolbar } from "reactflow";
+import { NodeToolbar } from "@xyflow/react";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button } from "../../components/bs-ui/button";
 import EditLabel from "../../components/ui/editLabel";
@@ -20,10 +20,10 @@ import {
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
 
-export default function GenericNode({ data, xPos, yPos, selected }: {
+export default function GenericNode({ data, positionAbsoluteX, positionAbsoluteY, selected }: {
   data: NodeDataType;
-  xPos: number;
-  yPos: number;
+  positionAbsoluteX: number;
+  positionAbsoluteY: number;
   selected: boolean;
 }) {
   const { id: flowId } = useParams();
@@ -78,7 +78,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
     <>
       <NodeToolbar>
         <NodeToolbarComponent
-          position={{ x: xPos, y: yPos }}
+          position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
           data={data}
           openPopUp={openPopUp}
           deleteNode={deleteNode}

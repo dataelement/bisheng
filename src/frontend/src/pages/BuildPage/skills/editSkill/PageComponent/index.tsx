@@ -21,7 +21,8 @@ import { Layers } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { unstable_useBlocker as useBlocker } from "react-router-dom";
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   BackgroundVariant,
   Connection,
@@ -29,25 +30,22 @@ import ReactFlow, {
   Edge,
   EdgeChange,
   NodeChange,
-  NodeDragHandler,
   OnEdgesDelete,
   OnSelectionChangeParams,
   SelectionDragHandler,
   addEdge,
-  updateEdge,
+  reconnectEdge,
   useEdgesState,
   useNodesState,
   useReactFlow,
-} from "reactflow";
+} from "@xyflow/react";
 import ConnectionLineComponent from "../ConnectionLineComponent";
 import Header from "../Header";
 import SelectionMenu from "../SelectionMenuComponent";
 import ExtraSidebar from "../extraSidebarComponent";
 
-const nodeTypes = {
-  genericNode: GenericNode,
-};
 
+const nodeTypes = { genericNode: GenericNode };
 export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: string }) {
 
   let {
@@ -59,6 +57,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     getNodeId,
   } = useContext(TabsContext);
   const { setErrorData } = useContext(alertContext);
+
 
   const reactFlowWrapper = useRef(null);
   const { data, types, reactFlowInstance, setReactFlowInstance, templates } = useContext(typesContext);
@@ -191,7 +190,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     [setEdges, setNodes, takeSnapshot]
   );
 
-  const onNodeDragStart: NodeDragHandler = useCallback(() => {
+  const onNodeDragStart = useCallback(() => {
     // 👇 make dragging a node undoable
     takeSnapshot();
     // 👉 you can place your event handlers here
@@ -232,7 +231,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
 
         // If data type is not "chatInput" or if there are no "chatInputNode" nodes present in the ReactFlow instance, create a new node
         // Calculate the position where the node should be created
-        const position = reactFlowInstance.project({
+        const position = reactFlowInstance.screenToFlowPosition({
           x: event.clientX - reactflowBounds.left,
           y: event.clientY - reactflowBounds.top,
         });
@@ -292,7 +291,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
     (oldEdge: Edge, newConnection: Connection) => {
       if (isValidConnection(newConnection, reactFlowInstance)) {
         edgeUpdateSuccessful.current = true;
-        setEdges((els) => updateEdge(oldEdge, newConnection, els));
+        setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
       }
     },
     [reactFlowInstance, setEdges]
@@ -366,9 +365,9 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
                     disableKeyboardA11y={true}
                     onInit={setReactFlowInstance}
                     nodeTypes={nodeTypes}
-                    onEdgeUpdate={onEdgeUpdate}
-                    onEdgeUpdateStart={onEdgeUpdateStart}
-                    onEdgeUpdateEnd={onEdgeUpdateEnd}
+                    onReconnect={onEdgeUpdate}
+                    onReconnectStart={onEdgeUpdateStart}
+                    onReconnectEnd={onEdgeUpdateEnd}
                     onNodeDragStart={onNodeDragStart}
                     onSelectionDragStart={onSelectionDragStart}
                     onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}

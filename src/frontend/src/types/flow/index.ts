@@ -1,4 +1,4 @@
-import { Edge, Node, ReactFlowJsonObject, Viewport, XYPosition } from "reactflow";
+import { Edge, Node, ReactFlowJsonObject, Viewport, XYPosition } from "@xyflow/react";
 import { APIClassType } from "../api/index";
 
 /** 流程 */

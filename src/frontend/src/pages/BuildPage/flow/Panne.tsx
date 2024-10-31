@@ -2,8 +2,10 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
 import { useCopyPaste, useUndoRedo } from "@/util/hook";
 import cloneDeep from "lodash-es/cloneDeep";
-import { useCallback, useEffect, useRef, useState } from "react";
-import ReactFlow, { Background, BackgroundVariant, Connection, Controls, addEdge, applyEdgeChanges, applyNodeChanges } from 'reactflow';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactFlow, Background, BackgroundVariant, Connection, Controls, addEdge, applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import '@xyflow/react/dist/base.css';
 import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
 import Header from "./Header";
@@ -95,16 +97,16 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                             onDragOver={onDragOver}
                             onDrop={onDrop}
                             onSelectionChange={onSelectionChange}
-                            onNodesDelete={() => {
-                                console.log('111 :>> ', 111);
-                                return false
-                            }}
+                            onBeforeDelete={(e) =>
+                                // 阻止start节点删除
+                                !e.nodes.some(node => node.data.type === 'start')
+                            }
                         // 自定义线组件
                         // connectionLineComponent={ConnectionLineComponent} 
                         // 校验连线合法性
-                        // onEdgeUpdate={onEdgeUpdate} 
-                        // onEdgeUpdateStart={onEdgeUpdateStart}
-                        // onEdgeUpdateEnd={onEdgeUpdateEnd}
+                        // onReconnect={onEdgeUpdate} 
+                        // onReconnectStart={onEdgeUpdateStart}
+                        // onReconnectEnd={onEdgeUpdateEnd}
                         // onEdgesDelete={onEdgesDelete}
 
                         // onNodesDelete={onDelete} // 更新setEdges
@@ -183,7 +185,7 @@ const useFlow = (_reactFlowInstance, data) => {
                     event.dataTransfer.getData("flownodedata")
                 );
 
-                const position = _reactFlowInstance.project({
+                const position = _reactFlowInstance.screenToFlowPosition({
                     x: event.clientX - reactflowBounds.left,
                     y: event.clientY - reactflowBounds.top,
                 });
@@ -206,7 +208,7 @@ const useFlow = (_reactFlowInstance, data) => {
 
     const onEdgeSelect = useCallback(() => {
         const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
-        const position = _reactFlowInstance.project({
+        const position = _reactFlowInstance.screenToFlowPosition({
             x: 1 - reactflowBounds.left,
             y: 2 - reactflowBounds.top,
         });

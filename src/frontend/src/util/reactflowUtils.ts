@@ -6,7 +6,7 @@ import {
   OnSelectionChangeParams,
   ReactFlowJsonObject,
   XYPosition,
-} from "reactflow";
+} from "@xyflow/react";
 
 // import { downloadFlowsFromDatabase } from "../controllers/API";
 import {

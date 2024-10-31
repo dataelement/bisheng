@@ -2,7 +2,7 @@ import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, Position } from "reactflow";
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, Position } from "@xyflow/react";
 import Sidebar from "./Sidebar";
 export default function CustomEdge({ id, sourceX, sourceY, targetX, targetY, onOptionSelect, onButtonClick, isDropdownOpen }) {
     const [edgePath, labelX, labelY] = getBezierPath({

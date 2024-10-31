@@ -209,7 +209,9 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                                         e.target.nextSibling.style.display = '';
                                         return true;
                                     }
-                                    e.target.nextSibling.style.display = 'none';
+                                    if (e.target.nextSibling) {
+                                        e.target.nextSibling.style.display = 'none';
+                                    }
                                 })
                             }}
                         // onFocus={(e) => {

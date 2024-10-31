@@ -4,7 +4,7 @@ import { generateUUID } from '@/components/bs-ui/utils';
 import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
 import { useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 
 interface Iprops {
     edges?: boolean,

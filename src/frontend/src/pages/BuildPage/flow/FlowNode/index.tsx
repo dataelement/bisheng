@@ -5,7 +5,7 @@ import { Label } from '@/components/bs-ui/label';
 import { cn } from '@/utils';
 import { House, SprayCan } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Handle, NodeToolbar, Position } from 'reactflow';
+import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
 import { WorkflowNode } from '@/types/flow';

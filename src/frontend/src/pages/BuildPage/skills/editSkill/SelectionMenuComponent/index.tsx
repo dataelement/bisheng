@@ -1,6 +1,6 @@
 import { Combine } from "lucide-react";
 import { useEffect, useState } from "react";
-import { NodeToolbar } from "reactflow";
+import { NodeToolbar } from "@xyflow/react";
 export default function SelectionMenu({ onClick, nodes, isVisible }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
