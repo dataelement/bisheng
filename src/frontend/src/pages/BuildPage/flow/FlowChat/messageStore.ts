@@ -3,6 +3,8 @@ import { ChatMessageType } from '@/types/chat';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
 import { formatDate } from '@/util/utils';
+import { WorkflowMessage } from '@/types/flow';
+import { generateUUID } from '@/components/bs-ui/utils';
 
 /**
  * 会话消息管理
@@ -17,7 +19,7 @@ type State = {
     chatId: string,
     /** 没有更多历史纪录 */
     historyEnd: boolean,
-    messages: ChatMessageType[]
+    messages: WorkflowMessage[]
     /** 历史回话独立存储 */
     hisMessages: ChatMessageType[]
     /**
@@ -30,7 +32,7 @@ type Actions = {
     loadHistoryMsg: (flowid: string, chatId: string, data: { appendHistory: boolean, lastMsg: string }) => Promise<void>;
     loadMoreHistoryMsg: (flowid: string, appendHistory: boolean) => Promise<void>;
     destory: () => void;
-    createSendMsg: (inputs: any, inputKey?: string) => void;
+    createSendMsg: (msg: string) => void;
     createWsMsg: (data: any) => void;
     updateCurrentMessage: (wsdata: any, cover: boolean) => void;
     changeChatId: (chatId: string) => void;
@@ -75,12 +77,60 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
 let currentChatId = ''
 const runLogsTypes = ['tool', 'flow', 'knowledge']
 export const useMessageStore = create<State & Actions>((set, get) => ({
-    running: false,
     chatId: '',
     messages: [],
+
+    running: false,
     hisMessages: [],
     historyEnd: false,
     showGuideQuestion: false,
+    changeChatId(chatId) {
+        set((state) => ({ chatId }))
+    },
+    // start
+    createWsMsg(data) {
+        console.log('change createWsMsg');
+        set((state) => {
+            let newChat = cloneDeep(state.messages);
+            const { category, flow_id, chat_id, message_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
+            newChat.push({
+                category, flow_id, chat_id, message_id, files, is_bot,
+                message, receiver, source, user_id,
+                liked: !!liked,
+                end: type === 'over',
+                sender: '',
+                node_id: message?.node_id || '',
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                // extra,
+            })
+            return { messages: newChat }
+        })
+    },
+    createSendMsg(msg) {
+        set((state) => ({
+            messages:
+                [...state.messages, {
+                    ...bsMsgItem,
+                    category: 'user',
+                    message_id: generateUUID(8),
+                    message: msg,
+                    update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                }]
+        }))
+    },
+    insetSeparator(text) {
+        set((state) => ({
+            messages: [...state.messages, {
+                ...bsMsgItem,
+                category: 'separator',
+                message_id: generateUUID(8),
+                message: text,
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+            }]
+        }))
+    },
+
+
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
     },
@@ -130,43 +180,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     destory() {
         set({ chatId: '', messages: [] })
     },
-    createSendMsg(inputs, inputKey) {
-        console.log('change createSendMsg', inputs, inputKey);
 
-        set((state) => ({
-            messages:
-                [...state.messages, {
-                    isSend: true,
-                    message: inputs,
-                    chatKey: inputKey,
-                    thought: '',
-                    category: '',
-                    files: [],
-                    end: false,
-                    user_name: "",
-                    update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-                }]
-        }))
-    },
-    // start
-    createWsMsg(data) {
-        console.log('change createWsMsg');
-        set((state) => {
-            let newChat = cloneDeep(state.messages);
-            newChat.push({
-                isSend: false,
-                message: runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '',
-                chatKey: '',
-                thought: data.intermediate_steps || '',
-                category: data.category || '',
-                files: [],
-                end: false,
-                user_name: '',
-                extra: data.extra
-            })
-            return { messages: newChat }
-        })
-    },
+
     // stream end
     updateCurrentMessage(wsdata, cover = false) {
         // console.log( wsdata.chat_id, get().chatId);
@@ -231,22 +246,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }
         set((state) => ({ messages: [...messages] }))
     },
-    changeChatId(chatId) {
-        set((state) => ({ chatId }))
-    },
     startNewRound(str) {
         get().insetSeparator(str)
         set((state) => ({ showGuideQuestion: true }))
-    },
-    insetSeparator(text) {
-        set((state) => ({
-            messages: [...state.messages, {
-                ...bsMsgItem,
-                id: Math.random() * 1000000,
-                category: 'divider',
-                message: text,
-            }]
-        }))
     },
     insetSystemMsg(text) {
         set((state) => ({
@@ -272,14 +274,15 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
 }))
 
 
+
 const bsMsgItem = {
-    id: Math.random() * 1000000,
-    isSend: false,
-    message: '',
-    chatKey: '',
-    thought: '',
-    category: '',
+    flow_id: '',
+    chat_id: '',
     files: [],
+    is_bot: false,
+    receiver: '',
+    source: 0,
+    user_id: 0,
     end: true,
-    user_name: ''
+    sender: ''
 }

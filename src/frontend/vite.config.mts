@@ -7,7 +7,8 @@ import svgr from "vite-plugin-svgr";
 // import { visualizer } from 'rollup-plugin-visualizer';
 
 // Use environment variable to determine the target.
-const target = process.env.VITE_PROXY_TARGET || "http://192.168.2.47:7860";
+const target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3003";
+// const target = process.env.VITE_PROXY_TARGET || "http://192.168.2.47:7860";
 //  const target = process.env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
 const apiRoutes = ["^/api/", "/health"];
 
@@ -17,7 +18,7 @@ const proxyTargets = apiRoutes.reduce((proxyObj, route) => {
     changeOrigin: true,
     withCredentials: true,
     secure: false,
-    ws: true,
+    ws: true
   };
   return proxyObj;
 }, {});

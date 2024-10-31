@@ -13,7 +13,6 @@ export default function CustomEdge({ id, sourceX, sourceY, targetX, targetY, onO
         targetY,
         targetPosition: Position.Left,
     });
-console.log('123 :>> ', 123);
     const handleOptionClick = (option) => {
         onOptionSelect({ label: option, position: { x: labelX, y: labelY } });
     };

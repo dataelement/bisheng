@@ -5,6 +5,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { readFileLibDatabase } from "@/controllers/API";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import useFlowStore from "../../flowStore";
 
 const TabsHead = memo(({ onChange }) => {
 
@@ -23,7 +24,10 @@ const enum KnowledgeType {
 type KnowledgeTypeValues = `${KnowledgeType}`;
 
 export default function KnowledgeSelectItem({ data, onChange }) {
-    const [tabType, setTabType] = useState<KnowledgeTypeValues>(KnowledgeType.Knowledge)
+    const { flow } = useFlowStore()
+
+    const currentTabRef = useRef(data.value.tab)
+    const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.tab)
     const [value, setValue] = useState<any>(() => data.value.value.map(el => {
         return { label: el.label, value: el.key }
     }))
@@ -44,23 +48,22 @@ export default function KnowledgeSelectItem({ data, onChange }) {
     }
     // input文件变量s
     const loadFiles = () => {
-        // TODO
         const files = []
-        // tempData.forEach(node => {
-        //     if (node.type !== 'input') return
-        //     node.group_params.forEach(group => {
-        //         group.params.forEach(param => {
-        //             if (param.key === 'form_input') {
-        //                 param.value.forEach(val => {
-        //                     val.type === 'file' && files.push({
-        //                         label: val.value,
-        //                         value: val.key
-        //                     })
-        //                 })
-        //             }
-        //         })
-        //     })
-        // })
+        flow.nodes.forEach(node => {
+            if (node.data.type !== 'input') return
+            node.data.group_params.forEach(group => {
+                group.params.forEach(param => {
+                    if (param.key === 'form_input') {
+                        param.value.forEach(val => {
+                            val.type === 'file' && files.push({
+                                label: val.value,
+                                value: val.key
+                            })
+                        })
+                    }
+                })
+            })
+        })
         setFileOptions(files)
     }
 
@@ -89,6 +92,20 @@ export default function KnowledgeSelectItem({ data, onChange }) {
         }
     }
 
+    const handleSelect = (vals) => {
+        const resVals = currentTabRef.current === tabType ? vals : [vals[vals.length - 1]]
+        setValue(resVals)
+        onChange({
+            tab: tabType,
+            value: resVals.map(el => ({ // 夸类型先清空value
+                key: el.value,
+                label: el.label
+            }))
+        })
+
+        currentTabRef.current = tabType
+    }
+
     return <div className='node-item mb-2'>
         <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
         <MultiSelect
@@ -100,13 +117,7 @@ export default function KnowledgeSelectItem({ data, onChange }) {
             options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
             placeholder={t('build.selectKnowledgeBase')}
             searchPlaceholder={t('build.searchBaseName')}
-            onChange={(vals) => onChange({
-                tab: tabType,
-                value: vals.map(el => ({ // 夸类型先清空value
-                    key: el.value,
-                    label: el.label
-                }))
-            })}
+            onChange={handleSelect}
             onLoad={() => reload(1, '')}
             onSearch={(val) => reload(1, val)}
             onScrollLoad={(val) => loadMore(val)}

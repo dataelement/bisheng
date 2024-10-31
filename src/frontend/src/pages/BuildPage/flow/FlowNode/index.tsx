@@ -18,8 +18,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     const onChange = useCallback((evt) => {
         console.log(evt.target.value);
     }, []);
-    const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.options[0].key)
-    console.log('currentTab :>> ', currentTab);
+    const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.value)
 
     const handleUpdate = () => {
         // 创建并触发自定义事件，传递需要更新的节点 id 和数据
@@ -76,7 +75,10 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 {/* body */}
 
                 <div className='-nowheel'>
-                    {node.tab && <NodeTabs data={node.tab} onChange={setCurrentTab} />}
+                    {node.tab && <NodeTabs data={node.tab} onChange={(val) => {
+                        setCurrentTab(val)
+                        node.tab.value = val
+                    }} />}
                     {node.group_params.map(group =>
                         <ParameterGroup nodeId={node.id} key={group.name} tab={currentTab} cate={group} onOutPutChange={handleChangeOutPut} />
                     )}

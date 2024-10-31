@@ -1,4 +1,4 @@
-import { Edge, ReactFlowJsonObject, Viewport, XYPosition } from "reactflow";
+import { Edge, Node, ReactFlowJsonObject, Viewport, XYPosition } from "reactflow";
 import { APIClassType } from "../api/index";
 
 /** 流程 */
@@ -112,7 +112,7 @@ export interface WorkFlow {
   id: string;
   name: string;
   description: string;
-  nodes: WorkflowNode[];
+  nodes: Node<WorkflowNode[]>[];
   edges: Edge[];
   viewport: Viewport;
   // status: number;
@@ -180,4 +180,23 @@ export interface WorkflowNodeParam {
   multi?: boolean;
   /** Array of options */
   options?: any[];
+}
+
+/** 工作流消息结构 */
+export interface WorkflowMessage {
+  category: string;              // "processing"
+  node_id?: string;               // Node identifier
+  flow_id: string;               // Flow identifier
+  chat_id: string | null;        // Nullable, could be null if not set
+  message_id: string | null;     // Nullable, could be null if not set
+  files: any[];                  // Array, likely for file attachments
+  is_bot: boolean;               // True if the sender is a bot
+  liked?: boolean;                 // Count or boolean representing like status
+  message: any;               // Actual message content, empty in this case
+  receiver: string | null;       // Nullable receiver field
+  sender: string | null;         // Nullable sender field
+  source: number;                // Source identifier, type unclear
+  user_id: number;               // User identifier, integer type
+  end: boolean;
+  update_time: string;
 }

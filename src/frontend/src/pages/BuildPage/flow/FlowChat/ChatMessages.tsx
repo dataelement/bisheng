@@ -9,6 +9,10 @@ import { useTranslation } from "react-i18next";
 // import RunLog from "./RunLog";
 // import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
+import MessageBs from "./MessageBs";
+import MessageUser from "./MessageUser";
+import Separator from "@/components/bs-comp/chatComponent/Separator";
+import MessageBsChoose from "./MessageBsChoose";
 
 export default function ChatMessages({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
@@ -56,7 +60,9 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
     }, [messagesRef.current, messages, chatId]);
 
-    const messagesList = [...hisMessages, ...messages]
+    // const messagesList = [...hisMessages, ...messages]
+    const messagesList = [...messages]
+    console.log('ui message :>> ', messagesList);
     // 成对的qa msg
     const findQa = (msgs, index) => {
         const item = msgs[index]
@@ -86,52 +92,38 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
     }
 
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
-        {/* {guideWord && <MessageBs
-            key={9999}
-            data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
             messagesList.map((msg, index) => {
-                let type = 'llm'
-                if (msg.isSend) {
-                    type = 'user'
-                } else if (msg.category === 'divider') {
-                    type = 'separator'
-                } else if (msg.files?.length) {
-                    type = 'file'
-                } else if (['tool', 'flow', 'knowledge'].includes(msg.category)
-                ) {
-                    type = 'runLog'
-                } else if (msg.thought) {
-                    type = 'system'
-                }
-
-                switch (type) {
+                switch (msg.category) {
                     case 'user':
-                        return <MessageUser mark={mark} key={msg.id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
-                    case 'llm':
+                        return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
+                    case 'guide_word':
+                    case 'output_msg':
                         return <MessageBs
                             mark={mark}
                             logo={logo}
-                            key={msg.id}
+                            key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
                             onSource={(data) => { sourceRef.current?.openModal(data) }}
-                            onMarkClick={() => onMarkClick('answer', msg.id, findQa(messagesList, index))}
+                            onMarkClick={() => onMarkClick('answer', msg.message_id, findQa(messagesList, index))}
                         />;
-                    case 'system':
-                        return <MessageSystem key={msg.id} data={msg} />;
                     case 'separator':
-                        return <Separator key={msg.id} text={msg.message || t('chat.roundOver')} />;
-                    case 'file':
-                        return <FileBs key={msg.id} data={msg} />;
-                    case 'runLog':
-                        return <RunLog key={msg.id} data={msg} />;
+                        return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
+                    case 'output_choose_msg':
+                        return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} />;
+                    case 'output_input_msg':
+                        return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
+                    // case 'file':
+                    //     return <FileBs key={msg.id} data={msg} />;
+                    // case 'runLog':
+                    //     return <RunLog key={msg.id} data={msg} />;
                     default:
-                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
+                        return <div className="text-sm mt-2 border rounded-md p-2" key={msg.message_id}>Unknown message type</div>;
                 }
             })
         }
-        <ThumbsMessage ref={thumbRef}></ThumbsMessage>
+        {/* <ThumbsMessage ref={thumbRef}></ThumbsMessage>
         <ResouceModal ref={sourceRef}></ResouceModal> */}
     </div>
 };

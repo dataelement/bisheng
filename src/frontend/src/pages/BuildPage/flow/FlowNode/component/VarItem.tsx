@@ -6,7 +6,7 @@ import { useState } from "react";
 export default function VarItem({ data }) {
     const [open, setOpen] = useState(false)
 
-    if (Array.isArray(data.value) && data.value.length > 1) return <div className="mb-2">
+    if (Array.isArray(data.value) && data.value.length > 0) return <div className="mb-2">
         <div className="flex justify-between items-center">
             <Label className="bisheng-label">{data.label}</Label>
             <ChevronUp className={open ? 'rotate-180' : ''} onClick={() => setOpen(!open)} />

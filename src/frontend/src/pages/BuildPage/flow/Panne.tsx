@@ -9,9 +9,6 @@ import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 
-
-const initialNodes = [];
-
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
 // 流程编排面板
@@ -24,7 +21,7 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
     }, [])
 
     const { reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        setNodes, onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, { nodes: initialNodes })
+        setNodes, onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, flow)
 
     useUndoRedo(nodes,
         (data) => {
@@ -63,8 +60,10 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
         <Header flow={flow}></Header>
         <div className="flex-1 min-h-0 overflow-hidden relative">
             <Sidebar onInitStartNode={node => {
-                // TODO 判断 新flow
-                setNodes([{ id: `${node.type}_${generateUUID(5)}`, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }])
+                // start node
+                const nodeId = `${node.type}_${generateUUID(5)}`;
+                node.id = nodeId;
+                (!flow.nodes || flow.nodes.length === 0) && setNodes([{ id: nodeId, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }])
             }} />
             <main className="h-full flex flex-1 bg-gray-50" ref={keyBoardPanneRef}>
                 <div className="size-full" ref={reactFlowWrapper}>
@@ -96,6 +95,10 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                             onDragOver={onDragOver}
                             onDrop={onDrop}
                             onSelectionChange={onSelectionChange}
+                            onNodesDelete={() => {
+                                console.log('111 :>> ', 111);
+                                return false
+                            }}
                         // 自定义线组件
                         // connectionLineComponent={ConnectionLineComponent} 
                         // 校验连线合法性
@@ -128,7 +131,7 @@ const useFlow = (_reactFlowInstance, data) => {
     const reactFlowWrapper = useRef(null);
 
     const [nodes, setNodes] = useState(data.nodes);
-    const [edges, setEdges] = useState([]);
+    const [edges, setEdges] = useState(data.edges);
     console.log('nodes edges:>> ', nodes, edges);
 
     // 绑定快捷键
@@ -186,8 +189,10 @@ const useFlow = (_reactFlowInstance, data) => {
                 });
                 console.log('object :>> ', position, data);
 
+                const nodeId = `${data.node.type}_${generateUUID(5)}`
+                data.node.id = nodeId
                 setNodes((nds) => nds.concat(
-                    { id: `${data.node.id}_${generateUUID(5)}`, type: 'flowNode', position, data: data.node }
+                    { id: nodeId, type: 'flowNode', position, data: data.node }
                 ));
             } else if (event.dataTransfer.types.some((t) => t === "Files")) {
                 // 拖拽上传

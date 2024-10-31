@@ -4,6 +4,7 @@ import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { File, X } from "lucide-react";
 import { useState } from "react";
 import VarInput from "./VarInput";
+import useFlowStore from "../../flowStore";
 
 export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
     // console.log('data.value :>> ', data.value);
@@ -76,12 +77,13 @@ export const useFileUpload = (_files, onFilesChange) => {
 
         input.onchange = (e: Event) => {
             setLoading(true);
+            const flowId = 'flowid_xxxx' // TODO
 
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
                 uploadFileWithProgress(file, (progress) => {
                     console.log("Upload Progress:", progress);
-                }).then(res => {
+                }, 'icon', '/api/v1/upload/workflow/' + flowId).then(res => {
                     setLoading(false);
                     const newFiles = [...files, { name: file.name, path: res.file_path }];
                     setFiles(newFiles);

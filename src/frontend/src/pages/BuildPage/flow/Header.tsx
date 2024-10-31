@@ -21,6 +21,15 @@ const Header = ({ flow }) => {
         testRef.current?.run(flow)
     }
 
+    const handleSaveClick = () => {
+        // temp
+        localStorage.setItem('flow_tmp', JSON.stringify(flow))
+        message({
+            variant: 'success',
+            description: "假装保存成功"
+        })
+    }
+
     return (
         <header className="flex justify-between items-center p-4 py-2 bg-background shadow-md border-b">
             {/* Left Section with Back Button and Title */}
@@ -63,7 +72,7 @@ const Header = ({ flow }) => {
                     <Play className="size-3.5 mr-1" />
                     运行
                 </Button>
-                <Button variant="outline" size="sm" className="ml-4">
+                <Button variant="outline" size="sm" className="ml-4" onClick={handleSaveClick}>
                     保存
                 </Button>
                 <Button size="sm" className="ml-4">

@@ -1,18 +1,22 @@
-import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
+import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { Play } from "lucide-react";
 import { forwardRef, useImperativeHandle, useState } from "react";
-import Chat from "./Chat";
+import ChatPane from "./ChatPane";
 
 // ref
 
 export const TestSheet = forwardRef((props, ref) => {
     const [open, setOpen] = useState(false)
+    const [chatId, setChatId] = useState("")
+    const [flow, setFlow] = useState<any>(null)
 
     // Expose a `run` method through the `ref` to control the sheet's state
     useImperativeHandle(ref, () => ({
         run: (flow) => {
             setOpen(true)  // 通过 `run` 方法打开 `Sheet`
-            console.log("Flow:", flow); // 这里可以执行其他操作
+
+            setFlow( flow)
+            setChatId('xxxxxxxxx1')
         }
     }));
 
@@ -23,13 +27,8 @@ export const TestSheet = forwardRef((props, ref) => {
                 <SheetHeader>
                     <SheetTitle className="flex items-center p-2 border-b"><Play /> 工作流预览</SheetTitle>
                 </SheetHeader>
-                <div className="grid gap-4 px-2 py-4 h-[calc(100vh-40px)]">
-                    <Chat
-                        useName=''
-                        guideWord=''
-                        wsUrl={'xxxx'}
-                        onBeforSend={() => ({})}
-                    ></Chat>
+                <div className="grid gap-4 px-2 py-4 h-[calc(100vh-40px)] bg-[#fff]">
+                    <ChatPane chatId={chatId} flow={flow} />
                 </div>
                 <SheetFooter>
                     <SheetClose asChild>

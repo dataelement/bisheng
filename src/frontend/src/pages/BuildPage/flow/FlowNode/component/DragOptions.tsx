@@ -61,7 +61,7 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
 
         const newItem = {
             // key: 'xx',
-            id: generateUUID(5),
+            id: generateUUID(8),
             text: inputValue.trim(),
             type: ''
         };

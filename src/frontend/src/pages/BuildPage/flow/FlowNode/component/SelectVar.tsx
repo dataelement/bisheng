@@ -1,10 +1,13 @@
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select"
 import { ChevronRight, SprayCan } from "lucide-react"
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Colors, Icons } from "../../Sidebar"
+import useFlowStore from "../../flowStore"
 
 export default function SelectVar({ nodeId, children, onSelect }) {
     const [open, setOpen] = useState(false)
+    const { flow } = useFlowStore()
+
     const getNodeDataByTemp = (temp) => {
         const IconComp = Icons[temp.type] || SprayCan
         const color = Colors[temp.type] || 'text-gray-950'
@@ -18,12 +21,14 @@ export default function SelectVar({ nodeId, children, onSelect }) {
             data: temp.group_params
         }
     }
-    const nodeTemps = []
-    //  tempData.reduce((list, temp) => {
-    //     const newNode = getNodeDataByTemp(temp)
-    //     list.push(newNode)
-    //     return list
-    // }, [])
+    const nodeTemps = useMemo(() => {
+        if (!flow.nodes || !open) return []
+        return flow.nodes.reduce((list, temp) => {
+            const newNode = getNodeDataByTemp(temp.data)
+            list.push(newNode)
+            return list
+        }, [])
+    }, [open])
 
     // vars
     const [vars, setVars] = useState([])
