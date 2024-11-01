@@ -68,7 +68,6 @@ class GraphEngine:
         # output 节点后跟一个fake 节点用来处理中断
         if node_instance.type == NodeType.OUTPUT.value:
             fake_node = self.nodes_map[f"{node_instance.id}_fake"]
-            self.nodes_map[fake_node.id] = fake_node
             self.graph_builder.add_node(fake_node.id, fake_node.run)
             self.graph_builder.add_edge(node_instance.id, fake_node.id)
             self.graph_builder.add_conditional_edges(fake_node.id, node_instance.route_node, {

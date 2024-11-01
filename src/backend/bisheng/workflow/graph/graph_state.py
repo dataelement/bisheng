@@ -33,6 +33,8 @@ class GraphState(BaseModel):
             return None
 
         # todo 某些特殊变量的处理 chat_history、source_document等
+        if key == "chat_history":
+            return self.get_history_memory()
         return self.variables_pool[node_id].get(key)
 
     def get_variable_by_str(self, contact_key: str) -> Any:

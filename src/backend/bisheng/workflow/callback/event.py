@@ -34,9 +34,11 @@ class OutputMsgData(BaseModel):
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files')
 
+
 class OutputMsgInputData(OutputMsgData):
     key: str = Field('', description='variable key')
     input_msg: str = Field('', description='default input msg')
+
 
 class OutputMsgChooseData(OutputMsgData):
     key: str = Field('', description='variable key')
