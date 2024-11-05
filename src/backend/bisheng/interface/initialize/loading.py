@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Sequence, Type
 import httpx
 import openai
 from bisheng.cache.utils import file_download
-from bisheng.chat.config import ChatConfig
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.interface.agents.base import agent_creator
 from bisheng.interface.chains.base import chain_creator
@@ -31,7 +30,6 @@ from langchain.agents import agent as agent_module
 from langchain.agents.agent import AgentExecutor
 from langchain.agents.agent_toolkits.base import BaseToolkit
 from langchain.agents.tools import BaseTool
-from langchain.base_language import BaseLanguageModel
 from langchain.chains.base import Chain
 from langchain.document_loaders.base import BaseLoader
 from langchain.vectorstores.base import VectorStore
@@ -463,7 +461,7 @@ def instantiate_embedding(class_object, params: Dict):
             params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
             params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
         if class_object.__name__ == 'OpenAIEmbeddings':
-            params["check_embedding_ctx_length"] = False
+            params['check_embedding_ctx_length'] = False
 
         return class_object(**params)
     except ValidationError:
