@@ -2,6 +2,7 @@ import { Button } from "@/components/bs-ui/button";
 import { UploadCloud, Variable } from "lucide-react";
 import { useEffect, useRef } from "react";
 import SelectVar from "./SelectVar";
+import { Label } from "@/components/bs-ui/label";
 
 // ' ' -> '&nbsp;'
 const htmlDecode = (input) => {
@@ -86,7 +87,7 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
                 }
             }
             cursorPositionRef.current = position;
-            console.log('object :>> ', cursorPositionRef.current);
+            // console.log('cursorPositionRef :>> ', cursorPositionRef.current);
         }
     };
 
@@ -113,33 +114,34 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
         textAreaHtmlRef.current = newHtmlContent;
         textareaRef.current.innerHTML = textAreaHtmlRef.current;
         cursorPositionRef.current += `{{#${key}#}}`.length
-        console.log('object 2:>> ', cursorPositionRef.current);
+        // console.log('cursorPositionRef:>> ', cursorPositionRef.current);
 
         onChange(textMsgRef.current);
     };
 
-    return <div className="nodrag mt-2 flex flex-col min-h-[80px] w-full relative rounded-md border border-input bg-search-input text-sm shadow-sm">
+    return <div className="nodrag mt-2 flex flex-col w-full relative rounded-md border border-input bg-search-input text-sm shadow-sm">
+        <div className="flex justify-between gap-1 border-b px-2 py-1">
+            <Label className="bisheng-label text-xs">变量输入</Label>
+            <div className="flex gap-2">
+                <SelectVar nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
+                    <Variable size={16} className="text-muted-foreground hover:text-gray-800" />
+                </SelectVar>
+                {onUpload && <Button variant="ghost" className="p-0 h-4 text-muted-foreground" onClick={onUpload}>
+                    <UploadCloud size={16} />
+                </Button>}
+            </div>
+        </div>
         <div
             ref={textareaRef}
             contentEditable
             onInput={handleInput}
             onClick={handleSelection}
             onKeyUp={handleSelection}
-            className="px-3 py-2 border-none outline-none bg-search-input text-[#111] rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="px-3 py-2 min-h-[80px] max-h-24 overflow-y-auto border-none outline-none bg-search-input text-[#111] rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         // value={value.msg}
         // onChange={(e) => setValue({ ...value, msg: e.target.value })}
         // placeholder="Enter your message..."
         ></div>
-
-        <div className="absolute top-0 right-2 flex gap-1">
-            <SelectVar nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                <Variable size={18} className="text-muted-foreground hover:text-gray-800" />
-            </SelectVar>
-            {onUpload && <Button variant="ghost" className="p-0 h-8 text-muted-foreground" onClick={onUpload}>
-                <UploadCloud size={18} />
-            </Button>}
-        </div>
-
         {children}
     </div>
 };

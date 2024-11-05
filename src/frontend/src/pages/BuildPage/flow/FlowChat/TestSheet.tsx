@@ -15,7 +15,7 @@ export const TestSheet = forwardRef((props, ref) => {
         run: (flow) => {
             setOpen(true)  // 通过 `run` 方法打开 `Sheet`
 
-            setFlow( flow)
+            setFlow(flow)
             setChatId('xxxxxxxxx1')
         }
     }));
@@ -25,9 +25,9 @@ export const TestSheet = forwardRef((props, ref) => {
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetContent className="sm:max-w-[520px]">
                 <SheetHeader>
-                    <SheetTitle className="flex items-center p-2 border-b"><Play /> 工作流预览</SheetTitle>
+                    <SheetTitle className="flex items-center p-2 text-md"><Play size={16} /> 工作流预览</SheetTitle>
                 </SheetHeader>
-                <div className="grid gap-4 px-2 py-4 h-[calc(100vh-40px)] bg-[#fff]">
+                <div className="px-2 py-4 h-[calc(100vh-40px)] bg-[#fff]">
                     <ChatPane chatId={chatId} flow={flow} />
                 </div>
                 <SheetFooter>

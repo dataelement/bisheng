@@ -122,35 +122,34 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 <Label className="bisheng-label">表单项类型</Label>
                 <div className="flex gap-4 justify-between mx-6 mt-2">
                     <Button
-                        className="flex flex-col h-18 w-28"
+                        className={`flex flex-col h-18 w-28 ${formData.formType === FormType.Text ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
                         type="button"
-                        variant={formData.formType === FormType.Text ? "default" : "outline"}
+                        variant="outline"
                         onClick={() => setFormData({ ...formData, formType: FormType.Text })}
                     >
-                        <Type />
+                        <Type size={18} />
                         文本输入
                     </Button>
                     <Button
-                        className="flex flex-col h-18 w-28"
+                        className={`flex flex-col h-18 w-28 ${formData.formType === FormType.Select ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
                         type="button"
-                        variant={formData.formType === FormType.Select ? "default" : "outline"}
+                        variant="outline"
                         onClick={() => setFormData({ ...formData, formType: FormType.Select })}
                     >
-                        <ChevronsDown />
+                        <ChevronsDown size={18} />
                         下拉选项
                     </Button>
                     <Button
-                        className="flex flex-col h-18 w-28"
+                        className={`flex flex-col h-18 w-28 ${formData.formType === FormType.File ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
                         type="button"
-                        variant={formData.formType === FormType.File ? "default" : "outline"}
+                        variant="outline"
                         onClick={() => setFormData({ ...formData, formType: FormType.File })}
                     >
-                        <CloudUpload />
+                        <CloudUpload size={18} />
                         文件
                     </Button>
                 </div>
             </div>
-
             <div>
                 <Label className="flex items-center bisheng-label">
                     展示名称
@@ -290,7 +289,7 @@ export default function InputFormItem({ data, onChange }) {
     };
 
     return (
-        <div className="node-item mb-2 nodrag" data-key={data.key}>
+        <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
                 <DragOptions
                     options={data.value.map(el => ({
@@ -302,7 +301,7 @@ export default function InputFormItem({ data, onChange }) {
                     onChange={handleOptionsChange} // 拖拽排序后的更新
                 />
             )}
-            <Button onClick={handleOpen} variant='outline' className="w-full border-dashed mt-2">
+            <Button onClick={handleOpen} variant='outline' className="border-primary text-primary mt-2">
                 {data.label}
             </Button>
 

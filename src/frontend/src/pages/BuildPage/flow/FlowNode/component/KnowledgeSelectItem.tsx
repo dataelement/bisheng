@@ -106,7 +106,7 @@ export default function KnowledgeSelectItem({ data, onChange }) {
         currentTabRef.current = tabType
     }
 
-    return <div className='node-item mb-2'>
+    return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
         <MultiSelect
             id="knowledge-select-item"

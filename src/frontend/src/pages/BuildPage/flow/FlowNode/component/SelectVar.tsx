@@ -1,8 +1,8 @@
-import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select"
-import { ChevronRight, SprayCan } from "lucide-react"
-import { useMemo, useRef, useState } from "react"
-import { Colors, Icons } from "../../Sidebar"
-import useFlowStore from "../../flowStore"
+import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
+import { ChevronRight } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import useFlowStore from "../../flowStore";
+import NodeLogo from "../NodeLogo";
 
 const isMatch = (obj, expression) => {
     const fn = new Function('value', `return ${expression}`);
@@ -14,9 +14,6 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
     const { flow } = useFlowStore()
 
     const getNodeDataByTemp = (temp) => {
-        const IconComp = Icons[temp.type] || SprayCan
-        const color = Colors[temp.type] || 'text-gray-950'
-
         const hasChild = temp.group_params.some(group =>
             group.params.some(param => param.global)
         )
@@ -25,7 +22,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
             id: temp.id,
             type: temp.type,
             name: temp.name,
-            icon: <IconComp className={`size-5 ${color}`} />,
+            icon: <NodeLogo type={temp.type} />,
             desc: temp.description,
             data: hasChild ? temp.group_params : null
         }
@@ -43,18 +40,21 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
     const [vars, setVars] = useState([])
     const currentMenuRef = useRef(null)
     const handleShowVars = (item) => {
-        console.log('123 :>> ', 123);
         currentMenuRef.current = item
         // start节点 preset_question#0(中文)
         // input节点 key
         // agent xxx#0
-        const _vars = []
+        let _vars = []
         item.data.forEach(group => {
             group.params.forEach(param => {
                 // 不能选自己(相同变量名视为self) param.key
                 if (param.key === itemKey) return
-
-                if (param.global === 'key'
+                if (!param.global) return
+                // 处理code表达式
+                if (param.global.indexOf('code') === 0) {
+                    const result = isMatch(param, param.global.replace('code:', ''));
+                    _vars = [..._vars, ...result]
+                } else if (param.global === 'key'
                     || (param.global === 'self' && nodeId === item.id)) {
                     _vars.push({
                         label: param.key,
@@ -71,7 +71,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
                     // 特殊逻辑
                     // 私有变量
                     if (key === 'self') {
-                        if (nodeId === item.id && value.indexOf(item.key) !== -1) {
+                        if (nodeId === item.id && value.indexOf(itemKey) !== -1) {
                             _vars.push({
                                 label: param.key,
                                 value: param.key

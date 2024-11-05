@@ -5,7 +5,7 @@ import React from "react";
 export default function SliderItem({ data, onChange }) {
     const [value, setValue] = React.useState(data.value * 100)
 
-    return <div className='node-item mb-2' data-key={data.key}>
+    return <div className='node-item mb-4' data-key={data.key}>
         <Label className='bisheng-label'>{data.label}</Label>
         <div className="flex gap-4 mt-2">
             <Slider

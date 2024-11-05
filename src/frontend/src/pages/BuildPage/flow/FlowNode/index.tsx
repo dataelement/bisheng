@@ -1,16 +1,11 @@
-import { Badge } from '@/components/bs-ui/badge';
-import { Input, Textarea } from '@/components/bs-ui/input';
-import EditTitle from '@/components/bs-ui/input/editTitle';
-import { Label } from '@/components/bs-ui/label';
-import { cn } from '@/utils';
-import { House, SprayCan } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { LoadingIcon } from '@/components/bs-icons/loading';
+import { WorkflowNode } from '@/types/flow';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
+import { useCallback, useEffect, useState } from 'react';
+import NodeLogo from './NodeLogo';
+import NodeTabs from './NodeTabs';
 import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
-import { WorkflowNode } from '@/types/flow';
-import { Icons } from '../Sidebar';
-import NodeTabs from './NodeTabs';
 
 
 function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNode, selected: boolean, isConnectable: boolean }) {
@@ -30,8 +25,6 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         });
         window.dispatchEvent(event);
     };
-
-    const CompIcon = Icons[node.type] || SprayCan
 
     useEffect(() => {
         window.node = node
@@ -55,30 +48,37 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     return (
-        <div>
+        <div className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[20px] p-[1px]`}>
             {/* head bars */}
             <NodeToolbar align="end">
-                <NodeToolbarComponent></NodeToolbarComponent>
+                <NodeToolbarComponent nodeId={node.id} type={node.type}></NodeToolbarComponent>
             </NodeToolbar>
 
-            <div className={cn("bisheng-node border-2", selected ? "active" : "")}>
-                {/* head */}
-                <div className='p-4 bisheng-node-head'>
-                    <div className='relative z-10 flex gap-2'>
-                        <CompIcon className='text-blue-700' />
-                        <EditTitle str={node.name} className={'text-background'} onChange={() => { }}>
-                            {(val) => <p className='text-gray-50 font-bold'>{val}</p>}
-                        </EditTitle>
-                    </div>
+            <div className="bisheng-node">
+                {/* top */}
+                <div className='bisheng-node-top flex items-center'>
+                    <LoadingIcon className='size-5 text-[#B3BBCD]' />
+                    <span className='text-sm text-[#B3BBCD]'>BISHENG</span>
                 </div>
-                <p className='text-xs p-2 bg-background text-muted-foreground'>{node.description}</p>
+                {/* head */}
+                <div className='bisheng-node-head'>
+                    <div className='relative z-10 flex gap-2'>
+                        <NodeLogo type={node.type} />
+                        <span>{node.name}</span>
+                        {/* <EditTitle str={node.name} className={'text-background'} onChange={() => { }}>
+                            {(val) => <p className='text-gray-50 font-bold'>{val}</p>}
+                        </EditTitle> */}
+                    </div>
+                    <p className='text-xs text-muted-foreground mt-2'>{node.description}</p>
+                </div>
                 {/* body */}
-
                 <div className='-nowheel'>
-                    {node.tab && <NodeTabs data={node.tab} onChange={(val) => {
-                        setCurrentTab(val)
-                        node.tab.value = val
-                    }} />}
+                    {node.tab && <NodeTabs
+                        data={node.tab}
+                        onChange={(val) => {
+                            setCurrentTab(val)
+                            node.tab.value = val
+                        }} />}
                     {node.group_params.map(group =>
                         <ParameterGroup nodeId={node.id} key={group.name} tab={currentTab} cate={group} onOutPutChange={handleChangeOutPut} />
                     )}
@@ -89,14 +89,14 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     type="target"
                     position={Position.Left}
                     className='bisheng-flow-handle'
-                    style={{ left: -8 }}
+                    style={{ left: -16 }}
                 />}
                 {!['condition', 'output', 'end'].includes(node.type) && <Handle
                     id="right_handle"
                     type="source"
                     position={Position.Right}
                     className='bisheng-flow-handle'
-                    style={{ right: -8 }}
+                    style={{ right: -16 }}
                 />}
             </div>
         </div>

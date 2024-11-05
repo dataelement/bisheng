@@ -49,7 +49,7 @@ export default function ModelItem({ data, onChange }) {
         return _defaultValue
     }, [data.value, options])
 
-    return <div className='node-item mb-2'>
+    return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
         {defaultValue ? <Cascader
             defaultValue={defaultValue}

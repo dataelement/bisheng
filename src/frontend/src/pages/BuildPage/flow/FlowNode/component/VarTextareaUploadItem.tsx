@@ -18,7 +18,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
     const { files, handleFileUpload, handleFileRemove } = useFileUpload(data.value?.files || [], handleFilesChange);
 
     return (
-        <div className='node-item mb-2 nodrag' data-key={data.key}>
+        <div className='node-item mb-4 nodrag' data-key={data.key}>
             <Label className='bisheng-label'>{data.label}</Label>
             <VarInput
                 itemKey={data.key}
@@ -29,11 +29,11 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
                 onChange={handleInputChange}
             >
                 {/* Display uploaded images */}
-                <div className="flex flex-wrap gap-4 p-2">
+                <div className="flex flex-wrap gap-4">
                     {
                         files.map((file, index) => (
                             /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.path) ?
-                                <div key={index} className="relative border rounded-md size-12">
+                                <div key={index} className="relative border rounded-md size-12 my-2">
                                     <img src={file.path} alt="" className="object-cover w-12 h-12 rounded-md" />
                                     <Button
                                         size="icon"

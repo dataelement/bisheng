@@ -1014,42 +1014,20 @@
   }
 
   .bisheng-node {
-    @apply relative flex w-96 flex-col justify-center shadow-md border rounded-md bg-accent
+    @apply relative flex w-80 flex-col justify-center rounded-[20px] bg-[#F7F8FB] pb-5 shadow-sm border-2 border-primary/10
   }
-  .bisheng-node.active{
-    @apply border-primary
+  .bisheng-node-top{
+    @apply bg-[#EFF1F5] rounded-t-[20px] px-3 py-1.5
   }
   .bisheng-node-head{
     overflow: hidden;
     position: relative;
-    @apply rounded-t-sm
-  }
-  .bisheng-node-head::before{
-    content: '';
-    position: absolute;
-    top: -250px;
-    left: -50%;
-    width: 200%;
-    height: 500px;
-    background-image: linear-gradient(45deg, #12a5f8 0%, #FA8BFF 90%);
-    animation: rotateBG 4s linear infinite;
-    /* 024de3 024de3*/
-  }
-  .bisheng-node.active .bisheng-node-head::before{
-    /* animation: rotateBG 4s linear infinite; */
-  }
-  @keyframes rotateBG {
-    from {
-      transform: rotate(0deg);
-    }
-
-    to {
-      transform: rotate(360deg);
-    }
+    background: #F9F9FA;
+    @apply p-3 border-t border-[#cad0de]
   }
 
   .bisheng-flow-handle {
-    @apply h-3 w-3 border-2 border-primary hover:scale-[2] transition translate-x-0 bg-background;
+    @apply h-2 w-2 bg-primary border border-primary hover:scale-[2] transition translate-x-0;
   }
   .bisheng-flow-handle::before {
     content: '';
@@ -1070,7 +1048,10 @@
     @apply opacity-100 ;
   }
   .textarea-badge{
-    @apply border rounded-md px-1 bg-border
+    @apply border border-[#E8EDF2] rounded-md px-1 bg-[#EFF3F8] text-primary
+  }
+  .textarea-badge::before{
+    content: '(x)';
   }
   /* .bisheng-flow-handle:hover::after{
     content: '';

@@ -4,7 +4,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 export default function InputListItem({ data, onChange }) {
 
-    return <div className='node-item mb-2'>
+    return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label">
             {data.label}
             {data.help && <QuestionTooltip content={data.help} />}

@@ -9,6 +9,11 @@ const enum API_TYPE {
     FLOW = 'flow'
 }
 
+/**
+ * 
+ * @param type 助手/技能/工作流
+ * @ 助手id/技能useContext(TabsContext)/ 
+ */
 const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
     const [activeMenu, setActiveMenu] = useState('api-access');
     const { t } = useTranslation()

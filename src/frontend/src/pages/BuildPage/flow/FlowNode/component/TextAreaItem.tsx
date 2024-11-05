@@ -5,9 +5,10 @@ import { useState } from "react";
 export default function TextAreaItem({ data, onChange }) {
     const [value, setValue] = useState(data.value || '')
 
-    return <div className='node-item mb-2' data-key={data.key}>
+    return <div className='node-item mb-4' data-key={data.key}>
         <Label className='bisheng-label'>{data.label}</Label>
         <Textarea value={value}
+            className="mt-2"
             onChange={(e) => {
                 setValue(e.target.value);
                 onChange(e.target.value);

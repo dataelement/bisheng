@@ -28,7 +28,7 @@ export default function FlowPage() {
 
     const { flow, setFlow } = useFlowStore()
 
-    const _flow = useMemo(() => {
+    const _flow = useEffect(() => {
         const str = localStorage.getItem('flow_tmp')
         const f = str ? JSON.parse(str) : flow
         setFlow(f)
@@ -36,7 +36,7 @@ export default function FlowPage() {
     }, [])
     return (
         <div className="flow-page-positioning">
-            {_flow && <Panne flow={_flow} />}
+            {flow && <Panne flow={flow} />}
         </div>
     );
 }

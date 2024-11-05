@@ -46,14 +46,14 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }
         })
     }
 
-    return <div className='node-item mb-2' data-key={data.key}>
+    return <div className='node-item mb-4' data-key={data.key}>
         <div className="flex justify-between items-center">
             <Label className="flex items-center bisheng-label">
                 {data.required && <span className="text-red-500">*</span>}
                 {data.label}
                 {data.help && <QuestionTooltip content={data.help} />}
             </Label>
-            <Badge variant="outline" className="bg-input text-muted-foreground">{data.key}</Badge>
+            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
         </div>
         <SelectVar nodeId={nodeId} itemKey={data.key} onSelect={handleChange}>
             <div className="no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">

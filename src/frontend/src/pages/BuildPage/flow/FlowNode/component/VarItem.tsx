@@ -20,8 +20,8 @@ export default function VarItem({ data }) {
         </div>
     </div>
 
-    return <div className="mb-2 flex justify-between items-center">
+    return <div className="mb-4 flex justify-between items-center">
         <Label className="bisheng-label">{data.label}</Label>
-        <Badge variant="outline" className="bg-input text-muted-foreground">{data.key}</Badge>
+        <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
     </div>
 };

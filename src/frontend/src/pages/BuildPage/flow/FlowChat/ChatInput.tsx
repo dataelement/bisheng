@@ -27,7 +27,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
-    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, insetSeparator, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, insetSeparator, destory, setShowGuideQuestion } = useMessageStore()
     // console.log('ui messages :>> ', messages);
 
     const currentChatIdRef = useRef(null)
@@ -233,11 +233,8 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             description: data.message
         });
         if (data.category === 'node_run') return // TODO 进度
-        if (data.type === 'close') {
-            return insetSeparator('本轮结束')
-        }
         if (data.category === 'user_input') {
-            inputNodeIdRef.current =  data.message.node_id
+            inputNodeIdRef.current = data.message.node_id
             // 待用户输入
             const form = onBeforSend('getInputForm', {
                 nodeId: data.message.node_id,
@@ -245,12 +242,19 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             })
             form ? setInputForm(form) : setInputLock({ locked: false, reason: '' })
             return
-        }
-        if (data.category === 'guide_question') {
+        } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.filter(q => q))
         }
-        if (data.type === 'over') {
+        if (data.type === 'close') {
+            return insetSeparator('本轮结束')
+        } else if (data.type === 'over') {
             createWsMsg(data)
+        } else if (data.type === 'start') {
+            createWsMsg(data)
+        } else if (data.type === 'stream') {
+            updateCurrentMessage(data)
+        } else if (data.type === 'end') {
+            updateCurrentMessage(data)
         }
 
         // if (Array.isArray(data) && data.length) return

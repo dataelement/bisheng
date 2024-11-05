@@ -1,10 +1,10 @@
+import { generateUUID } from '@/components/bs-ui/utils';
 import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
+import { WorkflowMessage } from '@/types/flow';
+import { formatDate } from '@/util/utils';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
-import { formatDate } from '@/util/utils';
-import { WorkflowMessage } from '@/types/flow';
-import { generateUUID } from '@/components/bs-ui/utils';
 
 /**
  * 会话消息管理
@@ -34,7 +34,7 @@ type Actions = {
     destory: () => void;
     createSendMsg: (msg: string) => void;
     createWsMsg: (data: any) => void;
-    updateCurrentMessage: (wsdata: any, cover: boolean) => void;
+    updateCurrentMessage: (data: any) => void;
     changeChatId: (chatId: string) => void;
     startNewRound: (str: string) => void;
     insetSeparator: (text: string) => void;
@@ -75,7 +75,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
 }
 
 let currentChatId = ''
-const runLogsTypes = ['tool', 'flow', 'knowledge']
+
 export const useMessageStore = create<State & Actions>((set, get) => ({
     chatId: '',
     messages: [],
@@ -105,6 +105,25 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             })
             return { messages: newChat }
         })
+    },
+    // stream end
+    updateCurrentMessage(data) {
+        const messages = get().messages
+
+        console.log('change updateCurrentMessage');
+        const currentMessageIndex = messages.findIndex(msg => msg.message_id === data.message_id)
+        const currentMessage = messages[currentMessageIndex]
+
+        const newCurrentMessage = {
+            ...currentMessage,
+            ...data,
+            message: currentMessage.message + data.message,
+            end: ['end', 'over'].includes(data.type),
+            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+        }
+
+        messages[currentMessageIndex] = newCurrentMessage
+        set((state) => ({ messages: [...messages] }))
     },
     createSendMsg(msg) {
         set((state) => ({
@@ -182,70 +201,70 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
 
 
-    // stream end
-    updateCurrentMessage(wsdata, cover = false) {
-        // console.log( wsdata.chat_id, get().chatId);
-        // if (wsdata.end) {
-        //     debugger
-        // }
-        console.log('change updateCurrentMessage');
-        const messages = get().messages
-        const isRunLog = runLogsTypes.includes(wsdata.category);
-        // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
-        let currentMessageIndex = 0
-        for (let i = messages.length - 1; i >= 0; i--) {
-            if (isRunLog && messages[i].extra === wsdata.extra) {
-                currentMessageIndex = i;
-                break;
-            } else if (!isRunLog && !runLogsTypes.includes(messages[i].category)) {
-                currentMessageIndex = i;
-                break;
-            }
-        }
-        const currentMessage = messages[currentMessageIndex]
+    // // stream end
+    // updateCurrentMessage(wsdata, cover = false) {
+    //     // console.log( wsdata.chat_id, get().chatId);
+    //     // if (wsdata.end) {
+    //     //     debugger
+    //     // }
+    //     console.log('change updateCurrentMessage');
+    //     const messages = get().messages
+    //     const isRunLog = runLogsTypes.includes(wsdata.category);
+    //     // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
+    //     let currentMessageIndex = 0
+    //     for (let i = messages.length - 1; i >= 0; i--) {
+    //         if (isRunLog && messages[i].extra === wsdata.extra) {
+    //             currentMessageIndex = i;
+    //             break;
+    //         } else if (!isRunLog && !runLogsTypes.includes(messages[i].category)) {
+    //             currentMessageIndex = i;
+    //             break;
+    //         }
+    //     }
+    //     const currentMessage = messages[currentMessageIndex]
 
-        const newCurrentMessage = {
-            ...currentMessage,
-            ...wsdata,
-            id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
-            message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
-            thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
-            files: wsdata.files || [],
-            category: wsdata.category || '',
-            source: wsdata.source
-        }
-        // 无id补上（如文件解析完成消息，后端无返回messageid）
-        if (!newCurrentMessage.id) {
-            newCurrentMessage.id = Math.random() * 1000000
-            // console.log('msg:', newCurrentMessage);
-        }
+    //     const newCurrentMessage = {
+    //         ...currentMessage,
+    //         ...wsdata,
+    //         id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
+    //         message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
+    //         thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
+    //         files: wsdata.files || [],
+    //         category: wsdata.category || '',
+    //         source: wsdata.source
+    //     }
+    //     // 无id补上（如文件解析完成消息，后端无返回messageid）
+    //     if (!newCurrentMessage.id) {
+    //         newCurrentMessage.id = Math.random() * 1000000
+    //         // console.log('msg:', newCurrentMessage);
+    //     }
 
-        messages[currentMessageIndex] = newCurrentMessage
-        // 会话特殊处理，兼容后端的缺陷
-        if (!isRunLog) {
-            // start - end 之间没有内容删除load
-            if (newCurrentMessage.end && !(newCurrentMessage.files.length || newCurrentMessage.thought || newCurrentMessage.message)) {
-                messages.pop()
-            }
-            // 无 messageid 删除
-            // if (newCurrentMessage.end && !newCurrentMessage.id) {
-            //     messages.pop()
-            // }
-            // 删除重复消息
-            const prevMessage = messages[currentMessageIndex - 1];
-            if ((prevMessage
-                && prevMessage.message === newCurrentMessage.message
-                && prevMessage.thought === newCurrentMessage.thought)
-                || cover) {
-                const removedMsg = messages.pop()
-                // 使用最后一条的信息作为准确信息
-                Object.keys(prevMessage).forEach((key) => {
-                    prevMessage[key] = removedMsg[key]
-                })
-            }
-        }
-        set((state) => ({ messages: [...messages] }))
-    },
+    //     messages[currentMessageIndex] = newCurrentMessage
+    //     // 会话特殊处理，兼容后端的缺陷
+    //     if (!isRunLog) {
+    //         // start - end 之间没有内容删除load
+    //         if (newCurrentMessage.end && !(newCurrentMessage.files.length || newCurrentMessage.thought || newCurrentMessage.message)) {
+    //             messages.pop()
+    //         }
+    //         // 无 messageid 删除
+    //         // if (newCurrentMessage.end && !newCurrentMessage.id) {
+    //         //     messages.pop()
+    //         // }
+    //         // 删除重复消息
+    //         const prevMessage = messages[currentMessageIndex - 1];
+    //         if ((prevMessage
+    //             && prevMessage.message === newCurrentMessage.message
+    //             && prevMessage.thought === newCurrentMessage.thought)
+    //             || cover) {
+    //             const removedMsg = messages.pop()
+    //             // 使用最后一条的信息作为准确信息
+    //             Object.keys(prevMessage).forEach((key) => {
+    //                 prevMessage[key] = removedMsg[key]
+    //             })
+    //         }
+    //     }
+    //     set((state) => ({ messages: [...messages] }))
+    // },
     startNewRound(str) {
         get().insetSeparator(str)
         set((state) => ({ showGuideQuestion: true }))

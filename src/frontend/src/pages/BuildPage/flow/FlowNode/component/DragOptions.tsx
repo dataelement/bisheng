@@ -105,28 +105,34 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
                                             style={{ ...provided.draggableProps.style, position: 'relative', top: 0, left: 0 }}
                                             className="flex items-center gap-2 relative"
                                         >
-                                            <div {...provided.dragHandleProps} className="flex flex-col justify-center">
-                                                <GripVertical size={20} color="#999" />
+                                            <div className='group w-full flex items-center rounded-md border border-input bg-search-input shadow-sm'>
+                                                <div {...provided.dragHandleProps} className="flex flex-col justify-center border-r px-1">
+                                                    <GripVertical size={20} color="#999" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <div
+                                                        className="h-9 leading-9 w-[200px] px-2 text-sm text-[#111] dark:text-gray-50 cursor-not-allowed opacity-50 truncate"
+                                                    >{item.text}</div>
+                                                </div>
+                                                <div className='flex gap-1 items-center pr-2'>
+                                                    <span className='text-xs text-muted-foreground group-hover:hidden'>{item.type}</span>
+                                                    {onEditClick && <Edit size={14} onClick={() => onEditClick(index, item)} className='cursor-pointer text-muted-foreground hover:text-foreground hidden group-hover:block' />}
+                                                    {items.length > 1 && (
+                                                        <Trash2
+                                                            size={14}
+                                                            className="cursor-pointer text-gray-500 hover:text-red-500 transition-colors duration-200 hidden group-hover:block"
+                                                            onClick={() => handleDelete(item.text)}
+                                                        />
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="flex-1 relative">
-                                                <Input value={item.text} disabled className="cursor-default" />
-                                                <span className='absolute top-2.5 right-2 text-xs text-muted-foreground'>{item.type}</span>
-                                            </div>
-                                            {onEditClick && <Edit size={20} onClick={() => onEditClick(index, item)} className='cursor-pointer text-muted-foreground hover:text-foreground' />}
-                                            {items.length > 1 && (
-                                                <Trash2
-                                                    size={20}
-                                                    className="cursor-pointer text-gray-500 hover:text-red-500 transition-colors duration-200"
-                                                    onClick={() => handleDelete(item.text)}
-                                                />
-                                            )}
                                             {
                                                 edges && <Handle
                                                     id={item.id}
                                                     type="source"
                                                     position={Position.Right}
                                                     className='bisheng-flow-handle'
-                                                    style={{ right: -18, top: 12 }}
+                                                    style={{ right: -12, top: 12 }}
                                                 />
                                             }
                                         </div>

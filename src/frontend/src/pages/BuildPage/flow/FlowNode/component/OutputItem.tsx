@@ -38,7 +38,7 @@ const OutputItem = ({ nodeId, data, onChange }) => {
                 return <div className='node-item mb-2' data-key={data.key}>
                     <div className="flex justify-between items-center">
                         <Label className='bisheng-label'>用户输入框展示内容</Label>
-                        <Badge variant="outline" className="bg-input text-muted-foreground">{data.key}</Badge>
+                        <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
                     </div>
                     <VarInput nodeId={nodeId} itemKey={data.key} flowNode={data} value={data.value.value} onChange={(msg) => onChange({ type: interactionType, value: msg })} />
                 </div>
@@ -48,7 +48,7 @@ const OutputItem = ({ nodeId, data, onChange }) => {
     };
 
     return (
-        <div className='node-item mb-2' data-key={data.key}>
+        <div className='node-item mb-4' data-key={data.key}>
             <Label className='bisheng-label'>{data.label}</Label>
             {/* 交互类型选择器 */}
             <RadioGroup value={interactionType} onValueChange={(val) => {
@@ -80,7 +80,7 @@ const OutputItem = ({ nodeId, data, onChange }) => {
                     type="source"
                     position={Position.Right}
                     className='bisheng-flow-handle'
-                    style={{ right: -8 }}
+                    style={{ right: -16 }}
                 />}
             </div>
         </div>

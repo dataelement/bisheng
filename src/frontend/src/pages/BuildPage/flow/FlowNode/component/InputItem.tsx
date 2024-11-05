@@ -6,7 +6,7 @@ import { useState } from "react";
 export default function InputItem({ type = 'text', data, onChange }) {
     const [value, setValue] = useState(data.value || '')
 
-    return <div className='node-item mb-2' data-key={data.key}>
+    return <div className='node-item mb-4' data-key={data.key}>
         <Label className="flex items-center bisheng-label">
             {data.label}
             {data.help && <QuestionTooltip content={data.help} />}

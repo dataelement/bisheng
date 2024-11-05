@@ -194,14 +194,14 @@ ${t('build.exampleTwo')}
                 <DialogHeader>
                     <DialogTitle>{isEditMode ? '编辑' : '创建'}{appType === AppType.ASSISTANT ? '助手' : '工作流'}</DialogTitle>
                 </DialogHeader>
-                <div className="flex flex-col gap-2 py-6">
-                    <div>
+                <div className="flex flex-col mt-2">
+                    <div className="mb-6">
                         <label htmlFor="name" className="bisheng-label">{appType === AppType.ASSISTANT ? '助手头像' : '工作流头像'}</label>
-                        <Avator value={formData.url} className="mt-2" onChange={uploadAvator}>
-                            <AssistantIcon className="bg-primary w-9 h-9 rounded-sm" />
+                        <Avator value={formData.url} className="mt-3" onChange={uploadAvator}>
+                            <AssistantIcon className="bg-primary w-8 h-8 rounded-sm" />
                         </Avator>
                     </div>
-                    <div>
+                    <div className="mb-6">
                         <label htmlFor="name" className="bisheng-label">
                             {appType === AppType.ASSISTANT ? t('build.assistantName') : '名称'}
                             <span className="bisheng-tip">*</span>
@@ -211,20 +211,20 @@ ${t('build.exampleTwo')}
                             name="name"
                             maxLength={50}
                             placeholder={appType === AppType.ASSISTANT ? '给助手起个名字' : '给工作流起个名字'}
-                            className="mt-2"
+                            className="mt-3"
                             value={formData.name}
                             onChange={handleChange}
                         />
                         {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
                     </div>
-                    <div>
+                    <div className="mb-6">
                         <label htmlFor="desc" className="bisheng-label">{appType === AppType.ASSISTANT ? '你希望助手的角色是什么，具体完成什么任务？' : '描述'}</label>
                         <Textarea
                             id="desc"
                             name="desc"
                             placeholder={appType === AppType.ASSISTANT ? t('build.forExample') : '输入工作流描述'}
                             maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
-                            className="mt-2 min-h-32"
+                            className="mt-3 min-h-32"
                             value={formData.desc}
                             onChange={handleChange}
                         />

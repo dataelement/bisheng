@@ -1,11 +1,11 @@
 import { generateUUID } from "@/components/bs-ui/utils";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
 import { useCopyPaste, useUndoRedo } from "@/util/hook";
-import cloneDeep from "lodash-es/cloneDeep";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ReactFlow, Background, BackgroundVariant, Connection, Controls, addEdge, applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import { Background, BackgroundVariant, Connection, Controls, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
+import '@xyflow/react/dist/style.css';
+import cloneDeep from "lodash-es/cloneDeep";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
 import Header from "./Header";
@@ -58,9 +58,10 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
         }
     };
 
+    const [showApiPage, setShowApiPage] = useState(false)
     return <div className="flex flex-col h-full overflow-hidden">
-        <Header flow={flow}></Header>
-        <div className="flex-1 min-h-0 overflow-hidden relative">
+        <Header flow={flow} onTabChange={(type) => setShowApiPage('api' === type)}></Header>
+        <div className={`flex-1 min-h-0 overflow-hidden ${showApiPage ? 'hidden' : ''} relative`}>
             <Sidebar onInitStartNode={node => {
                 // start node
                 const nodeId = `${node.type}_${generateUUID(5)}`;
@@ -117,12 +118,16 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                         // onSelectionEnd={() => setSelectionEnded(true)}
                         // style={{ backgroundImage: 'url(/test.svg)' }}
                         >
-                            <Background className="bg-background" color='#999' variant={BackgroundVariant.Dots} />
+                            <Background className="bg-[#edeff4]" color='#999' variant={BackgroundVariant.Dots} />
                             <Controls></Controls>
                         </ReactFlow>
                     </div>
                 </div>
             </main>
+        </div>
+        <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? '' : 'hidden'}`}>
+            {/* <ApiMainPage type={'flow'} /> */}
+            come sun~
         </div>
     </div>
 };
@@ -134,7 +139,17 @@ const useFlow = (_reactFlowInstance, data) => {
 
     const [nodes, setNodes] = useState(data.nodes);
     const [edges, setEdges] = useState(data.edges);
-    console.log('nodes edges:>> ', nodes, edges);
+    const { setViewport } = useReactFlow();
+    // console.log('nodes edges:>> ', nodes, edges);
+    //update flow when tabs change
+    useEffect(() => {
+        setNodes(data?.nodes ?? []);
+        setEdges(data?.edges ?? []);
+        if (_reactFlowInstance) {
+            setViewport(data?.viewport ?? { x: 140, y: 140, zoom: 0.5 });
+            _reactFlowInstance.fitView();
+        }
+    }, [data, _reactFlowInstance, setEdges, setNodes, setViewport]);
 
     // 绑定快捷键
     const { keyBoardPanneRef, setLastSelection } = useKeyBoard(reactFlowWrapper, setNodes)
@@ -155,8 +170,8 @@ const useFlow = (_reactFlowInstance, data) => {
                     {
                         ...params,
                         type: 'customEdge',
-                        style: { stroke: "#024de3", strokeWidth: 2 },
-                        className: 'stroke-foreground stroke-connection',
+                        // style: { stroke: "#024de3", strokeWidth: 2 },
+                        // className: 'stroke-foreground stroke-connection',
                         animated: true
                     },
                     eds
@@ -229,15 +244,53 @@ const useFlow = (_reactFlowInstance, data) => {
                 )
             );
         };
+        // del node
+        const handleNodeDelete = (event) => {
+            const nodeId = event.detail;
+            setNodes((nodes) => nodes.filter((n) => n.id !== nodeId));
+            setEdges((edges) => edges.filter((ns) => ns.source !== nodeId && ns.target !== nodeId));
+        }
+
+        // copy
+        const handleCopy = (event) => {
+            const nodeIds = event.detail;
+            let nodes = _reactFlowInstance.getNodes();
+            // let edges = _reactFlowInstance.getEdges();
+            const newNodes = nodeIds.map(nodeId => {
+                const node = nodes.find(n => n.id === nodeId);
+                const newNodeId = `${node.type}_${generateUUID(5)}`
+                // node.id = nodeId
+                return {
+                    id: newNodeId,
+                    type: "flowNode",
+                    position: {
+                        x: node.position.x + 100,
+                        y: node.position.y + 100,
+                    },
+                    data: {
+                        ...cloneDeep(node.data),
+                        id: newNodeId,
+                    },
+                    selected: false
+                };
+            });
+
+            setNodes((nds) => nds.map((e) => ({ ...e, selected: false })).concat(newNodes));
+        }
 
         // 监听自定义事件
         window.addEventListener('nodeUpdate', handleNodeUpdate);
+        window.addEventListener('nodeDelete', handleNodeDelete);
+        window.addEventListener('nodeCopy', handleCopy);
+
 
         // 在组件卸载时移除事件监听
         return () => {
             window.removeEventListener('nodeUpdate', handleNodeUpdate);
+            window.addEventListener('nodeDelete', handleNodeDelete);
+            window.removeEventListener('nodeCopy', handleCopy);
         };
-    }, []);
+    }, [_reactFlowInstance]);
 
     // 选中节点
     const onSelectionChange = useCallback((data) => {
