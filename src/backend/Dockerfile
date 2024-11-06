@@ -17,9 +17,7 @@ EOF'
 # Install Poetry
 RUN apt update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y && \
     apt install procps -y && \
-# Install font
     apt install fonts-wqy-zenhei -y && apt install vim -y && \
-# opencv
     apt install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 && \
     curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 # # Add Poetry to PATH
@@ -33,7 +31,6 @@ COPY ./ ./
 RUN mv -f ./nltk_data /root/nltk_data/ && \
     python -m pip install --upgrade pip && \
     pip install shapely==2.0.1 && \
-# Install dependencies
     poetry config virtualenvs.create false && \
     poetry install --no-interaction --no-ansi --without dev
 
