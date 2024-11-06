@@ -270,3 +270,8 @@
   .react-flow__panel.react-flow__attribution{
 	display: none !important;
   }
+.vditor-content ol>li[data-marker]:before {
+    content: attr(data-marker); 
+    margin-right: 5px;
+    font-weight: bold;
+}

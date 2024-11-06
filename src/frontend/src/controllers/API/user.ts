@@ -51,6 +51,14 @@ export async function getUsersApi({ name = '', page, pageSize, groupId, roleId }
     `/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name}${groupStr}${roleStr}`
   );
 }
+
+// 标注任务下用户列表
+export async function getLabelUsersApi( taskId: number): Promise<{ data: User[]; total: number }> {
+  return await axios.get(
+    `/api/v1/mark/get_user?task_id=${taskId}`
+  );
+}
+
 // 修改用户状态（启\禁用）
 export async function disableUserApi(userid, status) {
   return await axios.post(`/api/v1/user/update`, {
@@ -64,7 +72,7 @@ export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
     .then(res => res.data);
 }
 // 用户组下角色列表
-export async function getRolesByGroupApi(searchkey = "", groupIds:any[]): Promise<{ data: ROLE[] }> {
+export async function getRolesByGroupApi(searchkey = "", groupIds: any[]): Promise<{ data: ROLE[] }> {
   const groupStr = groupIds?.reduce((pre, id) => `${pre}&group_id=${id}`, '') || ''
   return await axios.get(`/api/v1/group/roles?keyword=${searchkey}${groupStr}`)
     .then(res => res.data);
@@ -243,7 +251,7 @@ export async function updateUserGroups(userId, groupIds) {
 }
 
 // 超管创建用户组
-export async function createUserApi(user_name:string, password:string, group_roles:any[]) {
+export async function createUserApi(user_name: string, password: string, group_roles: any[]) {
   return await axios.post('/api/v1/user/create', {
     user_name,
     password,

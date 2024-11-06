@@ -3,6 +3,7 @@ import urllib.parse
 from typing import List, Optional
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.knowledge import KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -288,12 +289,16 @@ async def get_file_bbox(request: Request,
 
 
 @router.post('/qa/add', status_code=200)
-def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
+async def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
     """ 增加知识库信息. """
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
         raise HTTPException(status_code=404, detail='知识库类型错误')
+
+    db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
+    if db_q and not QACreate.id:
+        raise KnowledgeQAError.http_exception()
 
     add_qa(db_knowledge=db_knowledge, data=QACreate)
     return resp_200()
@@ -332,6 +337,9 @@ def qa_append(
     """ 增加知识库信息. """
     QA_list = QAKnoweldgeDao.select_list(ids)
     knowledge = KnowledgeDao.query_by_id(QA_list[0].knowledge_id)
+    for q in QA_list:
+        if question in q.questions:
+            raise KnowledgeQAError.http_exception()
     for qa in QA_list:
         qa.questions.append(question)
         knowledge_imp.add_qa(knowledge, qa)

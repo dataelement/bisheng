@@ -19,10 +19,14 @@ import DataSetPage from "./pages/DataSetPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
+import FlowPage from "./pages/FlowPage";
 import KnowledgePage from "./pages/KnowledgePage";
 import FilesPage from "./pages/KnowledgePage/detail";
 import FilesUpload from "./pages/KnowledgePage/filesUpload";
 import QasPage from "./pages/KnowledgePage/qas";
+import LabelPage from "./pages/LabelPage";
+import TaskAppChats from "./pages/LabelPage/taskAppChats";
+import TaskApps from "./pages/LabelPage/taskApps";
 import LogPage from "./pages/LogPage";
 import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
 import { LoginPage } from "./pages/LoginPage/login";
@@ -33,6 +37,8 @@ import Management from "./pages/ModelPage/manage";
 import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
 import SystemPage from "./pages/SystemPage";
+import ResoucePage from "./pages/resoucePage";
+
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
 // const FilesPage = lazy(() => import(/* webpackChunkName: "FilesPage" */ "./pages/FileLibPage/files"));
@@ -84,6 +90,9 @@ const privateRouter = [
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },
+      { path: "label", element: <LabelPage /> },
+      { path: "label/:id", element: <TaskApps /> },
+      { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
     ],
   },
   { path: "model/doc", element: <Doc /> },
@@ -104,6 +113,10 @@ const privateRouter = [
     children: [
       { path: "", element: <EditAssistantPage /> }
     ]
+  },
+  {
+    path: "/resouce/:cid/:mid",
+    element: <ResoucePage />
   },
   // 独立会话页
   { path: "/chat/assistant/auth/:id/", element: <ChatPro type='assistant' /> },
@@ -152,6 +165,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
+  { path: "/resouce/:cid/:mid", element: <ResoucePage /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],

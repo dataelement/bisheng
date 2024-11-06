@@ -60,7 +60,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const [error, setError] = useState({ name: false, desc: false })
 
     const [saveLoad, setSaveLoad] = useState(false)
-    const handleCreate = () => {
+    const handleCreate = async () => {
         const name = nameRef.current.value
         const desc = descRef.current.value
         const errorlist = []
@@ -77,7 +77,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
         if (errorlist.length) return handleError(errorlist)
 
         setSaveLoad(true);
-        captureAndAlertRequestErrorHoc(createFileLib({
+        await captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
             model: modal[1].value,
@@ -89,6 +89,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             setOpen(false)
             setSaveLoad(false);
         }))
+        setSaveLoad(false);
     }
 
     const handleError = (list) => {

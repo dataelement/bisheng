@@ -5,6 +5,7 @@ import {
     EvaluatingIcon,
     GithubIcon,
     KnowledgeIcon,
+    LabelIcon,
     LogIcon,
     ModelIcon,
     QuitIcon,
@@ -162,6 +163,11 @@ export default function MainLayout() {
                             isMenu('evaluation') &&
                             <NavLink to='/evaluation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <EvaluatingIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.evaluation')}</span>
+                            </NavLink>
+                        }
+                        {
+                            <NavLink to='/label' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <LabelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">标  注</span>
                             </NavLink>
                         }
                         {

@@ -14,7 +14,7 @@ import { useTable } from "@/util/hook";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const AddSimilarQuestions = forwardRef(({ }, ref) => {
+const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
     const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const [knowledgeLib, setKnowledgeLib] = useState([]);
@@ -71,6 +71,7 @@ const AddSimilarQuestions = forwardRef(({ }, ref) => {
                 variant: 'success',
                 description: t('log.addSuccess')
             });
+            onMarked?.()
             close();
         }));
     };

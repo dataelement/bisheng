@@ -2,6 +2,18 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+RUN echo \
+    deb https://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib \
+    deb-src https://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib \
+    deb https://mirrors.aliyun.com/debian-security/ bookworm-security main \
+    deb-src https://mirrors.aliyun.com/debian-security/ bookworm-security main \
+    deb https://mirrors.aliyun.com/debian/ bookworm-updates main non-free non-free-firmware contrib \
+    deb-src https://mirrors.aliyun.com/debian/ bookworm-updates main non-free non-free-firmware contrib \
+    deb https://mirrors.aliyun.com/debian/ bookworm-backports main non-free non-free-firmware contrib \
+    deb-src https://mirrors.aliyun.com/debian/ bookworm-backports main non-free non-free-firmware contrib \
+    > /etc/apt/sources.list
+
+
 # Install Poetry
 RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y
 RUN apt-get update && apt-get install procps -y
@@ -21,7 +33,7 @@ COPY ./ ./
 RUN mv -f ./nltk_data /root/nltk_data/
 
 RUN python -m pip install --upgrade pip && \
-    pip install shapely==2.0.1 
+    pip install shapely==2.0.1
 
 # Install dependencies
 RUN poetry config virtualenvs.create false

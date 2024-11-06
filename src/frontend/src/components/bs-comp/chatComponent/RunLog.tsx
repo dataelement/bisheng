@@ -40,6 +40,10 @@ export default function RunLog({ data }) {
         return [title, lost]
     }, [assistantState, data])
 
+    // 没任何匹配的工具，隐藏
+    if (assistantState.tool_list.length + assistantState.knowledge_list.length
+        + assistantState.flow_list.length === 0) return null
+
     return <div className="py-1">
         <div className="rounded-sm border">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>

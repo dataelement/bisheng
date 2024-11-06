@@ -1,9 +1,10 @@
 import json
 import math
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid1
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services import chat_imp
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
@@ -13,7 +14,7 @@ from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schema.base_schema import PageList
-from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, FlowGptsOnlineList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
@@ -24,6 +25,8 @@ from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.mark_record import MarkRecordDao
+from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -44,11 +47,38 @@ flow_data_store = redis_client
 expire = 600  # reids 60s 过期
 
 
+@router.post('/chat/completions', response_class=StreamingResponse)
+async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depends()):
+
+    # messages 为openai 格式。目前不支持openai的复杂多轮，先临时处理
+    message = None
+    if request.messages:
+        last_message = request.messages[-1]
+        if 'content' in last_message:
+            message = last_message['content']
+        else:
+            logger.info('last_message={}', last_message)
+            message = last_message
+    session_id = request.session_id or uuid1().hex
+
+    payload = {'user_name': 'root', 'user_id': 1, 'role': 'admin'}
+    access_token = Authorize.create_access_token(subject=json.dumps(payload), expires_time=864000)
+    url = f'ws://127.0.0.1:7860/api/v1/chat/{request.model}?chat_id={session_id}&t={access_token}'
+    web_conn = await chat_imp.get_connection(url, session_id)
+
+    return StreamingResponse(chat_imp.event_stream(web_conn, message, session_id, request.model,
+                                                   request.streaming),
+                             media_type='text/event-stream')
+
+
 @router.get('/chat/app/list',
             response_model=UnifiedResponseModel[PageList[AppChatList]],
             status_code=200)
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
+                      mark_user: Optional[str] = None,
+                      mark_status: Optional[int] = None,
+                      task_id: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
@@ -56,33 +86,60 @@ def get_app_chat_list(*,
     """性能问题后续优化"""
 
     group_flow_ids = []
-    if not login_user.is_admin():
-        # 判断下是否是用户组管理员
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        if not user_groups:
-            raise UnAuthorizedError.http_exception()
-        user_group_ids = [user_group.group_id for user_group in user_groups]
-        # 获取分组下的所有资源ID
-        resources = GroupResourceDao.get_groups_resource(
-            user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
-        group_flow_ids = [one.third_id for one in resources]
-        if not group_flow_ids:
-            return resp_200(PageList(list=[], total=0))
-
     flow_ids, user_ids = [], []
-    if keyword:
-        flows = FlowDao.get_flow_list_by_name(name=keyword)
-        assistants = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
-        users = UserDao.search_user_by_name(user_name=keyword)
-        if flows:
-            flow_ids = [flow.id for flow in flows]
-        if assistants:
-            flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
-        if user_ids:
-            user_ids = [user.user_id for user in users]
-        # 检索内容为空
-        if not flow_ids and not user_ids:
-            return resp_200(PageList(list=[], total=0))
+
+    user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+    if not task_id:
+        # task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
+        # group_flow_ids = [app_id for one in task_list[0] for app_id in one.app_id.split(",")]
+        group_flow_ids = []
+    else:
+        if not login_user.is_admin():
+            task = MarkTaskDao.get_task_byid(task_id)
+            if str(login_user.user_id) not in task.process_users.split(","):
+                raise HTTPException(status_code=403, detail="没有权限")
+            # 判断下是否是用户组管理员
+            if user_groups:
+                # user_group_ids = [user_group.group_id for user_group in user_groups]
+                # 获取分组下的所有资源ID
+                # update 这里要改为 task下面关联的应用
+                # resources = GroupResourceDao.get_groups_resource(
+                #     user_group_ids, resource_types=[ResourceTypeEnum.FLOW, ResourceTypeEnum.ASSISTANT])
+                # group_flow_ids = [one.third_id for one in resources]
+
+                task = MarkTaskDao.get_task_byid(task_id)
+                #TODO: 加入筛选条件
+                group_flow_ids = task.app_id.split(",")
+                # group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
+                if not group_flow_ids:
+                    return resp_200(PageList(list=[], total=0))
+            else:
+                task = MarkTaskDao.get_task_byid(task_id)
+                if str(login_user.user_id) not in task.process_users.split(","):
+                    raise HTTPException(status_code=403, detail="没有权限")
+                #普通用户
+                # user_ids = [login_user.user_id]
+                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+
+        else:
+            group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+
+
+
+    # if keyword:
+    #     flows = FlowDao.get_flow_list_by_name(name=keyword)
+    #     assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
+    #     users = UserDao.search_user_by_name(user_name=keyword)
+    #     if flows:
+    #         flow_ids = [flow.id for flow in flows]
+    #     if assistants:
+    #         flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
+    #     if user_ids:
+    #         user_ids = [user.user_id for user in users]
+    #     # 检索内容为空
+    #     if not flow_ids and not user_ids:
+    #         return resp_200(PageList(list=[], total=0))
+
     if group_flow_ids:
         if flow_ids:
             flow_ids = list(set(flow_ids) & set(group_flow_ids))
@@ -103,6 +160,8 @@ def get_app_chat_list(*,
     flow_map = {flow.id: flow.name for flow in flow_list}
     assistant_map = {assistant.id: assistant.name for assistant in assistant_list}
 
+
+
     flow_map.update(assistant_map)
     res_obj = PageList(list=[
         AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
@@ -111,6 +170,34 @@ def get_app_chat_list(*,
                     **one) for one in res
     ],
                        total=count)
+
+    for o in res_obj.list:
+        mark = MarkRecordDao.get_record(task_id,o.chat_id)
+        o.mark_user = ""
+        o.mark_status = 1
+        if mark:
+            o.mark_user = mark.create_user if mark.create_user is not None else ""
+            o.mark_status =  mark.status if mark.status is not None else 1 
+            o.mark_id = mark.create_id
+
+
+    if mark_status:
+        res_obj.list = [one for one in res_obj.list if one.mark_status == mark_status]
+        res_obj.total = len(res_obj.list)
+
+    if mark_user:
+        users = mark_user.split(",")
+        users_int = [int(user) for user in users]
+        res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
+        res_obj.total = len(res_obj.list)
+
+    # if not user_groups and not login_user.is_admin():
+    #     res_obj.list = [one for one in res_obj.list if one.mark_id==login_user.user_id]
+    #     res_obj.total = len(res_obj.list)
+
+
+
+
     return resp_200(res_obj)
 
 
@@ -359,22 +446,26 @@ def get_online_chat(*,
                                       page_size=limit)
     flows = flows.data.get('data')
     for one in all_assistant:
+        msg= ChatMessageDao.get_msg_by_flow(one.id)
         res.append(
             FlowGptsOnlineList(id=str(one.id),
                                name=one.name,
                                desc=one.desc,
                                logo=one.logo,
+                               count=len(msg),
                                create_time=one.create_time,
                                update_time=one.update_time,
                                flow_type='assistant'))
 
     # 获取用户可见的所有已上线的技能
     for one in flows:
+        msg= ChatMessageDao.get_msg_by_flow(one['id'])
         res.append(
             FlowGptsOnlineList(id=one['id'],
                                name=one['name'],
                                desc=one['description'],
                                logo=one['logo'],
+                               count=len(msg),
                                create_time=one['create_time'],
                                update_time=one['update_time'],
                                flow_type='flow'))

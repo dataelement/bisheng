@@ -1,13 +1,11 @@
 import copy
 import json
-from typing import Annotated, Optional, Union, List, Any
+from typing import Annotated, List, Optional, Union
 from uuid import UUID
 
 import yaml
-from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile, Request, Query, Path
-from sqlmodel import select
-
-from bisheng import settings, __version__
+from bisheng import __version__, settings
+from bisheng.api.services.knowledge_imp import filetype_load_map
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
@@ -15,7 +13,7 @@ from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, Uploa
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.base import session_getter, generate_uuid
+from bisheng.database.base import generate_uuid, session_getter
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage
@@ -24,8 +22,9 @@ from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
-from bisheng.utils.minio_client import bucket, MinioClient
-from bisheng.api.services.knowledge_imp import filetype_load_map
+from bisheng.utils.minio_client import MinioClient, bucket
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
+from sqlmodel import select
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -33,6 +32,7 @@ except ImportError:
 
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
+
 
 # build router
 router = APIRouter(tags=['Base'])
@@ -108,9 +108,7 @@ async def get_web_config():
     web_conf = ConfigDao.get_config(ConfigKeyEnum.WEB_CONFIG)
     if not web_conf:
         return resp_200(data='')
-    return resp_200(data={
-        "value": web_conf.value
-    })
+    return resp_200(data={'value': web_conf.value})
 
 
 @router.post('/web/config')
@@ -118,28 +116,27 @@ async def update_web_config(request: Request,
                             admin_user: UserPayload = Depends(get_admin_user),
                             value: str = Body(embed=True)):
     """ 更新一些前端所需要的配置项，内容由前端决定 """
-    logger.info(f'update_web_config user_name={admin_user.user_name}, ip={get_request_ip(request)}')
+    logger.info(
+        f'update_web_config user_name={admin_user.user_name}, ip={get_request_ip(request)}')
     web_conf = ConfigDao.get_config(ConfigKeyEnum.WEB_CONFIG)
     if not web_conf:
         web_conf = Config(key=ConfigKeyEnum.WEB_CONFIG.value, value=value)
     else:
         web_conf.value = value
     ConfigDao.insert_config(web_conf)
-    return resp_200(data={
-        "value": web_conf.value
-    })
+    return resp_200(data={'value': web_conf.value})
 
 
 @router.post('/process/{flow_id}')
 async def process_flow_old(
-        flow_id: UUID,
-        inputs: Optional[dict] = None,
-        tweaks: Optional[dict] = None,
-        history_count: Annotated[int, Body(embed=True)] = 10,
-        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-        task_service: 'TaskService' = Depends(get_task_service),
-        sync: Annotated[bool, Body(embed=True)] = True,
+    flow_id: UUID,
+    inputs: Optional[dict] = None,
+    tweaks: Optional[dict] = None,
+    history_count: Annotated[int, Body(embed=True)] = 10,
+    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+    task_service: 'TaskService' = Depends(get_task_service),
+    sync: Annotated[bool, Body(embed=True)] = True,
 ):
     return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
                               task_service, sync)
@@ -149,14 +146,15 @@ async def process_flow_old(
 # @router.post('/predict/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
 @router.post('/process', response_model=UnifiedResponseModel[ProcessResponse])
 async def process_flow(
-        flow_id: Annotated[UUID, Body(embed=True)],
-        inputs: Optional[dict] = None,
-        tweaks: Optional[dict] = None,
-        history_count: Annotated[int, Body(embed=True)] = 10,
-        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-        task_service: 'TaskService' = Depends(get_task_service),
-        sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
+    flow_id: Annotated[UUID, Body(embed=True)],
+    inputs: Optional[dict] = None,
+    tweaks: Optional[dict] = None,
+    history_count: Annotated[int, Body(embed=True)] = 10,
+    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+    task_service: 'TaskService' = Depends(get_task_service),
+    sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
+    sse: Annotated[bool, Body(embed=True)] = False,
 ):
     """
     Endpoint to process an input with a given flow_id.
@@ -247,10 +245,15 @@ async def process_flow(
                 session.add_all([question, message])
                 session.commit()
                 session.refresh(message)
+
             extra.update({'source': source, 'message_id': message.id})
 
             if source == 1:
                 await process_source_document(source_documents, session_id, message.id, answer)
+                extra.update({
+                    'source_url':
+                    'resouce/{chat_id}/{msg_id}'.format(chat_id=session_id, msg_id=message.id)
+                })
             elif source == 4:
                 # QA
                 extra_qa = json.loads(answer.metadata.get('extra'))
@@ -292,7 +295,7 @@ def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[
             relative_path=object_name,  # minio中的object_name
         )
     except Exception as exc:
-        logger.exception(f'Error saving file: ')
+        logger.exception(f'Error saving file: {str(exc)}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -300,16 +303,19 @@ def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[
 async def upload_icon(request: Request,
                       login_user: UserPayload = Depends(get_login_user),
                       file: UploadFile = None):
-    resp = _upload_file(file, object_name_prefix="icon", file_supports=['jpeg', 'jpg', 'png'], bucket_name=bucket)
+    resp = _upload_file(file,
+                        object_name_prefix='icon',
+                        file_supports=['jpeg', 'jpg', 'png'],
+                        bucket_name=bucket)
     return resp_200(data=resp)
 
 
 @router.post('/upload/workflow/{workflow_id}')
-async def upload_icon(request: Request,
-                      login_user: UserPayload = Depends(get_login_user),
-                      file: UploadFile = None,
-                      workflow_id: str = Path(..., description="workflow id")):
-    resp = _upload_file(file, object_name_prefix=f"workflow/{workflow_id}", bucket_name=bucket)
+async def upload_icon_workflow(request: Request,
+                               login_user: UserPayload = Depends(get_login_user),
+                               file: UploadFile = None,
+                               workflow_id: str = Path(..., description='workflow id')):
+    resp = _upload_file(file, object_name_prefix=f'workflow/{workflow_id}', bucket_name=bucket)
     return resp_200(data=resp)
 
 

@@ -144,7 +144,7 @@ export default function KnowledgeFile() {
     const [modelNameMap, setModelNameMap] = useState({})
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
-        readFileLibDatabase(param.page, param.pageSize, param.keyword)
+        readFileLibDatabase({ ...param, name: param.keyword })
     )
 
     const handleDelete = (id) => {

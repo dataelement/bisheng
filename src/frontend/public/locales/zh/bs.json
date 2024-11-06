@@ -171,7 +171,7 @@
     "saveSuccessful": "保存成功",
     "supportVersions": "支持分成多个版本分支，分别进行开发以及版本间的比较。",
     "guideQuestions50": "引导问题最多50个字符",
-    "promptWords1000": "提示词最多为1000个字符",
+    "promptWords1000": "开场白最多为1000个字符",
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
     "modelRequired": "模型为空",
@@ -317,7 +317,7 @@
     "libraryName": "知识库名称",
     "description": "描述",
     "model": "模型",
-    "fileData": "文件数据",
+    "fileData": "文档知识库",
     "structuredData": "结构化数据",
     "qaData": "QA知识库",
     "libraryCollection": "知识库集合",
@@ -836,7 +836,8 @@
     "10605": "用户名已存在",
     "10606": "用户组和角色不能为空",
     "10610": "用户组内还有用户，不能删除",
-    "10920": "未配置QA知识库相似问模型"
+    "10920": "未配置QA知识库相似问模型",
+    "10930": "该问题已被标注过"
   },
   "all": "全部",
   "confirmButton": "确定",
