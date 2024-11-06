@@ -3,7 +3,7 @@ FROM python:3.10-slim
 WORKDIR /app
 
 
-RUN bash -c 'cat << EOF > /etc/apt/sources.list \
+RUN echo \
     deb https://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib \
     deb-src https://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib \
     deb https://mirrors.aliyun.com/debian-security/ bookworm-security main \
@@ -12,7 +12,7 @@ RUN bash -c 'cat << EOF > /etc/apt/sources.list \
     deb-src https://mirrors.aliyun.com/debian/ bookworm-updates main non-free non-free-firmware contrib \
     deb https://mirrors.aliyun.com/debian/ bookworm-backports main non-free non-free-firmware contrib \
     deb-src https://mirrors.aliyun.com/debian/ bookworm-backports main non-free non-free-firmware contrib \
-EOF' 
+    > /etc/apt/sources.list
 
 # Install Poetry
 RUN apt update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y 
