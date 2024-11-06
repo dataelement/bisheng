@@ -33,10 +33,10 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       REPO:
         from_secret: PY_NEXUS
     commands: # 定义在Docker容器中执行的shell命令
+      - pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
       - pip install Cython
       - pip install wheel
       - pip install twine
-      - pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
       - cd ./src/bisheng-langchain
       - python setup.py bdist_wheel
       - twine upload --verbose -u $NEXUS_USER  -p $NEXUS_PASSWORD --repository-url $REPO  dist/*.whl
