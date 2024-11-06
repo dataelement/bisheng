@@ -15,12 +15,12 @@ RUN bash -c 'cat << EOF > /etc/apt/sources.list \
 EOF' 
 
 # Install Poetry
-RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y && \
-    apt-get install procps -y \
+RUN apt update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y && \
+    apt install procps -y \
 # Install font
     apt install fonts-wqy-zenhei -y && apt install vim -y && \
 # opencv
-    apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 && \
+    apt install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1 && \
     curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 # # Add Poetry to PATH
 ENV PATH="${PATH}:/root/.local/bin"
