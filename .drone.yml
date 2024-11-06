@@ -79,7 +79,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - name: socket
         path: /var/run/docker.sock
       - name: pro-cache
-        path: ~/.local/share/pypoetry
+        path: /root/.local/share/pypoetry
     environment:
       http_proxy:
         from_secret: PROXY
