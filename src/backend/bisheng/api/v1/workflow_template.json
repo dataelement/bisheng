@@ -80,6 +80,7 @@
             "tab": "input"
           },
           {
+            "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
             "key": "form_input",
             "label": "+ 添加表单项",
             "type": "form",
@@ -244,6 +245,7 @@
           },
           {
             "key": "output",
+            "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
             "label": "输出变量",
             "type": "var",
             "value": []
