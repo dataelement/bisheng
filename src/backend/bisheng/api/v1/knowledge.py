@@ -297,7 +297,7 @@ async def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depen
         raise HTTPException(status_code=404, detail='知识库类型错误')
 
     db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
-    if db_q:
+    if db_q and not QACreate.id:
         raise KnowledgeQAError.http_exception()
 
     add_qa(db_knowledge=db_knowledge, data=QACreate)
