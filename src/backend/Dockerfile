@@ -16,7 +16,7 @@ EOF'
 
 # Install Poetry
 RUN apt update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y && \
-    apt install procps -y \
+    apt install procps -y && \
 # Install font
     apt install fonts-wqy-zenhei -y && apt install vim -y && \
 # opencv
