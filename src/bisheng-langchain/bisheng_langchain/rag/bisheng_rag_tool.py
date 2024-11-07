@@ -15,6 +15,7 @@ from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.vectorstores import VectorStoreRetriever
 from loguru import logger
@@ -236,13 +237,13 @@ class BishengRAGTool:
             run_manager: Optional[CallbackManagerForChainRun] = None) -> Any:
         docs = self.retrieval_and_rerank(query)
         try:
-            ans = self.qa_chain(
+            ans = self.qa_chain.invoke(
                 {
                     'input_documents': docs,
                     'question': query
                 },
                 return_only_outputs=return_only_outputs,
-                run_manager=run_manager,
+                config=RunnableConfig(callbacks=run_manager.get_child()),
             )
         except Exception as e:
             logger.error(f'question: {query}\nerror: {e}')
