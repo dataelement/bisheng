@@ -45,8 +45,6 @@ class RagNode(BaseNode):
         self._es = None
 
     def _run(self, unique_id: str):
-
-        self.init_user_question()
         self.init_qa_prompt()
         self.init_milvus()
         self.init_es()
@@ -59,6 +57,7 @@ class RagNode(BaseNode):
             max_content=self._max_chunk_size,
             sort_by_source_and_index=self._sort_chunks,
             return_source_documents=True,
+            document_variable_name='retriretrieved_result',
         )
         user_questions = self.init_user_question()
         ret = {}

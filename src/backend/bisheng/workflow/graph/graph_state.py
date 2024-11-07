@@ -1,7 +1,7 @@
-from typing import List, Any, Optional, Dict
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel
 from langchain.memory import ConversationBufferWindowMemory
+from pydantic import BaseModel
 
 
 class GraphState(BaseModel):
@@ -19,7 +19,7 @@ class GraphState(BaseModel):
 
     def save_context(self, question: str, answer: str) -> None:
         """  保存聊天记录 """
-        self.history_memory.save_context({"input": question}, {"output": answer})
+        self.history_memory.save_context({'input': question}, {'output': answer})
 
     def set_variable(self, node_id: str, key: str, value: Any):
         """ 将节点产生的数据放到全局变量里 """
@@ -33,7 +33,7 @@ class GraphState(BaseModel):
             return None
 
         # todo 某些特殊变量的处理 chat_history、source_document等
-        if key == "chat_history":
+        if key == 'chat_history':
             return self.get_history_memory()
         return self.variables_pool[node_id].get(key)
 
@@ -42,18 +42,19 @@ class GraphState(BaseModel):
         从全局变量中获取数据
         contact_key: node_id.key#index  #index不一定需要
         """
-        tmp_list = contact_key.split(".")
+        tmp_list = contact_key.split('.')
         node_id = tmp_list[0]
         var_key = tmp_list[1]
-        if var_key.find("#") != -1:
-            var_key = var_key.split("#")[0]
+        variable_val_index = None
+        if var_key.find('#') != -1:
+            var_key, variable_val_index = var_key.split('#')
         variable_val = self.get_variable(node_id, var_key)
 
         # 数组变量的处理
-        if var_key.find("#") != -1:
-            variable_val_index = int(var_key.split("#")[1])
+        if variable_val_index:
+            variable_val_index = int(variable_val_index)
             if not isinstance(variable_val, list) or len(variable_val) <= variable_val_index:
-                raise Exception(f"variable {contact_key} is not array or index out of range")
+                raise Exception(f'variable {contact_key} is not array or index out of range')
             return variable_val[variable_val_index]
 
         # todo 某些特殊变量的处理

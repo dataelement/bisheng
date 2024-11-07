@@ -44,14 +44,17 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.unique_id = unique_id
         self.node_id = node_id
         self.output = output
+        self.output_len = 0
         self.output_key = output_key
+        logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         # azure偶尔会返回一个None
         if token is None:
             return
-        logger.info('on_llm_new_token {} token={}', self.output, token)
+
         if self.output:
+            self.output += len(token)
             self.callback_manager.on_output_msg(
                 OutputMsgData(node_id=self.node_id,
                               msg=token,

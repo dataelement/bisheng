@@ -72,7 +72,8 @@ class LLMNode(BaseNode):
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)
 
-        logger.debug(f'workflow llm node prompt: system: {system}\nuser: {user}')
+        logger.debug(
+            f'outputkey={output_key} workflow llm node prompt: system: {system}\nuser: {user}')
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
                                               node_id=self.id,
@@ -83,4 +84,13 @@ class LLMNode(BaseNode):
         result = self._llm.invoke([SystemMessage(content=system),
                                    HumanMessage(content=user)],
                                   config=config)
+        if llm_callback.output_len == 0:
+            # stream 模式，命中了缓存等情况，直接返回结果
+            self.callback_manager.on_output_msg(
+                OutputMsgData(
+                    node_id=self.id,
+                    msg=result.content,
+                    unique_id=unique_id,
+                    output_key=output_key,
+                ))
         return result.content
