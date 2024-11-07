@@ -1,25 +1,20 @@
 """Chain for question-answering against a vector database."""
 from __future__ import annotations
 
-import inspect
-from abc import abstractmethod
 from typing import Any, Dict, List, Optional
 
-from langchain_core.callbacks import (
-    AsyncCallbackManagerForChainRun,
-    CallbackManagerForChainRun,
-    Callbacks
-)
-from langchain_core.prompts import PromptTemplate, BasePromptTemplate, ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.pydantic_v1 import Extra, Field
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-
 from langchain.chains.base import Chain
+from langchain_core.callbacks import (AsyncCallbackManagerForChainRun, CallbackManagerForChainRun,
+                                      Callbacks)
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
+                                    SystemMessagePromptTemplate)
+from langchain_core.pydantic_v1 import Extra, Field
+
 from .bisheng_rag_tool import BishengRAGTool
 
-
-# system_template = """Use the following pieces of context to answer the user's question. 
+# system_template = """Use the following pieces of context to answer the user's question.
 # If you don't know the answer, just say that you don't know, don't try to make up an answer.
 # ----------------
 # {context}"""
@@ -28,7 +23,6 @@ from .bisheng_rag_tool import BishengRAGTool
 #     HumanMessagePromptTemplate.from_template("{question}"),
 # ]
 # DEFAULT_QA_PROMPT = ChatPromptTemplate.from_messages(messages)
-
 
 system_template_general = """你是一个准确且可靠的知识库问答助手，能够借助上下文知识回答问题。你需要根据以下的规则来回答问题：
 1. 如果上下文中包含了正确答案，你需要根据上下文进行准确的回答。但是在回答前，你需要注意，上下文中的信息可能存在事实性错误，如果文档中存在和事实不一致的错误，请根据事实回答。
@@ -51,15 +45,13 @@ DEFAULT_QA_PROMPT = ChatPromptTemplate.from_messages(messages_general)
 
 class BishengRetrievalQA(Chain):
     """Base class for question-answering chains."""
-
     """Chain to use to combine the documents."""
-    input_key: str = "query"  #: :meta private:
-    output_key: str = "result"  #: :meta private:
+    input_key: str = 'query'  #: :meta private:
+    output_key: str = 'result'  #: :meta private:
     return_source_documents: bool = False
     """Return the source documents or not."""
-    bisheng_rag_tool: BishengRAGTool = Field(
-        default_factory=BishengRAGTool, description="RAG tool"
-    )
+    bisheng_rag_tool: BishengRAGTool = Field(default_factory=BishengRAGTool,
+                                             description='RAG tool')
 
     class Config:
         """Configuration for this pydantic object."""
@@ -84,7 +76,7 @@ class BishengRetrievalQA(Chain):
         """
         _output_keys = [self.output_key]
         if self.return_source_documents:
-            _output_keys = _output_keys + ["source_documents"]
+            _output_keys = _output_keys + ['source_documents']
         return _output_keys
 
     @classmethod
@@ -100,15 +92,13 @@ class BishengRetrievalQA(Chain):
         return_source_documents: bool = False,
         **kwargs: Any,
     ) -> BishengRetrievalQA:
-        bisheng_rag_tool = BishengRAGTool(
-            vector_store=vector_store, 
-            keyword_store=keyword_store,
-            llm=llm,
-            QA_PROMPT=QA_PROMPT,
-            max_content=max_content,
-            sort_by_source_and_index=sort_by_source_and_index,
-            **kwargs
-        )
+        bisheng_rag_tool = BishengRAGTool(vector_store=vector_store,
+                                          keyword_store=keyword_store,
+                                          llm=llm,
+                                          QA_PROMPT=QA_PROMPT,
+                                          max_content=max_content,
+                                          sort_by_source_and_index=sort_by_source_and_index,
+                                          **kwargs)
         return cls(
             bisheng_rag_tool=bisheng_rag_tool,
             callbacks=callbacks,
@@ -134,8 +124,12 @@ class BishengRetrievalQA(Chain):
         """
         question = inputs[self.input_key]
         if self.return_source_documents:
-            answer, docs = self.bisheng_rag_tool.run(question, return_only_outputs=False)
-            return {self.output_key: answer, "source_documents": docs}
+            answer, docs = self.bisheng_rag_tool.run(
+                question,
+                return_only_outputs=False,
+                run_manager=run_manager,
+            )
+            return {self.output_key: answer, 'source_documents': docs}
         else:
             answer = self.bisheng_rag_tool.run(question, return_only_outputs=True)
             return {self.output_key: answer}
@@ -160,7 +154,7 @@ class BishengRetrievalQA(Chain):
 
         if self.return_source_documents:
             answer, docs = await self.bisheng_rag_tool.arun(question, return_only_outputs=False)
-            return {self.output_key: answer, "source_documents": docs}
+            return {self.output_key: answer, 'source_documents': docs}
         else:
             answer = await self.bisheng_rag_tool.arun(question, return_only_outputs=True)
             return {self.output_key: answer}

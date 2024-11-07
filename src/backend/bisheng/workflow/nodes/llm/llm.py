@@ -1,7 +1,7 @@
 from bisheng.api.services.llm import LLMService
+from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
-from bisheng.workflow.nodes.llm.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -38,7 +38,7 @@ class LLMNode(BaseNode):
                 output_key = self.node_params['output'][index]['key']
                 result[output_key] = self._run_once(one, unique_id, output_key)
 
-        if not self._stream:
+        if not self._stream and self._output_user:
             # 非stream 模式，处理结果
             for k, v in result.items():
                 self.callback_manager.on_output_msg(
@@ -84,13 +84,5 @@ class LLMNode(BaseNode):
         result = self._llm.invoke([SystemMessage(content=system),
                                    HumanMessage(content=user)],
                                   config=config)
-        if llm_callback.output_len == 0:
-            # stream 模式，命中了缓存等情况，直接返回结果
-            self.callback_manager.on_output_msg(
-                OutputMsgData(
-                    node_id=self.id,
-                    msg=result.content,
-                    unique_id=unique_id,
-                    output_key=output_key,
-                ))
+
         return result.content

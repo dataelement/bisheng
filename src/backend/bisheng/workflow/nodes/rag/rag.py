@@ -1,6 +1,7 @@
 from typing import List
 
 from bisheng.api.services.llm import LLMService
+from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -41,6 +42,9 @@ class RagNode(BaseNode):
 
         self._user_info = UserDao.get_user(int(self.user_id))
 
+        # 是否输出结果给用户
+        self._output_user = self.node_params.get('output_user', False)
+
         self._milvus = None
         self._es = None
 
@@ -61,8 +65,14 @@ class RagNode(BaseNode):
         user_questions = self.init_user_question()
         ret = {}
         for index, question in enumerate(user_questions):
-            result = retriever._call({'query': question})
             output_key = self.node_params['output_user_input'][index]['key']
+            llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
+                                                  unique_id=unique_id,
+                                                  node_id=self.id,
+                                                  output=self._output_user,
+                                                  output_key=output_key)
+            result = retriever._call({'query': question}, run_manager=llm_callback)
+
             if self.node_params['output_user']:
                 self.callback_manager.on_output_msg(
                     OutputMsgData(node_id=self.id,
