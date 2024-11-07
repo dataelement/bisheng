@@ -243,7 +243,7 @@ class BishengRAGTool:
                     'question': query
                 },
                 return_only_outputs=return_only_outputs,
-                config=RunnableConfig(callbacks=run_manager.get_child()),
+                config=RunnableConfig(callbacks=run_manager),
             )
         except Exception as e:
             logger.error(f'question: {query}\nerror: {e}')

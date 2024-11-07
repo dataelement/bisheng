@@ -71,6 +71,7 @@ class RagNode(BaseNode):
                                                   node_id=self.id,
                                                   output=self._output_user,
                                                   output_key=output_key)
+
             result = retriever._call({'query': question}, run_manager=llm_callback)
 
             if self._output_user and llm_callback.output_len == 0:
