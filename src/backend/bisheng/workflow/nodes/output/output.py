@@ -13,13 +13,13 @@ class OutputNode(BaseNode):
 
         # minio
         self._minio_client = MinioClient()
-        self._output_type = self.node_params['submitted_result']['type']
+        self._output_type = self.node_params['output_way']['type']
 
         # 非选择型交互，则下个节点就是连线的target。选择型交互，需要根据用户输入来判断
         self._next_node_id = self.target_edges[0].target
 
     def handle_input(self, user_input: dict) -> Any:
-        self.node_params['submitted_result']['value'] = user_input['submitted_result']
+        self.node_params['output_way']['value'] = user_input['output_way']
 
     def get_input_schema(self) -> Any:
         # 说明不需要交互
@@ -31,7 +31,7 @@ class OutputNode(BaseNode):
     def route_node(self, state: dict) -> str:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
-            return self.get_next_node_id(self.node_params['submitted_result']['value'])
+            return self.get_next_node_id(self.node_params['output_way']['value'])
         return self._next_node_id
 
     def _run(self, unique_id: str):
@@ -60,13 +60,13 @@ class OutputNode(BaseNode):
         }
         # 需要交互则有group_params
         if self._output_type == 'input':
-            msg_params['key'] = 'submitted_result'
+            msg_params['key'] = 'output_way'
             msg_params['input_msg'] = self.parse_template_msg(
-                self.node_params['submitted_result']['value'])
+                self.node_params['output_way']['value'])
             self.callback_manager.on_output_input(data=OutputMsgInputData(**msg_params))
         elif self._output_type == 'choose':
-            msg_params['key'] = 'submitted_result'
-            msg_params['options'] = self.node_data.get_variable_info('submitted_result').options
+            msg_params['key'] = 'output_way'
+            msg_params['options'] = self.node_data.get_variable_info('output_way').options
             self.callback_manager.on_output_choose(data=OutputMsgChooseData(**msg_params))
         else:
             self.callback_manager.on_output_msg(OutputMsgData(**msg_params))

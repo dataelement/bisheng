@@ -1,4 +1,5 @@
 from bisheng.api.services.llm import LLMService
+from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.llm.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
@@ -24,8 +25,9 @@ class LLMNode(BaseNode):
         self._user_variables = self._user_prompt.extract()
 
         # 初始化llm对象
+        self._stream = True
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               params={'stream': True})
+                                               params={'stream': self._stream})
 
     def _run(self, unique_id: str):
         result = {}
@@ -36,6 +38,16 @@ class LLMNode(BaseNode):
                 output_key = self.node_params['output'][index]['key']
                 result[output_key] = self._run_once(one, unique_id, output_key)
 
+        if not self._stream:
+            # 非stream 模式，处理结果
+            for k, v in result.items():
+                self.callback_manager.on_output_msg(
+                    OutputMsgData(
+                        node_id=self.node_id,
+                        msg=v,
+                        unique_id=unique_id,
+                        output_key=k,
+                    ))
         return result
 
     def _run_once(self,
@@ -61,11 +73,11 @@ class LLMNode(BaseNode):
         user = self._user_prompt.format(variable_map)
 
         logger.debug(f'workflow llm node prompt: system: {system}\nuser: {user}')
-        llm_callback = LLMNodeCallbackHandler(
-            callback=self.callback_manager,
-            unique_id=unique_id,
-            node_id=self.id,
-        )
+        llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
+                                              unique_id=unique_id,
+                                              node_id=self.id,
+                                              output=self._output_user,
+                                              output_key=output_key)
         config = RunnableConfig(callbacks=[llm_callback])
 
         result = self._llm.invoke([SystemMessage(content=system),

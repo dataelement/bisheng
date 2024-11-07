@@ -109,7 +109,7 @@
             }
           },
           {
-            "key": "submitted_result",
+            "key": "output_way",
             "label": "交互类型",
             "global": "value.type=input",
             "type": "output_form",
@@ -345,6 +345,7 @@
             "key": "output_user_input",
             "label": "输出变量",
             "type": "var",
+            "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
             "value": []
           }
         ]

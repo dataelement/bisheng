@@ -30,12 +30,12 @@ class GuideQuestionData(BaseModel):
 
 
 class OutputMsgData(BaseModel):
-    unique_id: str = Field(..., description='Unique execution id')
+    unique_id: Optional[str] = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files')
-    stream: bool = Field(False, description='Whether the message is stream')
     output_key: str = Field('output', description='Whether the message is stream')
+    stream: bool = Field(True, description='Whether the message is stream', exclude=True)
 
 
 class OutputMsgInputData(OutputMsgData):

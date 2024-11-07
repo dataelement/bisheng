@@ -107,11 +107,12 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_output_msg(self, data: OutputMsgData):
         print(f'output msg: {data}')
+        msg_type = 'stream' if data.stream else 'over'
         self.send_chat_response(
             ChatResponse(message=data,
                          category='output_msg',
                          extra='',
-                         type='over',
+                         type=msg_type,
                          flow_id=self.workflow_id,
                          chat_id=self.chat_id,
                          files=data.files))

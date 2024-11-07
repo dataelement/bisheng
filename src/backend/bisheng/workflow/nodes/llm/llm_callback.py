@@ -6,7 +6,7 @@ from langchain_core.callbacks.base import AsyncCallbackHandler, BaseCallbackHand
 from loguru import logger
 
 
-class LLMNodeCallbackHandler(AsyncCallbackHandler):
+class LLMNodeAsyncCallbackHandler(AsyncCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
     def __init__(self, callback: BaseCallback, unique_id: str, node_id: str):
@@ -29,11 +29,17 @@ class LLMNodeCallbackHandler(AsyncCallbackHandler):
             ))
 
 
-class StreamingLLMCallbackHandler(BaseCallbackHandler):
+class LLMNodeCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
-    def __init__(self, callback: BaseCallback, unique_id: str, node_id: str, output: bool,
-                 output_key: str):
+    def __init__(
+        self,
+        callback: BaseCallback,
+        unique_id: str,
+        node_id: str,
+        output: bool,
+        output_key: str,
+    ):
         self.callback_manager = callback
         self.unique_id = unique_id
         self.node_id = node_id
@@ -50,5 +56,4 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
                 OutputMsgData(node_id=self.node_id,
                               msg=token,
                               unique_id=self.unique_id,
-                              output_key=self.output_key,
-                              stream=True))
+                              output_key=self.output_key))
