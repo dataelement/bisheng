@@ -57,16 +57,19 @@ class RagNode(BaseNode):
             max_content=self._max_chunk_size,
             sort_by_source_and_index=self._sort_chunks,
             return_source_documents=True,
-            document_variable_name='retriretrieved_result',
         )
         user_questions = self.init_user_question()
         ret = {}
         for index, question in enumerate(user_questions):
             result = retriever._call({'query': question})
+            output_key = self.node_params['output_user_input'][index]['key']
             if self.node_params['output_user']:
                 self.callback_manager.on_output_msg(
-                    OutputMsgData(node_id=self.id, msg=result['result']))
-            ret[self.node_params['output_user_input'][index]['key']] = result
+                    OutputMsgData(node_id=self.id,
+                                  msg=result['result'],
+                                  unique_id=unique_id,
+                                  output_key=output_key))
+            ret[output_key] = result
         return ret
 
     def init_user_question(self) -> List[str]:
