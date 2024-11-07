@@ -1,10 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import JSON, Column, DateTime, Text, text, CHAR, UniqueConstraint, update, delete
+from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select
 
 
@@ -76,7 +76,7 @@ class LLMServer(LLMServerBase, table=True):
 
 class LLMModel(LLMModelBase, table=True):
     __tablename__ = 'llm_model'
-    __table_args__ = (UniqueConstraint('server_id', 'model_name', name='server_model_uniq'),)
+    __table_args__ = (UniqueConstraint('server_id', 'model_name', name='server_model_uniq'), )
 
     id: Optional[int] = Field(nullable=False, primary_key=True, description='模型唯一ID')
 
@@ -117,19 +117,20 @@ class LLMDao:
                 else:
                     add_models.append(model)
             # 删除模型
-            session.exec(delete(LLMModel).where(LLMModel.server_id == server.id,
-                                                LLMModel.id.not_in([model.id for model in update_models])))
+            session.exec(
+                delete(LLMModel).where(LLMModel.server_id == server.id,
+                                       LLMModel.id.not_in([model.id for model in update_models])))
             # 添加新增的模型
             session.add_all(add_models)
             # 更新已有模型的数据
             for one in update_models:
-                session.exec(update(LLMModel).where(LLMModel.id == one.id).values(
-                    name=one.name,
-                    description=one.description,
-                    model_name=one.model_name,
-                    model_type=one.model_type,
-                    config=one.config
-                ))
+                session.exec(
+                    update(LLMModel).where(LLMModel.id == one.id).values(
+                        name=one.name,
+                        description=one.description,
+                        model_name=one.model_name,
+                        model_type=one.model_type,
+                        config=one.config))
 
             session.commit()
             session.refresh(server)
@@ -180,22 +181,26 @@ class LLMDao:
     @classmethod
     def get_model_by_type(cls, model_type: LLMModelType) -> Optional[LLMModel]:
         """ 根据模型类型获取第一个创建的模型 """
-        statement = select(LLMModel).where(LLMModel.model_type == model_type.value).order_by(LLMModel.id.asc())
+        statement = select(LLMModel).where(LLMModel.model_type == model_type.value).order_by(
+            LLMModel.id.asc())
         with session_getter() as session:
             return session.exec(statement).first()
 
     @classmethod
     def get_model_by_server_ids(cls, server_ids: List[int]) -> List[LLMModel]:
         """ 根据服务ID获取模型 """
-        statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(LLMModel.update_time.desc())
+        statement = select(LLMModel).where(LLMModel.server_id.in_(server_ids)).order_by(
+            LLMModel.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
     @classmethod
-    def update_model_status(cls, model_id: int, status: int, remark: str = ""):
+    def update_model_status(cls, model_id: int, status: int, remark: str = ''):
         """ 更新模型状态 """
         with session_getter() as session:
-            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(status=status, remark=remark))
+            session.exec(
+                update(LLMModel).where(LLMModel.id == model_id).values(status=status,
+                                                                       remark=remark))
             session.commit()
 
     @classmethod

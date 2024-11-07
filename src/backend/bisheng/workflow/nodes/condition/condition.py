@@ -8,9 +8,11 @@ class ConditionNode(BaseNode):
         super().__init__(*args, **kwargs)
 
         self._next_node_id = None
-        self._condition_cases = [ConditionCases(**one) for one in self.node_params["condition"]["cases"]]
+        self._condition_cases = [
+            ConditionCases(**one) for one in self.node_params['condition']['cases']
+        ]
 
-    def _run(self):
+    def _run(self, unique_id: str):
         for one in self._condition_cases:
             if one.evaluate_conditions(self.graph_state):
                 self._next_node_id = self.get_next_node_id(one.id)

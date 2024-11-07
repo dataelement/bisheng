@@ -1,19 +1,19 @@
-import asyncio
 import time
-from queue import Queue, Empty
-from typing import Dict, Any
-
-from loguru import logger
+from typing import Dict
 
 from bisheng.workflow.callback.base_callback import BaseCallback
-from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.graph_engine import GraphEngine
 
 
 class Workflow:
 
-    def __init__(self, workflow_id: str, user_id: str = None, workflow_data: Dict = None,
-                 max_steps: int = 0, timeout: int = 0, callback: BaseCallback = None):
+    def __init__(self,
+                 workflow_id: str,
+                 user_id: str = None,
+                 workflow_data: Dict = None,
+                 max_steps: int = 0,
+                 timeout: int = 0,
+                 callback: BaseCallback = None):
 
         # 运行的唯一标识，保存到数据库的唯一ID
         self.workflow_id = workflow_id
@@ -23,8 +23,11 @@ class Workflow:
         self.timeout = timeout
         self.current_time = None
 
-        self.graph_engine = GraphEngine(user_id=user_id, workflow_id=workflow_id, workflow_data=workflow_data,
-                                        max_steps=max_steps, callback=callback)
+        self.graph_engine = GraphEngine(user_id=user_id,
+                                        workflow_id=workflow_id,
+                                        workflow_data=workflow_data,
+                                        max_steps=max_steps,
+                                        callback=callback)
 
     def run(self, input_data: dict = None) -> (str, str):
         """

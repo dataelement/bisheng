@@ -1,4 +1,4 @@
-from typing import Any, Optional, List
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,9 +30,12 @@ class GuideQuestionData(BaseModel):
 
 
 class OutputMsgData(BaseModel):
+    unique_id: str = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files')
+    stream: bool = Field(False, description='Whether the message is stream')
+    output_key: str = Field('output', description='Whether the message is stream')
 
 
 class OutputMsgInputData(OutputMsgData):

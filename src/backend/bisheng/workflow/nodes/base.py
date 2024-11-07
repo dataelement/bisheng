@@ -1,10 +1,10 @@
 import copy
 import uuid
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
 from bisheng.workflow.callback.base_callback import BaseCallback
-from bisheng.workflow.callback.event import NodeStartData, NodeEndData
+from bisheng.workflow.callback.event import NodeEndData, NodeStartData
 from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.graph_state import GraphState
@@ -12,8 +12,9 @@ from bisheng.workflow.graph.graph_state import GraphState
 
 class BaseNode(ABC):
 
-    def __init__(self, node_data: BaseNodeData, workflow_id: str, user_id: str, graph_state: GraphState,
-                 target_edges: List[EdgeBase], max_steps: int, callback: BaseCallback, **kwargs: Any):
+    def __init__(self, node_data: BaseNodeData, workflow_id: str, user_id: str,
+                 graph_state: GraphState, target_edges: List[EdgeBase], max_steps: int,
+                 callback: BaseCallback, **kwargs: Any):
         self.id = node_data.id
         self.type = node_data.type
         self.name = node_data.name
@@ -41,7 +42,7 @@ class BaseNode(ABC):
         self.callback_manager = callback
 
         # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
-        self.tmp_collection_name = "tmp_workflow_data"
+        self.tmp_collection_name = 'tmp_workflow_data'
 
         # 简单参数解析
         self.init_data()
@@ -56,7 +57,7 @@ class BaseNode(ABC):
                 self.node_params[param_info.key] = copy.deepcopy(param_info.value)
 
     @abstractmethod
-    def _run(self) -> Dict[str, Any]:
+    def _run(self, unique_id: str) -> Dict[str, Any]:
         """
         Run node 返回的结果会存储到全局的变量管理里，可以被其他节点使用
         :return:
@@ -89,14 +90,15 @@ class BaseNode(ABC):
         :return:
         """
         if self.current_step >= self.max_steps:
-            raise Exception(f"node {self.name} exceeded more than max steps")
+            raise Exception(f'node {self.name} exceeded more than max steps')
 
         exec_id = uuid.uuid4().hex
-        self.callback_manager.on_node_start(data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
+        self.callback_manager.on_node_start(
+            data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
         reason = None
         try:
-            result = self._run()
+            result = self._run(exec_id)
             # 把节点输出存储到全局变量中
             if result:
                 for key, value in result.items():
@@ -106,6 +108,6 @@ class BaseNode(ABC):
             reason = str(e)
             raise e
         finally:
-            self.callback_manager.on_node_end(
-                data=NodeEndData(unique_id=exec_id, node_id=self.id, name=self.name, reason=reason))
+            self.callback_manager.on_node_end(data=NodeEndData(
+                unique_id=exec_id, node_id=self.id, name=self.name, reason=reason))
         return state

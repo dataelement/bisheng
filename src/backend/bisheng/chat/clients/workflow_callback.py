@@ -1,18 +1,18 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
-from typing import Callable, cast, List, Coroutine, Any
-
-from loguru import logger
+from typing import Any, Callable, Coroutine, List, cast
 
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.workflow.callback.base_callback import BaseCallback
-from bisheng.workflow.callback.event import NodeStartData, NodeEndData, OutputMsgChooseData, OutputMsgInputData, UserInputData, GuideWordData, GuideQuestionData, \
-    OutputMsgData
+from bisheng.workflow.callback.event import (GuideQuestionData, GuideWordData, NodeEndData,
+                                             NodeStartData, OutputMsgChooseData, OutputMsgData,
+                                             OutputMsgInputData, UserInputData)
+from loguru import logger
 
 
 def _run_coros(coros: List[Coroutine[Any, Any, Any]]) -> None:
-    if hasattr(asyncio, "Runner"):
+    if hasattr(asyncio, 'Runner'):
         # Python 3.11+
         # Run the coroutines in a new event loop, taking care to
         # - install signal handlers
@@ -25,7 +25,7 @@ def _run_coros(coros: List[Coroutine[Any, Any, Any]]) -> None:
                 try:
                     runner.run(coro)
                 except Exception as e:
-                    logger.warning(f"Error in callback coroutine: {repr(e)}")
+                    logger.warning(f'Error in callback coroutine: {repr(e)}')
 
             # Run pending tasks scheduled by coros until they are all done
             while pending := asyncio.all_tasks(runner.get_loop()):
@@ -37,10 +37,11 @@ def _run_coros(coros: List[Coroutine[Any, Any, Any]]) -> None:
             try:
                 asyncio.run(coro)
             except Exception as e:
-                logger.warning(f"Error in callback coroutine: {repr(e)}")
+                logger.warning(f'Error in callback coroutine: {repr(e)}')
 
 
 class WorkflowWsCallback(BaseCallback):
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.websocket = kwargs.get('websocket')
@@ -50,89 +51,89 @@ class WorkflowWsCallback(BaseCallback):
 
     def send_chat_response(self, chat_response: ChatResponse):
         with ThreadPoolExecutor(1) as executor:
-            executor.submit(
-                cast(Callable, copy_context().run), _run_coros, [self.websocket.send_json(chat_response.dict())]
-            ).result()
+            executor.submit(cast(Callable,
+                                 copy_context().run), _run_coros,
+                            [self.websocket.send_json(chat_response.dict())]).result()
 
     def on_node_start(self, data: NodeStartData):
         """ node start event """
-        print(f"node start: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.dict(),
-            category='node_run',
-            type='start',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id))
+        print(f'node start: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.dict(),
+                         category='node_run',
+                         type='start',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id))
 
     def on_node_end(self, data: NodeEndData):
         """ node end event """
-        print(f"node end: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.dict(),
-            category='node_run',
-            type='end',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id))
+        print(f'node end: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.dict(),
+                         category='node_run',
+                         type='end',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id))
 
     def on_user_input(self, data: UserInputData):
         """ user input event """
-        print(f"user input: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.dict(),
-            category='user_input',
-            type='over',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id))
+        print(f'user input: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.dict(),
+                         category='user_input',
+                         type='over',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id))
 
     def on_guide_word(self, data: GuideWordData):
         """ guide word event """
-        print(f"guide word: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.guide_word,
-            category='guide_word',
-            type='over',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id))
+        print(f'guide word: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.guide_word,
+                         category='guide_word',
+                         type='over',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id))
 
     def on_guide_question(self, data: GuideQuestionData):
         """ guide question event """
-        print(f"guide question: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.guide_question,
-            category='guide_question',
-            type='over',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id))
+        print(f'guide question: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.guide_question,
+                         category='guide_question',
+                         type='over',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id))
 
     def on_output_msg(self, data: OutputMsgData):
-        print(f"output msg: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.msg,
-            category='output_msg',
-            extra="",
-            type='over',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id,
-            files=data.files))
+        print(f'output msg: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data,
+                         category='output_msg',
+                         extra='',
+                         type='over',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id,
+                         files=data.files))
 
     def on_output_choose(self, data: OutputMsgChooseData):
-        print(f"output choose: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.dict(),
-            category='output_choose_msg',
-            extra="",
-            type='over',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id,
-            files=data.files))
+        print(f'output choose: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.dict(),
+                         category='output_choose_msg',
+                         extra='',
+                         type='over',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id,
+                         files=data.files))
 
     def on_output_input(self, data: OutputMsgInputData):
-        print(f"output input: {data}")
-        self.send_chat_response(ChatResponse(
-            message=data.dict(),
-            category='output_input_msg',
-            extra="",
-            type='over',
-            flow_id=self.workflow_id,
-            chat_id=self.chat_id,
-            files=data.files))
+        print(f'output input: {data}')
+        self.send_chat_response(
+            ChatResponse(message=data.dict(),
+                         category='output_input_msg',
+                         extra='',
+                         type='over',
+                         flow_id=self.workflow_id,
+                         chat_id=self.chat_id,
+                         files=data.files))
