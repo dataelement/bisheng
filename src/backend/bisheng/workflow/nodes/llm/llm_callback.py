@@ -50,7 +50,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         # azure偶尔会返回一个None
         if token is None:
             return
-
+        logger.info('on_llm_new_token {} token={}', self.output, token)
         if self.output:
             self.callback_manager.on_output_msg(
                 OutputMsgData(node_id=self.node_id,
