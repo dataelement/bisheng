@@ -19,7 +19,6 @@ import DataSetPage from "./pages/DataSetPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
-import FlowPage from "./pages/FlowPage";
 import KnowledgePage from "./pages/KnowledgePage";
 import FilesPage from "./pages/KnowledgePage/detail";
 import FilesUpload from "./pages/KnowledgePage/filesUpload";

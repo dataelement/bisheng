@@ -147,7 +147,7 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
 
             {!onEditClick && <div className="mt-4">
                 {!isAdding ? (
-                    <Button onClick={() => setIsAdding(true)} variant='outline' className="w-full border-dashed">
+                    <Button onClick={() => setIsAdding(true)} variant='outline' className="border-primary text-primary mt-2">
                         + 添加选项
                     </Button>
                 ) : (

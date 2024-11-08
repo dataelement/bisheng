@@ -1050,9 +1050,9 @@
   .textarea-badge{
     @apply border border-[#E8EDF2] rounded-md px-1 bg-[#EFF3F8] text-primary
   }
-  .textarea-badge::before{
+  /* .textarea-badge::before{
     content: '(x)';
-  }
+  } */
   /* .bisheng-flow-handle:hover::after{
     content: '';
     @apply size-full rounded-full absolute bg-primary top-0 animate-ping pointer-events-none

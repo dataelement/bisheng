@@ -58,7 +58,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                         <TabsTrigger value="account">基础节点</TabsTrigger>
                         <TabsTrigger value="password">工具节点</TabsTrigger>
                     </TabsList>
-                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] top-2`} onClick={() => setExpand(!expand)}>
+                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] top-2 rounded-full`} onClick={() => setExpand(!expand)}>
                         <ListVideo className={`size-5 ${expand ? 'rotate-180' : ''}`} />
                     </Button>}
                 </div>
@@ -69,7 +69,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                 <Tooltip key={item.type}>
                                     <TooltipTrigger className="block w-full">
                                         <div key={item.type}
-                                            className="flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200"
+                                            className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200 ${['input', 'output', 'llm', 'rag', 'end'].includes(item.type) ? '' : 'opacity-60'}`}
                                             onMouseEnter={(event) => {
                                                 // 如果正在拖拽，不移除hover样式
                                                 if (!event.currentTarget.classList.contains('border-gray-200')) {
@@ -79,7 +79,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                             onMouseLeave={(event) => {
                                                 event.currentTarget.classList.remove('bg-muted');
                                             }}
-                                            draggable={!dropdown || ['code'].includes(item.type)}
+                                            draggable={!dropdown && ['input', 'output', 'llm', 'rag', 'end'].includes(item.type)}
                                             onDragStart={(event) => {
                                                 onDragStart(event, { type: item.type, node: tempData.find(tmp => tmp.type === item.type) })
                                             }}

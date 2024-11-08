@@ -16,6 +16,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
         onChange({ msg: data.value?.msg, files: updatedFiles })
     };
     const { files, handleFileUpload, handleFileRemove } = useFileUpload(data.value?.files || [], handleFilesChange);
+    console.log('files :>> ', files);
 
     return (
         <div className='node-item mb-4 nodrag' data-key={data.key}>
@@ -29,10 +30,10 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
                 onChange={handleInputChange}
             >
                 {/* Display uploaded images */}
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap gap-4 p-2">
                     {
                         files.map((file, index) => (
-                            /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.path) ?
+                            /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name.toLocaleLowerCase()) ?
                                 <div key={index} className="relative border rounded-md size-12 my-2">
                                     <img src={file.path} alt="" className="object-cover w-12 h-12 rounded-md" />
                                     <Button
@@ -44,11 +45,11 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
                                         <X size={14} />
                                     </Button>
                                 </div> :
-                                <div className="relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
-                                    <File />
-                                    <div>
-                                        <p className="font-bold">{file.name}</p>
-                                        <span>{file.path.split('.')[1]}</span>
+                                <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
+                                    <File className="min-w-5"/>
+                                    <div className="max-w-full flex-1 pr-4">
+                                        <p className="w-full font-bold truncate">{file.name}</p>
+                                        {/* <span>{file.path.split('.')[1]}</span> */}
                                     </div>
                                     <Button
                                         size="icon"

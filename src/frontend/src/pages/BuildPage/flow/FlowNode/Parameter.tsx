@@ -1,16 +1,22 @@
 import { WorkflowNodeParam } from "@/types/flow";
+import CodeInputItem from "./component/CodeInputItem";
+import CodeOutputItem from "./component/CodeOutputItem";
+import CodePythonItem from "./component/CodePythonItem";
+import ConditionItem from "./component/ConditionItem";
 import HistoryNumItem from "./component/HistoryNumItem";
 import InputFormItem from "./component/InputFormItem";
 import InputItem from "./component/InputItem";
 import InputListItem from "./component/InputListItem";
+import KnowledgeQaSelectItem from "./component/KnowledgeQaSelectItem";
 import KnowledgeSelectItem from "./component/KnowledgeSelectItem";
 import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
-import SliderItem from "./component/SliderItem";
+import SliderItem, { SwitchSliderItem } from "./component/SliderItem";
 import SwitchItem from "./component/SwitchItem";
 import TextAreaItem from "./component/TextAreaItem";
+import ToolItem from "./component/ToolItem";
 import VarItem from "./component/VarItem";
-import VarSelectItem from "./component/VarSelectItem";
+import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 
@@ -46,20 +52,34 @@ export default function Parameter({ nodeId, item, onOutPutChange }
             return <ModelItem data={item} onChange={handleOnNewValue} />
         case 'slide':
             return <SliderItem data={item} onChange={handleOnNewValue} />
+        case 'slide_switch':
+            return <SwitchSliderItem data={item} onChange={handleOnNewValue} />
         case 'var_textarea':
             return <VarTextareaItem nodeId={nodeId} data={item} onChange={handleOnNewValue} />
         case 'switch':
             return <SwitchItem data={item} onChange={handleOnNewValue} />;
+        case 'var_select':
+            return <VarSelectSingleItem nodeId={nodeId} data={item} onChange={handleOnNewValue} />;
         case 'user_question':
             return <VarSelectItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onOutPutChange={onOutPutChange} />;
         case 'knowledge_select_multi':
             return <KnowledgeSelectItem data={item} onChange={handleOnNewValue} />;
+        case 'qa_select_multi':
+            return <KnowledgeQaSelectItem data={item} onChange={handleOnNewValue} />;
         case 'number':
             return <InputItem type='number' data={item} onChange={handleOnNewValue} />;
-        // case 'date':
-        //     return <DateParameter />;
-        // case 'boolean':
-        //     return <BooleanParameter />;
+        case 'code_input':
+            return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} />;
+        case 'code':
+            return <CodePythonItem data={item} onChange={handleOnNewValue} />;
+        case 'code_output':
+            return <CodeOutputItem data={item} onChange={handleOnNewValue} />;
+        case 'add_tool':
+            return <ToolItem data={item} onChange={handleOnNewValue} />;
+        case 'condition':
+            return <ConditionItem nodeId={nodeId} data={item} onChange={handleOnNewValue} />;
+        case 'report':
+            return null;
         default:
             return <div>Unsupported parameter type</div>;
     }

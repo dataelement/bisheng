@@ -54,7 +54,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 <NodeToolbarComponent nodeId={node.id} type={node.type}></NodeToolbarComponent>
             </NodeToolbar>
 
-            <div className="bisheng-node">
+            <div className={`bisheng-node ${node.type === 'condition' ? 'w-auto min-w-80' : ''}`} data-id={node.id}>
                 {/* top */}
                 <div className='bisheng-node-top flex items-center'>
                     <LoadingIcon className='size-5 text-[#B3BBCD]' />

@@ -112,7 +112,7 @@ export interface WorkFlow {
   id: string;
   name: string;
   description: string;
-  nodes: Node<WorkflowNode[]>[];
+  nodes: Node[];
   edges: Edge[];
   viewport: Viewport;
   // status: number;

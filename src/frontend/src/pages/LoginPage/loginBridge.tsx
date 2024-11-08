@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 //@ts-ignore
 import Wxpro from "./icons/wxpro.svg?react";
 import { useTranslation } from "react-i18next";
-import { ReactComponent as Wxpro } from "./icons/wxpro.svg";
 
 export default function LoginBridge({ onHasLdap }) {
 

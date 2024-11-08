@@ -27,8 +27,8 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
-    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, insetSeparator, destory, setShowGuideQuestion } = useMessageStore()
-    // console.log('ui messages :>> ', messages);
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, streamWsMsg, insetSeparator, destory, setShowGuideQuestion } = useMessageStore()
+    console.log('ui messages :>> ', messages);
 
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
@@ -226,7 +226,6 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
     }
 
     // 接受 ws 消息
-    const msgClosedRef = useRef(true) // 消息闭合
     const handleWsMessage = (data) => {
         if (data.category === 'error') return toast({
             variant: 'error',
@@ -249,13 +248,14 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             return insetSeparator('本轮结束')
         } else if (data.type === 'over') {
             createWsMsg(data)
-        } else if (data.type === 'start') {
-            createWsMsg(data)
         } else if (data.type === 'stream') {
-            updateCurrentMessage(data)
-        } else if (data.type === 'end') {
-            updateCurrentMessage(data)
+            streamWsMsg(data)
         }
+        //  else if (data.type === 'stream') {
+        //     updateCurrentMessage(data)
+        // } else if (data.type === 'end') {
+        //     updateCurrentMessage(data)
+        // }
 
         // if (Array.isArray(data) && data.length) return
         // if (data.type === 'start') {

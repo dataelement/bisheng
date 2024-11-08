@@ -34,6 +34,7 @@ type Actions = {
     destory: () => void;
     createSendMsg: (msg: string) => void;
     createWsMsg: (data: any) => void;
+    streamWsMsg: (data: any) => void;
     updateCurrentMessage: (data: any) => void;
     changeChatId: (chatId: string) => void;
     startNewRound: (str: string) => void;
@@ -106,24 +107,22 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             return { messages: newChat }
         })
     },
-    // stream end
-    updateCurrentMessage(data) {
-        const messages = get().messages
-
-        console.log('change updateCurrentMessage');
-        const currentMessageIndex = messages.findIndex(msg => msg.message_id === data.message_id)
-        const currentMessage = messages[currentMessageIndex]
-
+    // stream
+    streamWsMsg(data) {
+        let messages = cloneDeep(get().messages);
+        const { unique_id, output_key } = data.message;
+        const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
+        const currentMsg = messages[currentMessageIndex]
+        if (!currentMsg) return get().createWsMsg({ ...data, message: data.message.msg, message_id: unique_id + output_key })
+        // append
         const newCurrentMessage = {
-            ...currentMessage,
-            ...data,
-            message: currentMessage.message + data.message,
-            end: ['end', 'over'].includes(data.type),
+            ...currentMsg,
+            message: currentMsg.message + data.message.msg,
             update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
         }
 
         messages[currentMessageIndex] = newCurrentMessage
-        set((state) => ({ messages: [...messages] }))
+        set((state) => ({ messages }))
     },
     createSendMsg(msg) {
         set((state) => ({
@@ -150,6 +149,25 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
 
 
+    // stream end old
+    updateCurrentMessage(data) {
+        const messages = get().messages
+
+        console.log('change updateCurrentMessage');
+        const currentMessageIndex = messages.findIndex(msg => msg.message_id === data.message_id)
+        const currentMessage = messages[currentMessageIndex]
+
+        const newCurrentMessage = {
+            ...currentMessage,
+            ...data,
+            message: currentMessage.message + data.message,
+            end: ['end', 'over'].includes(data.type),
+            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+        }
+
+        messages[currentMessageIndex] = newCurrentMessage
+        set((state) => ({ messages: [...messages] }))
+    },
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
     },

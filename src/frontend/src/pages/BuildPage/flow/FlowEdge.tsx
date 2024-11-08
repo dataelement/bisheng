@@ -11,7 +11,7 @@ export default function CustomEdge({ id, sourceX, sourceY, targetX, targetY, onO
         targetX,
         targetY,
         targetPosition: Position.Left,
-        curvature: 1
+        curvature: 0.4
     });
 
     const handleOptionClick = (option) => {

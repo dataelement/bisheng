@@ -10,6 +10,7 @@ import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
+import { autoNodeName, initNode } from "@/util/flowUtils";
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
@@ -66,7 +67,7 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                 // start node
                 const nodeId = `${node.type}_${generateUUID(5)}`;
                 node.id = nodeId;
-                (!flow.nodes || flow.nodes.length === 0) && setNodes([{ id: nodeId, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }])
+                (!flow.nodes || flow.nodes.length === 0) && setNodes([{ id: nodeId, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }]);
             }} />
             <main className="h-full flex flex-1 bg-gray-50" ref={keyBoardPanneRef}>
                 <div className="size-full" ref={reactFlowWrapper}>
@@ -208,9 +209,13 @@ const useFlow = (_reactFlowInstance, data) => {
 
                 const nodeId = `${data.node.type}_${generateUUID(5)}`
                 data.node.id = nodeId
-                setNodes((nds) => nds.concat(
-                    { id: nodeId, type: 'flowNode', position, data: data.node }
-                ));
+                // 增加节点
+                setNodes((nds) => {
+                    const newName = autoNodeName(nds, data.node.name)
+                    const newNode = initNode(data.node)
+                    newNode.name = newName
+                    return nds.concat({ id: nodeId, type: 'flowNode', position, data: newNode })
+                });
             } else if (event.dataTransfer.types.some((t) => t === "Files")) {
                 // 拖拽上传
                 // takeSnapshot();
@@ -227,9 +232,9 @@ const useFlow = (_reactFlowInstance, data) => {
             x: 1 - reactflowBounds.left,
             y: 2 - reactflowBounds.top,
         });
-        setNodes((nds) => nds.concat(
-            { id: 'c', type: 'flowNode', position, data: { value: 'Node B' } }
-        ));
+        // setNodes((nds) => nds.concat(
+        //     { id: 'c', type: 'flowNode', position, data: { value: 'Node B' } }
+        // ));
     }, [setNodes, _reactFlowInstance])
 
     // 监听来自自定义节点的Chang value
@@ -274,8 +279,14 @@ const useFlow = (_reactFlowInstance, data) => {
                     selected: false
                 };
             });
-
-            setNodes((nds) => nds.map((e) => ({ ...e, selected: false })).concat(newNodes));
+            // 增加节点
+            setNodes((nds) => {
+                const _newNodes = newNodes.map(node => {
+                    node.data.name = autoNodeName(nds, node.data.name)
+                    return node
+                })
+                return nds.map((e) => ({ ...e, selected: false })).concat(_newNodes)
+            });
         }
 
         // 监听自定义事件

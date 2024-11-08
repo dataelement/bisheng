@@ -19,10 +19,10 @@ const Header = ({ flow, onTabChange }) => {
 
     const handleRunClick = () => {
         // 记录错误日志
-        message({
-            variant: 'warning',
-            description: "跳过校验,启动会话"
-        })
+        // message({
+        //     variant: 'warning',
+        //     description: "跳过校验,启动会话"
+        // })
 
         testRef.current?.run(flow)
     }

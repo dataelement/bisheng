@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
 import { ChevronRight } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
 
@@ -9,6 +9,10 @@ const isMatch = (obj, expression) => {
     return fn(obj.value);
 };
 
+/**
+ * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
+ * @returns 
+ */
 export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
@@ -24,6 +28,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
             name: temp.name,
             icon: <NodeLogo type={temp.type} />,
             desc: temp.description,
+            tab: temp.tab?.value || '',
             data: hasChild ? temp.group_params : null
         }
     }
@@ -47,12 +52,23 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
         let _vars = []
         item.data.forEach(group => {
             group.params.forEach(param => {
+                // 过滤不相同tab
+                if (item.tab && param.tab && item.tab !== param.tab) return
+                // 过滤当前节点的output变量
+                if (nodeId === item.id && param.key.indexOf('output') === 0) return
                 // 不能选自己(相同变量名视为self) param.key
                 if (param.key === itemKey) return
                 if (!param.global) return
                 // 处理code表达式
                 if (param.global.indexOf('code') === 0) {
-                    const result = isMatch(param, param.global.replace('code:', ''));
+                    let result = isMatch(param, param.global.replace('code:', ''));
+                    // 没值 key补
+                    if (!result.length) {
+                        result = [{
+                            label: param.key,
+                            value: param.key
+                        }]
+                    }
                     _vars = [..._vars, ...result]
                 } else if (param.global === 'key'
                     || (param.global === 'self' && nodeId === item.id)) {
@@ -103,13 +119,21 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
         })))
     }
 
+    // clear
+    useEffect(() => {
+        if (!open) {
+            setVars([])
+            setQuestions([])
+        }
+    }, [open])
+
     return <Select open={open} onOpenChange={setOpen}>
         <SelectTrigger showIcon={false} className={'group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0'}>
             {children}
         </SelectTrigger>
         <SelectContent>
             <div className="flex ">
-                <div className="w-36 border-l first:border-none">
+                <div className="w-36 border-l first:border-none overflow-y-auto max-h-[360px] scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
                             className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"

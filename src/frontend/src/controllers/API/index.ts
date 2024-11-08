@@ -110,6 +110,7 @@ export function updateTempApi(temp_id, data) {
 
 /**
  * 获取知识库列表
+ * type 0文件库 1qa库
  */
 export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0 }) {
   try {

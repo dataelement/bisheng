@@ -14,7 +14,7 @@ export default function VarItem({ data }) {
         <div className={open ? 'block' : 'hidden'}>
             {
                 data.value.map((item, index) =>
-                    <Badge key={item.key} variant="outline" className="bg-input text-muted-foreground ml-1 mt-1">{item.label}</Badge>
+                    <Badge key={item.key} variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-1 mt-1">{item.label}</Badge>
                 )
             }
         </div>

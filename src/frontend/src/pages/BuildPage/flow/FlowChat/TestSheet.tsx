@@ -23,7 +23,7 @@ export const TestSheet = forwardRef((props, ref) => {
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
-            <SheetContent className="sm:max-w-[520px]">
+            <SheetContent className="sm:max-w-[50%]">
                 <SheetHeader>
                     <SheetTitle className="flex items-center p-2 text-md"><Play size={16} /> 工作流预览</SheetTitle>
                 </SheetHeader>

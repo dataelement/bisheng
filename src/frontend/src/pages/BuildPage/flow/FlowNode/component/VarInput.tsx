@@ -119,6 +119,13 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
         onChange(textMsgRef.current);
     };
 
+    const handlePaste = (e) => {
+        // fomat text
+        e.preventDefault();  // 阻止默认粘贴行为
+        const text = e.clipboardData.getData('text');  // 从剪贴板中获取纯文本内容
+        document.execCommand('insertText', false, text);
+    }
+
     return <div className="nodrag mt-2 flex flex-col w-full relative rounded-md border border-input bg-search-input text-sm shadow-sm">
         <div className="flex justify-between gap-1 border-b px-2 py-1">
             <Label className="bisheng-label text-xs">变量输入</Label>
@@ -137,7 +144,8 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
             onInput={handleInput}
             onClick={handleSelection}
             onKeyUp={handleSelection}
-            className="px-3 py-2 min-h-[80px] max-h-24 overflow-y-auto border-none outline-none bg-search-input text-[#111] rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            onPaste={handlePaste}
+            className="nowheel px-3 py-2 whitespace-pre-line min-h-[80px] max-h-24 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input text-[#111] rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         // value={value.msg}
         // onChange={(e) => setValue({ ...value, msg: e.target.value })}
         // placeholder="Enter your message..."
