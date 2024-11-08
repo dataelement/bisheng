@@ -243,10 +243,10 @@ class BishengRAGTool:
                     'question': query
                 },
                 return_only_outputs=return_only_outputs,
-                config=RunnableConfig(callbacks=run_manager),
+                config=RunnableConfig(callbacks=[run_manager]),
             )
         except Exception as e:
-            logger.error(f'question: {query}\nerror: {e.with_traceback()}')
+            logger.error(f'question: {query}\nerror: {e}')
             ans = {'output_text': str(e)}
         if return_only_outputs:
             rag_answer = ans['output_text']

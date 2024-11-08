@@ -43,7 +43,7 @@ class LLMNode(BaseNode):
             for k, v in result.items():
                 self.callback_manager.on_output_msg(
                     OutputMsgData(
-                        node_id=self.node_id,
+                        node_id=self.id,
                         msg=v,
                         unique_id=unique_id,
                         output_key=k,
