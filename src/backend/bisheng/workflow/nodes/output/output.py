@@ -36,7 +36,7 @@ class OutputNode(BaseNode):
 
     def _run(self, unique_id: str):
         self.parse_output_msg()
-        self.send_output_msg()
+        self.send_output_msg(unique_id)
         return self.node_params
 
     def parse_output_msg(self):
@@ -51,9 +51,10 @@ class OutputNode(BaseNode):
                 one['path'] = self._minio_client.clear_minio_share_host(
                     self._minio_client.get_share_link(one['path']))
 
-    def send_output_msg(self):
+    def send_output_msg(self, unique_id: str):
         """ 发送output节点的消息 """
         msg_params = {
+            'unique_id': unique_id,
             'node_id': self.id,
             'msg': self.node_params['output_msg']['msg'],
             'files': self.node_params['output_msg']['files']

@@ -46,4 +46,5 @@ class OutputMsgInputData(OutputMsgData):
 
 class OutputMsgChooseData(OutputMsgData):
     key: str = Field('', description='variable key')
+    unique_id: Optional[str] = Field('', description='Unique execution id')
     options: Any = Field(None, description='default msg')
