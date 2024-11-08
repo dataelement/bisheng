@@ -37,7 +37,9 @@ class OutputNode(BaseNode):
     def _run(self, unique_id: str):
         self.parse_output_msg()
         self.send_output_msg(unique_id)
-        return self.node_params
+        res = {}
+        res['output_way'] = self.node_params['output_way']['value']
+        return res
 
     def parse_output_msg(self):
         """ 填充msg中的变量，获取文件的share地址 """
@@ -57,7 +59,8 @@ class OutputNode(BaseNode):
             'unique_id': unique_id,
             'node_id': self.id,
             'msg': self.node_params['output_msg']['msg'],
-            'files': self.node_params['output_msg']['files']
+            'files': self.node_params['output_msg']['files'],
+            'output_key': ''
         }
         # 需要交互则有group_params
         if self._output_type == 'input':

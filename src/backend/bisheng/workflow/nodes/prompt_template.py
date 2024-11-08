@@ -1,9 +1,10 @@
 import re
 
-REGEX = re.compile(r"\{\{#([#a-zA-Z_][#a-zA-Z0-9_]{0,29})#\}\}")
+from loguru import logger
+
+REGEX = re.compile(r'\{\{#([#a-zA-Z_][#a-zA-Z0-9_]{0,29})#\}\}')
 WITH_VARIABLE_TMPL_REGEX = re.compile(
-    r"\{\{#([#a-zA-Z_][a-zA-Z0-9_]{0,29}|[#a-zA-Z0-9_]{1,50}\.[#a-zA-Z0-9_\.]{1,100})#\}\}"
-)
+    r'\{\{#([#a-zA-Z_][a-zA-Z0-9_]{0,29}|[#a-zA-Z0-9_]{1,50}\.[#a-zA-Z0-9_\.]{1,100})#\}\}')
 
 
 class PromptTemplateParser:
@@ -29,17 +30,23 @@ class PromptTemplateParser:
         return re.findall(self.regex, self.template)
 
     def format(self, inputs: dict, remove_template_variables: bool = True) -> str:
+
         def replacer(match):
             key = match.group(1)
-            value = inputs.get(key, match.group(0))  # return original matched string if key not found
+            value = inputs.get(key,
+                               match.group(0))  # return original matched string if key not found
+            if isinstance(value, dict):
+                logger.info(f'value is dict, key={key}, value={value}')
+                value = value['result']  # rag result
 
             if remove_template_variables:
-                return PromptTemplateParser.remove_template_variables(value, self.with_variable_tmpl)
+                return PromptTemplateParser.remove_template_variables(
+                    value, self.with_variable_tmpl)
             return value
 
         prompt = re.sub(self.regex, replacer, self.template)
-        return re.sub(r"<\|.*?\|>", "", prompt)
+        return re.sub(r'<\|.*?\|>', '', prompt)
 
     @classmethod
     def remove_template_variables(cls, text: str, with_variable_tmpl: bool = False):
-        return re.sub(WITH_VARIABLE_TMPL_REGEX if with_variable_tmpl else REGEX, r"{\1}", text)
+        return re.sub(WITH_VARIABLE_TMPL_REGEX if with_variable_tmpl else REGEX, r'{\1}', text)

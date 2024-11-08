@@ -42,7 +42,7 @@ class GraphState(BaseModel):
         从全局变量中获取数据
         contact_key: node_id.key#index  #index不一定需要
         """
-        tmp_list = contact_key.split('.')
+        tmp_list = contact_key.split('.', 1)
         node_id = tmp_list[0]
         var_key = tmp_list[1]
         variable_val_index = None

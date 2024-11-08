@@ -27,7 +27,8 @@ class LLMNode(BaseNode):
         # 初始化llm对象
         self._stream = True
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
-                                               params={'stream': self._stream})
+                                               params={'stream': self._stream},
+                                               cache=False)
 
     def _run(self, unique_id: str):
         result = {}
