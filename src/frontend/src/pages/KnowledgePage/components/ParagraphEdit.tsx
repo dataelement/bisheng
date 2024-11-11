@@ -29,7 +29,7 @@ const ParagraphEdit = ({
     const prevOvergapData = useRef(null);
     const { t } = useTranslation('knowledge')
 
-    const labelTexts = useLabelTexts(fileId, partitions)
+    const labelTextRef = useLabelTexts(fileId, partitions)
     const [previewFileUrl, setFileUrl] = useState('')
     useEffect(() => {
         chunks ? setFileUrl(filePath) : getFilePathApi(fileId).then(setFileUrl)
@@ -39,13 +39,13 @@ const ParagraphEdit = ({
     const initData = (res) => {
         let labelsData = []
         let value = ''
-        // 优先遍历prioritizedItem（放数组前面）
         const arrData = [...res.data]
-        const prioritizedItem = arrData.find(item => item.metadata.chunk_index === chunkId);
-        if (prioritizedItem) {
-            arrData.splice(arrData.indexOf(prioritizedItem), 1);
-            arrData.unshift(prioritizedItem);
-        }
+        // 优先遍历prioritizedItem（放数组前面）
+        // const prioritizedItem = arrData.find(item => item.metadata.chunk_index === chunkId);
+        // if (prioritizedItem) {
+        //     arrData.splice(arrData.indexOf(prioritizedItem), 1);
+        //     arrData.unshift(prioritizedItem);
+        // }
 
         const seenIds = new Set()
         arrData.forEach(chunk => {
@@ -136,11 +136,11 @@ const ParagraphEdit = ({
         const distinct = {}
         const selectLabels = lbs.reduce((res, item) => {
             const { id, active } = item
-            const partId = labelTexts[id].part_id
+            const partId = labelTextRef.current[id].part_id
             if (distinct[partId]) return res // same partId
             distinct[partId] = true
-            Object.keys(labelTexts).forEach((key) => {
-                if (labelTexts[key].part_id === partId) {
+            Object.keys(labelTextRef.current).forEach((key) => {
+                if (labelTextRef.current[key].part_id === partId) {
                     res.push({ id: key, active })
                 }
             })
@@ -163,10 +163,10 @@ const ParagraphEdit = ({
         let prevPartId = ''
         let str = ''
         // 标注块拼接段落
-        data.forEach((item) => {
-            if (typeof labelTexts[item.id] === 'string') return window.alter('文件已失效，传个新的在测试')
+        data.forEach((item, index) => {
+            if (typeof labelTextRef.current[item.id] === 'string') return window.alter('文件已失效，传个新的在测试')
             if (item.active) {
-                const { text, type, part_id } = labelTexts[item.id]
+                const { text, type, part_id } = labelTextRef.current[item.id]
                 if (str === '') {
                     // 第一个块, title类型，末尾加单换行
                     str += text + (type === 'Title' ? '\n' : '')
@@ -310,16 +310,18 @@ const useDragSize = (full) => {
 
 // 标注文本数据
 const useLabelTexts = (fileId: string, partitions: any) => {
-    const [labelText, setLabelText] = useState<any>({});
+    const labelTextRef = useRef<any>({});
     useEffect(() => {
-        partitions ?
-            setLabelText(partitions)
-            : getFileBboxApi(fileId).then(res => {
-                setLabelText(res)
+        if (partitions) {
+            labelTextRef.current = partitions
+        } else {
+            getFileBboxApi(fileId).then(res => {
+                labelTextRef.current = res
             })
+        }
     }, [])
 
-    return labelText;
+    return labelTextRef;
 }
 
 export default ParagraphEdit;
