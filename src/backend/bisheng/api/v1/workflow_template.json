@@ -53,7 +53,7 @@
   {
     "id": "input_xxx",
     "name": "输入",
-    "description": "工作流运行到此结束",
+    "description": "工作流运行到此, 等待用户输入",
     "type": "input",
     "tab": {
       "value": "input",

@@ -19,7 +19,9 @@ class OutputNode(BaseNode):
         self._next_node_id = self.target_edges[0].target
 
     def handle_input(self, user_input: dict) -> Any:
+        # 需要存入state，
         self.node_params['output_way']['value'] = user_input['output_way']
+        self.graph_state.set_variable(self.id, 'output_way', user_input['output_way'])
 
     def get_input_schema(self) -> Any:
         # 说明不需要交互
