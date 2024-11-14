@@ -1,10 +1,11 @@
 import json
 import re
+
 from bisheng_langchain.gpts.message_types import LiberalFunctionMessage, LiberalToolMessage
 from langchain.tools import BaseTool
 from langchain.tools.render import format_tool_to_openai_tool
 from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.messages import FunctionMessage, SystemMessage, ToolMessage
+from langchain_core.messages import FunctionMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt import ToolExecutor, ToolInvocation
@@ -25,7 +26,10 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
             else:
                 msgs.append(m)
 
-        return [SystemMessage(content=system_message)] + msgs
+        return [
+            SystemMessage(content=system_message),
+            HumanMessage(content=kwargs.get('human_message'))
+        ] + msgs
 
     if tools:
         llm_with_tools = llm.bind(tools=[format_tool_to_openai_tool(t) for t in tools])
@@ -41,7 +45,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         if 'tool_calls' not in last_message.additional_kwargs:
             if '|<instruct>|' in system_message:
                 # cohere model
-                pattern = r"Answer:(.+)\nGrounded answer"
+                pattern = r'Answer:(.+)\nGrounded answer'
                 match = re.search(pattern, last_message.content)
                 if match:
                     last_message.content = match.group(1)

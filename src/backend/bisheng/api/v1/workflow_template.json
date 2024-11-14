@@ -53,7 +53,7 @@
   {
     "id": "input_xxx",
     "name": "输入",
-    "description": "工作流运行到此, 等待用户输入",
+    "description": "工作流运行到此结束",
     "type": "input",
     "tab": {
       "value": "input",
@@ -419,12 +419,9 @@
           {
             "key": "batch_variable",
             "label": "批处理变量",
-            "global": "self",
             "type": "user_question",
             "value": [],
-            "linkage": "output",
-            "placeholder": "请选择批处理变量",
-            "tab": "batch"
+            "placeholder": "请选择批处理变量"
           }
         ]
       },
@@ -510,10 +507,17 @@
           },
           {
             "key": "output",
-            "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
             "label": "输出变量",
             "type": "var",
-            "value": []
+            "value": "",
+            "tab": "single"
+          },
+          {
+            "key": "output_batch",
+            "label": "输出变量",
+            "type": "user_question_output",
+            "value": [],
+            "tab": "batch"
           }
         ]
       }
@@ -531,9 +535,7 @@
             "key": "condition",
             "label": "",
             "type": "condition",
-            "value": {
-              "cases": []
-            }
+            "value": []
           }
         ]
       }

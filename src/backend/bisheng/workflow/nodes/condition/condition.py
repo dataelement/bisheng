@@ -8,9 +8,7 @@ class ConditionNode(BaseNode):
         super().__init__(*args, **kwargs)
 
         self._next_node_id = None
-        self._condition_cases = [
-            ConditionCases(**one) for one in self.node_params['condition']['cases']
-        ]
+        self._condition_cases = [ConditionCases(**one) for one in self.node_params['condition']]
 
     def _run(self, unique_id: str):
         for one in self._condition_cases:
