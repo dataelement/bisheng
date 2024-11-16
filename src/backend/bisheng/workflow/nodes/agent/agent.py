@@ -6,6 +6,11 @@ from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 
+agent_executor_dict = {
+    'ReAct': 'get_react_agent_executor',
+    'function call': 'get_openai_functions_agent_executor',
+}
+
 
 class AgentNode(BaseNode):
 
@@ -47,7 +52,7 @@ class AgentNode(BaseNode):
         if not assistant_llm.llm_list:
             raise Exception('助手推理模型列表为空')
         default_llm = [
-            one for one in assistant_llm if one.model_id == self.node_params['model_id']
+            one for one in assistant_llm.llm_list if one.model_id == self.node_params['model_id']
         ][0]
         self._agent_executor_type = default_llm.agent_executor_type
         knowledge_retriever = {
@@ -58,13 +63,19 @@ class AgentNode(BaseNode):
         func_tools = self._init_tools()
         knowledge_tools = self._init_knowledge_tools(knowledge_retriever)
         tools = func_tools.extend(knowledge_tools)
-        self._agent = ConfigurableAssistant(agent_executor_type=self._agent_executor_type,
-                                            tools=tools,
-                                            llm=self._llm,
-                                            assistant_message=system_prompt)
+        self._agent = ConfigurableAssistant(
+            agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
+            tools=tools,
+            llm=self._llm,
+            assistant_message=system_prompt,
+        )
 
     def _init_tools(self):
-        return AssistantAgent.init_tools_by_toolid(self._tools, None)
+        if self._tools:
+            tool_ids = [int(one['key']) for one in self._tools]
+            return AssistantAgent.init_tools_by_toolid(tool_ids, self._llm, None)
+        else:
+            return []
 
     def _init_knowledge_tools(self, knowledge_retriever: dict):
         if not self._knowledge_ids:
@@ -96,7 +107,7 @@ class AgentNode(BaseNode):
                 output_key = self.node_params['output'][index]['key']
                 ret[output_key] = self._run_once(one, unique_id, output_key)
 
-        if not self._stream and self._output_user:
+        if self._output_user:
             # 非stream 模式，处理结果
             for k, v in ret.items():
                 self.callback_manager.on_output_msg(

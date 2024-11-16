@@ -115,7 +115,8 @@ class AssistantAgent(AssistantUtils):
                                               temperature=self.assistant.temperature,
                                               streaming=assistant_llm.auto_llm.streaming)
 
-    def parse_tool_params(self, tool: GptsTools) -> Dict:
+    @staticmethod
+    def parse_tool_params(tool: GptsTools) -> Dict:
         """
         解析预置工具的初始化参数
         """
@@ -128,19 +129,28 @@ class AssistantAgent(AssistantUtils):
 
         return params
 
-    def sync_init_preset_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+    @staticmethod
+    def sync_init_preset_tools(tool_list: List[GptsTools],
+                               llm: BaseLanguageModel,
+                               callbacks: Callbacks = None):
         """
         初始化预置工具列表
         """
-        tool_name_param = {tool.tool_key: self.parse_tool_params(tool) for tool in tool_list}
-        tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm, callbacks=callbacks)
+        tool_name_param = {
+            tool.tool_key: AssistantAgent.parse_tool_params(tool)
+            for tool in tool_list
+        }
+        tool_langchain = load_tools(tool_params=tool_name_param, llm=llm, callbacks=callbacks)
         return tool_langchain
 
     async def init_preset_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
         """
         初始化预置工具列表
         """
-        tool_name_param = {tool.tool_key: self.parse_tool_params(tool) for tool in tool_list}
+        tool_name_param = {
+            tool.tool_key: AssistantAgent.parse_tool_params(tool)
+            for tool in tool_list
+        }
         tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm, callbacks=callbacks)
         return tool_langchain
 
@@ -158,7 +168,8 @@ class AssistantAgent(AssistantUtils):
                                                        tool_type_info.auth_type,
                                                        tool_type_info.api_key)
 
-    def sync_init_personal_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+    @staticmethod
+    def sync_init_personal_tools(tool_list: List[GptsTools], callbacks: Callbacks = None):
         """
         初始化自定义工具列表
         """
@@ -167,7 +178,7 @@ class AssistantAgent(AssistantUtils):
         all_tool_type = {one.id: one for one in all_tool_type}
         tool_langchain = []
         for one in tool_list:
-            tool_params = self.parse_personal_params(one, all_tool_type)
+            tool_params = AssistantAgent.parse_personal_params(one, all_tool_type)
             openapi_tool = OpenApiTools.get_api_tool(one.tool_key, **tool_params)
             openapi_tool.callbacks = callbacks
             tool_langchain.append(openapi_tool)
@@ -222,7 +233,13 @@ class AssistantAgent(AssistantUtils):
             knowledge_retriever=self.assistant.knowledge_retriever,
         )
 
-    def init_tools_by_toolid(self, tool_ids: List[int], callbacks: Callbacks = None):
+    @staticmethod
+    def init_tools_by_toolid(
+        tool_ids: List[int],
+        llm: BaseLanguageModel,
+        callbacks: Callbacks = None,
+    ):
+        """通过id初始化tool"""
         tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
         preset_tools = []
         personal_tools = []
@@ -233,12 +250,12 @@ class AssistantAgent(AssistantUtils):
             else:
                 personal_tools.append(one)
         if preset_tools:
-            tool_langchain = self.sync_init_preset_tools(preset_tools, callbacks)
+            tool_langchain = AssistantAgent.sync_init_preset_tools(preset_tools, llm, callbacks)
             logger.info('act=build_preset_tools size={} return_tools={}', len(preset_tools),
                         len(tool_langchain))
             tools += tool_langchain
         if personal_tools:
-            tool_langchain = self.sync_init_personal_tools(personal_tools, callbacks)
+            tool_langchain = AssistantAgent.sync_init_personal_tools(personal_tools, callbacks)
             logger.info('act=build_personal_tools size={} return_tools={}', len(personal_tools),
                         len(tool_langchain))
             tools += tool_langchain

@@ -71,19 +71,22 @@ class OpenApiTools(APIToolBase):
 
     def run(self, **kwargs) -> str:
         """Run query through api and parse result."""
+        extra = {}
+        if 'proxy' in kwargs:
+            extra['proxy'] = kwargs.pop('proxy')
         path = self.get_real_path()
         logger.info('api_call url={}', path)
         method = self.get_request_method()
         params, json_data = self.get_params_json(**kwargs)
 
         if method == 'get':
-            resp = self.client.get(path, params=params)
+            resp = self.client.get(path, params=params, **extra)
         elif method == 'post':
-            resp = self.client.post(path, params=params, json=json_data)
+            resp = self.client.post(path, params=params, json=json_data, **extra)
         elif method == 'put':
-            resp = self.client.put(path, params=params, json=json_data)
+            resp = self.client.put(path, params=params, json=json_data, **extra)
         elif method == 'delete':
-            resp = self.client.delete(path, params=params, json=json_data)
+            resp = self.client.delete(path, params=params, json=json_data, **extra)
         else:
             raise Exception(f'http method is not support: {method}')
         if resp.status_code != 200:
@@ -93,19 +96,23 @@ class OpenApiTools(APIToolBase):
 
     async def arun(self, **kwargs) -> str:
         """Run query through api and parse result."""
+        extra = {}
+        if 'proxy' in kwargs:
+            extra['proxy'] = kwargs.pop('proxy')
+
         path = self.get_real_path()
         logger.info('api_call url={}', path)
         method = self.get_request_method()
         params, json_data = self.get_params_json(**kwargs)
 
         if method == 'get':
-            resp = await self.async_client.aget(path, params=params)
+            resp = await self.async_client.aget(path, params=params, **extra)
         elif method == 'post':
-            resp = await self.async_client.apost(path, params=params, json=json_data)
+            resp = await self.async_client.apost(path, params=params, json=json_data, **extra)
         elif method == 'put':
-            resp = await self.async_client.aput(path, params=params, json=json_data)
+            resp = await self.async_client.aput(path, params=params, json=json_data, **extra)
         elif method == 'delete':
-            resp = await self.async_client.adelete(path, params=params, json=json_data)
+            resp = await self.async_client.adelete(path, params=params, json=json_data, **extra)
         else:
             raise Exception(f'http method is not support: {method}')
         return resp
