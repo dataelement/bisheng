@@ -383,7 +383,6 @@
     "complete": "Complete",
     "setSplitSize": "Please set the file split size",
     "selectFileToUpload": "Please select a file to upload first",
-    "fileSizeExceedsLimit": "File size cannot exceed 50MB,removed",
     "file": "File",
     "sizeExceedsLimit": "Size exceeds 50MB",
     "editDictionary": "Edit Dictionary",

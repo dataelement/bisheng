@@ -2,11 +2,10 @@ import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { File, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import VarInput from "./VarInput";
-import useFlowStore from "../../flowStore";
 
-export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
+export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate }) {
     // console.log('data.value :>> ', data.value);
     const handleInputChange = (msg) => {
         onChange({ msg, files })
@@ -16,12 +15,25 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
         onChange({ msg: data.value?.msg, files: updatedFiles })
     };
     const { files, handleFileUpload, handleFileRemove } = useFileUpload(data.value?.files || [], handleFilesChange);
-    console.log('files :>> ', files);
+
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            if (!data.value?.msg) {
+                setError(true)
+                return data.label + '不可为空'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
 
     return (
         <div className='node-item mb-4 nodrag' data-key={data.key}>
             <Label className='bisheng-label'>{data.label}</Label>
             <VarInput
+                error={error}
+                placeholder={data.placeholder}
                 itemKey={data.key}
                 nodeId={nodeId}
                 flowNode={data}
@@ -46,7 +58,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange }) {
                                     </Button>
                                 </div> :
                                 <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
-                                    <File className="min-w-5"/>
+                                    <File className="min-w-5" />
                                     <div className="max-w-full flex-1 pr-4">
                                         <p className="w-full font-bold truncate">{file.name}</p>
                                         {/* <span>{file.path.split('.')[1]}</span> */}

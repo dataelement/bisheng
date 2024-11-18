@@ -1,26 +1,30 @@
 import { Label } from "@/components/bs-ui/label";
 import { Slider } from "@/components/bs-ui/slider";
 import { Switch } from "@/components/bs-ui/switch";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import React from "react";
 
 export default function SliderItem({ data, onChange }) {
-    const [value, setValue] = React.useState(data.value * 100)
+    const [value, setValue] = React.useState(data.value)
 
     return <div className='node-item mb-4' data-key={data.key}>
-        <Label className='bisheng-label'>{data.label}</Label>
+        <Label className='flex items-center bisheng-label'>
+            {data.label}
+            {data.help && <QuestionTooltip content={data.help} />}
+        </Label>
         <div className="flex gap-4 mt-2">
             <Slider
                 name="slider"
                 value={[value]}
-                min={0}
-                max={200}
-                step={10}
+                min={data.scope?.[0] || 0}
+                max={data.scope?.[1] || 10}
+                step={data.step || 1}
                 onValueChange={(v) => {
                     setValue(v[0])
-                    onChange(v[0] / 100)
+                    onChange(v[0])
                 }}
             />
-            <span className="w-10">{value / 100}</span>
+            <span className="w-10">{value}</span>
         </div>
     </div>
 };
@@ -33,7 +37,10 @@ export const SwitchSliderItem = ({ data, onChange }) => {
 
     return <div className='node-item mb-4' data-key={data.key}>
         <div className="flex justify-between items-center">
-            <Label className='bisheng-label'>{data.label}</Label>
+            <Label className='flex items-center bisheng-label'>
+                {data.label}
+                {data.help && <QuestionTooltip content={data.help} />}
+            </Label>
             <Switch checked={value.flag} onCheckedChange={(v) => {
                 const newValue = { ...value, flag: v }
                 setValue(newValue)
@@ -46,9 +53,9 @@ export const SwitchSliderItem = ({ data, onChange }) => {
                 disabled={!value.flag}
                 name="slider"
                 value={[value.value]}
-                min={0}
-                max={100}
-                step={1}
+                min={data.scope?.[0] || 0}
+                max={data.scope?.[1] || 10}
+                step={data.step || 1}
                 onValueChange={(v) => {
                     const newValue = { ...value, value: v[0] }
                     setValue(newValue)

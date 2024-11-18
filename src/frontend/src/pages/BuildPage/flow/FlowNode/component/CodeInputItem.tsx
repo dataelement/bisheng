@@ -2,10 +2,10 @@ import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { ChevronDown, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SelectVar from "./SelectVar";
 
-const Item = ({ nodeId, item, index, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => {
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType, label: '', value: '' });
     };
@@ -18,10 +18,21 @@ const Item = ({ nodeId, item, index, onUpdateItem, onDeleteItem }) => {
         onUpdateItem(index, { ...item, value: e.target.value });
     };
 
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        if (!validate) return setError(false);
+        if (item.key === '' || !/^[a-zA-Z0-9_]{1,50}$/.test(item.key)) {
+            setError(true);
+        } else {
+            setError(false);
+        }
+    }, [validate])
+
     return (
         <div className="flex gap-1 items-center mb-1">
             {/* key */}
-            <Input value={item.key} onChange={handleKeyChange} className="h-8" />
+            <Input value={item.key} onChange={handleKeyChange} className={`${error && 'border-red-500'} h-8`} />
             {/* type */}
 
             <Select value={item.type} onValueChange={handleTypeChange}>
@@ -52,10 +63,11 @@ const Item = ({ nodeId, item, index, onUpdateItem, onDeleteItem }) => {
 };
 
 
-export default function CodeInputItem({ nodeId, data, onChange }) {
+export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
     const [items, setItems] = useState(data.value);
 
     const handleAddItem = () => {
+        setError(false)
         const newItems = [...items, { key: '', type: 'quote', label: '', value: '' }];
         setItems(newItems);
         onChange(newItems);
@@ -73,11 +85,37 @@ export default function CodeInputItem({ nodeId, data, onChange }) {
         onChange(newItems);
     };
 
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            setError(false)
+            setTimeout(() => {
+                setError(true)
+            }, 100);
+
+            let msg = ''
+            items.some(item => {
+                if (item.key === '') {
+                    msg = '变量名称不能为空'
+                    return true
+                } else if (!/^[a-zA-Z0-9_]*$/.test(item.key)) {
+                    msg = '变量名称只能包含英文字符、数字和下划线'
+                    return true
+                } else if (item.key.length > 50) {
+                    msg = '变量名称不能超过 50 个字符'
+                    return true
+                }
+            })
+            return msg || false
+        })
+    }, [data.value])
+
     return (
         <div>
             {items.map((item, index) => (
                 <Item
                     key={index}
+                    validate={error}
                     nodeId={nodeId}
                     item={item}
                     index={index}

@@ -275,3 +275,11 @@
     margin-right: 5px;
     font-weight: bold;
 }
+
+.hover-reveal .hover-reveal-child{
+	opacity: 0;
+	transition: opacity .2s ease-in-out;
+}
+.hover-reveal:hover .hover-reveal-child{
+	opacity: 100;
+}

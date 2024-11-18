@@ -223,7 +223,9 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                         <p className="text-sm text-red-500" style={{ display: 'none' }}></p>
                         {index !== inputs.length - 1 && <CircleMinus
                             onClick={(e) => {
-                                e.target.previousSibling.style.display = 'none';
+                                if (e.target.previousSibling) {
+                                    e.target.previousSibling.style.display = 'none';
+                                }
                                 handleRemoveInput(item.id)
                             }} className="w-4 h-4 absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>

@@ -2,10 +2,10 @@ import { Badge } from "@/components/bs-ui/badge";
 import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { ChevronDown, X } from "lucide-react";
-import React from "react";
+import React, { useEffect } from "react";
 import SelectVar from "./SelectVar";
 
-export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }) {
+export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, onValidate }) {
     const [value, setValue] = React.useState(data.value)
 
     const handleDelete = (val) => {
@@ -46,6 +46,18 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }
         })
     }
 
+    const [error, setError] = React.useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            if (!data.value.length) {
+                setError(true)
+                return data.label + '不可为空'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
+
     return <div className='node-item mb-4' data-key={data.key}>
         <div className="flex justify-between items-center">
             <Label className="flex items-center bisheng-label">
@@ -56,13 +68,13 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }
             <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
         </div>
         <SelectVar nodeId={nodeId} itemKey={data.key} onSelect={handleChange}>
-            <div className="no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
+            <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
                 <div className="flex flex-wrap size-full overflow-y-auto">
-                    {value.map(item => <Badge onPointerDown={(e) => e.stopPropagation()} key={item} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
+                    {value.length ? value.map(item => <Badge onPointerDown={(e) => e.stopPropagation()} key={item} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
                         {data.varZh[item]}
                         <X className="h-3 w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
-                    )}
+                    ) : <span className="text-gray-400 mt-0.5">{data.placeholder}</span>}
                 </div>
                 <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>
@@ -72,7 +84,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange }
 
 
 // 单选
-export function VarSelectSingleItem({ nodeId, data, onChange }) {
+export function VarSelectSingleItem({ nodeId, data, onChange, onValidate }) {
     const [value, setValue] = React.useState(data.value)
 
     const handleChange = (item, v) => {
@@ -90,6 +102,17 @@ export function VarSelectSingleItem({ nodeId, data, onChange }) {
         onChange(itemKey)
     }
 
+    const [error, setError] = React.useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            if (!data.value) {
+                setError(true)
+                return data.label + '不可为空'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
 
     return <div className='node-item mb-4' data-key={data.key}>
         <div className="flex justify-between items-center">
@@ -101,9 +124,9 @@ export function VarSelectSingleItem({ nodeId, data, onChange }) {
             {/* <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge> */}
         </div>
         <SelectVar nodeId={nodeId} itemKey={data.key} onSelect={handleChange}>
-            <div className="no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
+            <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
                 <div className="flex flex-wrap">
-                    {data.varZh?.[value] || ''}
+                    {value ? data.varZh?.[value] : <span className="text-gray-400">{data.placeholder}</span>}
                 </div>
                 <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
             </div>

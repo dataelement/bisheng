@@ -3,7 +3,7 @@ import Cascader from "@/components/bs-ui/select/cascader";
 import { getModelListApi } from "@/controllers/API/finetune";
 import { useEffect, useMemo, useState } from "react";
 
-export default function ModelItem({ data, onChange }) {
+export default function ModelItem({ data, onChange, onValidate }) {
     const [options, setOptions] = useState<any[]>([])
 
     useEffect(() => {
@@ -49,9 +49,22 @@ export default function ModelItem({ data, onChange }) {
         return _defaultValue
     }, [data.value, options])
 
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            if (!data.value) {
+                setError(true)
+                return data.label + '不可为空'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
+
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
         {defaultValue ? <Cascader
+            error={error}
             defaultValue={defaultValue}
             options={options}
             onChange={(val) => onChange(val[1])}

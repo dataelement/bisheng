@@ -36,11 +36,15 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
         }
     };
 
-    const handleAddItem = () => {
+    const handleBeforAddItem = () => {
         if (items.length >= 30) {
             setError("最多添加 30 个选项");
             return;
         }
+        setIsAdding(true)
+    }
+
+    const handleAddItem = () => {
 
         if (!inputValue.trim()) {
             setError("选项内容不可为空");
@@ -131,9 +135,9 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
                                                     id={item.id}
                                                     type="source"
                                                     position={Position.Right}
-                                                    className='bisheng-flow-handle'
-                                                    style={{ right: -12, top: 12 }}
-                                                />
+                                                    className='bisheng-flow-handle group'
+                                                    style={{ right: -30, top: 18 }}
+                                                ><span></span></Handle>
                                             }
                                         </div>
                                     )}
@@ -147,14 +151,14 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
 
             {!onEditClick && <div className="mt-4">
                 {!isAdding ? (
-                    <Button onClick={() => setIsAdding(true)} variant='outline' className="border-primary text-primary mt-2">
+                    <Button onClick={handleBeforAddItem} type='button' variant='outline' className="border-primary text-primary mt-2">
                         + 添加选项
                     </Button>
                 ) : (
                     <div className="flex items-center space-x-2">
                         <Input
                             value={inputValue}
-                            placeholder="请输入选项文本"
+                            placeholder="请输入选项展示文本"
                             onChange={(e) => setInputValue(e.target.value)}
                             maxLength={50}
                         />

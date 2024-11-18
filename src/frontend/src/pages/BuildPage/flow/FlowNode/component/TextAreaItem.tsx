@@ -8,7 +8,8 @@ export default function TextAreaItem({ data, onChange }) {
     return <div className='node-item mb-4' data-key={data.key}>
         <Label className='bisheng-label'>{data.label}</Label>
         <Textarea value={value}
-            className="mt-2"
+            className="nodrag mt-2"
+            placeholder={data.placeholder || ''}
             onChange={(e) => {
                 setValue(e.target.value);
                 onChange(e.target.value);

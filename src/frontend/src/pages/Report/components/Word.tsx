@@ -88,6 +88,7 @@ export default function Word({ data }) {
         }
 
         return () => {
+            console.log('destroyEditor :>> ');
             window.editor.destroyEditor();
         }
     }, [])

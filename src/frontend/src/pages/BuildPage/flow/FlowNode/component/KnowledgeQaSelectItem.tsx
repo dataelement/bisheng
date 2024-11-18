@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-export default function KnowledgeQaSelectItem({ data, onChange }) {
+export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
     const { t } = useTranslation()
     const [value, setValue] = useState<any>(() => data.value.map(el => {
         return { label: el.label, value: el.key }
@@ -42,10 +42,26 @@ export default function KnowledgeQaSelectItem({ data, onChange }) {
         )
     }
 
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            if (!data.value.length) {
+                setError(true)
+                return data.label + '不可为空'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
+
     return <div className='node-item mb-4'>
-        <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
+        <Label className="flex items-center bisheng-label mb-2">
+            {data.required && <span className="text-red-500">*</span>}
+            {data.label}
+        </Label>
         <MultiSelect
             id="knowledge-qaselect"
+            error={error}
             multiple
             className={''}
             value={value}

@@ -23,7 +23,7 @@ const enum KnowledgeType {
 }
 type KnowledgeTypeValues = `${KnowledgeType}`;
 
-export default function KnowledgeSelectItem({ data, onChange }) {
+export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
     const { flow } = useFlowStore()
 
     const currentTabRef = useRef(data.value.type)
@@ -106,10 +106,26 @@ export default function KnowledgeSelectItem({ data, onChange }) {
         currentTabRef.current = tabType
     }
 
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        data.required && onValidate(() => {
+            if (!data.value.value.length) {
+                setError(true)
+                return data.label + '不可为空'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
+
     return <div className='node-item mb-4'>
-        <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
+        <Label className="flex items-center bisheng-label mb-2">
+            {data.required && <span className="text-red-500">*</span>}
+            {data.label}
+        </Label>
         <MultiSelect
             id="knowledge-select-item"
+            error={error}
             tabs={<TabsHead onChange={handleTabChange} />}
             multiple
             className={''}

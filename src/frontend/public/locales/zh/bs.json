@@ -380,7 +380,6 @@
     "complete": "完成",
     "setSplitSize": "请设置文件切分大小",
     "selectFileToUpload": "请先选择文件上传",
-    "fileSizeExceedsLimit": "文件不能超50M",
     "file": "文件",
     "sizeExceedsLimit": "超过50M,已移除",
     "editDictionary": "编辑词典",

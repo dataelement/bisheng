@@ -26,7 +26,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
             id: temp.id,
             type: temp.type,
             name: temp.name,
-            icon: <NodeLogo type={temp.type} />,
+            icon: <NodeLogo type={temp.type} colorStr={temp.name} />,
             desc: temp.description,
             tab: temp.tab?.value || '',
             data: hasChild ? temp.group_params : null

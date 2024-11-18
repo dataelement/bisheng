@@ -22,6 +22,7 @@ interface Option {
 }
 
 interface IProps {
+    error?: boolean,
     placholder?: string,
     defaultValue?: Option[],
     options: Option[],
@@ -91,7 +92,7 @@ const resetCols = (values, options) => {
     return vals
 }
 
-export default function Cascader({ selectClass = '', close = false, selectPlaceholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
+export default function Cascader({ error = false, selectClass = '', close = false, selectPlaceholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
 
     const [open, setOpen] = useState(false)
     const [values, setValues] = useState<any>(defaultValue)
@@ -154,7 +155,7 @@ export default function Cascader({ selectClass = '', close = false, selectPlaceh
     }
 
     return <Select open={open} onOpenChange={setOpen}>
-        <SelectTrigger className={'group data-[placeholder]:text-inherit ' + selectClass}>
+        <SelectTrigger className={`${error && 'border-red-500'} group data-[placeholder]:text-inherit ${selectClass}`}>
             <Input className="border-none bg-transparent px-0" readOnly value={values.map(el => el.label).join('/')} />
             {close && values.length !== 0 && <X
                 className="hidden group-hover:block bg-border text-[#666] rounded-full p-0.5"

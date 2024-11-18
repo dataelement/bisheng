@@ -51,7 +51,7 @@ const Header = ({ flow, onTabChange }) => {
     const handleImportClick = () => {
         setOpen(false)
         bsConfirm({
-            desc: "导入将覆盖现有工作流,确定要导入吗?",
+            desc: "导入将会覆盖现有工作流，确认导入？",
             onOk(next) {
                 uploadFlow()
                 next()
@@ -79,7 +79,7 @@ const Header = ({ flow, onTabChange }) => {
                     <div className="pl-3">
                         <h1 className="font-medium text-sm flex gap-2">
                             <span className="truncate max-w-48 font-bold">流程编排体验</span>
-                            {/* <Button size="icon" variant="ghost" className="size-6"><PencilLineIcon className="size-4 text-gray-500"></PencilLineIcon></Button> */}
+                            <Button size="icon" variant="ghost" className="size-6"><PencilLineIcon className="size-4 text-gray-500"></PencilLineIcon></Button>
                         </h1>
                         <p className="text-xs text-gray-500 mt-0.5">
                             <Badge variant="gray" className="font-light">当前版本: v0.0.0</Badge>

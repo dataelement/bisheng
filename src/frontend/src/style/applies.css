@@ -1014,7 +1014,7 @@
   }
 
   .bisheng-node {
-    @apply relative flex w-80 flex-col justify-center rounded-[20px] bg-[#F7F8FB] pb-5 shadow-sm border-2 border-primary/10
+    @apply relative flex w-[332px] flex-col justify-center rounded-[20px] border-4 group-hover:shadow-sm
   }
   .bisheng-node-top{
     @apply bg-[#EFF1F5] rounded-t-[20px] px-3 py-1.5
@@ -1027,28 +1027,40 @@
   }
 
   .bisheng-flow-handle {
-    @apply h-2 w-2 bg-primary border border-primary hover:scale-[2] transition translate-x-0;
+    @apply h-6 w-6 bg-transparent border-none flex justify-center items-center
   }
-  .bisheng-flow-handle::before {
+  .bisheng-flow-handle:hover span{
+    @apply size-10/12
+  }
+  .bisheng-flow-handle span {
+    @apply w-2 h-2 bg-primary rounded-full transition-all relative pointer-events-none
+  }
+  .bisheng-flow-handle span::before {
     content: '';
-    @apply absolute bg-[#fff] w-[1px] h-full top-0 left-1/2 transform -translate-x-1/2 opacity-0 transition-opacity duration-300;
+    @apply absolute bg-[#fff] w-[1px] h-2/3 top-[3px] left-1/2 transform -translate-x-1/2 opacity-0 transition-opacity duration-300;
   }
   
-  .bisheng-flow-handle::after {
+  .bisheng-flow-handle span::after {
     content: '';
-    @apply absolute bg-[#fff] h-[1px] w-full left-0 top-1/2 transform -translate-y-1/2 opacity-0 transition-opacity duration-300;
+    @apply absolute bg-[#fff] h-[1px] w-2/3 left-[3px] top-1/2 transform -translate-y-1/2 opacity-0 transition-opacity duration-300;
   }
   
-  .bisheng-flow-handle:hover {
+  /* .bisheng-flow-handle:hover {
     @apply bg-primary;
-  }
+  } */
   
-  .bisheng-flow-handle:hover::before,
-  .bisheng-flow-handle:hover::after {
+  .bisheng-flow-handle:hover span::before,
+  .bisheng-flow-handle:hover span::after {
     @apply opacity-100 ;
   }
   .textarea-badge{
     @apply border border-[#E8EDF2] rounded-md px-1 bg-[#EFF3F8] text-primary
+  }
+  .bisheng-richtext{
+    @apply text-[#111]
+  }
+  .bisheng-richtext.placeholder{
+    @apply text-gray-400
   }
   /* .textarea-badge::before{
     content: '(x)';

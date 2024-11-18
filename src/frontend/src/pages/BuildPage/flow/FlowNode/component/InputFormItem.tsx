@@ -89,13 +89,13 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             newErrors.variableName = "变量名称只能包含英文字符、数字和下划线，且不能以数字开头";
         } else if (formData.variableName.length > 50) {
             newErrors.variableName = "变量名称不能超过 50 个字符";
-        } else if (existingOptions?.some(opt => opt.text === formData.variableName)) {
+        } else if (existingOptions?.some(opt => opt.key === formData.variableName)) {
             newErrors.variableName = "变量名称已存在";
         }
 
         // 校验选项长度
-        if (formData.formType === FormType.Select && formData.options.length > 30) {
-            newErrors.options = "最多添加 30 个选项";
+        if (formData.formType === FormType.Select && !formData.options.length) {
+            newErrors.options = "至少添加 1 个选项";
         }
 
         setErrors(newErrors);
@@ -220,7 +220,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         </form>
     );
 }
-export default function InputFormItem({ data, onChange }) {
+export default function InputFormItem({ data, onChange, onValidate }) {
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(''); // 控制编辑模式
     const [foucsUpdate, setFoucsUpdate] = useState(false);
@@ -288,6 +288,18 @@ export default function InputFormItem({ data, onChange }) {
         onChange(data.value);
     };
 
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        onValidate(() => {
+            if (!data.value.length) {
+                setError(true)
+                return '至少添加一个表单项'
+            }
+            setError(false)
+            return false
+        })
+    }, [data.value])
+
     return (
         <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
@@ -304,6 +316,7 @@ export default function InputFormItem({ data, onChange }) {
             <Button onClick={handleOpen} variant='outline' className="border-primary text-primary mt-2">
                 {data.label}
             </Button>
+            {error && <p className="text-red-500 text-sm">至少添加一个表单项</p>}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
                 <DialogContent>

@@ -14,7 +14,7 @@ export default function InputListItem({ data, onChange }) {
             rules={[{ maxLength: 50, message: '最大50个字符' }]}
             value={data.value.length ? data.value : ['']}
             onChange={onChange}
-            placeholder={''}
+            placeholder={data.placeholder || ''}
         ></InputList>
     </div>
 };

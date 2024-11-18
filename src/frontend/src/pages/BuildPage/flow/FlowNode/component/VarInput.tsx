@@ -1,8 +1,8 @@
 import { Button } from "@/components/bs-ui/button";
+import { Label } from "@/components/bs-ui/label";
 import { UploadCloud, Variable } from "lucide-react";
 import { useEffect, useRef } from "react";
 import SelectVar from "./SelectVar";
-import { Label } from "@/components/bs-ui/label";
 
 // ' ' -> '&nbsp;'
 const htmlDecode = (input) => {
@@ -26,8 +26,8 @@ const findKeyByValue = (obj, value) => {
     return value;
 };
 
-export default function VarInput({ nodeId, itemKey, flowNode, value, children = null, onUpload = undefined, onChange }) {
-    const textareaRef = useRef(null);
+export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, value, error = false, children = null, onUpload = undefined, onChange }) {
+    const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
     const textAreaHtmlRef = useRef(null);
     const textMsgRef = useRef(value || '');
 
@@ -53,7 +53,12 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
 
     useEffect(() => {
         textAreaHtmlRef.current = strToHtml(value || '')
-        textareaRef.current.innerHTML = textAreaHtmlRef.current;
+        if (textAreaHtmlRef.current) {
+            textareaRef.current.innerHTML = textAreaHtmlRef.current;
+        } else {
+            textareaRef.current.innerHTML = placeholder;
+            textareaRef.current.classList.add("placeholder");
+        }
     }, [])
 
     const handleInput = () => {
@@ -126,7 +131,7 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
         document.execCommand('insertText', false, text);
     }
 
-    return <div className="nodrag mt-2 flex flex-col w-full relative rounded-md border border-input bg-search-input text-sm shadow-sm">
+    return <div className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'}`}>
         <div className="flex justify-between gap-1 border-b px-2 py-1">
             <Label className="bisheng-label text-xs">变量输入</Label>
             <div className="flex gap-2">
@@ -145,11 +150,52 @@ export default function VarInput({ nodeId, itemKey, flowNode, value, children = 
             onClick={handleSelection}
             onKeyUp={handleSelection}
             onPaste={handlePaste}
-            className="nowheel px-3 py-2 whitespace-pre-line min-h-[80px] max-h-24 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input text-[#111] rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            className="nowheel bisheng-richtext px-3 py-2 whitespace-pre-line min-h-[80px] max-h-24 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         // value={value.msg}
         // onChange={(e) => setValue({ ...value, msg: e.target.value })}
-        // placeholder="Enter your message..."
         ></div>
         {children}
     </div>
 };
+
+
+function usePlaceholder(placeholder) {
+    const divRef = useRef(null);
+
+    const handleFocus = () => {
+        if (divRef.current && divRef.current.innerHTML.trim() === placeholder) {
+            divRef.current.innerHTML = "";
+            divRef.current.classList.remove("placeholder");
+        }
+    };
+
+    const handleBlur = () => {
+        if (divRef.current && divRef.current.innerHTML.trim() === "") {
+            divRef.current.innerHTML = placeholder;
+            divRef.current.classList.add("placeholder");
+        }
+    };
+
+    useEffect(() => {
+        if (!placeholder) return
+        if (divRef.current) {
+            // 添加事件监听
+            divRef.current.addEventListener("focus", handleFocus);
+            divRef.current.addEventListener("blur", handleBlur);
+
+            // 清理事件监听
+            return () => {
+                if (divRef.current) {
+                    divRef.current.removeEventListener("focus", handleFocus);
+                    divRef.current.removeEventListener("blur", handleBlur);
+                }
+            };
+        }
+    }, [placeholder]);
+
+    return { textareaRef: divRef, handleFocus, handleBlur };
+}
+
+

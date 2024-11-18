@@ -64,7 +64,7 @@ export const gradients = [
 // 'bg-pink-600',
 // 'bg-rose-600'
 export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
-  return <div className={cname(`rounded-sm flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
+  return <div className={cname(`rounded-md flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
 export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {

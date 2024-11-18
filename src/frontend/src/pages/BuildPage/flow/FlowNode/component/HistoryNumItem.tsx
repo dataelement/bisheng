@@ -10,7 +10,7 @@ export default function HistoryNumItem({ data, onChange }) {
     return <div className="flex items-center mb-4 nodrag -nopan">
         <Label className="bisheng-label">最近</Label>
         <Input type="number" boxClassName="w-20 mx-1" className="h-5" value={value}></Input>
-        <Label className="bisheng-label">条链条记录:</Label>
+        <Label className="bisheng-label">条聊天记录:</Label>
         <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0] ml-auto">{data.key}</Badge>
     </div>
 };
