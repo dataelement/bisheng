@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 
 def get_react_agent_executor(tools: list[BaseTool], llm: LanguageModelLike, system_message: str,

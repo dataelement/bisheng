@@ -1,9 +1,6 @@
 from datetime import datetime
-from typing import Any, List, Optional, Union
-
-from sqlmodel.sql.expression import Select, SelectOfScalar
 from enum import Enum
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Union
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -12,8 +9,9 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from langchain.pydantic_v1 import BaseModel
-from sqlalchemy import Column, DateTime, func, text, delete, update
+from sqlalchemy import Column, DateTime, delete, func, text, update
 from sqlmodel import Field, or_, select
+from sqlmodel.sql.expression import Select, SelectOfScalar
 
 
 class KnowledgeTypeEnum(Enum):
@@ -23,7 +21,7 @@ class KnowledgeTypeEnum(Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True)
-    name: str = Field(index=True, min_length=1, max_length=30, description="知识库名, 最少一个字符，最多30个字符")
+    name: str = Field(index=True, min_length=1, max_length=30, description='知识库名, 最少一个字符，最多30个字符')
     type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
     description: Optional[str] = Field(index=True)
     model: Optional[str] = Field(index=False)
@@ -77,7 +75,8 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def update_knowledge_update_time(cls, knowledge: Knowledge):
-        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(update_time=text('NOW()'))
+        statement = update(Knowledge).where(Knowledge.id == knowledge.id).values(
+            update_time=text('NOW()'))
         with session_getter() as session:
             session.exec(statement)
             session.commit()
@@ -93,11 +92,17 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 
     @classmethod
-    def _user_knowledge_filters(cls, statement: Any, user_id: int, knowledge_id_extra: List[int] = None,
+    def _user_knowledge_filters(cls,
+                                statement: Any,
+                                user_id: int,
+                                knowledge_id_extra: List[int] = None,
                                 knowledge_type: KnowledgeTypeEnum = None,
-                                name: str = None, page: int = 0, limit: int = 0) -> Union[Select, SelectOfScalar]:
+                                name: str = None,
+                                page: int = 0,
+                                limit: int = 0) -> Union[Select, SelectOfScalar]:
         if knowledge_id_extra:
-            statement = statement.where(or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
+            statement = statement.where(
+                or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
         else:
             statement = statement.where(Knowledge.user_id == user_id)
         if knowledge_type:
@@ -109,9 +114,13 @@ class KnowledgeDao(KnowledgeBase):
         return statement
 
     @classmethod
-    def get_user_knowledge(cls, user_id: int, knowledge_id_extra: List[int] = None,
+    def get_user_knowledge(cls,
+                           user_id: int,
+                           knowledge_id_extra: List[int] = None,
                            knowledge_type: KnowledgeTypeEnum = None,
-                           name: str = None, page: int = 0, limit: int = 10) -> List[Knowledge]:
+                           name: str = None,
+                           page: int = 0,
+                           limit: int = 10) -> List[Knowledge]:
         statement = select(Knowledge)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
@@ -122,10 +131,14 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
-    def count_user_knowledge(cls, user_id: int, knowledge_id_extra: List[int] = None,
-                             knowledge_type: KnowledgeTypeEnum = None, name: str = None) -> int:
+    def count_user_knowledge(cls,
+                             user_id: int,
+                             knowledge_id_extra: List[int] = None,
+                             knowledge_type: KnowledgeTypeEnum = None,
+                             name: str = None) -> int:
         statement = select(func.count(Knowledge.id))
-        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra, knowledge_type, name)
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name)
         with session_getter() as session:
             return session.scalar(statement)
 
@@ -203,8 +216,11 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def get_all_knowledge(cls, name: str = None, knowledge_type: KnowledgeTypeEnum = None,
-                          page: int = 0, limit: int = 0) -> List[Knowledge]:
+    def get_all_knowledge(cls,
+                          name: str = None,
+                          knowledge_type: KnowledgeTypeEnum = None,
+                          page: int = 0,
+                          limit: int = 0) -> List[Knowledge]:
         statement = select(Knowledge)
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
@@ -217,7 +233,9 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
-    def count_all_knowledge(cls, name: str = None, knowledge_type: KnowledgeTypeEnum = None) -> int:
+    def count_all_knowledge(cls,
+                            name: str = None,
+                            knowledge_type: KnowledgeTypeEnum = None) -> int:
         statement = select(func.count(Knowledge.id))
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)

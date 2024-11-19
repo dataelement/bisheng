@@ -1,3 +1,5 @@
+import asyncio
+
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
 from bisheng.database.models.knowledge import KnowledgeDao
@@ -5,6 +7,7 @@ from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from loguru import logger
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -62,10 +65,10 @@ class AgentNode(BaseNode):
 
         func_tools = self._init_tools()
         knowledge_tools = self._init_knowledge_tools(knowledge_retriever)
-        tools = func_tools.extend(knowledge_tools)
+        func_tools.extend(knowledge_tools)
         self._agent = ConfigurableAssistant(
             agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
-            tools=tools,
+            tools=func_tools,
             llm=self._llm,
             assistant_message=system_prompt,
         )
@@ -146,8 +149,14 @@ class AgentNode(BaseNode):
             chat_history = self.graph_state.get_history_memory()[-self._chat_history_num:]
 
         if self._agent_executor_type == 'get_react_agent_executor':
-            result = self._agent.invoke({'input': user, 'chat_history': chat_history})
+            result = asyncio.create_task(
+                self._agent.invoke({
+                    'input': user,
+                    'chat_history': chat_history
+                }))
         else:
-            result = self._agent.invoke(user)
+            result = asyncio.create_task(self._agent.invoke(user))
+
+        logger.info(f'result: {result}')
 
         return result
