@@ -7,7 +7,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import FlowOnlineEditError
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowType, FlowUpdate
+from bisheng.database.models.flow import Flow, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
 from bisheng.database.models.role_access import AccessType
 from uuid import uuid4
 
@@ -177,13 +177,13 @@ def change_version(*,
 
 
 
-@router.get('/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
+@router.get('/get_one_flow/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
 def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
     return FlowService.get_one_flow(login_user, flow_id.hex)
 
 
-@router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+@router.patch('/update/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
 async def update_flow(*,
                       request: Request,
                       flow_id: UUID,
