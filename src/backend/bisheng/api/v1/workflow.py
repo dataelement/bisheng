@@ -9,7 +9,7 @@ from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowUpdate
 from bisheng.database.models.role_access import AccessType
-#from uuid import uuid4
+from uuid import uuid4
 
 from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
