@@ -143,7 +143,8 @@ def get_app_chat_list(*,
 
     if group_flow_ids:
         if flow_ids and keyword:
-            flow_ids = list(set(flow_ids) & set(group_flow_ids))
+            #flow_ids = list(set(flow_ids) & set(group_flow_ids))
+            flow_ids = flow_ids
         else:
             flow_ids = group_flow_ids
 
