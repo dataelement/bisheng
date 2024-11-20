@@ -1,7 +1,9 @@
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
+import { isVarInFlow } from "@/util/flowUtils";
 import { UploadCloud, Variable } from "lucide-react";
 import { useEffect, useRef } from "react";
+import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
 
 // ' ' -> '&nbsp;'
@@ -26,21 +28,29 @@ const findKeyByValue = (obj, value) => {
     return value;
 };
 
-export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, value, error = false, children = null, onUpload = undefined, onChange }) {
+export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, value, error = false, children = null, onUpload = undefined, onChange, onVarEvent = undefined }) {
     const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
     const textAreaHtmlRef = useRef(null);
     const textMsgRef = useRef(value || '');
+    const { flow } = useFlowStore()
 
-    const strToHtml = (str) => {
+    const strToHtml = (str, vilidate = false) => {
+        let error = ''
         const regex = /{{#(.*?)#}}/g;
         const parts = htmlDecode(str).split(regex);
-        return parts.map((part, index) => {
+        const html = parts.map((part, index) => {
             if (index % 2 === 1) {
                 const msgZh = flowNode.varZh?.[part] || part;
-                return `<span class="textarea-badge" contentEditable="false">${msgZh}</span>` // 校验逻辑增加id
+
+                if (vilidate) {
+                    error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part])
+                }
+                return `<span class=${error ? "textarea-error" : "textarea-badge"} contentEditable="false">${msgZh}</span>` // 校验逻辑增加id
             }
             return part;
         }).join('');
+
+        return [html, error]
     }
 
     const htmlToStr = (html) => {
@@ -52,7 +62,7 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
     }
 
     useEffect(() => {
-        textAreaHtmlRef.current = strToHtml(value || '')
+        textAreaHtmlRef.current = strToHtml(value || '')[0]
         if (textAreaHtmlRef.current) {
             textareaRef.current.innerHTML = textAreaHtmlRef.current;
         } else {
@@ -113,7 +123,7 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
             }
         }
         const newContent = beforeCursor + `{{#${key}#}}` + afterCursor;
-        const newHtmlContent = strToHtml(newContent)
+        const newHtmlContent = strToHtml(newContent)[0]
 
         textMsgRef.current = newContent;
         textAreaHtmlRef.current = newHtmlContent;
@@ -131,9 +141,22 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
         document.execCommand('insertText', false, text);
     }
 
+    // 校验变量是否可用
+    const validateVarAvailble = () => {
+        const value = textMsgRef.current;
+        const [html, error] = strToHtml(value || '', true)
+        textAreaHtmlRef.current = html
+        textareaRef.current.innerHTML = textAreaHtmlRef.current;
+        return error
+    }
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble)
+        return () => onVarEvent && onVarEvent(() => { })
+    }, [])
+
     return <div className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'}`}>
         <div className="flex justify-between gap-1 border-b px-2 py-1">
-            <Label className="bisheng-label text-xs">变量输入</Label>
+            <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>变量输入</Label>
             <div className="flex gap-2">
                 <SelectVar nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
                     <Variable size={16} className="text-muted-foreground hover:text-gray-800" />

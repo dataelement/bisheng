@@ -64,6 +64,8 @@ const OutputItem = ({ nodeId, data, onChange, onValidate }) => {
             setError(false)
             return false
         })
+
+        return () => onValidate(() => {})
     }, [data.value, interactionType])
 
     return (

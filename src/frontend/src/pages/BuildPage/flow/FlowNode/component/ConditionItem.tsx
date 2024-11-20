@@ -180,6 +180,8 @@ export default function ConditionItem({ nodeId, data, onChange, onValidate }) {
             if (res) return '条件分支不可为空'
             return false
         })
+
+        return () => onValidate(() => {})
     }, [data.value])
 
     return <div>

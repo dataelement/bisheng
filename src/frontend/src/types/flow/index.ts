@@ -180,6 +180,7 @@ export interface WorkflowNodeParam {
   multi?: boolean;
   /** Array of options */
   options?: any[];
+  test?: string
 }
 
 /** 工作流消息结构 */

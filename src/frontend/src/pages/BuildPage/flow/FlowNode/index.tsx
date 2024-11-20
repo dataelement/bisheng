@@ -2,17 +2,19 @@ import { LoadingIcon } from '@/components/bs-icons/loading';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { WorkflowNode } from '@/types/flow';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
-import { useCallback, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import EditText from './EditText';
 import NodeLogo from './NodeLogo';
 import NodeTabs from './NodeTabs';
 import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
-import { ChevronDown } from 'lucide-react';
-import EditText from './EditText';
-
+import RunLog from './RunLog';
+import { RunTest } from './RunTest';
 
 function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNode, selected: boolean, isConnectable: boolean }) {
     const [focusUpdate, setFocusUpdate] = useState(false)
+    const runRef = useRef(null)
     const { message } = useToast()
     const onChange = useCallback((evt) => {
         console.log(evt.target.value);
@@ -47,21 +49,17 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         console.log('node :>> ', key, value, node);
     }
 
-    const paramValidateEntities = useRef({})
+    const { paramValidateEntities, varValidateEntities, validateParams } = useEventMaster(node)
     const handleRun = () => {
         // vilidate node
-        const errors = []
-        Object.keys(paramValidateEntities.current).forEach(key => {
-            const { param, validate } = paramValidateEntities.current[key]
-            if (param.tab && node.tab && node.tab.value !== param.tab) return
-            const msg = validate()
-            msg && errors.push(msg)
-        })
+        const errors = validateParams()
 
         if (errors.length) return message({
             description: errors,
             variant: 'warning'
         })
+
+        runRef.current.run(node)
     }
 
     const [expend, setExpend] = useState(false)
@@ -77,17 +75,29 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 data-id={node.id}
             >
                 {/* top */}
-                <div className='bisheng-node-top flex items-center'>
-                    <LoadingIcon className='size-5 text-[#B3BBCD]' />
-                    <span className='text-sm text-[#B3BBCD]'>BISHENG</span>
-                </div>
+                <RunLog type={node.type} name={node.name}>
+                    <div className='bisheng-node-top flex items-center'>
+                        <LoadingIcon className='size-5 text-[#B3BBCD]' />
+                        <span className='text-sm text-[#B3BBCD]'>BISHENG</span>
+                    </div>
+                </RunLog>
+
                 {/* head */}
                 <div className='bisheng-node-head'>
                     <div className='relative z-10 flex gap-2'>
                         <NodeLogo type={node.type} colorStr={node.name} />
-                        <EditText >
-                            <span className='truncate'>{node.name}</span>
-                        </EditText>
+                        <div className='flex-1 w-44'>
+                            <EditText
+                                defaultValue={node.name}
+                                maxLength={50}
+                                disable={['start', 'end'].includes(node.type)}
+                                onChange={(val) => {
+                                    node.name = val;
+                                    setFocusUpdate(!focusUpdate)
+                                }}>
+                                <span className='truncate block'>{node.name}</span>
+                            </EditText>
+                        </div>
                         {!['output', 'condition', 'end'].includes(node.type) && <ChevronDown
                             className={`absolute right-0 bisheng-label cursor-pointer ${expend && 'rotate-180'}`}
                             size={14}
@@ -97,7 +107,16 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                             {(val) => <p className='text-gray-50 font-bold'>{val}</p>}
                         </EditTitle> */}
                     </div>
-                    <EditText type='textarea'>
+                    <EditText
+                        className='nodrag mt-2 text-xs text-muted-foreground'
+                        type='textarea'
+                        maxLength={200}
+                        disable={['start', 'end'].includes(node.type)}
+                        defaultValue={node.description}
+                        onChange={(val) => {
+                            node.description = val;
+                            setFocusUpdate(!focusUpdate)
+                        }}>
                         <p className='text-xs text-muted-foreground mt-2'>{node.description}</p>
                     </EditText>
                 </div>
@@ -118,6 +137,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 cate={group}
                                 onOutPutChange={handleChangeOutPut}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
+                                onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
                             />
                         )}
                     </div>
@@ -138,8 +158,72 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     style={{ top: 58, right: -16 }}
                 ><span></span></Handle>}
             </div>
+
+            <RunTest ref={runRef} />
         </div>
     );
 }
 
 export default CustomNode;
+
+
+const useEventMaster = (node) => {
+    const paramValidateEntities = useRef({})
+    const varValidateEntities = useRef({})
+
+    const validateParams = () => {
+        const errors = []
+        Object.keys(paramValidateEntities.current).forEach(key => {
+            const { param, validate } = paramValidateEntities.current[key]
+            if (param.tab && node.tab && node.tab.value !== param.tab) return
+            const msg = validate()
+            msg && errors.push(msg)
+        })
+        return errors
+    }
+
+    const validateAll = () => {
+        // item
+        const errors = validateParams()
+        // var
+        Object.keys(varValidateEntities.current).forEach(key => {
+            const { param, validate } = varValidateEntities.current[key]
+            if (param.tab && node.tab && node.tab.value !== param.tab) return
+            const msg = validate()
+            msg && errors.push(msg)
+        })
+        return errors
+    }
+
+    // 控制权交出
+    useEffect(() => {
+        const customEvent = new CustomEvent('node_event', {
+            detail: {
+                action: 'update',
+                id: node.id,
+                validate: validateAll,
+                // log: {
+                //     setData: (status, data) => { },
+                //     close: () => { }
+                // }
+            }
+        });
+        window.dispatchEvent(customEvent);
+
+        return () => {
+            const customEvent = new CustomEvent('node_event', {
+                detail: {
+                    action: 'remove',
+                    id: node.id
+                }
+            });
+            // window.dispatchEvent(customEvent);
+        }
+    }, [node])
+
+    return {
+        validateParams,
+        paramValidateEntities,
+        varValidateEntities
+    }
+}

@@ -4,10 +4,10 @@ import axios from "../request";
  * 获取工作流节点模板s
  */
 export const getWorkflowNodeTemplate = async (): Promise<any[]> => {
-    // return await axios.get("/api/v1/workflow/template");
-    return new Promise(res => setTimeout(() => {
-        res(template.data)
-    }, 100));
+    return await axios.get("/api/v1/workflow/template");
+    // return new Promise(res => setTimeout(() => {
+    //     res(template.data)
+    // }, 100));
 }
 
 
@@ -160,6 +160,7 @@ const template = {
                         {
                             "key": "code_input",
                             "type": "code_input",
+                            "test": "input",
                             "required": true,
                             "value": [
                                 { key: 'arg1', type: 'input', label: '', value: '' },
@@ -254,6 +255,7 @@ const template = {
                             "key": "system_prompt",
                             "label": "系统提示词",
                             "type": "var_textarea",
+                            "test": "input",
                             "value": "",
                             "required": true
                         },
@@ -261,6 +263,7 @@ const template = {
                             "key": "user_prompt",
                             "label": "用户提示词",
                             "type": "var_textarea",
+                            "test": "input",
                             "value": "",
                             "required": true
                         }
@@ -301,6 +304,7 @@ const template = {
                             "label": "用户问题",
                             "global": "self=system_prompt,user_prompt",
                             "type": "user_question",
+                            "test": "input",
                             "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理",
                             "linkage": "output_user_input",
                             "value": [],
@@ -401,6 +405,7 @@ const template = {
                             "key": "user_question",
                             "label": "输入变量",
                             "type": "var_select",
+                            "test": "input",
                             "value": "",
                             "required": true,
                             "placeholder": "请选择检索问题"
@@ -498,6 +503,7 @@ const template = {
                             "key": "system_prompt",
                             "label": "系统提示词",
                             "type": "var_textarea",
+                            "test": "input",
                             "value": "",
                             "placeholder": "助手画像",
                             "required": true
@@ -506,6 +512,7 @@ const template = {
                             "key": "user_prompt",
                             "label": "用户提示词",
                             "type": "var_textarea",
+                            "test": "input",
                             "value": "",
                             "placeholder": "用户消息内容",
                             "required": true

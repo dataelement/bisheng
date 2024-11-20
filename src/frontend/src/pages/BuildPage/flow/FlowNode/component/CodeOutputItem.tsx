@@ -103,6 +103,8 @@ export default function CodeOutputItem({ data, onChange, onValidate }) {
             })
             return msg || false
         })
+
+        return () => onValidate(() => {})
     }, [data.value])
 
     return (
