@@ -7,7 +7,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import FlowOnlineEditError
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowUpdate
+from bisheng.database.models.flow import Flow, FlowType, FlowUpdate
 from bisheng.database.models.role_access import AccessType
 from uuid import uuid4
 
@@ -125,6 +125,7 @@ def create_versions(*,
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     flow_id = flow_id.hex
+    flow_version.flow_type = FlowType.WORKFLOW.value
     return FlowService.create_new_version(user, flow_id, flow_version)
 
 
@@ -220,4 +221,22 @@ async def update_flow(*,
         pass
     FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
+
+@router.get('/list', status_code=200)
+def read_flows(*,
+               name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
+               tag_id: int = Query(default=None, description='标签ID'),
+               page_size: int = Query(default=10, description='每页数量'),
+               page_num: int = Query(default=1, description='页数'),
+               status: int = None,
+               Authorize: AuthJWT = Depends()):
+    """Read all flows."""
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    try:
+        return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size,FlowType.WORKFLOW.value)
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 

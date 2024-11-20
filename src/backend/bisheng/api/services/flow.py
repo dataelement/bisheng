@@ -18,7 +18,7 @@ from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
-from bisheng.database.models.flow import FlowDao, FlowStatus, Flow
+from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
@@ -199,7 +199,7 @@ class FlowService(BaseService):
 
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: int = 0, page: int = 1,
-                      page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
+                      page_size: int = 10, flow_type :int = FlowType.FLOW.value) -> UnifiedResponseModel[List[Dict]]:
         """
         获取所有技能
         """
@@ -215,8 +215,8 @@ class FlowService(BaseService):
                 })
         # 获取用户可见的技能列表
         if user.is_admin():
-            data = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size)
-            total = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids)
+            data = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size,flow_type)
+            total = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids,flow_type)
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
@@ -224,8 +224,8 @@ class FlowService(BaseService):
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, page_size)
-            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids)
+            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, page_size,flow_type)
+            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids,flow_type)
 
         # 获取技能列表对应的用户信息和版本信息
         # 技能ID列表
