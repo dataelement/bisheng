@@ -75,6 +75,8 @@ class OutputNode(BaseNode):
             msg_params['options'] = self.node_data.get_variable_info('output_way').options
             self.callback_manager.on_output_choose(data=OutputMsgChooseData(**msg_params))
         else:
+            self.graph_state.save_context(content=self.node_params['output_msg']['msg'],
+                                          msg_sender='AI')
             self.callback_manager.on_output_msg(OutputMsgData(**msg_params))
 
     def parse_template_msg(self, msg: str):

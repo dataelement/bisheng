@@ -74,12 +74,14 @@ class RagNode(BaseNode):
 
             result = retriever._call({'query': question}, run_manager=llm_callback)
 
-            if self._output_user and llm_callback.output_len == 0:
-                self.callback_manager.on_output_msg(
-                    OutputMsgData(node_id=self.id,
-                                  msg=result['result'],
-                                  unique_id=unique_id,
-                                  output_key=output_key))
+            if self._output_user:
+                self.graph_state.save_context(content=result['result'], msg_sender='AI')
+                if llm_callback.output_len == 0:
+                    self.callback_manager.on_output_msg(
+                        OutputMsgData(node_id=self.id,
+                                      msg=result['result'],
+                                      unique_id=unique_id,
+                                      output_key=output_key))
             ret[output_key] = result
         return ret
 
