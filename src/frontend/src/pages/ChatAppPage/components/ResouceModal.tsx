@@ -115,15 +115,15 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
         setTimeout(() => document.getElementById('taginput')?.focus(), 0);
     }
 
-    return <div className="flex gap-4" style={{ height: fullScreen ? '100vh' : !isMobile ? 'calc(100vh - 10rem)' : 'calc(100vh - 4rem)' }}>
+    return <div className="flex gap-4 relative" style={{ height: fullScreen ? '100vh' : !isMobile ? 'calc(100vh - 10rem)' : 'calc(100vh - 4rem)' }}>
         {
-            isMobile && <div className="absolute top-2 left-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
+            isMobile && <div className="absolute top-0 left-4 z-50 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
                 {!collapse && <span onClick={() => { setCollapse(true) }} className="">收起</span>}
                 {collapse && <span onClick={() => { setCollapse(false) }} className="">展开</span>}
             </div>
         }
         {
-            isMobile && <div className="absolute top-2 right-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
+            isMobile && <div className="absolute top-0 right-4 z-10 bg-gray-100 dark:bg-gray-950 py-1 px-2 pb-2 rounded-md">
                 <span onClick={closeDialog} >关闭</span>
             </div>
         }
@@ -169,7 +169,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             <p className="text-sm break-all">{_file.fileName}</p>
                             <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                                 {
-                                    _file.fileUrl && <div className="tooltip" data-tip={t('chat.downloadPDFTooltip')}>
+                                    _file.fileUrl && <div className="tooltip tooltip-left" data-tip={t('chat.downloadPDFTooltip')}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                             <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                         </a>

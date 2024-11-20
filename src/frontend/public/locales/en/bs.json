@@ -177,7 +177,8 @@
     "contactAdmin": "Please contact the administrator's online assistant",
     "deleteSure": "Are you sure you want to delete this tool?",
     "modelRequired": "Model is empty",
-    "avatar": "Avatar"
+    "avatar": "Avatar",
+    "switchTo": "Switch to"
   },
   "chat": {
     "newChat": "New Chat",
@@ -451,7 +452,7 @@
     "openingIntroduction": "Opening Introduction",
     "openingStatement": "Opening Statement",
     "assistantMessageFormat": "The assistant will send this message at the beginning of each conversation, supports Markdown format",
-    "maximumPromptLength": "The prompt can be up to 1000 characters",
+    "maximumPromptLength": "The remarks can be up to 1000 characters",
     "recommendQuestionsForUsers": "Provide recommended questions for users to guide them to ask. When there are more than 3, 3 will be randomly selected.",
     "maxCharacters50": "Up to 50 characters",
     "enterGuidingQuestions": "Please enter guiding questions",

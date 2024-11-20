@@ -126,23 +126,25 @@ def get_app_chat_list(*,
 
 
 
-    # if keyword:
-    #     flows = FlowDao.get_flow_list_by_name(name=keyword)
-    #     assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
-    #     users = UserDao.search_user_by_name(user_name=keyword)
-    #     if flows:
-    #         flow_ids = [flow.id for flow in flows]
-    #     if assistants:
-    #         flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
-    #     if user_ids:
-    #         user_ids = [user.user_id for user in users]
-    #     # 检索内容为空
-    #     if not flow_ids and not user_ids:
-    #         return resp_200(PageList(list=[], total=0))
+    if keyword:
+        flows = FlowDao.get_flow_list_by_name(name=keyword)
+        assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
+        users = UserDao.search_user_by_name(user_name=keyword)
+        if flows:
+            flow_ids = [flow.id for flow in flows]
+        if assistants:
+            flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
+        if user_ids:
+            user_ids = [user.user_id for user in users]
+        # 检索内容为空
+        if not flow_ids and not user_ids:
+            return resp_200(PageList(list=[], total=0))
+        
 
     if group_flow_ids:
-        if flow_ids:
-            flow_ids = list(set(flow_ids) & set(group_flow_ids))
+        if flow_ids and keyword:
+            #flow_ids = list(set(flow_ids) & set(group_flow_ids))
+            flow_ids = flow_ids
         else:
             flow_ids = group_flow_ids
 
