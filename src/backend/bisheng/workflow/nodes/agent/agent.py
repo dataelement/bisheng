@@ -1,12 +1,12 @@
-import asyncio
-
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
+from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 agent_executor_dict = {
@@ -148,14 +148,21 @@ class AgentNode(BaseNode):
         if self._chat_history_flag:
             chat_history = self.graph_state.get_history_memory()[-self._chat_history_num:]
 
+        llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
+                                              unique_id=unique_id,
+                                              node_id=self.id,
+                                              output=self._output_user,
+                                              output_key=output_key)
+        config = RunnableConfig(callbacks=[llm_callback])
+
         if self._agent_executor_type == 'get_react_agent_executor':
-            result = asyncio.create_task(
-                self._agent.invoke({
-                    'input': user,
-                    'chat_history': chat_history
-                }))
+            result = self._agent.invoke({
+                'input': user,
+                'chat_history': chat_history
+            },
+                                        config=config)
         else:
-            result = asyncio.create_task(self._agent.invoke(user))
+            result = self._agent.invoke(user, config=config)
 
         logger.info(f'result: {result}')
 

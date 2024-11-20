@@ -27,7 +27,7 @@ class GraphState(BaseModel):
     def save_context(self, content: str, msg_sender: str) -> None:
         """  保存聊天记录 """
         """ workflow 特殊情况，过程会有多轮交互，所以不是一条对一条，重制消息结构"""
-        if msg_sender == 'user':
+        if msg_sender == 'human':
             self.history_memory.chat_memory.aadd_messages([HumanMessage(content=content)])
         elif msg_sender == 'AI':
             self.history_memory.chat_memory.aadd_messages([AIMessage(content=content)])

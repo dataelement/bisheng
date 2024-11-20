@@ -5,7 +5,7 @@ from bisheng_langchain.gpts.message_types import LiberalFunctionMessage, Liberal
 from langchain.tools import BaseTool
 from langchain.tools.render import format_tool_to_openai_tool
 from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.messages import FunctionMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import FunctionMessage, SystemMessage, ToolMessage
 from langgraph.graph import END
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt import ToolExecutor, ToolInvocation
@@ -27,10 +27,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
             else:
                 msgs.append(m)
 
-        return [
-            SystemMessage(content=system_message),
-            HumanMessage(content=kwargs.get('human_message'))
-        ] + msgs
+        return [SystemMessage(content=system_message)] + msgs
 
     if tools:
         llm_with_tools = llm.bind(tools=[format_tool_to_openai_tool(t) for t in tools])
@@ -114,7 +111,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
     workflow = MessageGraph()
 
     # Define the two nodes we will cycle between
-    workflow.add_node('agent', RunnableCallable(agent))
+    workflow.add_node('agent', agent)
     workflow.add_node('action', RunnableCallable(call_tool, acall_tool))
 
     # Set the entrypoint as `agent`
