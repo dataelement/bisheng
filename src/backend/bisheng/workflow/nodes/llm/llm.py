@@ -1,6 +1,5 @@
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
-from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -39,16 +38,10 @@ class LLMNode(BaseNode):
                 output_key = self.node_params['output'][index]['key']
                 result[output_key] = self._run_once(one, unique_id, output_key)
 
-        if not self._stream and self._output_user:
+        if self._output_user:
             # 非stream 模式，处理结果
             for k, v in result.items():
-                self.callback_manager.on_output_msg(
-                    OutputMsgData(
-                        node_id=self.id,
-                        msg=v,
-                        unique_id=unique_id,
-                        output_key=k,
-                    ))
+                self.graph_state.save_context(content=v, msg_sender='AI')
         return result
 
     def _run_once(self,
