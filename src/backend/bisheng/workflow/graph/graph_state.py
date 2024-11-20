@@ -1,6 +1,7 @@
 from typing import Any, Dict, Optional
 
 from langchain.memory import ConversationBufferWindowMemory
+from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
 from pydantic import BaseModel
 
 
@@ -13,13 +14,23 @@ class GraphState(BaseModel):
     # 全局变量池
     variables_pool: Dict[str, Dict[str, Any]] = {}
 
-    def get_history_memory(self) -> str:
+    def get_history_memory(self, count: int) -> str:
         """ 获取聊天历史记录 """
-        return self.history_memory.load_memory_variables({})[self.history_memory.memory_key]
+        """ 因为不是1对1，所以重写 buffer_as_str"""
+        messages = self.history_memory.chat_memory.messages[-count:]
+        return get_buffer_string(
+            messages,
+            human_prefix=self.history_memory.human_prefix,
+            ai_prefix=self.history_memory.ai_prefix,
+        )
 
-    def save_context(self, question: str, answer: str) -> None:
+    def save_context(self, content: str, msg_sender: str) -> None:
         """  保存聊天记录 """
-        self.history_memory.save_context({'input': question}, {'output': answer})
+        """ workflow 特殊情况，过程会有多轮交互，所以不是一条对一条，重制消息结构"""
+        if msg_sender == 'user':
+            self.history_memory.chat_memory.aadd_messages([HumanMessage(content=content)])
+        elif msg_sender == 'AI':
+            self.history_memory.chat_memory.aadd_messages([AIMessage(content=content)])
 
     def set_variable(self, node_id: str, key: str, value: Any):
         """ 将节点产生的数据放到全局变量里 """
@@ -27,17 +38,17 @@ class GraphState(BaseModel):
             self.variables_pool[node_id] = {}
         self.variables_pool[node_id][key] = value
 
-    def get_variable(self, node_id: str, key: str) -> Any:
+    def get_variable(self, node_id: str, key: str, count: Optional[int] = None) -> Any:
         """ 从全局变量中获取数据 """
         if node_id not in self.variables_pool:
             return None
 
         # todo 某些特殊变量的处理 chat_history、source_document等
         if key == 'chat_history':
-            return self.get_history_memory()
+            return self.get_history_memory(count=count)
         return self.variables_pool[node_id].get(key)
 
-    def get_variable_by_str(self, contact_key: str) -> Any:
+    def get_variable_by_str(self, contact_key: str, history_count: Optional[int] = None) -> Any:
         """
         从全局变量中获取数据
         contact_key: node_id.key#index  #index不一定需要
@@ -48,7 +59,7 @@ class GraphState(BaseModel):
         variable_val_index = None
         if var_key.find('#') != -1:
             var_key, variable_val_index = var_key.split('#')
-        variable_val = self.get_variable(node_id, var_key)
+        variable_val = self.get_variable(node_id, var_key, history_count)
 
         # 数组变量的处理
         if variable_val_index:

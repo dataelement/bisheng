@@ -9,9 +9,11 @@ from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowUpdate
 from bisheng.database.models.role_access import AccessType
+#from uuid import uuid4
+
+from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
 from fastapi import status as http_status
-from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 
@@ -20,6 +22,7 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
 from bisheng.chat.types import WorkType
+from bisheng.utils import minio_client
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -32,6 +35,42 @@ def get_template():
     with open(f"{current_path}/workflow_template.json", 'r', encoding='utf-8') as f:
         data = json.load(f)
     return resp_200(data=data)
+
+
+@router.get("/report/file", response_model=UnifiedResponseModel, status_code=200)
+async def get_report_file(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        version_key: str = Query("", description="minio的object_name")):
+    """ 获取report节点的模板文件 """
+    if not version_key:
+        # 重新生成一个version_key
+        version_key = f"bisheng/workflow/{uuid4().hex}.docx"
+    file_url = minio_client.MinioClient().get_share_link(version_key)
+    return resp_200(data={
+        'url': file_url,
+        'version_key': version_key,
+    })
+
+
+@router.post('/report/callback', response_model=UnifiedResponseModel, status_code=200)
+async def upload_report_file(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        data: dict = Body(...)):
+    """ office 回调接口保存 report节点的模板文件 """
+    status = data.get('status')
+    file_url = data.get('url')
+    key = data.get('key')
+    logger.debug(f'callback={data}')
+    if status not in {2, 6}:
+        # 非保存回调不处理
+        return {'error': 0}
+    logger.info(f'office_callback url={file_url}')
+    file = Requests().get(url=file_url)
+    minio_client.MinioClient().upload_minio_data(
+        key, file._content, len(file._content),
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 
 @router.websocket('/chat/{workflow_id}')

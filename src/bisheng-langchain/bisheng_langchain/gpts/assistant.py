@@ -1,9 +1,6 @@
 import asyncio
 import logging
-from enum import Enum
-from functools import lru_cache
 from typing import Any, Mapping, Optional, Sequence
-from urllib.parse import urlparse
 
 import httpx
 import yaml
@@ -11,7 +8,7 @@ from bisheng_langchain.gpts.load_tools import get_all_tool_names, load_tools
 from bisheng_langchain.gpts.utils import import_by_type, import_class
 from langchain.tools import BaseTool
 from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableBinding
 
 logger = logging.getLogger(__name__)
@@ -38,11 +35,13 @@ class ConfigurableAssistant(RunnableBinding):
         config: Optional[Mapping[str, Any]] = None,
         **others: Any,
     ) -> None:
-        others.pop("bound", None)
-        agent_executor_object = import_class(f'bisheng_langchain.gpts.agent_types.{agent_executor_type}')
+        others.pop('bound', None)
+        agent_executor_object = import_class(
+            f'bisheng_langchain.gpts.agent_types.{agent_executor_type}')
 
-        _agent_executor = agent_executor_object(tools, llm, assistant_message, interrupt_before_action)
-        agent_executor = _agent_executor.with_config({"recursion_limit": recursion_limit})
+        _agent_executor = agent_executor_object(tools, llm, assistant_message,
+                                                interrupt_before_action)
+        agent_executor = _agent_executor.with_config({'recursion_limit': recursion_limit})
         super().__init__(
             agent_executor_type=agent_executor_type,
             tools=tools,
@@ -88,7 +87,7 @@ class BishengAssistant:
             tool_type = tool.pop('type')
             tool_config = tool if tool else {}
             if tool_type not in available_tools:
-                raise ValueError(f"Tool type {tool_type} not found in TOOLS")
+                raise ValueError(f'Tool type {tool_type} not found in TOOLS')
             _returned_tools = load_tools({tool_type: tool_config})
             if isinstance(_returned_tools, list):
                 tools.extend(_returned_tools)
@@ -98,43 +97,44 @@ class BishengAssistant:
         # init agent executor
         agent_executor_params = self.assistant_params['agent_executor']
         self.agent_executor_type = agent_executor_params.pop('type')
-        self.assistant = ConfigurableAssistant(
-            agent_executor_type=self.agent_executor_type, 
-            tools=tools, 
-            llm=llm, 
-            assistant_message=assistant_message, 
-            **agent_executor_params
-        )
+        self.assistant = ConfigurableAssistant(agent_executor_type=self.agent_executor_type,
+                                               tools=tools,
+                                               llm=llm,
+                                               assistant_message=assistant_message,
+                                               **agent_executor_params)
 
     def run(self, query, chat_history=[], chat_round=5):
         if len(chat_history) % 2 != 0:
-            raise ValueError("chat history should be even")
-        
+            raise ValueError('chat history should be even')
+
         # 限制chat_history轮数
         if len(chat_history) > chat_round * 2:
-            chat_history = chat_history[-chat_round*2:]
+            chat_history = chat_history[-chat_round * 2:]
 
         inputs = []
         for i in range(0, len(chat_history), 2):
             inputs.append(HumanMessage(content=chat_history[i]))
-            inputs.append(AIMessage(content=chat_history[i+1]))
+            inputs.append(AIMessage(content=chat_history[i + 1]))
         inputs.append(HumanMessage(content=query))
         if self.agent_executor_type == 'get_react_agent_executor':
-            result = asyncio.run(self.assistant.ainvoke({"input": inputs[-1].content, "chat_history": inputs[:-1]}))
+            result = asyncio.run(
+                self.assistant.ainvoke({
+                    'input': inputs[-1].content,
+                    'chat_history': inputs[:-1]
+                }))
         else:
             result = asyncio.run(self.assistant.ainvoke(inputs))
         return result
 
 
-if __name__ == "__main__":
-    from langchain.globals import set_debug
+if __name__ == '__main__':
 
     # set_debug(True)
     # chat_history = []
     # query = "分析当日市场行情"
     chat_history = ['你好', '你好，有什么可以帮助你吗？', '福蓉科技股价多少?', '福蓉科技（股票代码：300049）的当前股价为48.67元。']
     query = '今天是什么时候？去年这个时候的股价是多少？'
-    bisheng_assistant = BishengAssistant("config/base_scene.yaml")
+    bisheng_assistant = BishengAssistant('config/base_scene.yaml')
     # bisheng_assistant = BishengAssistant("config/knowledge_scene.yaml")
     # bisheng_assistant = BishengAssistant("config/rag_scene.yaml")
     result = bisheng_assistant.run(query, chat_history=chat_history)

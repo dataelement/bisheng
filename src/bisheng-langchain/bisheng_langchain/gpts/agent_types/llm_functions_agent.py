@@ -9,13 +9,14 @@ from langchain_core.messages import FunctionMessage, HumanMessage, SystemMessage
 from langgraph.graph import END
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt import ToolExecutor, ToolInvocation
+from langgraph.utils.runnable import RunnableCallable
 
 
 def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageModelLike,
                                         system_message: str, interrupt_before_action: bool,
                                         **kwargs):
 
-    async def _get_messages(messages):
+    def _get_messages(messages):
         msgs = []
         for m in messages:
             if isinstance(m, LiberalToolMessage):
@@ -35,6 +36,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         llm_with_tools = llm.bind(tools=[format_tool_to_openai_tool(t) for t in tools])
     else:
         llm_with_tools = llm
+
     agent = _get_messages | llm_with_tools
     tool_executor = ToolExecutor(tools)
 
@@ -55,7 +57,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
             return 'continue'
 
     # Define the function to execute tools
-    async def call_tool(messages):
+    async def acall_tool(messages):
         actions: list[ToolInvocation] = []
         # Based on the continue condition
         # we know the last message involves a function call
@@ -82,11 +84,38 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         ]
         return tool_messages
 
+    def call_tool(messages):
+        actions: list[ToolInvocation] = []
+        # Based on the continue condition
+        # we know the last message involves a function call
+        last_message = messages[-1]
+        for tool_call in last_message.additional_kwargs['tool_calls']:
+            function = tool_call['function']
+            function_name = function['name']
+            _tool_input = json.loads(function['arguments'] or '{}')
+            # We construct an ToolInvocation from the function_call
+            actions.append(ToolInvocation(
+                tool=function_name,
+                tool_input=_tool_input,
+            ))
+        # We call the tool_executor and get back a response
+        responses = tool_executor.batch(actions, **kwargs)
+        # We use the response to create a ToolMessage
+        tool_messages = [
+            LiberalToolMessage(
+                tool_call_id=tool_call['id'],
+                content=response,
+                additional_kwargs={'name': tool_call['function']['name']},
+            )
+            for tool_call, response in zip(last_message.additional_kwargs['tool_calls'], responses)
+        ]
+        return tool_messages
+
     workflow = MessageGraph()
 
     # Define the two nodes we will cycle between
-    workflow.add_node('agent', agent)
-    workflow.add_node('action', call_tool)
+    workflow.add_node('agent', RunnableCallable(agent))
+    workflow.add_node('action', RunnableCallable(call_tool, acall_tool))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
