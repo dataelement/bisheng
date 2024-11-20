@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install procps -y
 # Install font
 RUN apt install vim fonts-wqy-zenhei -y
 # opencv
-RUN apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1
+RUN apt-get update && apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 # # Add Poetry to PATH
 ENV PATH="${PATH}:/root/.local/bin"
