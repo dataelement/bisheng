@@ -1,16 +1,24 @@
 import json
 import os
 from typing import Optional
+from uuid import UUID
 
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.flow import FlowOnlineEditError
+from bisheng.api.utils import get_L2_param_from_flow
+from bisheng.database.base import session_getter
+from bisheng.database.models.flow import Flow, FlowUpdate
+from bisheng.database.models.role_access import AccessType
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 
-from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.flow import FlowService
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.chat import chat_manager
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
 from bisheng.chat.types import WorkType
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
@@ -52,3 +60,125 @@ async def workflow_ws(*,
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
+
+
+@router.get('/versions', status_code=200)
+def get_versions(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
+    """
+    获取技能对应的版本列表
+    """
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    flow_id = flow_id.hex
+    return FlowService.get_version_list_by_flow(user, flow_id)
+
+
+@router.post('/versions', status_code=200)
+def create_versions(*,
+                    flow_id: UUID,
+                    flow_version: FlowVersionCreate,
+                    Authorize: AuthJWT = Depends()):
+    """
+    创建新的技能版本
+    """
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    flow_id = flow_id.hex
+    return FlowService.create_new_version(user, flow_id, flow_version)
+
+
+@router.put('/versions/{version_id}', status_code=200)
+def update_versions(*,
+                    request: Request,
+                    version_id: int,
+                    flow_version: FlowVersionCreate,
+                    login_user: UserPayload = Depends(get_login_user)):
+    """
+    更新版本
+    """
+    return FlowService.update_version_info(request, login_user, version_id, flow_version)
+
+
+@router.delete('/versions/{version_id}', status_code=200)
+def delete_versions(*, version_id: int, Authorize: AuthJWT = Depends()):
+    """
+    删除版本
+    """
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.delete_version(user, version_id)
+
+
+@router.get('/versions/{version_id}', status_code=200)
+def get_version_info(*, version_id: int, Authorize: AuthJWT = Depends()):
+    """
+    获取版本信息
+    """
+    Authorize.jwt_required()
+    payload = json.loads(Authorize.get_jwt_subject())
+    user = UserPayload(**payload)
+    return FlowService.get_version_info(user, version_id)
+
+
+@router.post('/change_version', status_code=200)
+def change_version(*,
+                   request: Request,
+                   flow_id: UUID = Query(default=None, description='技能唯一ID'),
+                   version_id: int = Query(default=None, description='需要设置的当前版本ID'),
+                   login_user: UserPayload = Depends(get_login_user)):
+    """
+    修改当前版本
+    """
+    flow_id = flow_id.hex
+    return FlowService.change_current_version(request, login_user, flow_id, version_id)
+
+
+
+@router.get('/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
+def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
+    """Read a flow."""
+    return FlowService.get_one_flow(login_user, flow_id.hex)
+
+
+@router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+async def update_flow(*,
+                      request: Request,
+                      flow_id: UUID,
+                      flow: FlowUpdate,
+                      login_user: UserPayload = Depends(get_login_user)):
+    """Update a flow."""
+    flow_id = flow_id.hex
+    with session_getter() as session:
+        db_flow = session.get(Flow, flow_id)
+    if not db_flow:
+        raise HTTPException(status_code=404, detail='Flow not found')
+
+    if not login_user.access_check(db_flow.user_id, flow_id, AccessType.FLOW_WRITE):
+        return UnAuthorizedError.return_resp()
+
+    flow_data = flow.model_dump(exclude_unset=True)
+
+    # 验证工作流是否可以使用
+
+    if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
+        raise FlowOnlineEditError.http_exception()
+
+    # if settings.remove_api_keys:
+    #     flow_data = remove_api_keys(flow_data)
+    for key, value in flow_data.items():
+        setattr(db_flow, key, value)
+    with session_getter() as session:
+        session.add(db_flow)
+        session.commit()
+        session.refresh(db_flow)
+    try:
+        if not get_L2_param_from_flow(db_flow.data, db_flow.id):
+            logger.error(f'flow_id={db_flow.id} extract file_node fail')
+    except Exception:
+        pass
+    FlowService.update_flow_hook(request, login_user, db_flow)
+    return resp_200(db_flow)
+

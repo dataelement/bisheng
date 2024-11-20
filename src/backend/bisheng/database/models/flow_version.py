@@ -21,6 +21,7 @@ class FlowVersionBase(SQLModelSerializable):
     data: Optional[Dict] = Field(default=None, description="版本的数据")
     description: Optional[str] = Field(index=False, description="版本的描述")
     user_id: Optional[int] = Field(index=True, description="创建者")
+    flow_type: Optional[int] = Field(default=1, description="版本的类型")
     is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")
     is_delete: Optional[int] = Field(default=0, description="是否删除")
     original_version_id: Optional[int] = Field(default=None, description="来源版本的ID")

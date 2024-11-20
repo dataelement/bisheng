@@ -127,7 +127,7 @@ class FlowService(BaseService):
 
         flow_version = FlowVersion(flow_id=flow_id, name=flow_version.name, description=flow_version.description,
                                    user_id=user.user_id, data=flow_version.data,
-                                   original_version_id=flow_version.original_version_id)
+                                   original_version_id=flow_version.original_version_id,flow_type=flow_version.flow_type)
 
         # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)

@@ -19,6 +19,9 @@ class FlowStatus(Enum):
     OFFLINE = 1
     ONLINE = 2
 
+class FlowType(Enum):
+    FLOW= 1
+    WORKFLOW= 10
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
@@ -27,6 +30,7 @@ class FlowBase(SQLModelSerializable):
     data: Optional[Dict] = Field(default=None)
     logo: Optional[str] = Field(index=False)
     status: Optional[int] = Field(index=False, default=1)
+    flow_type: Optional[int] = Field(index=False, default=1)
     update_time: Optional[datetime] = Field(
         sa_column=Column(DateTime,
                          nullable=True,
@@ -181,7 +185,7 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
-                  status: Optional[int] = None, flow_ids: List[str] = None, page: int = 0, limit: int = 0) \
+                  status: Optional[int] = None, flow_ids: List[str] = None, page: int = 0, limit: int = 0,flow_type:int=FlowType.FLOW.value) \
             -> List[Flow]:
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
@@ -198,7 +202,7 @@ class FlowDao(FlowBase):
                 statement = statement.where(Flow.status == status)
             if flow_ids:
                 statement = statement.where(Flow.id.in_(flow_ids))
-            statement = statement.order_by(Flow.update_time.desc())
+            statement = statement.where(Flow.flow_type==flow_type).order_by(Flow.update_time.desc())
             if page > 0 and limit > 0:
                 statement = statement.offset((page - 1) * limit).limit(limit)
             flows = session.exec(statement)
@@ -211,7 +215,8 @@ class FlowDao(FlowBase):
                     extra_ids: Union[List[str], str],
                     name: str,
                     status: Optional[int] = None,
-                    flow_ids: List[str] = None) -> int:
+                    flow_ids: List[str] = None,
+                    flow_type: int=FlowType.FLOW.value) -> int:
         with session_getter() as session:
             count_statement = session.query(func.count(Flow.id))
             if extra_ids and isinstance(extra_ids, List):
@@ -226,10 +231,11 @@ class FlowDao(FlowBase):
                 count_statement = count_statement.filter(Flow.id.in_(flow_ids))
             if status is not None:
                 count_statement = count_statement.filter(Flow.status == status)
+            count_statement = count_statement.filter(Flow.flow_type== flow_type)
             return count_statement.scalar()
 
     @classmethod
-    def get_all_online_flows(cls, keyword: str = None, flow_ids: List[str] = None) -> List[Flow]:
+    def get_all_online_flows(cls, keyword: str = None, flow_ids: List[str] = None,flow_type:int=FlowType.FLOW.value) -> List[Flow]:
         with session_getter() as session:
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
                                Flow.logo, Flow.update_time, Flow.description,
@@ -239,6 +245,7 @@ class FlowDao(FlowBase):
             if keyword:
                 statement = statement.where(
                     or_(Flow.name.like(f'%{keyword}%'), Flow.description.like(f'%{keyword}%')))
+            statement = statement.where(Flow.flow_type==flow_type)
             result = session.exec(statement).mappings().all()
             return [Flow.model_validate(f) for f in result]
 
@@ -248,7 +255,8 @@ class FlowDao(FlowBase):
                                      page: int = 0,
                                      limit: int = 0,
                                      keyword: str = None,
-                                     flow_ids: List[str] = None) -> List[Flow]:
+                                     flow_ids: List[str] = None,
+                                     flow_type:int=FlowType.FLOW.value) -> List[Flow]:
         user_role = UserRoleDao.get_user_roles(user_id)
         flow_id_extra = []
         if user_role:
@@ -266,10 +274,10 @@ class FlowDao(FlowBase):
                                  FlowStatus.ONLINE.value,
                                  flow_ids=flow_ids,
                                  page=page,
-                                 limit=limit)
+                                 limit=limit,flow_type=flow_type)
 
     @classmethod
-    def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0) \
+    def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0,flow_type:int=FlowType.FLOW.value) \
             -> (List[Flow], int):
         """
         通过技能ID过滤技能列表，只返回简略信息，不包含data
@@ -287,6 +295,7 @@ class FlowDao(FlowBase):
                 or_(Flow.name.like(f'%{keyword}%'), Flow.description.like(f'%{keyword}%')))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.where(Flow.flow_type==flow_type)
         statement = statement.order_by(Flow.update_time.desc())
         with session_getter() as session:
             result = session.exec(statement).mappings().all()
