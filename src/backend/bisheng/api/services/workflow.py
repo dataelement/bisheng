@@ -41,7 +41,7 @@ class WorkFlowService(BaseService):
         # 获取用户可见的技能列表
         if user.is_admin():
             fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page)
-            ares, atotal = AssistantDao.get_all_assistants_read(name, page, half_page, assistant_ids, status)
+            ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids)
             data = fdata + ares 
             total = ftotal + atotal
@@ -58,7 +58,7 @@ class WorkFlowService(BaseService):
             total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids)
             if a_role_access:
                 assistant_ids_extra = [UUID(access.third_id).hex for access in a_role_access]
-            a_res, a_total = AssistantDao.get_all_assistants_read(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
+            a_res, a_total = AssistantDao.get_all_assistants(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
             data = data + a_res
             total = total + a_total
 
@@ -74,7 +74,6 @@ class WorkFlowService(BaseService):
                 flow_ids.append(one.id.hex)
                 user_ids.append(one.user_id)
             else:
-                one.flow_type = 5 
                 assistant_ids.append(one.id.hex)
         # 获取列表内的用户信息
         user_infos = UserDao.get_user_by_ids(user_ids)
@@ -113,7 +112,7 @@ class WorkFlowService(BaseService):
         # 重新拼接技能列表list信息
         res = []
         for one in data:
-            if one.flow_type != 5:
+            if one.flow_type:
                 one.logo = cls.get_logo_share_link(one.logo)
                 flow_info = jsonable_encoder(one)
                 flow_info['user_name'] = user_dict.get(one.user_id, one.user_id)
@@ -130,6 +129,7 @@ class WorkFlowService(BaseService):
                     simple_assistant.write = True
                 simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
                 simple_assistant.tags = a_tags.get(one.id.hex, [])
+                simple_assistant.flow_type = 5
                 res.append(simple_assistant)
 
         return resp_200(data={

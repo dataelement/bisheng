@@ -54,9 +54,6 @@ class AssistantLinkBase(SQLModelSerializable):
 class Assistant(AssistantBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
 
-class AssistantRead(AssistantBase):
-    flow_type: int = 5
-
 
 class AssistantLink(AssistantLinkBase, table=True):
     pass
@@ -161,36 +158,6 @@ class AssistantDao(AssistantBase):
         statement = statement.order_by(Assistant.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
-
-    @classmethod
-    def get_all_assistants_read(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,
-                           status: int = None) -> (List[AssistantRead], int):
-        with session_getter() as session:
-            statement = select(AssistantRead).where(AssistantRead.is_delete == 0)
-            count_statement = session.query(func.count(
-                AssistantRead.id)).where(AssistantRead.is_delete == 0)
-            if name:
-                statement = statement.where(or_(
-                    AssistantRead.name.like(f'%{name}%'),
-                    AssistantRead.desc.like(f'%{name}%')
-                ))
-                count_statement = count_statement.where(or_(
-                    AssistantRead.name.like(f'%{name}%'),
-                    AssistantRead.desc.like(f'%{name}%')
-                ))
-            if assistant_ids:
-                statement = statement.where(AssistantRead.id.in_(assistant_ids))
-                count_statement = count_statement.where(AssistantRead.id.in_(assistant_ids))
-            if status is not None:
-                statement = statement.where(AssistantRead.status == status)
-                count_statement = count_statement.where(AssistantRead.status == status)
-            if page and limit:
-                statement = statement.offset(
-                    (page - 1) * limit
-                ).limit(limit)
-            statement = statement.order_by(AssistantRead.update_time.desc())
-            return session.exec(statement).all(), session.exec(count_statement).scalar()
-
 
     @classmethod
     def get_all_assistants(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,

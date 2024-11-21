@@ -281,6 +281,7 @@ class AssistantSimpleInfo(BaseModel):
     user_id: int
     user_name: str
     status: int
+    flow_type: Optional[int]
     write: Optional[bool] = Field(default=False)
     group_ids: Optional[List[int]]
     tags: Optional[List[Tag]]
