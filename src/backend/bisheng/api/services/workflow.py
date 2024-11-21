@@ -70,10 +70,11 @@ class WorkFlowService(BaseService):
         user_ids = []
         assistant_ids =[]
         for one in data:
-            if one.flow_type != 5:
+            if one.flow_type:
                 flow_ids.append(one.id.hex)
                 user_ids.append(one.user_id)
             else:
+                one.flow_type = 5 
                 assistant_ids.append(one.id.hex)
         # 获取列表内的用户信息
         user_infos = UserDao.get_user_by_ids(user_ids)
