@@ -5,6 +5,7 @@ from uuid import UUID
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import FlowOnlineEditError
+from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
@@ -235,7 +236,7 @@ def read_flows(*,
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     try:
-        return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size,FlowType.WORKFLOW.value)
+        return WorkFlowService.get_all_flows(user, name, status, tag_id, page_num, page_size,FlowType.WORKFLOW.value)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e

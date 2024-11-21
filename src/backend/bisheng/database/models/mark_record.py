@@ -24,7 +24,7 @@ class MarkRecordBase(SQLModelSerializable):
     create_user: str = Field(index=True)
     flow_type: str = Field(index=True)
     create_id: int = Field(index=True)
-    app_id: int = Field(index=True)
+    app_id: int = Field(index=True, nullable=True)
     task_id: int = Field(index=True)
     session_id: str = Field(index=True)
     status: int = Field(index=False, default=1)
