@@ -10,7 +10,7 @@ bucket = 'bisheng'
 tmp_bucket = 'tmp-dir'
 
 
-class MinioClient():
+class MinioClient:
     minio_share: minio.Minio
     minio_client: minio.Minio
 
@@ -126,3 +126,11 @@ class MinioClient():
             if 'code: NoSuchKey' in str(e):
                 return False
             raise e
+
+    def get_object(self, bucket_name, object_name, **kwargs) -> bytes:
+        try:
+            response = self.minio_client.get_object(bucket_name, object_name, **kwargs)
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()

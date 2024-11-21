@@ -70,5 +70,16 @@ class GraphState(BaseModel):
                 raise Exception(f'variable {contact_key} is not array or index out of range')
             return variable_val[variable_val_index]
 
-        # todo 某些特殊变量的处理
         return variable_val
+
+    def get_all_variables(self) -> Dict[str, Any]:
+        """ 获取所有的变量，key为node_id.key的格式 """
+        ret = {}
+        for node_id, node_variables in self.variables_pool.items():
+            for key, value in node_variables.items():
+                ret[f'{node_id}.{key}'] = self.get_variable(node_id, key)
+                # 特殊处理下 preset_question key
+                if key == 'preset_question':
+                    for one in range(len(value)):
+                        ret[f'{node_id}.{key}#{one}'] = value[one]
+        return ret
