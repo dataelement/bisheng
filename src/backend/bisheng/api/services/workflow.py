@@ -17,6 +17,7 @@ from fastapi.encoders import jsonable_encoder
 
 class WorkFlowService(BaseService):
 
+    @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], page: int = 1,
                       page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
         """

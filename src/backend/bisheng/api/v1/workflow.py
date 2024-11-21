@@ -244,7 +244,7 @@ def read_flows(*,
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     try:
-        return WorkFlowService.get_all_flows(user, name, status, tag_id, page_num, page_size,FlowType.WORKFLOW.value)
+        return WorkFlowService.get_all_flows(user, name, status, tag_id, page_num, page_size)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
