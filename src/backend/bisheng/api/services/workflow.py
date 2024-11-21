@@ -122,15 +122,15 @@ class WorkFlowService(BaseService):
                 flow_info['tags'] = flow_tags.get(one.id.hex, [])
 
                 res.append(flow_info)
-            else:
-                one.logo = cls.get_logo_share_link(one.logo)
-                simple_assistant = AssistantService.return_simple_assistant_info(one)
-                if one.user_id == user.user_id or user.is_admin():
-                    simple_assistant.write = True
-                simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
-                simple_assistant.tags = a_tags.get(one.id.hex, [])
-                simple_assistant.flow_type = 5
-                res.append(simple_assistant)
+            # else:
+            #     one.logo = cls.get_logo_share_link(one.logo)
+            #     simple_assistant = AssistantService.return_simple_assistant_info(one)
+            #     if one.user_id == user.user_id or user.is_admin():
+            #         simple_assistant.write = True
+            #     simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
+            #     simple_assistant.tags = a_tags.get(one.id.hex, [])
+            #     simple_assistant.flow_type = 5
+            #     res.append(simple_assistant)
 
         return resp_200(data={
             "data": res,
