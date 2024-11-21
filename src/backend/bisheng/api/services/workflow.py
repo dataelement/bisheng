@@ -112,7 +112,7 @@ class WorkFlowService(BaseService):
         # 重新拼接技能列表list信息
         res = []
         for one in data:
-            if one.flow_type:
+            if hasattr(one, "flow_type"):
                 one.logo = cls.get_logo_share_link(one.logo)
                 flow_info = jsonable_encoder(one)
                 flow_info['user_name'] = user_dict.get(one.user_id, one.user_id)
