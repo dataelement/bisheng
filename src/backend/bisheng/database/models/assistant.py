@@ -53,6 +53,8 @@ class AssistantLinkBase(SQLModelSerializable):
 
 class Assistant(AssistantBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+
+class AssistantRead(AssistantBase):
     flow_type: int = 5
 
 
@@ -164,7 +166,7 @@ class AssistantDao(AssistantBase):
     def get_all_assistants(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,
                            status: int = None) -> (List[Assistant], int):
         with session_getter() as session:
-            statement = select(Assistant).where(Assistant.is_delete == 0)
+            statement = select(AssistantRead).where(Assistant.is_delete == 0)
             count_statement = session.query(func.count(
                 Assistant.id)).where(Assistant.is_delete == 0)
             if name:
