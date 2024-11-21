@@ -24,6 +24,7 @@ class WorkFlowService(BaseService):
         获取所有技能
         """
         flow_ids = []
+        assistant_ids  = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
             assistant = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
