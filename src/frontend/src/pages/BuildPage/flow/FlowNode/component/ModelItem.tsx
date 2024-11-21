@@ -59,6 +59,8 @@ export default function ModelItem({ data, onChange, onValidate }) {
             setError(false)
             return false
         })
+
+        return () => onValidate(() => {})
     }, [data.value])
 
     return <div className='node-item mb-4'>

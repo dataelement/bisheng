@@ -5,7 +5,7 @@ import { File, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import VarInput from "./VarInput";
 
-export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate }) {
+export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
     // console.log('data.value :>> ', data.value);
     const handleInputChange = (msg) => {
         onChange({ msg, files })
@@ -26,6 +26,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
             setError(false)
             return false
         })
+        return () => onValidate(() => {})
     }, [data.value])
 
     return (
@@ -40,6 +41,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                 value={data.value?.msg}
                 onUpload={handleFileUpload}
                 onChange={handleInputChange}
+                onVarEvent={onVarEvent}
             >
                 {/* Display uploaded images */}
                 <div className="flex flex-wrap gap-4 p-2">

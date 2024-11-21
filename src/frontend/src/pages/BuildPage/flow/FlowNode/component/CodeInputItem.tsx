@@ -108,6 +108,8 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
             })
             return msg || false
         })
+
+        return () => onValidate(() => { })
     }, [data.value])
 
     return (

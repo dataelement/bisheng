@@ -1,28 +1,48 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import { AssistantIcon } from "@/components/bs-icons";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { Bell, ChevronLeft, CircleEllipsis, EllipsisVertical, LogOut, PencilLineIcon, PenLine, Play, Rocket } from "lucide-react";
-import { useRef, useState } from "react";
-import { TestSheet } from "./FlowChat/TestSheet";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
-import { Trigger } from "@radix-ui/react-select";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import useFlowStore from "./flowStore";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Bell, ChevronLeft, EllipsisVertical, PencilLineIcon, Play } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChatTest } from "./FlowChat/ChatTest";
+import useFlowStore from "./flowStore";
 
 const Header = ({ flow, onTabChange }) => {
     const { message } = useToast()
     const testRef = useRef(null)
     const { uploadFlow } = useFlowStore()
 
+    // 收集节点校验事件(表单 变量)
+    const nodeValidateEntitiesRef = useRef({})
+    useEffect(() => {
+        const setNodeEvent = (e) => {
+            const { action, id } = e.detail
+            if (action === 'update') {
+                nodeValidateEntitiesRef.current[id] = e.detail.validate
+            } else {
+                delete nodeValidateEntitiesRef.current[id]
+            }
+        }
+        window.addEventListener('node_event', setNodeEvent)
+        return () => {
+            window.removeEventListener('node_event', setNodeEvent)
+        }
+    }, [])
+
     const handleRunClick = () => {
         // 记录错误日志
-        // message({
-        //     variant: 'warning',
-        //     description: "跳过校验,启动会话"
-        // })
+        let errors = []
+        Object.keys(nodeValidateEntitiesRef.current).forEach(key => {
+            errors = [...errors, ...nodeValidateEntitiesRef.current[key]()]
+        })
+
+        if (errors.length) return message({
+            description: errors,
+            variant: 'warning'
+        })
 
         testRef.current?.run(flow)
     }
@@ -129,7 +149,7 @@ const Header = ({ flow, onTabChange }) => {
                     </PopoverContent>
                 </Popover>
             </div>
-            <TestSheet ref={testRef} />
+            <ChatTest ref={testRef} />
         </header>
     );
 };

@@ -56,6 +56,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
             setError(false)
             return false
         })
+        return () => onValidate(() => {})
     }, [data.value])
 
     return <div className='node-item mb-4' data-key={data.key}>
@@ -112,6 +113,7 @@ export function VarSelectSingleItem({ nodeId, data, onChange, onValidate }) {
             setError(false)
             return false
         })
+        return () => onValidate(() => {})
     }, [data.value])
 
     return <div className='node-item mb-4' data-key={data.key}>

@@ -2,10 +2,10 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
 from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
@@ -110,16 +110,17 @@ class AgentNode(BaseNode):
                 output_key = self.node_params['output'][index]['key']
                 ret[output_key] = self._run_once(one, unique_id, output_key)
 
+        logger.debug('agent_over result={}', ret)
         if self._output_user:
             # 非stream 模式，处理结果
             for k, v in ret.items():
-                self.callback_manager.on_output_msg(
-                    OutputMsgData(
-                        node_id=self.id,
-                        msg=v,
-                        unique_id=unique_id,
-                        output_key=k,
-                    ))
+                answer = ''
+                for one in v:
+                    if isinstance(one, AIMessage):
+                        answer += one.content
+                ret[k] = answer
+                self.graph_state.save_context(content=answer, msg_sender='AI')
+
         return ret
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None):
@@ -163,7 +164,5 @@ class AgentNode(BaseNode):
                                         config=config)
         else:
             result = self._agent.invoke(user, config=config)
-
-        logger.info(f'result: {result}')
 
         return result

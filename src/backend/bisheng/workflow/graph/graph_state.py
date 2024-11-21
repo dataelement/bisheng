@@ -15,8 +15,10 @@ class GraphState(BaseModel):
     variables_pool: Dict[str, Dict[str, Any]] = {}
 
     def get_history_memory(self, count: int) -> str:
-        """ 获取聊天历史记录 """
-        """ 因为不是1对1，所以重写 buffer_as_str"""
+        """ 获取聊天历史记录
+        因为不是1对1，所以重写 buffer_as_str"""
+        if not count:
+            count = self.history_memory.k
         messages = self.history_memory.chat_memory.messages[-count:]
         return get_buffer_string(
             messages,
@@ -25,12 +27,12 @@ class GraphState(BaseModel):
         )
 
     def save_context(self, content: str, msg_sender: str) -> None:
-        """  保存聊天记录 """
-        """ workflow 特殊情况，过程会有多轮交互，所以不是一条对一条，重制消息结构"""
+        """  保存聊天记录
+        workflow 特殊情况，过程会有多轮交互，所以不是一条对一条，重制消息结构"""
         if msg_sender == 'human':
-            self.history_memory.chat_memory.aadd_messages([HumanMessage(content=content)])
+            self.history_memory.chat_memory.add_messages([HumanMessage(content=content)])
         elif msg_sender == 'AI':
-            self.history_memory.chat_memory.aadd_messages([AIMessage(content=content)])
+            self.history_memory.chat_memory.add_messages([AIMessage(content=content)])
 
     def set_variable(self, node_id: str, key: str, value: Any):
         """ 将节点产生的数据放到全局变量里 """

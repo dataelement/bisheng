@@ -298,6 +298,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             setError(false)
             return false
         })
+        return () => onValidate(() => {})
     }, [data.value])
 
     return (

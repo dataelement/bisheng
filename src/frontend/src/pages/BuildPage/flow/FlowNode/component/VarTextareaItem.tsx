@@ -2,7 +2,7 @@ import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
 import VarInput from "./VarInput";
 
-export default function VarTextareaItem({ nodeId, data, onChange, onValidate }) {
+export default function VarTextareaItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
     const [error, setError] = useState(false)
 
     useEffect(() => {
@@ -14,6 +14,7 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate }) 
             setError(false)
             return false
         })
+        return () => onValidate(() => {})
     }, [data.value])
 
     return (
@@ -30,6 +31,7 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate }) 
                 error={error}
                 value={data.value}
                 onChange={onChange}
+                onVarEvent={onVarEvent}
             >
             </VarInput>
             <p className="text-xs text-primary/60">{data.desc}</p>

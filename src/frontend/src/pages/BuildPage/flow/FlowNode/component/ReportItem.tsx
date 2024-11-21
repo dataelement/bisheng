@@ -26,6 +26,8 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
             setError(false)
             return false
         })
+
+        return () => onValidate(() => {})
     }, [data.value])
     return <div className='node-item mb-4 nodrag' data-key={data.key}>
         <Label className='bisheng-label'>{data.label}</Label>

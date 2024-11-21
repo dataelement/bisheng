@@ -23,7 +23,7 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
 from bisheng.chat.types import WorkType
-from bisheng.utils import minio_client
+from bisheng.utils.minio_client import MinioClient
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -46,18 +46,21 @@ async def get_report_file(
     """ 获取report节点的模板文件 """
     if not version_key:
         # 重新生成一个version_key
-        version_key = f"bisheng/workflow/{uuid4().hex}.docx"
-    file_url = minio_client.MinioClient().get_share_link(version_key)
+        version_key = f"workflow/report/{uuid4().hex}.docx"
+    file_url = ""
+    minio_client = MinioClient()
+    if minio_client.object_exists(minio_client.bucket, version_key):
+        file_url = minio_client.get_share_link(version_key)
+
     return resp_200(data={
         'url': file_url,
         'version_key': version_key,
     })
 
 
-@router.post('/report/callback', response_model=UnifiedResponseModel, status_code=200)
+@router.post('/report/callback', status_code=200)
 async def upload_report_file(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user),
         data: dict = Body(...)):
     """ office 回调接口保存 report节点的模板文件 """
     status = data.get('status')
@@ -69,9 +72,12 @@ async def upload_report_file(
         return {'error': 0}
     logger.info(f'office_callback url={file_url}')
     file = Requests().get(url=file_url)
-    minio_client.MinioClient().upload_minio_data(
+    minio_client = MinioClient()
+
+    minio_client.upload_minio_data(
         key, file._content, len(file._content),
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    return {'error': 0}
 
 
 @router.websocket('/chat/{workflow_id}')

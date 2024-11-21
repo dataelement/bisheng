@@ -75,6 +75,7 @@ const useReport = () => {
     const { id } = useParams()
     useEffect(() => {
         setLoading(true);
+        /** 新建or编辑 key 由后端生成 */
         getReportFormApi(id).then(({ version_key, temp_url }) => {
             setLoading(false);
             setDocx({

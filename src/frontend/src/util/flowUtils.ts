@@ -56,12 +56,13 @@ export function getToolTree(temp) {
                         key: el.name,
                         label: el.name,
                         type: 'var_textarea',
+                        test: "input",
                         desc: el.description,
                         required: el.required,
                         value: ''
                     }))
                 },
-                { 
+                {
                     name: '输出',
                     params: [{
                         global: 'key',
@@ -79,4 +80,29 @@ export function getToolTree(temp) {
         name: temp.name,
         children: children
     }
+}
+
+// 变量是否存在flow中
+// 所有情况
+// start_3ca7f.preset_question
+// start_3ca7f.preset_question#0   type: "input_list"  value个数
+// input_dee6e.text_input2    type: form   变量名 -> value[0].key
+// llm_b12e5.output_start_d377c.chat_history   type:var && value是数组时  变量名 -> value[0].key
+export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
+    const nodeName = nodes.find(node => node.id === nodeId).data.name
+    const varNodeId = varName.match(/^([^.]+)/)[1]
+    const res = nodes.some(node =>
+        varNodeId === node.id ? node.data.group_params.some(group =>
+            group.params.some(param => {
+                if (param.type === 'input_list' && varName.indexOf('#') !== -1) {
+                    return !!param.value[varName.match(/#(\d+)/)[1]]
+                } else if (param.type === 'form' || (param.type === 'var' && Array.isArray(param.value))) {
+                    return param.value.some(item => `${node.id}.${item.key}` === varName)
+                } else {
+                    return `${node.id}.${param.key}` === varName
+                }
+            })
+        ) : false
+    )
+    return res ? '' : `${nodeName}节点错误：${varNameCn}不存在`
 }
