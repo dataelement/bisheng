@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from uuid import UUID
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.base import BaseService
@@ -17,8 +17,8 @@ from fastapi.encoders import jsonable_encoder
 
 class WorkFlowService(BaseService):
 
-    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: int = 0, page: int = 1,
-                      page_size: int = 10, flow_type :int = FlowType.FLOW.value) -> UnifiedResponseModel[List[Dict]]:
+    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], page: int = 1,
+                      page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
         """
         获取所有技能
         """
