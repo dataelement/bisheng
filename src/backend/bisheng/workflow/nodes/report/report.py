@@ -32,6 +32,7 @@ class ReportNode(BaseNode):
         output_doc = doc_parse.render(template_def)
         output_content = io.BytesIO()
         output_doc.save(output_content)
+        output_content.seek(0)
 
         # minio的临时目录
         tmp_object_name = f"workflow/report/{uuid4().hex}/{self._file_name}"
@@ -45,5 +46,6 @@ class ReportNode(BaseNode):
             'node_id': self.id,
             'msg': "",
             'files': [{'path': file_share_url, 'name': self._file_name}],
-            'output_key': ''
+            'output_key': '',
+            'stream': False
         }))
