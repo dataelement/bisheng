@@ -1,3 +1,5 @@
+from typing import IO
+
 from docx import Document
 
 
@@ -19,7 +21,7 @@ def find_lcs(str1, str2):
 
 
 class DocxTemplateRender(object):
-    def __init__(self, filepath: str = None, file_content: bytes = None):
+    def __init__(self, filepath: str = None, file_content: IO[bytes] = None):
         self.filepath = filepath
         self.file_content = file_content
         if self.filepath:

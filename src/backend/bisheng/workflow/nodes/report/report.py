@@ -12,7 +12,7 @@ class ReportNode(BaseNode):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._report_info = self.node_params['report_info']
-        self._object_name = f"workflow/report/{self._report_info['version_key']}./docx"
+        self._object_name = f"workflow/report/{self._report_info['version_key']}.docx"
         self._file_name = self._report_info['file_name'] if self._report_info['file_name'] else 'tmp_report.docx'
         if not self._file_name.endswith('.docx'):
             self._file_name += '.docx'
@@ -21,7 +21,7 @@ class ReportNode(BaseNode):
     def _run(self, unique_id: str):
         # 下载报告模板文件
         file_content = self._minio_client.get_object(self._minio_client.bucket, self._object_name)
-        doc_parse = DocxTemplateRender(file_content=file_content)
+        doc_parse = DocxTemplateRender(file_content=io.BytesIO(file_content))
         # 获取所有的节点变量
         all_variables = self.graph_state.get_all_variables()
         template_def = []
