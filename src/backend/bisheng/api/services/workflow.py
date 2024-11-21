@@ -1,5 +1,6 @@
 from typing import Dict, List
 from uuid import UUID
+from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
@@ -65,9 +66,13 @@ class WorkFlowService(BaseService):
         flow_ids = []
         # 技能创建用户的ID列表
         user_ids = []
+        assistant_ids =[]
         for one in data:
-            flow_ids.append(one.id.hex)
-            user_ids.append(one.user_id)
+            if one.flow_type != 5:
+                flow_ids.append(one.id.hex)
+                user_ids.append(one.user_id)
+            else:
+                assistant_ids.append(one.id.hex)
         # 获取列表内的用户信息
         user_infos = UserDao.get_user_by_ids(user_ids)
         user_dict = {one.user_id: one.user_name for one in user_infos}
@@ -91,18 +96,38 @@ class WorkFlowService(BaseService):
         # 获取技能关联的tag
         flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.FLOW, flow_ids)
 
+        # 查询助手所属的分组
+        assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
+        assistant_group_dict = {}
+        for one in assistant_groups:
+            if one.third_id not in assistant_group_dict:
+                assistant_group_dict[one.third_id] = []
+            assistant_group_dict[one.third_id].append(one.group_id)
+
+        # 获取助手关联的tag
+        a_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.ASSISTANT, assistant_ids)
+
         # 重新拼接技能列表list信息
         res = []
         for one in data:
-            one.logo = cls.get_logo_share_link(one.logo)
-            flow_info = jsonable_encoder(one)
-            flow_info['user_name'] = user_dict.get(one.user_id, one.user_id)
-            flow_info['write'] = True if user.is_admin() or user.user_id == one.user_id else False
-            flow_info['version_list'] = flow_versions.get(one.id.hex, [])
-            flow_info['group_ids'] = flow_group_dict.get(one.id.hex, [])
-            flow_info['tags'] = flow_tags.get(one.id.hex, [])
+            if one.flow_type != 5:
+                one.logo = cls.get_logo_share_link(one.logo)
+                flow_info = jsonable_encoder(one)
+                flow_info['user_name'] = user_dict.get(one.user_id, one.user_id)
+                flow_info['write'] = True if user.is_admin() or user.user_id == one.user_id else False
+                flow_info['version_list'] = flow_versions.get(one.id.hex, [])
+                flow_info['group_ids'] = flow_group_dict.get(one.id.hex, [])
+                flow_info['tags'] = flow_tags.get(one.id.hex, [])
 
-            res.append(flow_info)
+                res.append(flow_info)
+            else:
+                one.logo = cls.get_logo_share_link(one.logo)
+                simple_assistant = AssistantService.return_simple_assistant_info(one)
+                if one.user_id == user.user_id or user.is_admin():
+                    simple_assistant.write = True
+                simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
+                simple_assistant.tags = a_tags.get(one.id.hex, [])
+                res.append(simple_assistant)
 
         return resp_200(data={
             "data": res,

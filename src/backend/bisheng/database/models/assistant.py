@@ -53,6 +53,7 @@ class AssistantLinkBase(SQLModelSerializable):
 
 class Assistant(AssistantBase, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+    flow_type: int = 5
 
 
 class AssistantLink(AssistantLinkBase, table=True):

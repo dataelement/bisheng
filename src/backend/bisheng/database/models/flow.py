@@ -190,7 +190,7 @@ class FlowDao(FlowBase):
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
-                               Flow.logo, Flow.update_time, Flow.description, Flow.guide_word)
+                               Flow.logo, Flow.update_time, Flow.description, Flow.guide_word,Flow.flow_type)
             if extra_ids and isinstance(extra_ids, List):
                 statement = statement.where(or_(Flow.id.in_(extra_ids), Flow.user_id == user_id))
             elif not extra_ids:
