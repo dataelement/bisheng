@@ -166,9 +166,9 @@ class AssistantDao(AssistantBase):
     def get_all_assistants_read(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,
                            status: int = None) -> (List[AssistantRead], int):
         with session_getter() as session:
-            statement = select(AssistantRead).where(Assistant.is_delete == 0)
+            statement = select(AssistantRead).where(AssistantRead.is_delete == 0)
             count_statement = session.query(func.count(
-                AssistantRead.id)).where(Assistant.is_delete == 0)
+                AssistantRead.id)).where(AssistantRead.is_delete == 0)
             if name:
                 statement = statement.where(or_(
                     AssistantRead.name.like(f'%{name}%'),
