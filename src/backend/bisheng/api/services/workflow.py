@@ -56,7 +56,7 @@ class WorkFlowService(BaseService):
             total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids)
             if a_role_access:
                 assistant_ids_extra = [UUID(access.third_id).hex for access in a_role_access]
-            a_res, a_total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit=half_page,assistant_ids)
+            a_res, a_total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
             data = data + a_res
             total = total + a_total
 
