@@ -39,7 +39,7 @@ class WorkFlowService(BaseService):
         # 获取用户可见的技能列表
         if user.is_admin():
             fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size=half_page)
-            ares, atotal = AssistantDao.get_all_assistants(name, page, limit=half_page, assistant_ids, status)
+            ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids)
             data = fdata + ares 
             total = ftotal + atotal
