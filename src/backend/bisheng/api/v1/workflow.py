@@ -46,11 +46,12 @@ async def get_report_file(
     """ 获取report节点的模板文件 """
     if not version_key:
         # 重新生成一个version_key
-        version_key = f"workflow/report/{uuid4().hex}.docx"
+        version_key = uuid4().hex
     file_url = ""
+    object_name = f"workflow/report/{version_key}.docx"
     minio_client = MinioClient()
-    if minio_client.object_exists(minio_client.bucket, version_key):
-        file_url = minio_client.get_share_link(version_key)
+    if minio_client.object_exists(minio_client.bucket, object_name):
+        file_url = minio_client.get_share_link(object_name)
 
     return resp_200(data={
         'url': file_url,
@@ -72,10 +73,11 @@ async def upload_report_file(
         return {'error': 0}
     logger.info(f'office_callback url={file_url}')
     file = Requests().get(url=file_url)
-    minio_client = MinioClient()
 
+    minio_client = MinioClient()
+    object_name = f"workflow/report/{key}.docx"
     minio_client.upload_minio_data(
-        key, file._content, len(file._content),
+        object_name, file._content, len(file._content),
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     return {'error': 0}
 
@@ -183,7 +185,6 @@ def change_version(*,
     return FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
-
 @router.get('/get_one_flow/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
 def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
@@ -229,6 +230,7 @@ async def update_flow(*,
     FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 
+
 @router.get('/list', status_code=200)
 def read_flows(*,
                name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
@@ -246,4 +248,3 @@ def read_flows(*,
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-
