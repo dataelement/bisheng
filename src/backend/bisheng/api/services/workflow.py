@@ -70,7 +70,7 @@ class WorkFlowService(BaseService):
         user_ids = []
         assistant_ids =[]
         for one in data:
-            if one.flow_type:
+            if hasattr(one, "flow_type"):
                 flow_ids.append(one.id.hex)
                 user_ids.append(one.user_id)
             else:
