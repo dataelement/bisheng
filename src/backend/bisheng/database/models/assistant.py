@@ -112,43 +112,43 @@ class AssistantDao(AssistantBase):
     @classmethod
     def get_assistants(cls, user_id: int, name: str, assistant_ids_extra: List[UUID],
                        status: Optional[int], page: int, limit: int, assistant_ids: List[UUID] = None) -> (
-            List[Assistant], int):
+            List[AssistantRead], int):
         with session_getter() as session:
             count_statement = session.query(func.count(
-                Assistant.id)).where(Assistant.is_delete == 0)
-            statement = select(Assistant).where(Assistant.is_delete == 0)
+                AssistantRead.id)).where(Assistant.is_delete == 0)
+            statement = select(AssistantRead).where(Assistant.is_delete == 0)
             if assistant_ids_extra:
                 # 需要or 加入的条件
                 statement = statement.where(
-                    or_(Assistant.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
+                    or_(AssistantRead.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
                 count_statement = count_statement.where(
-                    or_(Assistant.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
+                    or_(AssistantRead.id.in_(assistant_ids_extra), Assistant.user_id == user_id))
             else:
-                statement = statement.where(Assistant.user_id == user_id)
-                count_statement = count_statement.where(Assistant.user_id == user_id)
+                statement = statement.where(AssistantRead.user_id == user_id)
+                count_statement = count_statement.where(AssistantRead.user_id == user_id)
 
             if assistant_ids:
-                statement = statement.where(Assistant.id.in_(assistant_ids))
-                count_statement = count_statement.where(Assistant.id.in_(assistant_ids))
+                statement = statement.where(AssistantRead.id.in_(assistant_ids))
+                count_statement = count_statement.where(AssistantRead.id.in_(assistant_ids))
 
             if name:
                 statement = statement.where(or_(
-                    Assistant.name.like(f'%{name}%'),
-                    Assistant.desc.like(f'%{name}%')
+                    AssistantRead.name.like(f'%{name}%'),
+                    AssistantRead.desc.like(f'%{name}%')
                 ))
                 count_statement = count_statement.where(or_(
-                    Assistant.name.like(f'%{name}%'),
-                    Assistant.desc.like(f'%{name}%')
+                    AssistantRead.name.like(f'%{name}%'),
+                    AssistantRead.desc.like(f'%{name}%')
                 ))
             if status is not None:
-                statement = statement.where(Assistant.status == status)
-                count_statement = count_statement.where(Assistant.status == status)
+                statement = statement.where(AssistantRead.status == status)
+                count_statement = count_statement.where(AssistantRead.status == status)
             if limit == 0 and page == 0:
                 # 获取全部，不分页
-                statement = statement.order_by(Assistant.update_time.desc())
+                statement = statement.order_by(AssistantRead.update_time.desc())
             else:
                 statement = statement.offset(
-                    (page - 1) * limit).limit(limit).order_by(Assistant.update_time.desc())
+                    (page - 1) * limit).limit(limit).order_by(AssistantRead.update_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
 
     @classmethod
@@ -161,6 +161,36 @@ class AssistantDao(AssistantBase):
         statement = statement.order_by(Assistant.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def get_all_assistants_read(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,
+                           status: int = None) -> (List[AssistantRead], int):
+        with session_getter() as session:
+            statement = select(AssistantRead).where(Assistant.is_delete == 0)
+            count_statement = session.query(func.count(
+                AssistantRead.id)).where(Assistant.is_delete == 0)
+            if name:
+                statement = statement.where(or_(
+                    AssistantRead.name.like(f'%{name}%'),
+                    AssistantRead.desc.like(f'%{name}%')
+                ))
+                count_statement = count_statement.where(or_(
+                    AssistantRead.name.like(f'%{name}%'),
+                    AssistantRead.desc.like(f'%{name}%')
+                ))
+            if assistant_ids:
+                statement = statement.where(AssistantRead.id.in_(assistant_ids))
+                count_statement = count_statement.where(AssistantRead.id.in_(assistant_ids))
+            if status is not None:
+                statement = statement.where(AssistantRead.status == status)
+                count_statement = count_statement.where(AssistantRead.status == status)
+            if page and limit:
+                statement = statement.offset(
+                    (page - 1) * limit
+                ).limit(limit)
+            statement = statement.order_by(AssistantRead.update_time.desc())
+            return session.exec(statement).all(), session.exec(count_statement).scalar()
+
 
     @classmethod
     def get_all_assistants(cls, name: str, page: int, limit: int, assistant_ids: List[UUID] = None,
