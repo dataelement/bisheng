@@ -9,8 +9,6 @@ class QARetrieverNode(BaseNode):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 判断是单次还是批量
-        self._tab = self.node_data.tab['value']
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
@@ -30,6 +28,7 @@ class QARetrieverNode(BaseNode):
         params = {}
         params['search_kwargs'] = {'k': 1, 'score_threshold': self._score}
         params['search_type'] = 'similarity_score_threshold'
+        params['collection_name'] = {'key': self._qa_knowledge_id}
         knowledge_retriever = instantiate_vectorstore(
             node_type='MilvusWithPermissionCheck',
             class_object=MilvusWithPermissionCheck,
