@@ -27,6 +27,7 @@ class LLMNodeAsyncCallbackHandler(AsyncCallbackHandler):
                 node_id=self.node_id,
                 msg=token,
                 unique_id=self.unique_id,
+                stream=True,
             ))
 
 
@@ -62,7 +63,8 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                 OutputMsgData(node_id=self.node_id,
                               msg=token,
                               unique_id=self.unique_id,
-                              output_key=self.output_key))
+                              output_key=self.output_key,
+                              stream=True))
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
 

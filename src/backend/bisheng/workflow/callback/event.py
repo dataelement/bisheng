@@ -35,7 +35,7 @@ class OutputMsgData(BaseModel):
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files')
     output_key: str = Field(..., description='Whether the message is stream')
-    stream: bool = Field(True, description='Whether the message is stream', exclude=True)
+    stream: bool = Field(False, description='Whether the message is stream', exclude=True)
 
 
 class OutputMsgInputData(OutputMsgData):
