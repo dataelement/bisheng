@@ -58,9 +58,9 @@ def read_template(page_size: Optional[int] = None,
             template = session.get(Template, id)
         return resp_200([template])
     if name:
-        sql.where(Template.name == name)
+        sql = sql.where(Template.name == name)
     if flow_type:
-        sql.where(Template.flow_type == flow_type)
+        sql = sql.where(Template.flow_type == flow_type)
 
     sql.order_by(Template.order_num.desc())
     if page_size and page_name:
