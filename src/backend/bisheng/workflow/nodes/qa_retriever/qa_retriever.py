@@ -28,7 +28,7 @@ class QARetrieverNode(BaseNode):
         params = {}
         params['search_kwargs'] = {'k': 1, 'score_threshold': self._score}
         params['search_type'] = 'similarity_score_threshold'
-        params['collection_name'] = {'key': self._qa_knowledge_id}
+        params['collection_name'] = self._qa_knowledge_id  # [{"key":"", "label":""}]
         knowledge_retriever = instantiate_vectorstore(
             node_type='MilvusWithPermissionCheck',
             class_object=MilvusWithPermissionCheck,
