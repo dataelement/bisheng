@@ -396,6 +396,7 @@
           "key": "retrieval_result",
           "label": "检索结果",
           "type": "var",
+          "global": "key",
           "value": ""
         }]
       }
