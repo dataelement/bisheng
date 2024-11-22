@@ -33,7 +33,8 @@ class TemplateRead(TemplateSkillBase):
 
 
 class TemplateCreate(TemplateSkillBase):
-    pass
+    # 1 flow 5 assistant 10 workflow
+    flow_type: int = 1
 
 
 class TemplateUpdate(SQLModelSerializable):
