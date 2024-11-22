@@ -1,6 +1,6 @@
+from bisheng.database.models.user import UserDao
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.interface.vector_store.custom import MilvusWithPermissionCheck
-from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
 
@@ -9,9 +9,6 @@ class QARetrieverNode(BaseNode):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # 是否输出结果给用户
-        self._output_user = self.node_params.get('output_user', False)
 
         # 初始化输入
         self._user_question = self.node_params.get('user_question', '')
@@ -29,6 +26,7 @@ class QARetrieverNode(BaseNode):
         params['search_kwargs'] = {'k': 1, 'score_threshold': self._score}
         params['search_type'] = 'similarity_score_threshold'
         params['collection_name'] = self._qa_knowledge_id  # [{"key":"", "label":""}]
+        params['user_name'] = UserDao.get_user(self.user_id).user_name
         knowledge_retriever = instantiate_vectorstore(
             node_type='MilvusWithPermissionCheck',
             class_object=MilvusWithPermissionCheck,
@@ -46,12 +44,7 @@ class QARetrieverNode(BaseNode):
             result_str = result['result'][0].page_content
         else:
             result_str = 'None'
-        if self._output_user:
-            self.callback_manager.on_output_msg(
-                OutputMsgData(node_id=self.id,
-                              msg=result_str,
-                              unique_id=unique_id,
-                              output_key=self._user_question))
+
         ret = {}
         ret['retrieval_result'] = result_str
         return ret
