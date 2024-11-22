@@ -21,6 +21,7 @@ class FlowStatus(Enum):
 
 class FlowType(Enum):
     FLOW= 1
+    ASSISTANT= 5
     WORKFLOW= 10
 
 class FlowBase(SQLModelSerializable):
@@ -185,7 +186,7 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_flows(cls, user_id: Optional[int], extra_ids: Union[List[str], str], name: str,
-                  status: Optional[int] = None, flow_ids: List[str] = None, page: int = 0, limit: int = 0) \
+                  status: Optional[int] = None, flow_ids: List[str] = None, page: int = 0, limit: int = 0,flow_type:Optional[int]= None) \
             -> List[Flow]:
         with session_getter() as session:
             # data 数据量太大，对mysql 有影响
@@ -200,6 +201,8 @@ class FlowDao(FlowBase):
                     or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
             if status is not None:
                 statement = statement.where(Flow.status == status)
+            if flow_type is not None:
+                statement = statement.where(Flow.flow_type== flow_type)
             if flow_ids:
                 statement = statement.where(Flow.id.in_(flow_ids))
             statement = statement.order_by(Flow.update_time.desc())
@@ -215,7 +218,8 @@ class FlowDao(FlowBase):
                     extra_ids: Union[List[str], str],
                     name: str,
                     status: Optional[int] = None,
-                    flow_ids: List[str] = None) -> int:
+                    flow_ids: List[str] = None,
+                    flow_type:Optional[int]= None) -> int:
         with session_getter() as session:
             count_statement = session.query(func.count(Flow.id))
             if extra_ids and isinstance(extra_ids, List):
@@ -226,6 +230,8 @@ class FlowDao(FlowBase):
             if name:
                 count_statement = count_statement.filter(
                     or_(Flow.name.like(f'%{name}%'), Flow.description.like(f'%{name}%')))
+            if flow_type is not None:
+                count_statement= count_statement.where(Flow.flow_type== flow_type)
             if flow_ids:
                 count_statement = count_statement.filter(Flow.id.in_(flow_ids))
             if status is not None:

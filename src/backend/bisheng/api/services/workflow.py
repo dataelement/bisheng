@@ -18,7 +18,7 @@ from fastapi.encoders import jsonable_encoder
 class WorkFlowService(BaseService):
 
     @classmethod
-    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], page: int = 1,
+    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],page: int = 1,
                       page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
         """
         获取所有技能
@@ -40,9 +40,10 @@ class WorkFlowService(BaseService):
         half_page = int(page_size/2)
         # 获取用户可见的技能列表
         if user.is_admin():
-            fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page)
-            ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
-            ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids)
+            fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page,flow_type)
+            ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids,flow_type)
+            if not flow_type or flow_type == FlowType.ASSISTANT.value:
+                ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             data = fdata + ares 
             total = ftotal + atotal
         else:
@@ -54,11 +55,12 @@ class WorkFlowService(BaseService):
             assistant_ids_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, half_page)
-            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids)
+            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, half_page,flow_type)
+            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids,flow_type)
             if a_role_access:
                 assistant_ids_extra = [UUID(access.third_id).hex for access in a_role_access]
-            a_res, a_total = AssistantDao.get_all_assistants(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
+            if not flow_type or flow_type == FlowType.ASSISTANT.value:
+                a_res, a_total = AssistantDao.get_all_assistants(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
             data = data + a_res
             total = total + a_total
 
