@@ -42,6 +42,8 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page,flow_type)
             ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids,flow_type)
+            ares = []
+            atotal = 0
             if not flow_type or flow_type == FlowType.ASSISTANT.value:
                 ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             data = fdata + ares 
@@ -59,6 +61,8 @@ class WorkFlowService(BaseService):
             total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids,flow_type)
             if a_role_access:
                 assistant_ids_extra = [UUID(access.third_id).hex for access in a_role_access]
+            a_res = []
+            a_total = 0
             if not flow_type or flow_type == FlowType.ASSISTANT.value:
                 a_res, a_total = AssistantDao.get_all_assistants(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
             data = data + a_res
