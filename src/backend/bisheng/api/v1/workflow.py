@@ -117,12 +117,12 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     # 判断用户是否重复技能名
     with session_getter() as session:
         if session.exec(
-                select(Flow).where(Flow.name == flow.name,Flow.flow_type == WorkType.WORKFLOW.value,
+                select(Flow).where(Flow.name == flow.name,Flow.flow_type == FlowType.WORKFLOW.value,
                                    Flow.user_id == login_user.user_id)).first():
             raise HTTPException(status_code=500, detail='工作流名重复')
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
-    db_flow.flow_type = WorkType.WORKFLOW.value
+    db_flow.flow_type = FlowType.WORKFLOW.value
     # 创建新的技能
     db_flow = FlowDao.create_flow(db_flow)
 
