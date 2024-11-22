@@ -3,12 +3,14 @@ import os
 from typing import Optional
 from uuid import UUID
 
+from sqlmodel import select
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.flow import FlowOnlineEditError
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
+from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
+from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from uuid import uuid4
 
@@ -109,6 +111,27 @@ async def workflow_ws(*,
         logger.error(f'Websocket exception: {str(exc)}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
 
+@router.post('/create', status_code=201)
+def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
+    """Create a new flow."""
+    # 判断用户是否重复技能名
+    with session_getter() as session:
+        if session.exec(
+                select(Flow).where(Flow.name == flow.name,Flow.flow_type == WorkType.WORKFLOW.value,
+                                   Flow.user_id == login_user.user_id)).first():
+            raise HTTPException(status_code=500, detail='工作流名重复')
+    flow.user_id = login_user.user_id
+    db_flow = Flow.model_validate(flow)
+    db_flow.flow_type = WorkType.WORKFLOW.value
+    # 创建新的技能
+    db_flow = FlowDao.create_flow(db_flow)
+
+    current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
+    ret = FlowRead.model_validate(db_flow)
+    ret.version_id = current_version.id
+    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id)
+    return resp_200(data=ret)
+
 
 @router.get('/versions', status_code=200)
 def get_versions(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
@@ -197,7 +220,7 @@ async def update_flow(*,
                       flow_id: UUID,
                       flow: FlowUpdate,
                       login_user: UserPayload = Depends(get_login_user)):
-    """Update a flow."""
+    """online offline"""
     flow_id = flow_id.hex
     with session_getter() as session:
         db_flow = session.get(Flow, flow_id)
@@ -209,7 +232,7 @@ async def update_flow(*,
 
     flow_data = flow.model_dump(exclude_unset=True)
 
-    # 验证工作流是否可以使用
+    # TODO:  验证工作流是否可以使用
 
     if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
         raise FlowOnlineEditError.http_exception()
