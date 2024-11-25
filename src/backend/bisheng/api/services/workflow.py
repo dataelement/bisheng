@@ -38,7 +38,7 @@ class WorkFlowService(BaseService):
                 })
 
         half_page = int(page_size/2)
-        if flow_type == FlowType.ASSISTANT.value:
+        if flow_type:
             half_page = page_size
 
         # 获取用户可见的技能列表
