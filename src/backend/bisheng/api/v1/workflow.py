@@ -124,7 +124,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     db_flow = Flow.model_validate(flow)
     db_flow.flow_type = FlowType.WORKFLOW.value
     # 创建新的技能
-    db_flow = FlowDao.create_flow(db_flow)
+    db_flow = FlowDao.create_flow(db_flow,FlowType.WORKFLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
     ret = FlowRead.model_validate(db_flow)

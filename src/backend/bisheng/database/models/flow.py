@@ -37,8 +37,8 @@ class FlowBase(SQLModelSerializable):
                          nullable=True,
                          server_default=text('CURRENT_TIMESTAMP'),
                          onupdate=text('CURRENT_TIMESTAMP')))
-    create_time: Optional[datetime] = Field(default=(datetime.now()).strftime('%Y-%m-%d %H:%M:%S'),
-                                            index=True)
+    create_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     guide_word: Optional[str] = Field(sa_column=Column(String(length=1000)))
 
     @validator('data')
@@ -95,7 +95,7 @@ class FlowUpdate(SQLModelSerializable):
 class FlowDao(FlowBase):
 
     @classmethod
-    def create_flow(cls, flow_info: Flow) -> Flow:
+    def create_flow(cls, flow_info: Flow,flow_type: Optional[int]) -> Flow:
         from bisheng.database.models.flow_version import FlowVersion
         with session_getter() as session:
             session.add(flow_info)
@@ -104,7 +104,8 @@ class FlowDao(FlowBase):
                                        is_current=1,
                                        data=flow_info.data,
                                        flow_id=flow_info.id.hex,
-                                       user_id=flow_info.user_id)
+                                       user_id=flow_info.user_id,
+                                       flow_type=flow_type)
             session.add(flow_version)
             session.commit()
             session.refresh(flow_info)
