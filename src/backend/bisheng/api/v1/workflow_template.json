@@ -162,6 +162,7 @@
         "params": [{
           "key": "code_output",
           "type": "code_output",
+          "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
           "required": true,
           "value": []
         }]
