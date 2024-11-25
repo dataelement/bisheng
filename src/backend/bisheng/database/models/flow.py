@@ -104,6 +104,7 @@ class FlowDao(FlowBase):
                                        is_current=1,
                                        data=flow_info.data,
                                        flow_id=flow_info.id.hex,
+                                       create_time=datetime.now(),
                                        user_id=flow_info.user_id,
                                        flow_type=flow_type)
             session.add(flow_version)
