@@ -154,7 +154,7 @@
           "key": "code",
           "type": "code",
           "required": true,
-          "value": ""
+          "value": "def main(arg1: str, arg2: str) -> dict: \n    return {'result1': arg1, 'result2': arg2}"
         }]
       },
       {
@@ -164,7 +164,7 @@
           "type": "code_output",
           "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
           "required": true,
-          "value": []
+          "value": [{"key":  "result1", "type":  "str"}, {"key":  "result2", "type":  "str"}]
         }]
       }
     ]

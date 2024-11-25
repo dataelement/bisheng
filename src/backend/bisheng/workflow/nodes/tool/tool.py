@@ -19,7 +19,7 @@ class ToolNode(BaseNode):
 
     def _run(self, unique_id: str):
         tool_input = self.parse_tool_input()
-        output = self._tool.run(**tool_input)
+        output = self._tool.run(tool_input=tool_input)
         return {
             "output": output
         }
