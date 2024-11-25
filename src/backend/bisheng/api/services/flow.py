@@ -441,7 +441,7 @@ class FlowService(BaseService):
     @classmethod
     def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         # 写入审计日志
-        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex,flow_type=flow_info.type)
+        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex,flow_type=flow_info.flow_type)
 
         # 写入logo缓存
         cls.get_logo_share_link(flow_info.logo)
@@ -452,7 +452,7 @@ class FlowService(BaseService):
         logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
 
         # 写入审计日志
-        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info,flow_type=flow_info.type)
+        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info,flow_type=flow_info.flow_type)
 
         # 将用户组下关联的技能删除
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)
