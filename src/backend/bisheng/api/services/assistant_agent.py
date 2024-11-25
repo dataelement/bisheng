@@ -131,7 +131,7 @@ class AssistantAgent(AssistantUtils):
 
     @staticmethod
     def sync_init_preset_tools(tool_list: List[GptsTools],
-                               llm: BaseLanguageModel,
+                               llm: BaseLanguageModel = None,
                                callbacks: Callbacks = None):
         """
         初始化预置工具列表
