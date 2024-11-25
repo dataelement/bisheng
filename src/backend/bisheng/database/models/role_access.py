@@ -46,6 +46,8 @@ class AccessType(Enum):
     ASSISTANT_WRITE = 6
     GPTS_TOOL_READ = 7
     GPTS_TOOL_WRITE = 8
+    WORK_FLOW= 9
+    WORK_FLOW_WRITE= 10
 
     WEB_MENU = 99  # 前端菜单栏权限限制
 

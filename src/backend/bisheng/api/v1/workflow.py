@@ -129,7 +129,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
-    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id)
+    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id,FlowType.WORKFLOW.value)
     return resp_200(data=ret)
 
 

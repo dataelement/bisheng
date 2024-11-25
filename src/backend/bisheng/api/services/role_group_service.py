@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
@@ -14,7 +14,7 @@ from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -250,6 +250,8 @@ class RoleGroupService():
             return self.get_group_flow(group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
             return self.get_group_knowledge(group_id, name, page_size, page_num)
+        elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
+            return self.get_group_flow(group_id, name, page_size, page_num, FlowType.WORKFLOW.value)
         elif resource_type.value == ResourceTypeEnum.ASSISTANT.value:
             return self.get_group_assistant(group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.GPTS_TOOL.value:
@@ -262,10 +264,13 @@ class RoleGroupService():
         user_map = {user.user_id: user.user_name for user in user_list}
         return user_map
 
-    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int) -> (List[Any], int):
+    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,flow_type:Optional[int] = None) -> (List[Any], int):
         """ 获取用户组下的知识库列表 """
         # 查询用户组下的技能ID列表
-        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.FLOW)
+        rs_type = ResourceTypeEnum.FLOW
+        if flow_type == FlowType.WORKFLOW.value:
+            rs_type = ResourceTypeEnum.WORK_FLOW
+        resource_list = GroupResourceDao.get_group_resource(group_id, rs_type)
         if not resource_list:
             return [], 0
         res = []

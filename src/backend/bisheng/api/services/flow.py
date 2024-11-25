@@ -1,6 +1,6 @@
 import asyncio
 import copy
-from typing import List, Dict, AsyncGenerator
+from typing import List, Dict, AsyncGenerator, Optional
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
@@ -66,8 +66,12 @@ class FlowService(BaseService):
         if not flow_info:
             return NotFoundFlowError.return_resp()
 
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW_WRITE
+
         # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
         if version_info.is_current == 1:
@@ -86,8 +90,13 @@ class FlowService(BaseService):
         if not flow_info:
             return NotFoundFlowError.return_resp()
 
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW_WRITE
+
+
         # 判断权限
-        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
         # 技能上线状态不允许 切换版本
@@ -158,8 +167,11 @@ class FlowService(BaseService):
         if not flow_info:
             return NotFoundFlowError.return_resp()
 
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW_WRITE
         # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑
@@ -191,7 +203,10 @@ class FlowService(BaseService):
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if not flow_info:
             raise NotFoundFlowError.http_exception()
-        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW):
+        atype = AccessType.FLOW
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             raise UnAuthorizedError.http_exception()
         flow_info.logo = cls.get_logo_share_link(flow_info.logo)
 
@@ -394,7 +409,7 @@ class FlowService(BaseService):
         return index, answer_result
 
     @classmethod
-    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow, version_id) -> bool:
+    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow, version_id,flow_type:Optional[int]=None) -> bool:
         logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
         # 将技能所需的表单写到数据库内
         try:
@@ -406,14 +421,18 @@ class FlowService(BaseService):
         user_group = UserGroupDao.get_user_group(login_user.user_id)
         if user_group:
             batch_resource = []
+            resource_type = ResourceTypeEnum.FLOW.value
+            if flow_type and flow_type == FlowType.WORKFLOW.value:
+                resource_type = ResourceTypeEnum.WORK_FLOW.value
+
             for one in user_group:
                 batch_resource.append(
                     GroupResource(group_id=one.group_id,
                                   third_id=flow_info.id.hex,
-                                  type=ResourceTypeEnum.FLOW.value))
+                                  type=resource_type))
             GroupResourceDao.insert_group_batch(batch_resource)
         # 写入审计日志
-        AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+        AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex,flow_type)
 
         # 写入logo缓存
         cls.get_logo_share_link(flow_info.logo)
@@ -422,7 +441,7 @@ class FlowService(BaseService):
     @classmethod
     def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         # 写入审计日志
-        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex,flow_type=flow_info.type)
 
         # 写入logo缓存
         cls.get_logo_share_link(flow_info.logo)
@@ -433,7 +452,7 @@ class FlowService(BaseService):
         logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
 
         # 写入审计日志
-        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info)
+        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info,flow_type=flow_info.type)
 
         # 将用户组下关联的技能删除
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)
