@@ -38,6 +38,9 @@ class WorkFlowService(BaseService):
                 })
 
         half_page = int(page_size/2)
+        if flow_type == FlowType.ASSISTANT.value:
+            half_page = page_size
+
         # 获取用户可见的技能列表
         if user.is_admin():
             fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page,flow_type)
