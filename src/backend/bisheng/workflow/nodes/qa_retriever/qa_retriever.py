@@ -41,7 +41,7 @@ class QARetrieverNode(BaseNode):
         result = self._retriever.invoke({'query': question})
         # qa 结果是document
         if result['result']:
-            result_str = result['result'][0].page_content
+            result_str = result['result'][0].metadata['answer']
         else:
             result_str = 'None'
 
