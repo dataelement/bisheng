@@ -214,7 +214,7 @@ class FlowService(BaseService):
 
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: int = 0, page: int = 1,
-                      page_size: int = 10, flow_type :int = FlowType.FLOW.value) -> UnifiedResponseModel[List[Dict]]:
+                      page_size: int = 10, flow_type :Optional[int] = FlowType.FLOW.value) -> UnifiedResponseModel[List[Dict]]:
         """
         获取所有技能
         """

@@ -426,7 +426,7 @@ def get_online_chat(*,
                                       FlowStatus.ONLINE.value,
                                       tag_id=tag_id,
                                       page=search_page,
-                                      page_size=limit)
+                                      page_size=limit,flow_type=None)
     flows = flows.data.get('data')
     for one in all_assistant:
         msg = ChatMessageDao.get_msg_by_flow(one.id)
