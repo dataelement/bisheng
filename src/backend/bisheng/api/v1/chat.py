@@ -21,7 +21,7 @@ from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
-from bisheng.database.models.flow import Flow, FlowDao, FlowStatus
+from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao
 from bisheng.database.models.mark_task import MarkTaskDao
@@ -443,6 +443,7 @@ def get_online_chat(*,
     # 获取用户可见的所有已上线的技能
     for one in flows:
         msg = ChatMessageDao.get_msg_by_flow(one['id'])
+        flow_type = "flow" if one['flow_type'] == FlowType.FLOW.value else "workflow"
         res.append(
             FlowGptsOnlineList(id=one['id'],
                                name=one['name'],
@@ -451,7 +452,7 @@ def get_online_chat(*,
                                count=len(msg),
                                create_time=one['create_time'],
                                update_time=one['update_time'],
-                               flow_type='flow'))
+                               flow_type=flow_type))
     res.sort(key=lambda x: x.update_time, reverse=True)
     if page and limit:
         res = res[(page - 1) * limit:page * limit]
