@@ -280,9 +280,10 @@ def read_flows(*,
              response_model=UnifiedResponseModel[TemplateRead],
              status_code=201)
 def create_template(*, template: TemplateCreate):
-    """Create a new flow."""
+    """Create a new workflow or assitant."""
     template.flow_type = FlowType.WORKFLOW.value
     db_template = Template.model_validate(template)
+    # TODO: if assitant need more data 
     if not db_template.data:
         with session_getter() as session:
             db_flow = session.get(Flow, template.flow_id)
