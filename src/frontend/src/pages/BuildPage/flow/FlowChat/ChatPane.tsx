@@ -56,6 +56,7 @@ export default function ChatPane({ chatId, flow }: { chatId: string, flow: any }
     return <Chat
         useName=''
         guideWord=''
+        clear
         wsUrl={'xxxx'}
         onBeforSend={getMessage}
     ></Chat>

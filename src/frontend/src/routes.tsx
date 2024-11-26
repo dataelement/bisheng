@@ -72,8 +72,8 @@ const privateRouter = [
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/apps", element: <Apps />, permission: 'build', },
-      { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
-      { path: "build/skills", element: <SkillsPage />, permission: 'build', },
+      // { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
+      // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build", element: <Navigate to="apps" replace /> },

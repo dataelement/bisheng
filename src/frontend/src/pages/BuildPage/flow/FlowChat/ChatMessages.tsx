@@ -13,6 +13,7 @@ import MessageBs from "./MessageBs";
 import MessageUser from "./MessageUser";
 import Separator from "@/components/bs-comp/chatComponent/Separator";
 import MessageBsChoose from "./MessageBsChoose";
+import MessageNodeRun from "./MessageNodeRun";
 
 export default function ChatMessages({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
@@ -114,6 +115,8 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                         return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} />;
                     case 'output_input_msg':
                         return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
+                    case 'node_run':
+                        return <MessageNodeRun key={msg.message_id} data={msg} />;
                     // case 'file':
                     //     return <FileBs key={msg.id} data={msg} />;
                     // case 'runLog':

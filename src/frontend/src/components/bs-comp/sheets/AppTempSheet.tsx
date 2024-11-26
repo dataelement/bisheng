@@ -40,8 +40,8 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
     const allDataRef = useRef([])
 
     useEffect(() => {
-        // TODO by type filter 
-        readTempsDatabase().then(res => {
+        setKeyword(' ')
+        readTempsDatabase(type).then(res => {
             allDataRef.current = res
             setKeyword('')
         })
@@ -64,18 +64,18 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                     {/* type */}
                     <div className="mt-4">
                         <div
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
-                            onClick={() => setType(AppType.ASSISTANT)}
-                        >
-                            <Bot />
-                            <span>助手</span>
-                        </div>
-                        <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mt-1 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
                             <Workflow />
                             <span>工作流</span>
+                        </div>
+                        <div
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
+                            onClick={() => setType(AppType.ASSISTANT)}
+                        >
+                            <Bot />
+                            <span>助手</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mt-1 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}

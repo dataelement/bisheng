@@ -1,17 +1,17 @@
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Button } from "@/components/bs-ui/button"
-import { generateUUID } from "@/components/bs-ui/utils"
+import { getWorkflowReportTemplate } from "@/controllers/API/workflow"
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload"
 import Word from "@/pages/Report/components/Word"
 import { ChevronDown } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import SelectVar from "./SelectVar"
 // save(fe) -> office(onlyofc) -> upload(be)
-export default function ReportWordEdit({ data, nodeId, onChange }) {
+export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     const { t } = useTranslation()
 
-    const { docx, loading, createDocx, importDocx } = useReport(data, onChange)
+    const { docx, loading, createDocx, importDocx } = useReport(versionKey, onChange)
 
     // inset var
     const iframeRef = useRef(null)
@@ -54,7 +54,7 @@ export default function ReportWordEdit({ data, nodeId, onChange }) {
                         <Button variant="black" className="h-8">插入变量 <ChevronDown size={14} /></Button>
                     </SelectVar>
                 </div>
-                <Word data={docx}></Word>
+                <Word data={docx} workflow></Word>
                 {/* <LabelPanne onInset={handleInset}></LabelPanne> */}
             </div>
         </div>
@@ -62,22 +62,28 @@ export default function ReportWordEdit({ data, nodeId, onChange }) {
 };
 
 
-const useReport = (data, onchange) => {
+const useReport = (versionKey, onchange) => {
     const [loading, setLoading] = useState(false)
 
     const [docx, setDocx] = useState({
-        key: data.key || '',
-        path: data.path || ''
+        key: '',
+        path: ''
     })
 
-    const handleCreate = () => {
-        const newData = {
-            key: generateUUID(32),
-            path: 'http://192.168.106.120:3002/empty.docx'
-            // path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx' // 文档服务能访问到的文件地址
-        }
-        setDocx(newData)
-        onchange(newData)
+    useEffect(() => {
+        getWorkflowReportTemplate(versionKey).then(res => {
+            setDocx({
+                key: res.version_key,
+                path: res.url
+            })
+            onchange(res.version_key)
+        })
+    }, [])
+
+
+    const handleCreate = async () => {
+        setDocx(docx => ({ ...docx, path: 'http://192.168.106.120:3002/empty.docx' }))
+        // setDocx(doc => ({...docx, path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx'})// 文档服务能访问到的文件地址
     }
 
     const handleImport = () => {
@@ -96,12 +102,7 @@ const useReport = (data, onchange) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             uploadFileWithProgress(file, (progress) => { }).then(res => {
                 setLoading(false);
-                const newData = {
-                    key: generateUUID(32),
-                    path: res.file_path
-                }
-                setDocx(newData)
-                onchange(newData)
+                setDocx(docx => ({ ...docx, path: res.file_path }))
             })
         };
 

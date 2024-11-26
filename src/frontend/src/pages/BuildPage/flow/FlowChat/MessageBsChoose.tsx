@@ -28,7 +28,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBsChoose({ type = 'choose', logo, data }: { type: string, logo: string, data: WorkflowMessage }) {
+export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
     const { t } = useTranslation()
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length

@@ -1,7 +1,7 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { AssistantIcon } from "@/components/bs-icons";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";

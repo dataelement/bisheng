@@ -26,8 +26,7 @@ export default function Templates() {
     const { type } = useParams()
     const [temps, setTemps] = useState([])
     useEffect(() => {
-        // 根据type筛选
-        readTempsDatabase().then(setTemps)
+        readTempsDatabase(type).then(setTemps)
     }, [type])
 
     const handleDragEnd = ({ source, destination }: any) => {

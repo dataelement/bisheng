@@ -65,7 +65,7 @@ export default function Skills() {
 
     // 选模板(创建技能)
     const handldSelectTemp = async (tempId) => {
-        const [flow] = await readTempsDatabase(tempId)
+        const [flow] = await readTempsDatabase('skill', tempId)
 
         flow.name = `${flow.name}-${generateUUID(5)}`
         // @ts-ignore

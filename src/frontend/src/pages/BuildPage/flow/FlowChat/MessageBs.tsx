@@ -11,6 +11,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { useMessageStore } from "./messageStore";
 import { WorkflowMessage } from "@/types/flow";
+import ChatFile from "./ChatFileFile";
 
 // 颜色列表
 const colorList = [
@@ -64,7 +65,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                     },
                 }}
             >
-                { data.message}
+                {data.message}
             </ReactMarkdown>
         ),
         [data.message]
@@ -77,6 +78,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
     }
 
     const chatId = useMessageStore(state => state.chatId)
+    console.log('data.files :>> ', data);
 
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
@@ -94,9 +96,10 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />
                         </div>}
-                    {data.message.toString() ?
+                    {data.message.toString() || data.files.length ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                            {mkdown}
+                            {data.message && mkdown}
+                            {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                             {/* @user */}
                             {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                             {/* 光标 */}

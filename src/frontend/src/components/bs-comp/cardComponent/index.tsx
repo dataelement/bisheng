@@ -1,13 +1,13 @@
-import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { AssistantIcon, FlowIcon } from "@/components/bs-icons/";
 import { cname } from "@/components/bs-ui/utils";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SkillIcon } from "../../bs-icons";
 import { AddToIcon } from "../../bs-icons/addTo";
 import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
 import { PlusIcon } from "../../bs-icons/plus";
 import { SettingIcon } from "../../bs-icons/setting";
-import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
@@ -170,7 +170,7 @@ export default function CardComponent<T>({
           url={logo}
           id={id}
         >
-          {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
+          {type === 'skill' ? <SkillIcon /> : type === 'assist' ? <AssistantIcon /> : <FlowIcon />}
         </TitleLogo>
         <div className="flex gap-1 items-center">
           {headSelecter}
@@ -200,7 +200,7 @@ export default function CardComponent<T>({
         {edit
           && <div className="hidden group-hover:flex">
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
-            {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            {isAdmin && type !== 'assist' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>
         }

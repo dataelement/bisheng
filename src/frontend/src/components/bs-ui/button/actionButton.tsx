@@ -11,6 +11,7 @@ export default function ActionButton({
     buttonTipContent = null,
     delayDuration = 700,
     variant = "default",
+    iconClassName = '',
     ...props
 }) {
 
@@ -32,9 +33,9 @@ export default function ActionButton({
         <Popover>
             <PopoverTrigger asChild>
                 <Button
-                    size="icon"
+                    size={props.size || 'icon'}
                     variant={variant}
-                    className="rounded-l-none ml-[1px] [&[data-state=open]>svg]:rotate-180"
+                    className={`rounded-l-none ml-[1px] [&[data-state=open]>svg]:rotate-180 ${iconClassName}`}
                 ><ChevronDown className="size-4" /></Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align={align}>

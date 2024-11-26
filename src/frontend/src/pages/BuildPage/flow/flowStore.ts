@@ -12,10 +12,7 @@ type Actions = {
 }
 
 const useFlowStore = create<State & Actions>((set) => ({
-    flow: {
-        edges: [],
-        nodes: []
-    }, // null
+    flow:  null,
     setFlow: (newFlow) => set({ flow: newFlow }),
     // upload flow by json
     uploadFlow(file?: File) {

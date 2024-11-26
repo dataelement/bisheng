@@ -56,6 +56,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                             <InputComponent
                                                 type="textarea"
                                                 password={false}
+                                                maxLength={10000}
                                                 // value={item.value}
                                                 onChange={(val) => handleChange(item, val)}
                                             />
@@ -85,7 +86,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                                 placeholder={t('report.fileRequired')}
                                                 value={''}
                                                 onChange={(name) => updataFileName(item, name)}
-                                                fileTypes={["pdf"]}
+                                                fileTypes={["png", "jpg", "jpeg", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "md", "html", "pdf"]}
                                                 suffixes={['xxx']}
                                                 onFileChange={(val) => handleChange(item, val)}
                                             />

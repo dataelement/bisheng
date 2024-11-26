@@ -27,7 +27,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
 
-    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, streamWsMsg, insetSeparator, destory, setShowGuideQuestion } = useMessageStore()
+    const { messages, hisMessages, chatId, createSendMsg, createWsMsg, streamWsMsg, insetSeparator, destory, insetNodeRun, setShowGuideQuestion } = useMessageStore()
     console.log('ui messages :>> ', messages);
 
     const currentChatIdRef = useRef(null)
@@ -231,7 +231,10 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             variant: 'error',
             description: data.message
         });
-        if (data.category === 'node_run') return // TODO 进度
+        if (data.category === 'node_run') {
+            insetNodeRun(data)
+            return sendNodeLogEvent(data)
+        }
         if (data.category === 'user_input') {
             inputNodeIdRef.current = data.message.node_id
             // 待用户输入
@@ -245,7 +248,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             return questionsRef.current.updateQuestions(data.message.filter(q => q))
         }
         if (data.type === 'close') {
-            return insetSeparator('本轮结束')
+            return insetSeparator('本轮会话已结束')
         } else if (data.type === 'over') {
             createWsMsg(data)
         } else if (data.type === 'stream') {
@@ -291,6 +294,17 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
         //     setStop({ show: false, disable: false })
         //     setInputLock({ locked: false, reason: '' })
         // }
+    }
+
+    // 日志广播->nodes
+    const sendNodeLogEvent = (data) => {
+        const { node_id } = data.message
+        const event = new CustomEvent('nodeLogEvent', {
+            detail: {
+                nodeId: node_id, action: data.type === 'start' ? 'loading' : 'success', data: []
+            }
+        })
+        window.dispatchEvent(event)
     }
 
     // 触发发送消息事件（重试、表单）
@@ -355,8 +369,13 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                 {
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => { !inputLock.locked && destory() }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
+                        onClick={() => {
+                            if (!stop.show) return
+                            destory()
+                            insetSeparator('本轮会话已结束')
+                            sendWsMsg({ "action": "stop" });
+                        }}
+                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828] hover:text-red-600`} ></ClearIcon></div>
                 }
             </div>
             {/* form switch */}
@@ -375,6 +394,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                         onClick={() => {
                             if (stop.disable) return
                             setStop({ show: true, disable: true });
+                            insetSeparator('本轮会话已结束')
                             sendWsMsg({ "action": "stop" });
                         }}
                         className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
@@ -390,10 +410,11 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             </div>
             {/* stop autogen等待输入时专用*/}
             <div className="absolute w-full flex justify-center bottom-32">
-                {autogenStop && <Button className="rounded-full" variant="outline" onClick={() => {
+                {stop.show && <Button className="rounded-full" variant="outline" onClick={() => {
                     if (stop.disable) return
                     setStop({ show: true, disable: true });
                     setAutogenStop(false)
+                    insetSeparator('本轮会话已结束')
                     sendWsMsg({ "action": "stop" });
                 }}><CirclePause className="mr-2" />Stop</Button>}
             </div>

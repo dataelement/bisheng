@@ -1,16 +1,13 @@
-import { TabsContext } from "@/contexts/tabsContext";
 import { getFlowApi } from "@/controllers/API/flow";
-import cloneDeep from "lodash-es/cloneDeep";
-import { useContext, useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import Panne from "./Panne";
 import useFlowStore from "./flowStore";
-import { userContext } from "@/contexts/userContext";
 
 
 export default function FlowPage() {
     // const { flow, setFlow } = useContext(TabsContext);
-    // const { id } = useParams();
+    const { id } = useParams();
 
     // useEffect(() => {
     //     if (id && flow?.id !== id) {
@@ -32,13 +29,37 @@ export default function FlowPage() {
     const { flow, setFlow } = useFlowStore()
 
     useEffect(() => {
-        const str = localStorage.getItem('flow_tmp')
-        let f = str ? JSON.parse(str) : flow
+        getFlowApi(id).then(f => {
+            if (f.data) {
+                const { data, ..._flow } = f
+                return setFlow({
+                    ..._flow,
+                    nodes: data.nodes,
+                    edges: data.edges,
+                    viewport: data.viewport
+                })
+            }
+            // default
+            setFlow({
+                ...f,
+                nodes: [],
+                edges: [],
+                viewport: {
+                    x: 0,
+                    y: 0,
+                    zoom: 1
+                },
+                version_list: []
+            })
+        })
+        // const str = localStorage.getItem('flow_tmp')
+        // let f = str ? JSON.parse(str) : flow
         // if ('workflow_test' === user.user_name) {
         //     f = test
         // }
-        setFlow(f)
+        // setFlow(f)
         // return f
+        return () => setFlow(null)
     }, [])
     return (
         <div className="flow-page-positioning">

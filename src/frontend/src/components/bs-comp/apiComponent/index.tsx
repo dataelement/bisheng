@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ApiAccess from './ApiAccess';
 import ApiAccessFlow from './ApiAccessFlow';
+import ApiAccessSkill from './ApiAccessSkill';
 import ChatLink from './ChatLink';
 
 const enum API_TYPE {
     ASSISTANT = 'assistant',
+    SKILL = 'skill',
     FLOW = 'flow'
 }
 
@@ -21,11 +23,11 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
     const renderContent = () => {
         switch (activeMenu) {
             case 'api-access':
-                return type === API_TYPE.ASSISTANT ? <ApiAccess /> : <ApiAccessFlow />;
+                return type === API_TYPE.ASSISTANT ? <ApiAccess /> : type === API_TYPE.SKILL ? <ApiAccessSkill /> : <ApiAccessFlow />;
             case 'no-login-link':
                 return <ChatLink noLogin type={type} />;
             case 'login-link':
-                return <ChatLink type={type} />;
+            // return <ChatLink type={type} />;
             default:
                 return <ApiAccess />;
         }

@@ -43,7 +43,7 @@ export default function CustomEdge({ id, sourceX, sourceY, targetX, targetY, onO
                 markerEnd="url(#arrow)"
             />
             {/* 在连线中间添加一个加号按钮 */}
-            <EdgeLabelRenderer>
+            {/* <EdgeLabelRenderer>
                 <div
                     className="absolute"
                     style={{
@@ -60,7 +60,7 @@ export default function CustomEdge({ id, sourceX, sourceY, targetX, targetY, onO
                         </CardContent>
                     </Card>}
                 </div>
-            </EdgeLabelRenderer>
+            </EdgeLabelRenderer> */}
         </>
     );
 };

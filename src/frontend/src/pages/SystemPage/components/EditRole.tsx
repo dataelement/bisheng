@@ -29,8 +29,8 @@ const SearchPanne = ({ groupId, title, type, children }) => {
         }
 
         switch (type) {
-            // case 'flow':
-            //     return getGroupResourcesApi({ ...param, resource_type: 2 });
+            case 'flow':
+                return getGroupResourcesApi({ ...param, resource_type: 5 });
             case 'skill':
                 return getGroupResourcesApi({ ...param, resource_type: 2 });
             case 'tool':
@@ -91,7 +91,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     switch (item.type) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
-                        // case 2: useFlows.push(item.third_id); break;
+                        case 5: useFlows.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
                         case 7: useTools.push(Number(item.third_id)); break;
                         case 5: useAssistant.push(item.third_id); break;
@@ -154,7 +154,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         const res = await Promise.all([
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useSkills, type: 2 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
-            // updateRolePermissionsApi({ role_id: roleId, access_id: form.useLibs, type: 1 }),
+            updateRolePermissionsApi({ role_id: roleId, access_id: form.useFlows, type: 9 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.manageLibs, type: 3 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useTools, type: 7 }),
             updateRolePermissionsApi({ role_id: roleId, access_id: form.useAssistant, type: 5 }),

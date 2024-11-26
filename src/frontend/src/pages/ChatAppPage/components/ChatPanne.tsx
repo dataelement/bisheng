@@ -2,7 +2,7 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { AssistantIcon } from "@/components/bs-icons";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";

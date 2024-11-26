@@ -24,6 +24,17 @@ export const ChatTest = forwardRef((props, ref) => {
         }
     }));
 
+    const handleClose = () => {
+        setOpen(false)
+
+        const event = new CustomEvent('nodeLogEvent', {
+            detail: {
+                nodeId: '*', action: 'normal', data: []
+            }
+        })
+        window.dispatchEvent(event)
+    }
+
     if (!open) return null
 
     return <div
@@ -42,7 +53,7 @@ export const ChatTest = forwardRef((props, ref) => {
                     size="icon"
                     variant="destructive"
                     className="rounded-md shadow-md size-4 p-0.5"
-                    onClick={() => setOpen(false)}
+                    onClick={handleClose}
                 ><X /></Button>
             </div>
         </div>

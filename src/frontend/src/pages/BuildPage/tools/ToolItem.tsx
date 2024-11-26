@@ -51,7 +51,7 @@ export default function ToolItem({
                         <h1 className="text-sm font-medium leading-none">{api.name}</h1>
                         <p className="text-sm text-muted-foreground mt-2">{api.desc}</p>
                         {
-                            api.api_params.length > 0 && <p className="text-sm text-muted-foreground mt-2 flex gap-2">
+                            api.api_params?.length > 0 && <p className="text-sm text-muted-foreground mt-2 flex gap-2">
                                 <TooltipProvider>
                                     <Tooltip delayDuration={100}>
                                         <TooltipTrigger asChild>
@@ -65,7 +65,7 @@ export default function ToolItem({
                                                     <div key={param.name}>
                                                         <p className="flex gap-2 items-center mt-4 mb-2">
                                                             <span className="text-base">{param.name}</span>
-                                                            <span>{param.schema.type}</span>
+                                                            <span>{param.schema?.type}</span>
                                                             {param.required && <span className="text-red-500">必填</span>}
                                                         </p>
                                                         <p className="text-gray-500">{param.description}</p>

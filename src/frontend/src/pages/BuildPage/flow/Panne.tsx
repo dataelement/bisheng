@@ -67,7 +67,11 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                 // start node
                 const nodeId = `${node.type}_${generateUUID(5)}`;
                 node.id = nodeId;
-                (!flow.nodes || flow.nodes.length === 0) && setNodes([{ id: nodeId, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }]);
+                if (!flow.nodes || flow.nodes.length === 0) {
+                    setTimeout(() => {
+                        setNodes([{ id: nodeId, type: 'flowNode', position: { x: window.innerWidth * 0.4, y: 20 }, data: node }]);
+                    }, 500); // after init
+                }
             }} />
             <main className="h-full flex flex-1 bg-gray-50" ref={keyBoardPanneRef}>
                 <div className="size-full" ref={reactFlowWrapper}>
@@ -95,7 +99,7 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                             maxZoom={8}
                             disableKeyboardA11y={true}
                             // fitView
-                            className="theme-attribution"
+                            className={window.ThemeStyle.bg === 'logo' && "flow-bg-logo"}
                             onDragOver={onDragOver}
                             onDrop={onDrop}
                             onSelectionChange={onSelectionChange}
@@ -103,23 +107,28 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                                 // 阻止start节点删除
                                 !e.nodes.some(node => node.data.type === 'start')
                             }
-                        // 自定义线组件
-                        // connectionLineComponent={ConnectionLineComponent} 
-                        // 校验连线合法性
-                        // onReconnect={onEdgeUpdate} 
-                        // onReconnectStart={onEdgeUpdateStart}
-                        // onReconnectEnd={onEdgeUpdateEnd}
-                        // onEdgesDelete={onEdgesDelete}
+                            // 自定义线组件
+                            // connectionLineComponent={ConnectionLineComponent} 
+                            // 校验连线合法性
+                            // onReconnect={onEdgeUpdate} 
+                            // onReconnectStart={onEdgeUpdateStart}
+                            // onReconnectEnd={onEdgeUpdateEnd}
+                            // onEdgesDelete={onEdgesDelete}
 
-                        // onNodesDelete={onDelete} // 更新setEdges
-                        // onNodeDragStart={onNodeDragStart} // 快照
-                        // onSelectionDragStart={onSelectionDragStart} // 快照
-                        // 框选 (group)
-                        // onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}
-                        // onSelectionEnd={() => setSelectionEnded(true)}
-                        // style={{ backgroundImage: 'url(/test.svg)' }}
+                            // onNodesDelete={onDelete} // 更新setEdges
+                            // onNodeDragStart={onNodeDragStart} // 快照
+                            // onSelectionDragStart={onSelectionDragStart} // 快照
+                            // 框选 (group)
+                            // onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}
+                            // onSelectionEnd={() => setSelectionEnded(true)}
+                            style={{
+                                backgroundImage: window.ThemeStyle.bg === 'gradient'
+                                    && 'radial-gradient(circle at center bottom, rgba(2, 77, 227, 0.3) 2%, rgba(2, 77, 227, 0.2) 25%, rgba(2, 77, 227, 0.05) 60%, rgba(255, 255, 255, 0) 100%)',
+                                backgroundRepeat: 'no-repeat',
+                                backgroundSize: 'cover',
+                            }}
                         >
-                            <Background className="bg-[#edeff4]" color='#999' variant={BackgroundVariant.Dots} />
+                            <Background color='#999' variant={BackgroundVariant.Dots} />
                             <Controls></Controls>
                         </ReactFlow>
                     </div>

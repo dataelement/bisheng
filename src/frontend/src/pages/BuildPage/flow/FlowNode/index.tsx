@@ -11,6 +11,7 @@ import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
 import RunLog from './RunLog';
 import { RunTest } from './RunTest';
+import { cname } from '@/components/bs-ui/utils';
 
 function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNode, selected: boolean, isConnectable: boolean }) {
     const [focusUpdate, setFocusUpdate] = useState(false)
@@ -63,6 +64,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     const [expend, setExpend] = useState(false)
+    const nodeError = useBorderColor(node)
     return (
         <div className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[20px]`}>
             {/* head bars */}
@@ -71,11 +73,11 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             </NodeToolbar>
 
             <div
-                className={`bisheng-node hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`}
+                className={cname(`bisheng-node hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
                 data-id={node.id}
             >
                 {/* top */}
-                <RunLog type={node.type} name={node.name}>
+                <RunLog node={node}>
                     <div className='bisheng-node-top flex items-center'>
                         <LoadingIcon className='size-5 text-[#B3BBCD]' />
                         <span className='text-sm text-[#B3BBCD]'>BISHENG</span>
@@ -226,4 +228,20 @@ const useEventMaster = (node) => {
         paramValidateEntities,
         varValidateEntities
     }
+}
+
+const useBorderColor = (node) => {
+    const [error, setError] = useState(false)
+    useEffect(() => {
+        const onNodeEvent = (e) => {
+            const { nodeIds } = e.detail
+            setError(nodeIds.includes(node.id))
+        }
+        window.addEventListener('nodeErrorBorderEvent', onNodeEvent)
+        return () => {
+            window.removeEventListener('nodeErrorBorderEvent', onNodeEvent)
+        }
+    }, [])
+
+    return error
 }

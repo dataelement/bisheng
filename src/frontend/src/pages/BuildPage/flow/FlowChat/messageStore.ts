@@ -96,7 +96,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             const { category, flow_id, chat_id, message_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
             newChat.push({
                 category, flow_id, chat_id, message_id, files, is_bot,
-                message, receiver, source, user_id,
+                message: typeof message === 'string' ? message : message.msg, receiver, source, user_id,
                 liked: !!liked,
                 end: type === 'over',
                 sender: '',
@@ -147,7 +147,26 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }]
         }))
     },
-
+    insetNodeRun(data) {
+        set((state) => {
+            let newChat = cloneDeep(state.messages);
+            const { category, flow_id, chat_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
+            if (type === 'end') {
+                return { messages: newChat.filter(msg => msg.message_id !== message.unique_id)}
+            }
+            newChat.push({
+                category, flow_id, chat_id, message_id: message.unique_id, files, is_bot,
+                message, receiver, source, user_id,
+                liked: !!liked,
+                end: false,
+                sender: '',
+                node_id: message?.node_id || '',
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                // extra,
+            })
+            return { messages: newChat }
+        })
+    },
 
     // stream end old
     updateCurrentMessage(data) {

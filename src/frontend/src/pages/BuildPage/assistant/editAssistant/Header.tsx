@@ -1,5 +1,5 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
-import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { AssistantIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";

@@ -12,7 +12,9 @@ import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { readTempsDatabase } from "@/controllers/API";
-import { deleteFlowFromDatabase, readFlowsFromDatabase, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
+import { changeAssistantStatusApi } from "@/controllers/API/assistant";
+import { deleteFlowFromDatabase, getAppsApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
+import { onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
@@ -51,6 +53,11 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     </Select>
 }
 
+const TypeNames = {
+    5: AppType.ASSISTANT,
+    1: AppType.SKILL,
+    10: AppType.FLOW
+}
 export default function apps() {
     const { t } = useTranslation()
     const { user } = useContext(userContext);
@@ -58,21 +65,35 @@ export default function apps() {
     const navigate = useNavigate()
 
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14 }, (param) =>
-        readFlowsFromDatabase(param.page, param.pageSize, param.keyword, param.tag_id)
+        getAppsApi(param)
     )
 
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
     // 上下线
     const handleCheckedChange = (checked, data) => {
-        // data.versionId todo
-        // TODO 助手&技能&工作流 上下线
-        return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
-            if (res) {
-                refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
-            }
-            return res
-        }))
+        if (data.flow_type === 1) {
+            return captureAndAlertRequestErrorHoc(updataOnlineState(data.id, data, checked).then(res => {
+                if (res) {
+                    refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
+                }
+                return res
+            }))
+        } else if (data.flow_type === 5) {
+            return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 1 : 0)).then(res => {
+                if (res === null) {
+                    refreshData((item) => item.id === data.id, { status: checked ? 1 : 0 })
+                }
+                return res
+            })
+        } else if (data.flow_type === 10) {
+            return captureAndAlertRequestErrorHoc(onlineWorkflow(data, checked ? 2 : 1)).then(res => {
+                if (res === null) {
+                    refreshData((item) => item.id === data.id, { status: checked ? 1 : 0 })
+                }
+                return res
+            })
+        }
     }
 
     const handleDelete = (data) => {
@@ -93,12 +114,15 @@ export default function apps() {
     }
 
     const handleSetting = (data) => {
-        // console.log('data :>> ', data);
-        const vid = data.version_list.find(item => item.is_current === 1)?.id
-        // TODO 编辑分支 技能 助手 工作流
-        // 上线状态下，助手不能进入编辑
-        // navigate(`/build/skill/${data.id}/${vid}`)
-        navigate(`/flow/${data.id}`)
+        if (data.flow_type === 5) {
+            // 上线状态下，助手不能进入编辑
+            navigate(`/assistant/${data.id}`)
+        } else if (data.flow_type === 1) {
+            const vid = data.version_list.find(item => item.is_current === 1)?.id
+            navigate(`/build/skill/${data.id}/${vid}`)
+        } else {
+            navigate(`/flow/${data.id}`)
+        }
     }
 
     const createAppModalRef = useRef(null)
@@ -106,7 +130,7 @@ export default function apps() {
         if (type === AppType.SKILL) {
             if (!tempId) return navigate('/build/skill')
             // 选模板(创建技能)
-            const [flow] = await readTempsDatabase(tempId)
+            const [flow] = await readTempsDatabase(type, tempId)
 
             flow.name = `${flow.name}-${generateUUID(5)}`
             // @ts-ignore
@@ -176,7 +200,7 @@ export default function apps() {
                                     data={item}
                                     id={item.id}
                                     logo={item.logo}
-                                    type='skill' // TODO: 三类
+                                    type={TypeNames[item.flow_type]}
                                     edit={item.write}
                                     title={item.name}
                                     isAdmin={user.role === 'admin'}
@@ -234,8 +258,9 @@ const useCreateTemp = () => {
         tempType,
         flowRef,
         toggleTempModal(flow?) {
+            const map = { 10: "flow", 5: "assistant", 1: "skill" }
             flowRef.current = flow || null
-            // flow.type && setType(flow.type)  TODO
+            flow && setType(map[flow.flow_type])
             setOpen(!open)
         }
     }

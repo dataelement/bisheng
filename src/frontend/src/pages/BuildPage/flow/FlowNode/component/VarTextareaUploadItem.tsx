@@ -47,18 +47,18 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                 <div className="flex flex-wrap gap-4 p-2">
                     {
                         files.map((file, index) => (
-                            /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name.toLocaleLowerCase()) ?
-                                <div key={index} className="relative border rounded-md size-12 my-2">
-                                    <img src={file.path} alt="" className="object-cover w-12 h-12 rounded-md" />
-                                    <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background"
-                                        onClick={() => handleFileRemove(file.path)}
-                                    >
-                                        <X size={14} />
-                                    </Button>
-                                </div> :
+                            // /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name.toLocaleLowerCase()) ?
+                            //     <div key={index} className="relative border rounded-md size-12 my-2">
+                            //         <img src={file.path} alt="" className="object-cover w-12 h-12 rounded-md" />
+                            //         <Button
+                            //             size="icon"
+                            //             variant="outline"
+                            //             className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background"
+                            //             onClick={() => handleFileRemove(file.path)}
+                            //         >
+                            //             <X size={14} />
+                            //         </Button>
+                            //     </div> :
                                 <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
                                     <File className="min-w-5" />
                                     <div className="max-w-full flex-1 pr-4">
@@ -101,7 +101,7 @@ export const useFileUpload = (_files, onFilesChange) => {
                     console.log("Upload Progress:", progress);
                 }, 'icon', '/api/v1/upload/workflow/' + flowId).then(res => {
                     setLoading(false);
-                    const newFiles = [...files, { name: file.name, path: res.file_path }];
+                    const newFiles = [...files, { name: file.name, path: res.relative_path }];
                     setFiles(newFiles);
                     onFilesChange?.(newFiles);
                 }).catch(err => {

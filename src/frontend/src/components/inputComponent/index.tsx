@@ -48,7 +48,7 @@ export default function InputComponent({
         }}
       />
         : <input value={myValue}
-          // maxLength={maxLength}
+          maxLength={maxLength}
           className={
             classNames(
               disabled ? " input-disable " : "",

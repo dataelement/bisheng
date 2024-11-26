@@ -1,3 +1,4 @@
+import { AppType } from "@/types/app";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
@@ -74,8 +75,13 @@ export async function saveThemeApi(data: string): Promise<any> {
  * @returns The flows data.
  * @throws Will throw an error if reading fails.
  */
-export async function readTempsDatabase(id?: number): Promise<FlowType[]> {
-  return await axios.get(`/api/v1/skill/template${id ? '?id=' + id : ''}`);
+export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> {
+  const typeMap = {
+    [AppType.FLOW]: 10,
+    [AppType.ASSISTANT]: 5,
+    [AppType.SKILL]: 1
+  }
+  return await axios.get(`/api/v1/skill/template?flow_type=${typeMap[type]}${id ? '&id=' + id : ''}`);
 }
 
 /**
@@ -84,8 +90,9 @@ export async function readTempsDatabase(id?: number): Promise<FlowType[]> {
  * @param data {flow_id name description}
  * @returns  null.
  */
-export function createTempApi(params) {
-  return axios.post(`/api/v1/skill/template/create`, params);
+export function createTempApi(params, type) {
+  const map = { assistant: 5, skill: 1, flow: 10 }
+  return axios.post(`/api/v1/skill/template/create`, { ...params, flow_type: map[type] });
 }
 
 /**

@@ -1,6 +1,6 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
 import LoadMore from "@/components/bs-comp/loadMore";
-import { AssistantIcon, SettingIcon, SkillIcon } from "@/components/bs-icons";
+import { AssistantIcon, FlowIcon, SettingIcon, SkillIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -71,6 +71,11 @@ export default function HomePage({ onSelect }) {
     }
 
     // const [cardBoxWidth, cardboxRef] = useAutoWidth()
+    const typeNames = {
+        'flow': t('build.skill'),
+        'assistant': t('build.assistant'),
+        'workflow': '工作流'
+    }
     {/* @ts-ignore */ }
     return <div className="h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         <div className="flex justify-center place-items-center gap-20">
@@ -111,10 +116,10 @@ export default function HomePage({ onSelect }) {
                             title={flow.name}
                             description={flow.desc}
                             type="sheet"
-                            icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
+                            icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
                             footer={
-                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
-                                    {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}
+                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 'flow' && 'bg-gray-950'} ${flow.flow_type === 'assistant' && 'bg-blue-600'}`}>
+                                    {typeNames[flow.flow_type]}
                                 </Badge>
                             }
                             onClick={() => { onSelect(flow) }}

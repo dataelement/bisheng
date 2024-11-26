@@ -43,8 +43,8 @@ export default function CreateTemp({ flow, open, type, setOpen, onCreated }: { f
             variant: 'error',
             description: errorlist
         });
-        // TODO 三类模板
-        captureAndAlertRequestErrorHoc(createTempApi({ ...data, flow_id: flow.id }).then(res => {
+
+        captureAndAlertRequestErrorHoc(createTempApi({ ...data, flow_id: flow.id }, type).then(res => {
             setOpen(false)
             message({
                 variant: 'success',
