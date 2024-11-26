@@ -169,7 +169,7 @@ const Header = ({ flow, onTabChange }) => {
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
                     <TitleLogo
-                        url={''}
+                        url={flow.logo}
                         id={2}
                         className=""
                     ><AssistantIcon /></TitleLogo>

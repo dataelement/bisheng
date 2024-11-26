@@ -2,8 +2,7 @@ import { useEffect } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 
-export default function ChatPane({ chatId, flow }: { chatId: string, flow: any }) {
-
+export default function ChatPane({ chatId, flow, wsUrl = '' }: { chatId: string, flow: any, wsUrl?: string}) {
     const { changeChatId } = useMessageStore()
 
     useEffect(() => {
@@ -57,7 +56,7 @@ export default function ChatPane({ chatId, flow }: { chatId: string, flow: any }
         useName=''
         guideWord=''
         clear
-        wsUrl={'xxxx'}
+        wsUrl={wsUrl}
         onBeforSend={getMessage}
     ></Chat>
 

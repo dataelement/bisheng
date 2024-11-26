@@ -145,16 +145,15 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
     }
 
     const wsRef = useRef(null)
-    const createWebSocket = (chatId) => {
+    const createWebSocket = () => {
         // 单例
         if (wsRef.current) return Promise.resolve('ok');
         const isSecureProtocol = window.location.protocol === "https:";
         const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
 
-        const flowId = 'flowid_xxxx'
         return new Promise((res, rej) => {
             try {
-                const ws = new WebSocket(`${webSocketProtocol}://${location.host}/api/v1/workflow/chat/${flowId}`)
+                const ws = new WebSocket(`${webSocketProtocol}://${wsUrl}`)
                 wsRef.current = ws
                 // websocket linsen
                 ws.onopen = () => {

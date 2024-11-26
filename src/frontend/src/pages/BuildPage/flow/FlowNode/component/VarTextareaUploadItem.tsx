@@ -3,6 +3,7 @@ import { Label } from "@/components/bs-ui/label";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { File, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import VarInput from "./VarInput";
 
 export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
@@ -26,7 +27,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
             setError(false)
             return false
         })
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return (
@@ -59,18 +60,18 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
                             //             <X size={14} />
                             //         </Button>
                             //     </div> :
-                                <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
-                                    <File className="min-w-5" />
-                                    <div className="max-w-full flex-1 pr-4">
-                                        <p className="w-full font-bold truncate">{file.name}</p>
-                                        {/* <span>{file.path.split('.')[1]}</span> */}
-                                    </div>
-                                    <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background"
-                                        onClick={() => handleFileRemove(file.path)}><X size={14} /></Button>
+                            <div className="max-w-56 relative flex rounded-md border px-2 py-1 items-center gap-2 bg-muted">
+                                <File className="min-w-5" />
+                                <div className="max-w-full flex-1 pr-4">
+                                    <p className="w-full font-bold truncate">{file.name}</p>
+                                    {/* <span>{file.path.split('.')[1]}</span> */}
                                 </div>
+                                <Button
+                                    size="icon"
+                                    variant="outline"
+                                    className="p-0 size-5 rounded-full absolute right-[-10px] top-[-10px] bg-background"
+                                    onClick={() => handleFileRemove(file.path)}><X size={14} /></Button>
+                            </div>
                         ))
                     }
                 </div>
@@ -82,6 +83,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
 export const useFileUpload = (_files, onFilesChange) => {
     const [files, setFiles] = useState(_files);
     const [loading, setLoading] = useState(false);
+    const { id: flowId } = useParams();
 
     // Handle file upload
     const handleFileUpload = () => {
@@ -93,7 +95,6 @@ export const useFileUpload = (_files, onFilesChange) => {
 
         input.onchange = (e: Event) => {
             setLoading(true);
-            const flowId = 'flowid_xxxx' // TODO
 
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
