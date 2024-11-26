@@ -77,10 +77,20 @@ export default function Setting() {
               ></Temperature>
             </div>
             <div className="mb-4 px-6">
-              <label htmlFor="slider" className="bisheng-label">
-                聊天历史最大token数
+              <label htmlFor="slider" className="bisheng-label flex gap-1">
+                {t("build.maxToken")}
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <QuestionMarkCircledIcon />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{t("build.maxTokenTip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </label>
-              <Input value={assistantState.max_token} type="number" defaultValue={32000} min={0} onChange={e =>
+              <Input value={assistantState.max_token} type="number" className="mt-2" defaultValue={32000} min={0} onChange={e =>
                 dispatchAssistant("setting", { max_token: Number(e.target.value) })
               }></Input>
             </div>

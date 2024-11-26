@@ -534,7 +534,9 @@
     "apiKey": "API Key",
     "azureEndpoint": "Azure Endpoint",
     "apiVersion": "API Version",
-    "assistantAvatar": "Assistant avatar"
+    "assistantAvatar": "Assistant avatar",
+    "maxToken": "Max Token",
+    "maxTokenTip": "The maximum number of tokens to generate in the completion. The token length of the input text is automatically calculated and cannot exceed the model's context length. Increasing the value will increase the cost"
   },
   "tools": {
     "addTool": "Add Tool",

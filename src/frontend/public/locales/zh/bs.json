@@ -531,7 +531,9 @@
     "apiKey": "API密钥",
     "azureEndpoint": "Azure端点",
     "apiVersion": "API版本",
-    "assistantAvatar": "助手头像"
+    "assistantAvatar": "助手头像",
+    "maxToken": "聊天历史最大token数",
+    "maxTokenTip": "通过此参数对聊天历史记录进行裁剪，控制发送给模型的历史消息数量，避免出现超长错误，因此不可大于模型支持的最大上下文长度"
   },
   "tools": {
     "addTool": "添加工具",
