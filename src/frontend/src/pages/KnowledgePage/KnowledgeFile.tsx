@@ -138,14 +138,40 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     </Dialog>
 }
 
+const doing = {} // 记录copy中的知识库
 export default function KnowledgeFile() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
     const [modelNameMap, setModelNameMap] = useState({})
+    const { message } = useToast()
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
     )
+
+    // 复制中开启轮询
+    useEffect(() => {
+        const todos = datalist.reduce((prev, curr) => {
+            curr.copy && prev.push({ id: curr.id, name: curr.name })
+            return prev
+        }, [])
+
+        todos.map(todo => {
+            if (doing[todo.id]) {
+                message({
+                    variant: 'success',
+                    description: `${todo.name} 复制完成`
+                })
+                delete doing[todo.id]
+            } else {
+                doing[todo.id] = true
+            }
+        })
+
+        todos.length && setTimeout(() => {
+            reload()
+        }, 5000);
+    }, [datalist])
 
     const handleDelete = (id) => {
         bsConfirm({
@@ -179,6 +205,13 @@ export default function KnowledgeFile() {
     useEffect(() => {
         i18n.loadNamespaces('knowledge');
     }, [i18n]);
+
+    // copy
+    const handleCopy = (elem) => {
+        // 当前有文件正在解析，不可复制
+        // api 复制
+        reload()
+    }
 
     return (
         <div className="relative">
@@ -221,9 +254,10 @@ export default function KnowledgeFile() {
                                     window.libname = [el.name, el.description];
                                 }}>
                                     <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
+                                    {(user.role === 'admin' || user.user_id === el.user_id) && el.id % 2 === 0 ? <Button variant="link" onClick={el => handleCopy(el)}>复制</Button> : <Button variant="link" disabled>复制中</Button>}
                                     {user.role === 'admin' || user.user_id === el.user_id ?
-                                        <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
-                                        <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
+                                        <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-0">{t('delete')}</Button> :
+                                        <Button variant="link" className=" text-gray-400 px-0">{t('delete')}</Button>
                                     }
                                 </TableCell>
                             </TableRow>
