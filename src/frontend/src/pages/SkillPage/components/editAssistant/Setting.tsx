@@ -180,6 +180,7 @@ export default function Setting() {
             <div className="mb-4 px-6">
               <div className="flex gap-4">
                 <KnowledgeSelect
+                  type="file"
                   multiple
                   value={assistantState.knowledge_list.map(el => ({ label: el.name, value: el.id }))}
                   onChange={(vals) =>
