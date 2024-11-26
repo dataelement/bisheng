@@ -624,7 +624,7 @@ async def access_refresh(*, request: Request, data: RoleRefresh, login_user: Use
     # 添加新的权限
     with session_getter() as session:
         for third_id in access_id:
-            if access_type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value]:
+            if access_type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value, AccessType.WORK_FLOW.value,]:
                 third_id = UUID(third_id).hex
             role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
             session.add(role_access)
