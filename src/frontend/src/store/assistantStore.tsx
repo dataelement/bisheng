@@ -49,6 +49,7 @@ const assistantTemp = {
   tool_list: [],
   flow_list: [],
   knowledge_list: [],
+  max_token: 32000
 }
 
 export const useAssistantStore = create<State & Actions>((set) => ({

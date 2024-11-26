@@ -11,7 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
-import { InputList, Textarea } from "@/components/bs-ui/input";
+import { Input, InputList, Textarea } from "@/components/bs-ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -75,6 +75,14 @@ export default function Setting() {
                   dispatchAssistant("setting", { temperature: val })
                 }
               ></Temperature>
+            </div>
+            <div className="mb-4 px-6">
+              <label htmlFor="slider" className="bisheng-label">
+                聊天历史最大token数
+              </label>
+              <Input value={assistantState.max_token} type="number" defaultValue={32000} min={0} onChange={e =>
+                dispatchAssistant("setting", { max_token: Number(e.target.value) })
+              }></Input>
             </div>
           </AccordionContent>
         </AccordionItem>
