@@ -192,7 +192,7 @@ class ChatClient:
             elif one_item['category'] == 'tool_call':
                 tmp.insert(0, AIMessage(**json.loads(one_item['message'])))
             elif one_item['category'] == 'tool_result':
-                tmp.insert(0, ToolMessage(**json.loads(one_item['message'])))
+                tmp.insert(0, LiberalToolMessage(**json.loads(one_item['message'])))
 
         return tmp
 
