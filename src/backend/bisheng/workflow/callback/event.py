@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,7 @@ class NodeStartData(BaseModel):
 
 class NodeEndData(NodeStartData):
     reason: Optional[str] = Field(None, description='Reason for node exec error')
+    log_data: Dict = Field(None, description='Log data on node exec success')
 
 
 class UserInputData(BaseModel):

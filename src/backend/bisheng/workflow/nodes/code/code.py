@@ -27,6 +27,12 @@ class CodeNode(BaseNode):
 
         return main_ret
 
+    def parse_log(self, unique_id: str, result: dict):
+        return {
+            'input': self._parse_code_input(),
+            'output': result
+        }
+
     def _parse_code_input(self) -> dict:
         ret = {}
         for one in self._code_input:

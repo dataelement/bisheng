@@ -1,3 +1,5 @@
+from typing import Any
+
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
@@ -27,6 +29,10 @@ class AgentNode(BaseNode):
         self._system_variables = self._system_prompt.extract()
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
+
+        self.batch_variable_list = []
+        self._system_prompt_list = []
+        self._user_prompt_list = []
 
         # 聊天消息
         self._chat_history_flag = self.node_params['chat_history_flag']['flag']
@@ -98,9 +104,15 @@ class AgentNode(BaseNode):
     def _run(self, unique_id: str):
         ret = {}
         variable_map = {}
+
+        self._batch_variable_list = []
+        self._system_prompt_list = []
+        self._user_prompt_list = []
+
         for one in self._system_variables:
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         system_prompt = self._system_prompt.format(variable_map)
+        self._system_prompt_list.append(system_prompt)
         self._init_agent(system_prompt)
 
         if self._tab == 'single':
@@ -123,6 +135,16 @@ class AgentNode(BaseNode):
 
         return ret
 
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        ret = {
+            'system_prompt': self._system_prompt_list,
+            'user_prompt': self._user_prompt_list,
+            'output': result
+        }
+        if self._batch_variable_list:
+            ret['batch_variable'] = self._batch_variable_list
+        return ret
+
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None):
         """
         input_variable: 输入变量，如果是batch，则需要传入一个list，否则为None
@@ -133,6 +155,7 @@ class AgentNode(BaseNode):
         for one in self._system_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                self._batch_variable_list.append(variable_map[one])
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         # system = self._system_prompt.format(variable_map)
@@ -144,10 +167,11 @@ class AgentNode(BaseNode):
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)
+        self._user_prompt_list.append(user)
 
         chat_history = None
         if self._chat_history_flag:
-            chat_history = self.graph_state.get_history_memory()[-self._chat_history_num:]
+            chat_history = self.graph_state.get_history_memory(self._chat_history_num)
 
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
@@ -161,7 +185,7 @@ class AgentNode(BaseNode):
                 'input': user,
                 'chat_history': chat_history
             },
-                                        config=config)
+                config=config)
         else:
             result = self._agent.invoke(user, config=config)
 

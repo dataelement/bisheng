@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from bisheng.workflow.graph.graph_state import GraphState
 from pydantic import BaseModel, Field
@@ -11,12 +11,14 @@ class ConditionOne(BaseModel):
     comparison_operation: str = Field(..., description='Compare type')
     right_value_type: str = Field(..., description='Right value type')
     right_value: str = Field(..., description='Right value')
+    variable_key_value: Dict = Field(default={}, description='variable key value')
 
     def evaluate(self, graph_state: GraphState) -> bool:
         left_value = graph_state.get_variable_by_str(self.left_var)
         right_value = self.right_value
         if self.right_value_type == 'ref' and self.right_value:
             right_value = graph_state.get_variable_by_str(self.right_value)
+            self.variable_key_value[self.right_value] = right_value
 
         return self.compare_two_value(left_value, right_value)
 
@@ -60,6 +62,7 @@ class ConditionCases(BaseModel):
     id: str = Field(..., description='Unique id for case')
     operator: Optional[str] = Field('and', description='Operator for case')
     conditions: Optional[List[ConditionOne]] = Field(None, description='Conditions for case')
+    variable_key_value: Dict = Field(default={}, description='variable key value')
 
     def evaluate_conditions(self, graph_state: GraphState) -> bool:
         # 正常来讲只有else没有conditions
@@ -73,4 +76,5 @@ class ConditionCases(BaseModel):
             else:
                 if condition.evaluate(graph_state):
                     return True
+            self.variable_key_value.update(condition.variable_key_value)
         return True if self.operator == 'and' else False

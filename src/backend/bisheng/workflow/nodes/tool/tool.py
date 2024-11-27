@@ -1,3 +1,5 @@
+from typing import Any
+
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.workflow.nodes.base import BaseNode
@@ -22,6 +24,12 @@ class ToolNode(BaseNode):
         output = self._tool.run(tool_input=tool_input)
         return {
             "output": output
+        }
+
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return {
+            'input': self.parse_tool_input(),
+            'output': result
         }
 
     def parse_tool_input(self) -> dict:

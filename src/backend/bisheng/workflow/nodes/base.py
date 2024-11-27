@@ -64,6 +64,14 @@ class BaseNode(ABC):
         """
         raise NotImplementedError
 
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        """
+         返回节点运行日志，默认返回节点的输出内容，有特殊需求自行覆盖此函数
+        params:
+            result: 节点运行结果
+        """
+        return result
+
     def get_input_schema(self) -> Any:
         """ 返回用户需要输入的表单描述信息 """
         return None
@@ -97,8 +105,10 @@ class BaseNode(ABC):
             data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
         reason = None
+        log_data = None
         try:
             result = self._run(exec_id)
+            log_data = self.parse_log(exec_id, result)
             # 把节点输出存储到全局变量中
             if result:
                 for key, value in result.items():
@@ -109,5 +119,5 @@ class BaseNode(ABC):
             raise e
         finally:
             self.callback_manager.on_node_end(data=NodeEndData(
-                unique_id=exec_id, node_id=self.id, name=self.name, reason=reason))
+                unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
         return state

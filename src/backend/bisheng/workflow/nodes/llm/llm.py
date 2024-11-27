@@ -1,3 +1,5 @@
+from typing import Any
+
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
@@ -20,8 +22,12 @@ class LLMNode(BaseNode):
         # 初始化prompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
         self._system_variables = self._system_prompt.extract()
+        self._system_prompt_list = []
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
+        self._user_prompt_list = []
+
+        self._batch_variable_list = []
 
         # 初始化llm对象
         self._stream = True
@@ -30,6 +36,9 @@ class LLMNode(BaseNode):
                                                cache=False)
 
     def _run(self, unique_id: str):
+        self._system_prompt_list = []
+        self._user_prompt_list = []
+        self._batch_variable_list = []
         result = {}
         if self._tab == 'single':
             result['output'] = self._run_once(None, unique_id, 'output')
@@ -44,6 +53,16 @@ class LLMNode(BaseNode):
                 self.graph_state.save_context(content=v, msg_sender='AI')
         return result
 
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        ret = {
+            'system_prompt': self._system_prompt_list,
+            'user_prompt': self._user_prompt_list,
+            'output': result
+        }
+        if self._batch_variable_list:
+            ret['batch_variable'] = self._batch_variable_list
+        return ret
+
     def _run_once(self,
                   input_variable: str = None,
                   unique_id: str = None,
@@ -54,9 +73,11 @@ class LLMNode(BaseNode):
         for one in self._system_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                self._batch_variable_list.append(variable_map[one])
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         system = self._system_prompt.format(variable_map)
+        self._system_prompt_list.append(system)
 
         variable_map = {}
         for one in self._user_variables:
@@ -65,6 +86,7 @@ class LLMNode(BaseNode):
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)
+        self._user_prompt_list.append(user)
 
         logger.debug(
             f'outputkey={output_key} workflow llm node prompt: system: {system}\nuser: {user}')

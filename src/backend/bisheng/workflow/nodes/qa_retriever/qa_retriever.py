@@ -45,6 +45,12 @@ class QARetrieverNode(BaseNode):
         else:
             result_str = 'None'
 
-        ret = {}
-        ret['retrieval_result'] = result_str
-        return ret
+        return {
+            'retrieval_result': result_str
+        }
+
+    def parse_log(self, unique_id: str, result: dict) -> dict:
+        return {
+            'user_question': self.graph_state.get_variable_by_str(self._user_question),
+            'retrieval_result': result['retrieval_result']
+        }

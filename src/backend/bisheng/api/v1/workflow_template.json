@@ -317,7 +317,7 @@
             "key": "user_prompt",
             "label": "用户提示词",
             "type": "var_textarea",
-            "value": "用户问题：{{#RAG/user_question#}}\n参考文本：{{#RAG/retrieved_result#}}\n你的回答：",
+            "value": "用户问题：{{#rag_xxx.user_question#}}\n参考文本：{{#rag_xxx.retrieved_result#}}\n你的回答：",
             "required": true
           },
           {

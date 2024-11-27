@@ -43,6 +43,12 @@ class OutputNode(BaseNode):
         res['output_way'] = self.node_params['output_way']['value']
         return res
 
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return {
+            'output_msg': self.node_params['output_msg']['msg'],
+            'output_way': self.node_params['output_way']['value']
+        }
+
     def parse_output_msg(self):
         """ 填充msg中的变量，获取文件的share地址 """
         msg = self.node_params['output_msg']['msg']

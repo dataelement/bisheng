@@ -29,3 +29,9 @@ class StartNode(BaseNode):
             'chat_history': '',
             'preset_question': self.node_params['preset_question']
         }
+
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return {
+            'current_time': result['current_time'],
+            'preset_question': result['preset_question']
+        }

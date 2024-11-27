@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Any
 
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
@@ -84,6 +84,18 @@ class RagNode(BaseNode):
                                       output_key=output_key))
             ret[output_key] = result
         return ret
+
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        output_key = []
+        source_documents = []
+        for key, val in result.items():
+            output_key.append(val['result'])
+            source_documents.append(val['source_documents'])
+        return {
+            'user_question': self.init_user_question(),
+            'output_key': output_key,
+            'source_documents': source_documents
+        }
 
     def init_user_question(self) -> List[str]:
         ret = []
