@@ -80,9 +80,15 @@ export default function editAssistant() {
     // 校验助手数据
     const handleCheck = () => {
         const errors = []
-        if (!assistantState.max_token || !Number.isInteger(assistantState.max_token) || assistantState.max_token < 0) {
+        if (
+            assistantState.max_token === undefined ||
+            !Number.isInteger(assistantState.max_token) ||
+            assistantState.max_token < 0 ||
+            assistantState.max_token > 100 * 10000
+        ) {
             errors.push(t('skills.chatHistoryMaxToken'));
         }
+
         if (assistantState.guide_question.some(que => que.length > 50)) {
             errors.push(t('skills.guideQuestions50'))
         }
