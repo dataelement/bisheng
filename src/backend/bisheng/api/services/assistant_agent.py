@@ -382,7 +382,7 @@ class AssistantAgent(AssistantUtils):
                             enc.encode(json.dumps(one.additional_kwargs['tool_calls'], ensure_ascii=False))
                         )
                 else:
-                    total_count += len(enc.encode(one.content))
+                    total_count += len(enc.encode(str(one.content)))
             if total_count > self.assistant.max_token:
                 return get_finally_message(new_messages[1:])
             return new_messages
