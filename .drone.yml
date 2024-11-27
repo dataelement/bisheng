@@ -86,7 +86,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       https_proxy:
         from_secret: PROXY
       no_proxy: 192.168.106.8
-      version: v0.3.7
+      version: release
       docker_registry: http://192.168.106.8:6082
       docker_repo: 192.168.106.8:6082/dataelement/bisheng-backend
       docker_user:
@@ -114,7 +114,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       https_proxy:
         from_secret: PROXY
       no_proxy: 192.168.106.8
-      version: v0.3.7
+      version: release
       docker_registry: http://192.168.106.8:6082
       docker_repo: 192.168.106.8:6082/dataelement/bisheng-frontend
       docker_user:
