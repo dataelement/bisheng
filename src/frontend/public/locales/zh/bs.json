@@ -171,7 +171,7 @@
     "saveSuccessful": "保存成功",
     "supportVersions": "支持分成多个版本分支，分别进行开发以及版本间的比较。",
     "guideQuestions50": "引导问题最多50个字符",
-    "chatHistoryMaxToken": "聊天历史最大 token 数必须是一个 0 到 32000 之间的整数",
+    "chatHistoryMaxToken": "聊天历史最大 token 数必须是一个整数",
     "promptWords1000": "开场白最多为1000个字符",
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
