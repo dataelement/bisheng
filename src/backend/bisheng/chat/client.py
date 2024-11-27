@@ -40,7 +40,7 @@ class ChatClient:
         self.gpts_async_callback = None
         self.chat_history = []
         # 和模型对话时传入的 完整的历史对话轮数
-        self.latest_history_num = 5
+        self.latest_history_num = 10
         self.gpts_conf = settings.get_from_db('gpts')
         # 异步任务列表
         self.task_ids = []
@@ -161,7 +161,8 @@ class ChatClient:
             return
         # 从数据库加载历史会话
         if self.chat_id:
-            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['question', 'answer'],
+            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id,
+                                                         ['question', 'answer', 'tool_call', 'tool_result'],
                                                          self.latest_history_num * 4)
             for one in res:
                 self.chat_history.append({
@@ -188,6 +189,10 @@ class ChatClient:
                 tmp.insert(0, HumanMessage(content=json.loads(one_item['message'])['input']))
                 is_answer = True
                 find_i += 1
+            elif one_item['category'] == 'tool_call':
+                tmp.insert(0, AIMessage(**json.loads(one_item['message'])))
+            elif one_item['category'] == 'tool_result':
+                tmp.insert(0, ToolMessage(**json.loads(one_item['message'])))
 
         return tmp
 
