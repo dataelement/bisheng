@@ -173,6 +173,7 @@
     "saveSuccessful": "Save Successful",
     "supportVersions": "Support splitting into multiple version branches for development and comparison between versions.",
     "guideQuestions50": "Guide questions to a maximum of 50 characters",
+    "chatHistoryMaxToken": "The maximum number of tokens in chat history must be an integer between 0 and 32000",
     "promptWords1000": "The opening statement can be up to 1000 characters",
     "contactAdmin": "Please contact the administrator's online assistant",
     "deleteSure": "Are you sure you want to delete this tool?",

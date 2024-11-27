@@ -80,9 +80,9 @@ export default function editAssistant() {
     // 校验助手数据
     const handleCheck = () => {
         const errors = []
-        // if (!assistantState.model_name) {
-        //     errors.push(t('skills.modelRequired'))
-        // }
+        if (!assistantState.max_token || !Number.isInteger(assistantState.max_token) || assistantState.max_token < 0 || assistantState.max_token > 32000) {
+            errors.push('skills.chatHistoryMaxToken');
+        }
         if (assistantState.guide_question.some(que => que.length > 50)) {
             errors.push(t('skills.guideQuestions50'))
         }
