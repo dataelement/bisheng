@@ -1,10 +1,8 @@
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Button } from "@/components/bs-ui/button"
-import { getWorkflowReportTemplate } from "@/controllers/API/workflow"
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload"
 import Word from "@/pages/Report/components/Word"
 import { ChevronDown } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import SelectVar from "./SelectVar"
 // save(fe) -> office(onlyofc) -> upload(be)

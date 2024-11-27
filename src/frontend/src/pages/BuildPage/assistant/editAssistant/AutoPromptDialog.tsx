@@ -175,7 +175,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><RefreshCw className="mr-2" />{t('build.retry')}</Button>
                 </div>
                 <div className="group flex justify-end mt-2 h-[600px] relative">
-                    <Textarea ref={areaRef} className="h-full" defaultValue={assistantState.prompt}
+                    <Textarea ref={areaRef} className="h-full"
                         placeholder={t('prompt')}
                     ></Textarea>
                     <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>

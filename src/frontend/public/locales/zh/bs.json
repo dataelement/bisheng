@@ -175,7 +175,8 @@
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
     "modelRequired": "模型为空",
-    "avatar": "技能头像"
+    "avatar": "技能头像",
+    "switchTo": "切换到"
   },
   "chat": {
     "newChat": "新建会话",
@@ -447,7 +448,7 @@
     "openingIntroduction": "开场引导",
     "openingStatement": "开场白",
     "assistantMessageFormat": "助手将在每次对话开始时发送此信息，支持 Markdown 格式",
-    "maximumPromptLength": "提示词最多为1000个字符",
+    "maximumPromptLength": "开场白最多为1000个字符",
     "recommendQuestionsForUsers": "为用户提供推荐问题，引导用户提问，超过3个时将随机选取3个",
     "maxCharacters50": "最多50个字符",
     "enterGuidingQuestions": "请输入引导问题",

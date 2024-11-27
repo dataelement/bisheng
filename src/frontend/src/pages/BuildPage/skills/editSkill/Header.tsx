@@ -86,7 +86,7 @@ export default function Header({ flow }) {
         setFlow('versionChange', { ...flow, data: res.data })
         message({
             variant: "success",
-            title: `切换到 ${res.name}`,
+            title: `${t('skills.switchTo')} ${res.name}`,
             description: ""
         })
         setLoading(false)
@@ -109,7 +109,7 @@ export default function Header({ flow }) {
         {
             loading && <div className=" fixed left-0 top-0 w-full h-screen bg-background/60 z-50 flex items-center justify-center">
                 <LoadIcon className="mr-2 text-gray-600" />
-                <span>切换到 {version.name}</span>
+                <span>{t('skills.switchTo')} {version.name}</span>
             </div>
         }
         <div className="flex items-center gap-2 py-4">

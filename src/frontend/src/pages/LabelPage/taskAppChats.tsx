@@ -86,7 +86,7 @@ export default function index() {
         // get status
         getMarkStatusApi({ task_id: Number(id), chat_id: cid }).then((res: any) => {
             setStatus(String(res.status || 1))
-            setIsSelf(res.is_self)
+            setIsSelf(res.is_self === undefined ? true : res.is_self)
         })
 
         return () => {

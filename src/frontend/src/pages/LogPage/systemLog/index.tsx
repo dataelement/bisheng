@@ -107,7 +107,7 @@ export default function SystemLog() {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                {modules.map(m => <SelectItem value={m.value} key={m.value}>{m.name}</SelectItem>)}
+                                {modules.map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
                             </SelectGroup>
                         </SelectContent>
                     </Select>

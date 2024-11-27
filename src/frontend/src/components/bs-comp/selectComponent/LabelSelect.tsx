@@ -36,6 +36,11 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
 
     useEffect(() => {
         const newData = all.map(d => {
+            if (dataRef.current.length) {
+                // change name
+                const oldItem = dataRef.current.find(l => l.value === d.value)
+                return { ...oldItem, label: d?.label }
+            }
             const res = labels.find(l => l.value === d.value)
             return res ? { ...d, selected: true } : d
         })
