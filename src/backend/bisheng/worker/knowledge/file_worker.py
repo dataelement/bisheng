@@ -108,7 +108,7 @@ def copy_normal(
 
     # copy vector
     try:
-        copy_vector(source_knowledge, target_knowledge, one, knowledge_new)
+        copy_vector(source_knowledge, target_knowledge, one.id, knowledge_new.id)
         knowledge_new.status = KnowledgeFileStatus.SUCCESS.value
         KnowledgeFileDao.update(knowledge_new)
     except Exception as e:

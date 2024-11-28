@@ -156,4 +156,4 @@ class MinioClient:
             response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
             return response
         except Exception as e:
-            logger.error(e)
+            logger.error('{} {} {}', source_object_name, target_object_name, e)
