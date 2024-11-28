@@ -35,7 +35,7 @@ class WorkflowClient(BaseClient):
             'type': ChatMessageType.WORKFLOW.value,
 
             'is_bot': chat_response.is_bot,
-            'source': chat_response.source,  # todo 溯源功能
+            'source': chat_response.source,
             'message': json.dumps(chat_response.message, ensure_ascii=False),
             'extra': chat_response.extra,
             'category': chat_response.category,
@@ -80,7 +80,7 @@ class WorkflowClient(BaseClient):
             user_input[node_id] = node_info['data']
             # 保存用户输入到历史记录
             await self.save_chat_message(ChatResponse(message=node_info['message'],
-                                                      category='question',
+                                                      category=node_info['category'],
                                                       is_bot=False,
                                                       type=ChatMessageType.WORKFLOW.value,
                                                       flow_id=self.client_id,

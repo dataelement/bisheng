@@ -173,9 +173,6 @@ class WorkflowWsCallback(BaseCallback):
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
                                      files=data.files)
-        msg_id = self.save_chat_message(chat_response)
-        if msg_id:
-            chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
 
     def on_output_input(self, data: OutputMsgInputData):
@@ -187,7 +184,4 @@ class WorkflowWsCallback(BaseCallback):
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
                                      files=data.files)
-        msg_id = self.save_chat_message(chat_response)
-        if msg_id:
-            chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
