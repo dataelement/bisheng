@@ -277,7 +277,7 @@ class AssistantAgent(AssistantUtils):
             else:
                 flow_links.append(link)
         if tool_ids:
-            tools = self.init_tools_by_toolid(tool_ids)
+            tools = self.init_tools_by_toolid(tool_ids, self.llm)
 
         # flow + knowledge
         flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
