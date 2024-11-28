@@ -5,6 +5,7 @@ from typing import BinaryIO
 import minio
 from bisheng.settings import settings
 from loguru import logger
+from minio.commonconfig import CopySource
 
 bucket = 'bisheng'
 tmp_bucket = 'tmp-dir'
@@ -35,10 +36,13 @@ class MinioClient:
             cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
         self.mkdir(new_bucket=bucket)
 
-    def upload_minio(self, object_name: str, file_path, content_type='application/text', bucket_name=bucket):
+    def upload_minio(self,
+                     object_name: str,
+                     file_path,
+                     content_type='application/text',
+                     bucket_name=bucket):
         # 初始化minio
-        logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket,
-                     file_path)
+        logger.debug('upload_file obj={} bucket={} file_paht={}', object_name, bucket, file_path)
         return self.minio_client.fput_object(bucket_name=bucket_name,
                                              object_name=object_name,
                                              file_path=file_path,
@@ -96,7 +100,12 @@ class MinioClient:
         if not self.minio_client.bucket_exists(new_bucket):
             self.minio_client.make_bucket(new_bucket)
 
-    def upload_minio_file(self, object_name: str, file: BinaryIO, bucket_name=bucket, length: int = -1, **kwargs):
+    def upload_minio_file(self,
+                          object_name: str,
+                          file: BinaryIO,
+                          bucket_name=bucket,
+                          length: int = -1,
+                          **kwargs):
         # 初始化minio
         if length == -1:
             length = len(file.read())
@@ -104,7 +113,8 @@ class MinioClient:
         self.minio_client.put_object(bucket_name=bucket_name,
                                      object_name=object_name,
                                      data=file,
-                                     length=length, **kwargs)
+                                     length=length,
+                                     **kwargs)
 
     def download_minio(self, object_name: str):
         return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)
@@ -116,7 +126,7 @@ class MinioClient:
          抹去url中的minio share地址， 让前端通过nginx代理去访问资源
         """
         minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
-        return file_url.replace(f"http://{minio_share}", "")
+        return file_url.replace(f'http://{minio_share}', '')
 
     def object_exists(self, bucket_name, object_name, **kwargs):
         try:
@@ -134,3 +144,16 @@ class MinioClient:
         finally:
             response.close()
             response.release_conn()
+
+    def copy_object(
+        self,
+        source_object_name,
+        target_object_name,
+        bucket_name=bucket,
+    ) -> bytes:
+        try:
+            copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
+            response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
+            return response
+        except Exception as e:
+            logger.error(e)

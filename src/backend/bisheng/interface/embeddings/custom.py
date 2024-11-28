@@ -1,5 +1,6 @@
 from typing import List, Optional
 
+import numpy as np
 from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, LLMServer,
                                                 LLMServerType)
 from bisheng.interface.importing import import_by_type
@@ -158,6 +159,11 @@ class BishengEmbedding(BaseModel, Embeddings):
             if self.server_info.limit_flag:
                 pass
             ret = self.embeddings.embed_documents(texts)
+            # 盘单向量是否归一化了
+            if ret:
+                vector = ret[0]
+                if np.linalg.norm(vector) != 1:
+                    ret = [(np.array(doc) / np.linalg.norm(doc)).tolist() for doc in ret]
             self._update_model_status(0)
             return ret
         except Exception as e:
@@ -170,6 +176,8 @@ class BishengEmbedding(BaseModel, Embeddings):
         """embedding"""
         try:
             ret = self.embeddings.embed_query(text)
+            if np.linalg.norm(ret) != 1:
+                ret = (np.array(ret) / np.linalg.norm(ret)).tolist()
             self._update_model_status(0)
             return ret
         except Exception as e:

@@ -27,6 +27,7 @@ class KnowledgeBase(SQLModelSerializable):
     model: Optional[str] = Field(index=False)
     collection_name: Optional[str] = Field(index=False)
     index_name: Optional[str] = Field(index=False)
+    state: Optional[int] = Field(index=False, default=1, description='0 为未发布，1 为已发布, 2 为复制中')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -43,6 +44,7 @@ class Knowledge(KnowledgeBase, table=True):
 class KnowledgeRead(KnowledgeBase):
     id: int
     user_name: Optional[str]
+    copiable: Optional[bool]
 
 
 class KnowledgeUpdate(BaseModel):
@@ -121,7 +123,7 @@ class KnowledgeDao(KnowledgeBase):
                            name: str = None,
                            page: int = 0,
                            limit: int = 10) -> List[Knowledge]:
-        statement = select(Knowledge)
+        statement = select(Knowledge).where(Knowledge.state > 0)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name, page, limit)
@@ -136,7 +138,7 @@ class KnowledgeDao(KnowledgeBase):
                              knowledge_id_extra: List[int] = None,
                              knowledge_type: KnowledgeTypeEnum = None,
                              name: str = None) -> int:
-        statement = select(func.count(Knowledge.id))
+        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
                                                 knowledge_type, name)
         with session_getter() as session:
@@ -221,7 +223,7 @@ class KnowledgeDao(KnowledgeBase):
                           knowledge_type: KnowledgeTypeEnum = None,
                           page: int = 0,
                           limit: int = 0) -> List[Knowledge]:
-        statement = select(Knowledge)
+        statement = select(Knowledge).where(Knowledge.state > 0)
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
@@ -236,7 +238,7 @@ class KnowledgeDao(KnowledgeBase):
     def count_all_knowledge(cls,
                             name: str = None,
                             knowledge_type: KnowledgeTypeEnum = None) -> int:
-        statement = select(func.count(Knowledge.id))
+        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
@@ -254,7 +256,7 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     def get_knowledge_by_name(cls, name: str, user_id: int = 0) -> Knowledge:
         """ 通过知识库名称获取知识库详情 """
-        statement = select(Knowledge).where(Knowledge.name == name)
+        statement = select(Knowledge).where(Knowledge.name == name).where(Knowledge.state > 0)
         if user_id:
             statement = statement.where(Knowledge.user_id == user_id)
         with session_getter() as session:

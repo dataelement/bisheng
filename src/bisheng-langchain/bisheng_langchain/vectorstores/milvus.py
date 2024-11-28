@@ -8,8 +8,8 @@ from uuid import uuid4
 import numpy as np
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
-from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain
+from langchain_community.vectorstores.utils import maximal_marginal_relevance
 from pymilvus.exceptions import ConnectionNotExistException
 
 logger = logging.getLogger(__name__)
@@ -447,13 +447,13 @@ class Milvus(MilvusLangchain):
             self.col.load()
 
     def add_texts(
-            self,
-            texts: Iterable[str],
-            metadatas: Optional[List[dict]] = None,
-            timeout: Optional[int] = None,
-            batch_size: int = 1000,
-            no_embedding: bool = False,
-            **kwargs: Any,
+        self,
+        texts: Iterable[str],
+        metadatas: Optional[List[dict]] = None,
+        timeout: Optional[int] = None,
+        batch_size: int = 1000,
+        no_embedding: bool = False,
+        **kwargs: Any,
     ) -> List[str]:
         """Insert text data into Milvus.
 
@@ -532,7 +532,7 @@ class Milvus(MilvusLangchain):
                 res = self.col.insert(insert_list, timeout=timeout, **kwargs)
                 pks.extend(res.primary_keys)
             except ConnectionNotExistException as e:
-                logger.warning("retrying connection to milvus")
+                logger.warning(f'retrying connection to milvus {e}')
                 # reconnect to milvus
                 self._create_connection_alias(self.connection_args, self.alias)
 
@@ -545,13 +545,13 @@ class Milvus(MilvusLangchain):
         return pks
 
     def similarity_search(
-            self,
-            query: str,
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        query: str,
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Document]:
         """Perform a similarity search against the query string.
 
@@ -583,13 +583,13 @@ class Milvus(MilvusLangchain):
         return [doc for doc, _ in res]
 
     def similarity_search_by_vector(
-            self,
-            embedding: List[float],
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        embedding: List[float],
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Document]:
         """Perform a similarity search against the query string.
 
@@ -621,13 +621,13 @@ class Milvus(MilvusLangchain):
         return [doc for doc, _ in res]
 
     def similarity_search_with_score(
-            self,
-            query: str,
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        query: str,
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Perform a search on a query string and return results with score.
 
@@ -667,13 +667,13 @@ class Milvus(MilvusLangchain):
         return res
 
     def similarity_search_with_score_by_vector(
-            self,
-            embedding: List[float],
-            k: int = 4,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        embedding: List[float],
+        k: int = 4,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Perform a search on a query string and return results with score.
 
@@ -715,10 +715,9 @@ class Milvus(MilvusLangchain):
             else:
                 expr = f"{self._partition_field}==\"{self.partition_key}\""
         if expr and self.metadata_expr:
-            expr = f"{expr} and {self.metadata_expr}"
+            expr = f'{expr} and {self.metadata_expr}'
         elif self.metadata_expr and not expr:
             expr = self.metadata_expr
-
 
         # Perform the search.
         res = self.col.search(
@@ -742,15 +741,15 @@ class Milvus(MilvusLangchain):
         return ret
 
     def max_marginal_relevance_search(
-            self,
-            query: str,
-            k: int = 4,
-            fetch_k: int = 20,
-            lambda_mult: float = 0.5,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        query: str,
+        k: int = 4,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.5,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Document]:
         """Perform a search and return results that are reordered by MMR.
 
@@ -795,15 +794,15 @@ class Milvus(MilvusLangchain):
         )
 
     def max_marginal_relevance_search_by_vector(
-            self,
-            embedding: list[float],
-            k: int = 4,
-            fetch_k: int = 20,
-            lambda_mult: float = 0.5,
-            param: Optional[dict] = None,
-            expr: Optional[str] = None,
-            timeout: Optional[int] = None,
-            **kwargs: Any,
+        self,
+        embedding: list[float],
+        k: int = 4,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.5,
+        param: Optional[dict] = None,
+        expr: Optional[str] = None,
+        timeout: Optional[int] = None,
+        **kwargs: Any,
     ) -> List[Document]:
         """Perform a search and return results that are reordered by MMR.
 
@@ -890,18 +889,18 @@ class Milvus(MilvusLangchain):
 
     @classmethod
     def from_texts(
-            cls,
-            texts: List[str],
-            embedding: Embeddings,
-            metadatas: Optional[List[dict]] = None,
-            collection_name: str = 'LangChainCollection',
-            connection_args: dict[str, Any] = DEFAULT_MILVUS_CONNECTION,
-            consistency_level: str = 'Session',
-            index_params: Optional[dict] = None,
-            search_params: Optional[dict] = None,
-            drop_old: bool = False,
-            no_embedding: bool = False,
-            **kwargs: Any,
+        cls,
+        texts: List[str],
+        embedding: Embeddings,
+        metadatas: Optional[List[dict]] = None,
+        collection_name: str = 'LangChainCollection',
+        connection_args: dict[str, Any] = DEFAULT_MILVUS_CONNECTION,
+        consistency_level: str = 'Session',
+        index_params: Optional[dict] = None,
+        search_params: Optional[dict] = None,
+        drop_old: bool = False,
+        no_embedding: bool = False,
+        **kwargs: Any,
     ) -> Milvus:
         """Create a Milvus collection, indexes it with HNSW, and insert data.
 
@@ -942,8 +941,8 @@ class Milvus(MilvusLangchain):
     @staticmethod
     def _relevance_score_fn(distance: float) -> float:
         """Normalize the distance to a score on a scale [0, 1]."""
-        # Todo: normalize the es score on a scale [0, 1]
-        return 1 - distance
+        # normalize l2 distance
+        return 1 - distance / 2
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         return self._relevance_score_fn

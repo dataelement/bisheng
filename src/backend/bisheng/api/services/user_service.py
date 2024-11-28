@@ -73,6 +73,16 @@ class UserPayload:
         return False
 
     @wrapper_access_check
+    def copiable_check(self, owner_user_id: int) -> bool:
+        """
+            检查用户是否有某个资源复制权限
+        """
+        # 判断是否属于本人资源
+        if self.user_id == owner_user_id:
+            return True
+        return False
+
+    @wrapper_access_check
     def check_group_admin(self, group_id: int) -> bool:
         """
             检查用户是否是某个组的管理员
