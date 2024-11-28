@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
@@ -12,10 +13,17 @@ from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, or_, te
 from sqlmodel import Field, delete, select
 
 
+class ChatMessageType(Enum):
+    # todo 在041版本将旧的数据里的type全按照这个改一下
+    FLOW = 'flow'  # 表示技能会话消息
+    ASSISTANT = 'assistant'  # 表示助手会话消息
+    WORKFLOW = 'workflow'  # 表示工作流会话消息
+
+
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
     source: Optional[int] = Field(index=False, description='是否支持溯源')
-    mark_status: Optional[int] = Field(index=False,default=1, description='标记状态')
+    mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
     mark_user: Optional[int] = Field(index=False, description='标记用户')
     mark_user_name: Optional[str] = Field(index=False, description='标记用户')
     message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
@@ -102,10 +110,10 @@ class MessageDao(MessageBase):
             if user_ids:
                 count_stat = count_stat.where(or_(
                     ChatMessage.mark_user.in_(user_ids),
-                    ChatMessage.mark_status==1,
-                                                 ))
+                    ChatMessage.mark_status == 1,
+                ))
                 sql = sql.where(or_(ChatMessage.mark_user.in_(user_ids),
-                                    ChatMessage.mark_status==1))
+                                    ChatMessage.mark_status == 1))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
                 func.max(ChatMessage.create_time).desc()).offset(
@@ -167,9 +175,10 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_last_msg_by_flow_id(cls, flow_id: List[str],chat_id:List[str]):
+    def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
+            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(
+                not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
                 ChatMessage.create_time)
             return session.exec(statement).all()
 

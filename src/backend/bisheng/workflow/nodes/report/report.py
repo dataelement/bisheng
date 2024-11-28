@@ -47,5 +47,4 @@ class ReportNode(BaseNode):
             'msg': "",
             'files': [{'path': file_share_url, 'name': self._file_name}],
             'output_key': '',
-            'stream': False
         }))

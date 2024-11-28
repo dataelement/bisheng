@@ -90,28 +90,18 @@ async def upload_report_file(
 async def workflow_ws(*,
                       workflow_id: str,
                       websocket: WebSocket,
-                      t: Optional[str] = None,
                       chat_id: Optional[str] = None,
                       Authorize: AuthJWT = Depends()):
     try:
-        # if t:
-        #     Authorize.jwt_required(auth_from='websocket', token=t)
-        #     Authorize._token = t
-        # else:
-        #     Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        #
-        # payload = Authorize.get_jwt_subject()
-        # payload = json.loads(payload)
-        payload = {
-            'user_id': 1,
-            'user_name': 'admin',
-            'role': 'admin',
-        }
+        Authorize.jwt_required(auth_from='websocket', websocket=websocket)
+        payload = Authorize.get_jwt_subject()
+        payload = json.loads(payload)
         login_user = UserPayload(**payload)
         await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
+
 
 @router.post('/create', status_code=201)
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
@@ -119,19 +109,19 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     # 判断用户是否重复技能名
     with session_getter() as session:
         if session.exec(
-                select(Flow).where(Flow.name == flow.name,Flow.flow_type == FlowType.WORKFLOW.value,
+                select(Flow).where(Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value,
                                    Flow.user_id == login_user.user_id)).first():
             raise HTTPException(status_code=500, detail='工作流名重复')
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     db_flow.flow_type = FlowType.WORKFLOW.value
     # 创建新的技能
-    db_flow = FlowDao.create_flow(db_flow,FlowType.WORKFLOW.value)
+    db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
-    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id,FlowType.WORKFLOW.value)
+    FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id, FlowType.WORKFLOW.value)
     return resp_200(data=ret)
 
 
@@ -270,7 +260,7 @@ def read_flows(*,
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     try:
-        return WorkFlowService.get_all_flows(user, name, status, tag_id,flow_type, page_num, page_size)
+        return WorkFlowService.get_all_flows(user, name, status, tag_id, flow_type, page_num, page_size)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
