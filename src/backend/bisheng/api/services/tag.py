@@ -78,6 +78,8 @@ class TagService:
             resource_info = AssistantDao.get_one_assistant(UUID(resource_id))
         elif resource_type == ResourceTypeEnum.FLOW:
             resource_info = FlowDao.get_flow_by_id(UUID(resource_id).hex)
+        elif resource_type == ResourceTypeEnum.WORK_FLOW:
+            resource_info = FlowDao.get_flow_by_id(UUID(resource_id).hex)
         else:
             raise HTTPException(status_code=404, detail="资源类型不支持")
         if not resource_info:
