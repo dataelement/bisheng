@@ -3,7 +3,7 @@ import urllib.parse
 from typing import List, Optional
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.knowledge import KnowledgeQAError
+from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
@@ -14,7 +14,8 @@ from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
                                                KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import QAKnoweldgeDao, QAKnowledgeUpsert
+from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
+                                                    QAKnoweldgeDao, QAKnowledgeUpsert)
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
@@ -104,17 +105,41 @@ def create_knowledge(*,
     return resp_200(db_knowledge)
 
 
+@router.post('/copy', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
+async def copy_knowledge(*,
+                         request: Request,
+                         background_tasks: BackgroundTasks,
+                         login_user: UserPayload = Depends(get_login_user),
+                         knowledge_id: int = Body(..., embed=True)):
+    """ 复制知识库. """
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+
+    if not login_user.is_admin and knowledge.user_id != login_user.id:
+        return UnAuthorizedError.return_resp()
+
+    knowledge_count = KnowledgeFileDao.count_file_by_filters(
+        knowledge_id,
+        status=KnowledgeFileStatus.PROCESSING.value,
+    )
+    if knowledge.state != 1 or knowledge_count > 0:
+        return KnowledgeCPError.return_resp()
+    knowledge = KnowledgeService.copy_knowledge(background_tasks, login_user, knowledge)
+    return resp_200(knowledge)
+
+
 @router.get('', status_code=200)
 def get_knowledge(*,
                   request: Request,
                   login_user: UserPayload = Depends(get_login_user),
                   name: str = None,
-                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias='type'),
+                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
+                                              alias='type'),
                   page_size: Optional[int] = 10,
                   page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name, page_num, page_size)
+    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
+                                                page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -199,12 +224,12 @@ def get_QA_list(*,
 
     return resp_200({
         'data':
-            data,
+        data,
         'total':
-            total_count,
+        total_count,
         'writeable':
-            login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
-                                    AccessType.KNOWLEDGE_WRITE)
+        login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                AccessType.KNOWLEDGE_WRITE)
     })
 
 
@@ -289,7 +314,8 @@ async def get_file_bbox(request: Request,
 
 
 @router.post('/qa/add', status_code=200)
-async def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(get_login_user)):
+async def qa_add(*, QACreate: QAKnowledgeUpsert,
+                 login_user: UserPayload = Depends(get_login_user)):
     """ 增加知识库信息. """
     QACreate.user_id = login_user.user_id
     db_knowledge = KnowledgeDao.query_by_id(QACreate.knowledge_id)

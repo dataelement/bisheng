@@ -815,7 +815,7 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
         - "巴黎是哪个国家的首都？"
 
         请使用json 返回
-        {{"question": 生成的问题列表}}
+        {{"questions": 生成的问题列表}}
 
         以下是用户提供的问题和答案：
         问题：{question}
@@ -833,7 +833,7 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
         code_ret = extract_code_blocks(gen_question)
         if code_ret:
             question_dict = json.loads(code_ret[0])
-            return question_dict['question']
+            return question_dict['questions']
         else:
             logger.info('md_code_extract_error {}', gen_question)
         return []

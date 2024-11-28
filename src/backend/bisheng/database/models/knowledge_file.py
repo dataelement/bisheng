@@ -27,11 +27,14 @@ class KnowledgeFileBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     file_name: str = Field(index=True)
     md5: Optional[str] = Field(index=False)
-    parse_type: Optional[str] = Field(default=ParseType.LOCAL.value, index=False, description="采用什么模式解析的文件")
-    bbox_object_name: Optional[str] = Field(default='', description="bbox文件在minio存储的对象名称")
+    parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
+                                      index=False,
+                                      description='采用什么模式解析的文件')
+    bbox_object_name: Optional[str] = Field(default='', description='bbox文件在minio存储的对象名称')
     status: Optional[int] = Field(default=KnowledgeFileStatus.PROCESSING.value,
-                                  index=False, description="1: 解析中；2: 解析成功；3: 解析失败")
-    object_name: Optional[str] = Field(index=False)
+                                  index=False,
+                                  description='1: 解析中；2: 解析成功；3: 解析失败')
+    object_name: Optional[str] = Field(index=False, description='文件在minio存储的对象名称')
     extra_meta: Optional[str] = Field(index=False)
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
     create_time: Optional[datetime] = Field(
@@ -113,7 +116,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         with session_getter() as session:
             return session.query(KnowledgeFile.id, KnowledgeFile.object_name).filter(
                 KnowledgeFile.knowledge_id == knowledge_id).order_by(
-                KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
+                    KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
 
     @classmethod
     def count_file_by_knowledge_id(cls, knowledge_id: int):
@@ -173,8 +176,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     @classmethod
-    def get_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: int = None,
-                            page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
+    def get_file_by_filters(cls,
+                            knowledge_id: int,
+                            file_name: str = None,
+                            status: int = None,
+                            page: int = 0,
+                            page_size: int = 0) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
@@ -187,8 +194,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(statement).all()
 
     @classmethod
-    def count_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: int = None) -> int:
-        statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
+    def count_file_by_filters(cls,
+                              knowledge_id: int,
+                              file_name: str = None,
+                              status: int = None) -> int:
+        statement = select(func.count(
+            KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status is not None:
@@ -196,13 +207,16 @@ class KnowledgeFileDao(KnowledgeFileBase):
         with session_getter() as session:
             return session.scalar(statement)
 
+
 class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
-    def get_qa_knowledge_by_knowledge_id(cls, knowledge_id: int):
+    def get_qa_knowledge_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
+        offset = page * page_size
+        state = select(QAKnowledge).where(
+            QAKnowledge.knowledge_id == knowledge_id, ).offset(offset).limit(page_size)
         with session_getter() as session:
-            return session.exec(
-                select(QAKnowledge).where(QAKnowledge.knowledge_id == knowledge_id)).all()
+            return session.exec(state).all()
 
     @classmethod
     def get_qa_knowledge_by_knowledge_ids(cls, knowledge_ids: List[int]) -> List[QAKnowledge]:
@@ -221,7 +235,8 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             group_filters = []
             for one in question:
                 group_filters.append(func.json_contains(QAKnowledge.questions, '"{}"'.format(one)))
-            statement =select(QAKnowledge).where(or_(*group_filters)).where(QAKnowledge.knowledge_id== knowledge_id)
+            statement = select(QAKnowledge).where(
+                or_(*group_filters)).where(QAKnowledge.knowledge_id == knowledge_id)
             return session.exec(statement).first()
 
     @classmethod
