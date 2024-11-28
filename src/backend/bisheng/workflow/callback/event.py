@@ -36,7 +36,6 @@ class OutputMsgData(BaseModel):
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files', exclude=True)
     output_key: str = Field(..., description='Whether the message is stream')
-    stream: bool = Field(False, description='Whether the message is stream', exclude=True)
 
 
 class OutputMsgInputData(OutputMsgData):
@@ -49,3 +48,13 @@ class OutputMsgChooseData(OutputMsgData):
     key: str = Field('', description='variable key')
     unique_id: Optional[str] = Field('', description='Unique execution id')
     options: Any = Field(None, description='default msg')
+
+
+class StreamMsgData(BaseModel):
+    unique_id: str = Field(..., description='Unique execution id')
+    node_id: str = Field(..., description='Node unique id')
+    msg: str = Field('', description='Stream msg')
+
+
+class StreamMsgOverData(StreamMsgData):
+    pass
