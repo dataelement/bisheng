@@ -82,7 +82,7 @@ class WorkflowClient(BaseClient):
             await self.save_chat_message(ChatResponse(message=node_info['message'],
                                                       category=node_info['category'],
                                                       is_bot=False,
-                                                      type=ChatMessageType.WORKFLOW.value,
+                                                      type='end',
                                                       flow_id=self.client_id,
                                                       chat_id=self.chat_id,
                                                       user_id=self.user_id,))
