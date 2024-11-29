@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List, Optional
 from uuid import UUID
 from bisheng.api.services.assistant import AssistantService
@@ -13,6 +14,9 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 
+from bisheng.workflow.callback.base_callback import BaseCallback
+from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.nodes.node_manage import NodeFactory
 from fastapi.encoders import jsonable_encoder
 
 class WorkFlowService(BaseService):
@@ -151,3 +155,20 @@ class WorkFlowService(BaseService):
             "data": res,
             "total": total
         })
+    
+    @classmethod
+    def run_once(cls,node_data:json):
+
+        base_callback = BaseCallback()
+        node = NodeFactory.instance_node(node_type=node_data["node_type"],
+                                            node_data=node_data,
+                                            user_id=1,
+                                            workflow_id="aa",
+                                            graph_state=GraphState(),
+                                            target_edges=None,
+                                            max_steps=233,
+                                            callback=base_callback)
+
+        return node._run()
+
+

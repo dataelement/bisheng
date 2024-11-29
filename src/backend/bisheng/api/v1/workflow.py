@@ -62,6 +62,13 @@ async def get_report_file(
         'version_key': version_key,
     })
 
+@router.post('/run_once',status_code=200)
+async def run_once(request: Request):
+    node_data = await request.json()
+    print(node_data)
+    result =  WorkFlowService.run_once(node_data)
+
+    return resp_200(data=result)
 
 @router.post('/report/callback', status_code=200)
 async def upload_report_file(
