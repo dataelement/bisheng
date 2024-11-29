@@ -157,7 +157,7 @@ class WorkFlowService(BaseService):
         })
     
     @classmethod
-    def run_once(cls,node_data:json):
+    def run_once(cls,node_data:Dict[any,any]):
 
         base_callback = BaseCallback()
         node = NodeFactory.instance_node(node_type=node_data["node_type"],
