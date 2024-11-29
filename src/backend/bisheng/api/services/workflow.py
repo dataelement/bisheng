@@ -15,6 +15,7 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 
 from bisheng.workflow.callback.base_callback import BaseCallback
+from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from fastapi.encoders import jsonable_encoder
@@ -159,6 +160,7 @@ class WorkFlowService(BaseService):
     @classmethod
     def run_once(cls,node_data:Dict[any,any]):
 
+        node_data = BaseNodeData(**node_data.get('data', {}))
         base_callback = BaseCallback()
         node = NodeFactory.instance_node(node_type=node_data["node_type"],
                                             node_data=node_data,
