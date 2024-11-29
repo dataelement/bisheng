@@ -171,6 +171,7 @@
     "saveSuccessful": "保存成功",
     "supportVersions": "支持分成多个版本分支，分别进行开发以及版本间的比较。",
     "guideQuestions50": "引导问题最多50个字符",
+    "chatHistoryMaxToken": "聊天历史最大 token 数必须是一个整数",
     "promptWords1000": "开场白最多为1000个字符",
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
@@ -531,7 +532,9 @@
     "apiKey": "API密钥",
     "azureEndpoint": "Azure端点",
     "apiVersion": "API版本",
-    "assistantAvatar": "助手头像"
+    "assistantAvatar": "助手头像",
+    "maxToken": "聊天历史最大token数",
+    "maxTokenTip": "通过此参数对聊天历史记录进行裁剪，控制发送给模型的历史消息数量，避免出现超长错误，因此不可大于模型支持的最大上下文长度"
   },
   "tools": {
     "addTool": "添加工具",

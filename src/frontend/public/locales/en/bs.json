@@ -173,6 +173,7 @@
     "saveSuccessful": "Save Successful",
     "supportVersions": "Support splitting into multiple version branches for development and comparison between versions.",
     "guideQuestions50": "Guide questions to a maximum of 50 characters",
+    "chatHistoryMaxToken": "The maximum number of tokens in chat history must be an integer",
     "promptWords1000": "The opening statement can be up to 1000 characters",
     "contactAdmin": "Please contact the administrator's online assistant",
     "deleteSure": "Are you sure you want to delete this tool?",
@@ -534,7 +535,9 @@
     "apiKey": "API Key",
     "azureEndpoint": "Azure Endpoint",
     "apiVersion": "API Version",
-    "assistantAvatar": "Assistant avatar"
+    "assistantAvatar": "Assistant avatar",
+    "maxToken": "Max Token",
+    "maxTokenTip": "The maximum number of tokens to generate in the completion. The token length of the input text is automatically calculated and cannot exceed the model's context length. Increasing the value will increase the cost"
   },
   "tools": {
     "addTool": "Add Tool",

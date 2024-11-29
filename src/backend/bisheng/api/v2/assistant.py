@@ -67,7 +67,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     agent = AssistantAgent(assistant_info, '')  # 初始化agent
     await agent.init_assistant()
     answer = await agent.run(question, chat_history)
-    answer = answer[0].content
+    answer = answer[-1].content
 
     openai_resp_id = uuid.uuid4().hex
     logger.info(f'act=assistant_chat_completions_over openai_resp_id={openai_resp_id}')

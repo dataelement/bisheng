@@ -278,6 +278,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.model_name = req.model_name
         assistant.temperature = req.temperature
         assistant.update_time = datetime.now()
+        assistant.max_token = req.max_token
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息

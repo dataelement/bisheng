@@ -8,7 +8,7 @@ from uuid import UUID
 
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
@@ -363,6 +363,32 @@ class AssistantAgent(AssistantUtils):
         except Exception as e:
             logger.error(f"record assistant history error: {str(e)}")
 
+    async def trim_messages(self, messages: List[Any]) -> List[Any]:
+        # 获取encoding
+        enc = self.cl100k_base()
+
+        def get_finally_message(new_messages: List[Any]) -> List[Any]:
+            # 修剪到只有一条记录则不再处理
+            if len(new_messages) == 1:
+                return new_messages
+            total_count = 0
+            for one in new_messages:
+                if isinstance(one, HumanMessage):
+                    total_count += len(enc.encode(one.content))
+                elif isinstance(one, AIMessage):
+                    total_count += len(enc.encode(one.content))
+                    if 'tool_calls' in one.additional_kwargs:
+                        total_count += len(
+                            enc.encode(json.dumps(one.additional_kwargs['tool_calls'], ensure_ascii=False))
+                        )
+                else:
+                    total_count += len(enc.encode(str(one.content)))
+            if total_count > self.assistant.max_token:
+                return get_finally_message(new_messages[1:])
+            return new_messages
+
+        return get_finally_message(messages)
+
     async def arun(self, query: str, chat_history: List = None, callback: Callbacks = None):
         await self.fake_callback(callback)
 
@@ -375,7 +401,7 @@ class AssistantAgent(AssistantUtils):
         async for one in self.agent.astream(inputs, config=RunnableConfig(callbacks=callback)):
             yield one
 
-    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None):
+    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None) -> List[BaseMessage]:
         """
         运行智能体对话
         """
@@ -387,17 +413,18 @@ class AssistantAgent(AssistantUtils):
         else:
             inputs = [HumanMessage(content=query)]
 
+        # trim message
+        inputs = await self.trim_messages(inputs)
+
         if self.current_agent_executor == 'ReAct':
             result = await self.react_run(inputs, callback)
         else:
             result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
-        # 包含了history，将history排除, 默认取最后一个为最终结果
-        res = [result[-1]]
 
         # 记录聊天历史
         await self.record_chat_history([one.to_json() for one in result])
 
-        return res
+        return result
 
     async def react_run(self, inputs: List, callback: Callbacks = None):
         """ react 模式的输入和执行 """
