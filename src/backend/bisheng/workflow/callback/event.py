@@ -36,6 +36,7 @@ class OutputMsgData(BaseModel):
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files', exclude=True)
     output_key: str = Field(..., description='Whether the message is stream')
+    source_documents: Optional[List[Any]] = Field([], description='Source documents')
 
 
 class OutputMsgInputData(OutputMsgData):
@@ -57,4 +58,4 @@ class StreamMsgData(BaseModel):
 
 
 class StreamMsgOverData(StreamMsgData):
-    pass
+    source_documents: Optional[List[Any]] = Field([], description='Source documents')

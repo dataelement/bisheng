@@ -5,7 +5,7 @@ from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.workflow.callback.event import OutputMsgData
+from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
@@ -81,8 +81,17 @@ class RagNode(BaseNode):
                         OutputMsgData(node_id=self.id,
                                       msg=result['result'],
                                       unique_id=unique_id,
-                                      output_key=output_key))
-            ret[output_key] = result
+                                      output_key=output_key,
+                                      source_documents=result['source_documents']))
+                else:
+                    # 说明有流式输出，则触发流式结束事件
+                    self.callback_manager.on_stream_over(StreamMsgOverData(
+                        node_id=self.id,
+                        msg=result['result'],
+                        unique_id=unique_id,
+                        source_documents=result['source_documents'],
+                    ))
+            ret[output_key] = result[retriever.output_key]
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:

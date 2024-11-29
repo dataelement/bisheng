@@ -28,6 +28,9 @@ class WorkflowClient(BaseClient):
                                            user_id=self.user_id)
 
     async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
+        if not self.chat_id:
+            return
+
         message = ChatMessageDao.insert_one(ChatMessage(**{
             'user_id': self.user_id,
             'chat_id': self.chat_id,
@@ -81,6 +84,8 @@ class WorkflowClient(BaseClient):
             # 保存用户输入到历史记录
             await self.save_chat_message(ChatResponse(message=node_info['message'],
                                                       category=node_info['category'],
+                                                      extra=node_info['extra'],
+                                                      source=node_info['source'],
                                                       is_bot=False,
                                                       type='end',
                                                       flow_id=self.client_id,

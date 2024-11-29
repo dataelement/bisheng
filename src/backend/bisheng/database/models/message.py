@@ -29,7 +29,7 @@ class MessageBase(SQLModelSerializable):
     message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
     extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
-    category: str = Field(index=False, description='消息类别， question等')
+    category: str = Field(index=False, max_length=32, description='消息类别， question等')
     flow_id: UUID = Field(index=True, description='对应的技能id')
     chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
     user_id: Optional[str] = Field(index=True, description='用户id')
