@@ -39,7 +39,9 @@ class WorkflowClient(BaseClient):
 
             'is_bot': chat_response.is_bot,
             'source': chat_response.source,
-            'message': json.dumps(chat_response.message, ensure_ascii=False),
+            'message': chat_response.message if isinstance(chat_response.message, str) else json.dumps(
+                chat_response.message, ensure_ascii=False
+            ),
             'extra': chat_response.extra,
             'category': chat_response.category,
         }))

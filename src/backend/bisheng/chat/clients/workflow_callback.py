@@ -146,14 +146,14 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_output_msg(self, data: OutputMsgData):
         print(f'output msg: {data}')
-        chat_response = ChatResponse(message=data.dict(),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='output_msg',
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
                                      files=data.files)
-        msg_id = self.save_chat_message(chat_response)
+        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
@@ -170,20 +170,20 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_stream_over(self, data: StreamMsgOverData):
         print(f'stream over: {data}')
-        chat_response = ChatResponse(message=data.dict(),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='stream_msg',
                                      extra='',
                                      type='end',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id)
-        msg_id = self.save_chat_message(chat_response)
+        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)
 
     def on_output_choose(self, data: OutputMsgChooseData):
         print(f'output choose: {data}')
-        chat_response = ChatResponse(message=data.dict(),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='output_choose_msg',
                                      extra='',
                                      type='over',
@@ -194,7 +194,7 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_output_input(self, data: OutputMsgInputData):
         print(f'output input: {data}')
-        chat_response = ChatResponse(message=data.dict(),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='output_input_msg',
                                      extra='',
                                      type='over',
