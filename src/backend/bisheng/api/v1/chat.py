@@ -365,11 +365,12 @@ def get_chatlist_list(*,
     flow_dict = {flow.id: flow for flow in db_flow}
     for i, message in enumerate(db_message):
         if message.flow_id in flow_dict:
+            temp_flow = flow_dict[message.flow_id]
             chat_list.append(
                 ChatList(flow_name=flow_dict[message.flow_id].name,
                          flow_description=flow_dict[message.flow_id].description,
                          flow_id=message.flow_id,
-                         flow_type='flow',
+                         flow_type='workflow' if temp_flow.flow_type == FlowType.WORKFLOW.value else 'flow',
                          chat_id=message.chat_id,
                          logo=flow_dict[message.flow_id].logo,
                          create_time=message.create_time,
@@ -421,7 +422,7 @@ def get_online_chat(*,
                                                    AssistantStatus.ONLINE.value,
                                                    tag_id,
                                                    page=search_page,
-                                                   limit=limit)
+                                                   limit=limit)chat.py
     all_assistant = all_assistant.data.get('data')
     flows = FlowService.get_all_flows(user,
                                       keyword,
