@@ -46,7 +46,7 @@ class GraphEngine:
         # init langgraph state graph
         self.graph_builder = StateGraph(TempState)
         self.graph = None
-        self.graph_config = {'configurable': {'thread_id': '1'}}
+        self.graph_config = {'configurable': {'thread_id': '1'}, 'recursion_limit': 50}
 
         self.status = WorkflowStatus.RUNNING.value
         self.reason = ''  # 失败原因
@@ -101,7 +101,7 @@ class GraphEngine:
             raise Exception('workflow must have at least one node')
 
         start_node = None
-        end_node = None
+        end_nodes = []
         interrupt_nodes = []
         # init nodes
         for node in nodes:
@@ -127,7 +127,7 @@ class GraphEngine:
             if node_instance.type == NodeType.START.value:
                 start_node = node_instance.id
             elif node_instance.type == NodeType.END.value:
-                end_node = node_instance.id
+                end_nodes.append(node_instance.id)
             elif node_instance.type == NodeType.INPUT.value:
                 # 需要中止接收用户输入的节点
                 interrupt_nodes.append(node_instance.id)
@@ -142,8 +142,9 @@ class GraphEngine:
         if not start_node:
             raise Exception('workflow must have start node')
         self.graph_builder.add_edge(START, start_node)
-        if end_node:
-            self.graph_builder.add_edge(end_node, END)
+        if end_nodes:
+            for end_node in end_nodes:
+                self.graph_builder.add_edge(end_node, END)
 
         # 将其他节点链接起来
         for node_id, node_instance in self.nodes_map.items():
@@ -152,6 +153,7 @@ class GraphEngine:
         # compile langgraph
         self.graph = self.graph_builder.compile(checkpointer=MemorySaver(),
                                                 interrupt_before=interrupt_nodes)
+        self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
         with open(f"./data/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
                   'wb') as f:
             f.write(self.graph.get_graph().draw_mermaid_png())

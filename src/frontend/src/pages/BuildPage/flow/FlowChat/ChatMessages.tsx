@@ -95,6 +95,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
         {
             messagesList.map((msg, index) => {
+                // output节点特殊msg
                 switch (msg.category) {
                     case 'user':
                         return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;

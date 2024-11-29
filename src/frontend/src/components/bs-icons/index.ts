@@ -7,7 +7,7 @@ export { DropDownIcon } from './down';
 export { EnIcon } from './en';
 export { FilterIcon } from './filter';
 export { FlagIcon } from './flag';
-export { AssistantIcon, FlowIcon, SkillIcon } from './flow';
+export { AssistantIcon, FlowIcon, SkillIcon, Skill2Icon, Flow2Icon } from './flow';
 export { FormIcon } from './form';
 export { GithubIcon } from './github';
 export { GoIcon } from './go';

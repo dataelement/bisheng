@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
+import Notification from "./Notification";
 
 const Header = ({ flow, onTabChange }) => {
     const { message } = useToast()
@@ -31,24 +32,39 @@ const Header = ({ flow, onTabChange }) => {
     console.log('flow :>> ', flow);
 
     const validateNodes = useNodeEvent(flow)
+    const addNotification = useFlowStore((state) => state.addNotification);
 
     const handleRunClick = () => {
         // 记录错误日志
         const errors = validateNodes()
-        if (errors.length) return message({
-            description: errors,
-            variant: 'warning'
-        })
+        if (errors.length) {
+            errors.map(el => addNotification({
+                type: 'warning',
+                title: '',
+                description: el
+            }))
+            return message({
+                description: errors,
+                variant: 'warning'
+            })
+        }
 
         testRef.current?.run(flow)
     }
 
     const handleOnlineClick = async () => {
         const errors = validateNodes()
-        if (errors.length) return message({
-            description: errors,
-            variant: 'warning'
-        })
+        if (errors.length) {
+            errors.map(el => addNotification({
+                type: 'warning',
+                title: '',
+                description: el
+            }))
+            return message({
+                description: errors,
+                variant: 'warning'
+            })
+        }
 
         // api请求
         const res = await captureAndAlertRequestErrorHoc(onlineWorkflow(flow, 2))
@@ -71,6 +87,7 @@ const Header = ({ flow, onTabChange }) => {
         // localStorage.setItem('flow_tmp', JSON.stringify(flow))
         const res = await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
             ...flow,
+            name: version.name,
             data: {
                 nodes: flow.nodes,
                 edges: flow.edges,
@@ -203,9 +220,7 @@ const Header = ({ flow, onTabChange }) => {
             </div>
             {/* Right Section with Options */}
             <div className="flex items-center gap-3">
-                {/* <Button size="icon" variant="outline" disabled className="bg-[#fff] h-8">
-                    <Bell size={16} />
-                </Button> */}
+                <Notification />
                 <Button variant="outline" size="sm" className="bg-[#fff] h-8" onClick={handleRunClick}>
                     <Play className="size-3.5 mr-1" />
                     运行
@@ -214,7 +229,8 @@ const Header = ({ flow, onTabChange }) => {
                     保存
                 </Button>
                 {
-                    version && <ActionButton
+                    // version && <ActionButton
+                    false && <ActionButton
                         size="sm"
                         className="px-6 flex gap-2 bg-[#fff]"
                         iconClassName="bg-[#fff]"

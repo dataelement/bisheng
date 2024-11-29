@@ -36,7 +36,7 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
     return (
         <div className="flex gap-1 items-center mb-1 hover-reveal">
             {/* key */}
-            <SelectVar nodeId={nodeId} itemKey={item.id} onSelect={(E, v) => {
+            <SelectVar className="max-w-32" nodeId={nodeId} itemKey={item.id} onSelect={(E, v) => {
                 onUpdateItem(index, { ...item, left_label: v.label, left_var: `${E.id}.${v.value}` })
             }}>
                 <div className={`${required && !item.left_label && 'border-red-500'} no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
@@ -70,37 +70,39 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                 </SelectContent>
             </Select>
             {/* type */}
-            <Select value={item.right_value_type} onValueChange={handleTypeChange}>
-                <SelectTrigger className="max-w-32 w-24 h-8">
-                    <SelectValue placeholder="请选择" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectGroup>
-                        <SelectItem value="quote">引用</SelectItem>
-                        <SelectItem value="input">输入</SelectItem>
-                    </SelectGroup>
-                </SelectContent>
-            </Select>
-            {/* value */}
-            {item.right_value_type === 'quote' ? <SelectVar
-                nodeId={nodeId}
-                itemKey={item.id}
-                onSelect={(E, v) => {
-                    onUpdateItem(index, { ...item, right_label: v.label, right_value: `${E.id}.${v.value}` })
-                }}>
-                <div className={`${required && !item.right_label && 'border-red-500'} no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
-                    <span className="flex items-center">
-                        {item.right_label}
-                    </span>
-                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-                </div>
-            </SelectVar>
-                : <Input
-                    placeholder={item.comparison_operation === 'regex' ? '输入正则表达式' : '输入值'}
-                    value={item.right_value}
-                    onChange={handleValueChange}
-                    className={`${required && !item.right_value && 'border-red-500'} h-8`} />}
-            {del && <Trash2 size={18} onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer hover-reveal-child" />}
+            {!['is_not_empty', 'is_empty'].includes(item.comparison_operation) && <>
+                <Select value={item.right_value_type} onValueChange={handleTypeChange}>
+                    <SelectTrigger className="max-w-32 w-24 h-8">
+                        <SelectValue placeholder="请选择" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                            <SelectItem value="quote">引用</SelectItem>
+                            <SelectItem value="input">输入</SelectItem>
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
+                {/* value */}
+                {item.right_value_type === 'quote' ? <SelectVar
+                    nodeId={nodeId}
+                    itemKey={item.id}
+                    onSelect={(E, v) => {
+                        onUpdateItem(index, { ...item, right_label: v.label, right_value: `${E.id}.${v.value}` })
+                    }}>
+                    <div className={`${required && !item.right_label && 'border-red-500'} no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
+                        <span className="flex items-center">
+                            {item.right_label}
+                        </span>
+                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                    </div>
+                </SelectVar>
+                    : <Input
+                        placeholder={item.comparison_operation === 'regex' ? '输入正则表达式' : '输入值'}
+                        value={item.right_value}
+                        onChange={handleValueChange}
+                        className={`${required && !item.right_value && 'border-red-500'} h-8`} />}
+                {del && <Trash2 size={18} onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer hover-reveal-child" />}
+            </>}
         </div>
     );
 };
@@ -174,14 +176,14 @@ export default function ConditionItem({ nodeId, data, onChange, onValidate }) {
                 return item.conditions.some(cds => {
                     if (!cds.left_label) return true
                     if (!cds.comparison_operation) return true
-                    if (!(cds.right_value || cds.right_label)) return true
+                    if (!(cds.right_value || cds.right_label) && !['is_not_empty', 'is_empty'].includes(cds.comparison_operation)) return true
                 })
             })
             if (res) return '条件分支不可为空'
             return false
         })
 
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return <div>

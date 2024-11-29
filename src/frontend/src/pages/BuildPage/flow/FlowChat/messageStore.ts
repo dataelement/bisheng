@@ -93,16 +93,16 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         console.log('change createWsMsg');
         set((state) => {
             let newChat = cloneDeep(state.messages);
-            const { category, flow_id, chat_id, message_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
+            const { category, flow_id, chat_id, message_id, files, is_bot,extra, liked, message, receiver, type, source, user_id } = data
             newChat.push({
                 category, flow_id, chat_id, message_id, files, is_bot,
-                message: typeof message === 'string' ? message : message.msg, receiver, source, user_id,
+                message, receiver, source, user_id,
                 liked: !!liked,
                 end: type === 'over',
                 sender: '',
                 node_id: message?.node_id || '',
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-                // extra,
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+                extra
             })
             return { messages: newChat }
         })
@@ -118,7 +118,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const newCurrentMessage = {
             ...currentMsg,
             message: currentMsg.message + data.message.msg,
-            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+            end: data.type === 'end'
         }
 
         messages[currentMessageIndex] = newCurrentMessage
@@ -152,7 +153,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             let newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
             if (type === 'end') {
-                return { messages: newChat.filter(msg => msg.message_id !== message.unique_id)}
+                return { messages: newChat.filter(msg => msg.message_id !== message.unique_id) }
             }
             newChat.push({
                 category, flow_id, chat_id, message_id: message.unique_id, files, is_bot,
@@ -165,6 +166,25 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 // extra,
             })
             return { messages: newChat }
+        })
+    },
+    async loadHistoryMsg(flowid, chatId, { appendHistory, lastMsg }) {
+        const res = await getChatHistory(flowid, chatId, 30, 0)
+        const msgs = handleHistoryMsg(res)
+        currentChatId = chatId
+        const hisMessages = appendHistory ? [] : msgs.reverse()
+        if (hisMessages.length) {
+            hisMessages.push({
+                ...bsMsgItem,
+                id: Math.random() * 1000000,
+                category: 'divider',
+                message: lastMsg,
+            })
+        }
+        set({
+            historyEnd: false,
+            messages: appendHistory ? msgs.reverse() : [],
+            hisMessages
         })
     },
 
@@ -189,25 +209,6 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
-    },
-    async loadHistoryMsg(flowid, chatId, { appendHistory, lastMsg }) {
-        const res = await getChatHistory(flowid, chatId, 30, 0)
-        const msgs = handleHistoryMsg(res)
-        currentChatId = chatId
-        const hisMessages = appendHistory ? [] : msgs.reverse()
-        if (hisMessages.length) {
-            hisMessages.push({
-                ...bsMsgItem,
-                id: Math.random() * 1000000,
-                category: 'divider',
-                message: lastMsg,
-            })
-        }
-        set({
-            historyEnd: false,
-            messages: appendHistory ? msgs.reverse() : [],
-            hisMessages
-        })
     },
     async loadMoreHistoryMsg(flowid, appendHistory) {
         if (get().running) return // 会话进行中禁止加载more历史

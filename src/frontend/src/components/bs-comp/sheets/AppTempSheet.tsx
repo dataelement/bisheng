@@ -7,11 +7,12 @@ import { useNavigate } from "react-router-dom";
 import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
+import { Flow2Icon, Skill2Icon } from "@/components/bs-icons";
 
 /** 应用模板选择 */
 export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
     const [open, setOpen] = useState(false)
-    const [type, setType] = useState<AppType>(AppType.ASSISTANT)
+    const [type, setType] = useState<AppType>(AppType.FLOW)
     const createDesc = useMemo(() => {
         const descs = {
             [AppType.ASSISTANT]: {
@@ -64,24 +65,24 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                     {/* type */}
                     <div className="mt-4">
                         <div
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mt-1 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
-                            <Workflow />
+                            <Flow2Icon />
                             <span>工作流</span>
                         </div>
                         <div
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.ASSISTANT)}
                         >
                             <Bot />
                             <span>助手</span>
                         </div>
                         <div
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mt-1 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.SKILL)}
                         >
-                            <Boxes />
+                            <Skill2Icon />
                             <span>技能</span>
                         </div>
                     </div>

@@ -137,6 +137,13 @@ export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', 
 }
 
 /**
+ * 复制知识库
+ */
+export async function copyLibDatabase(knowledge_id) {
+  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id });
+}
+
+/**
  * 获取知识库下文件列表
  */
 export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status }) {

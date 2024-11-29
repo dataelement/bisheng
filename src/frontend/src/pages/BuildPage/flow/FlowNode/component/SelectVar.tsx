@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
+import { cname } from "@/components/bs-ui/utils";
 
 const isMatch = (obj, expression) => {
     const fn = new Function('value', `return ${expression}`);
@@ -13,7 +14,7 @@ const isMatch = (obj, expression) => {
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
  */
-export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
+export default function SelectVar({ nodeId, itemKey, children, onSelect, className = '' }) {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
 
@@ -128,7 +129,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect }) {
     }, [open])
 
     return <Select open={open} onOpenChange={setOpen}>
-        <SelectTrigger showIcon={false} className={'group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0'}>
+        <SelectTrigger showIcon={false} className={cname('group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
         <SelectContent>

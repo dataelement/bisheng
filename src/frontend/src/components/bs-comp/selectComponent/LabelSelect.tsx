@@ -53,8 +53,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
     }
 
     const handleChecked = (id) => {
-        // TODO 增加工作流type
-        const type = resource.type === 'assist' ? 3 : 2
+        const type = resource.type === 5 ? 3 : resource.type === 1 ? 2 : 5
         setData(pre => {
             const newData = pre.map(d => d.value === id ? { ...d, selected: !d.selected } : d)
             const cur = newData.find(d => d.value === id)

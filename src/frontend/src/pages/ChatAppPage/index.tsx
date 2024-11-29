@@ -17,7 +17,6 @@ import HomePage from "./components/ChatHome";
 import ChatPanne from "./components/ChatPanne";
 
 export default function SkillChatPage() {
-
     const { t } = useTranslation()
     const [selectChat, setSelelctChat] = useState<any>({
         id: '', chatId: '', type: ''

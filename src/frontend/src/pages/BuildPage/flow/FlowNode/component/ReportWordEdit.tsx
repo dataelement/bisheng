@@ -49,7 +49,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
             <div ref={iframeRef} className="relative flex-1 border bg-accent">
                 <div className="absolute right-10 top-2 z-10">
                     <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => handleInset(`${E.id}.${v.value}`)}>
-                        <Button variant="black" className="h-8">插入变量 <ChevronDown size={14} /></Button>
+                        <Button className="h-8">插入变量 <ChevronDown size={14} /></Button>
                     </SelectVar>
                 </div>
                 <Word data={docx} workflow></Word>

@@ -17,8 +17,18 @@ interface Input {
     value: string
 }
 
-export const ResultText = ({ title, text }: { title: string, text: string }) => {
+export const ResultText = ({ title, value }: { title: string, value: any }) => {
     const [copyed, setCopied] = useState(false)
+    const [text, setText] = useState(() => {
+        if (typeof value === 'object') {
+            return JSON.stringify(value, null, 2)
+        } else if (Array.isArray(value)) {
+            return value.join('\n')
+        } else {
+            return value
+        }
+        return value
+    })
     const handleCopy = (e) => {
         e.stopPropagation()
 

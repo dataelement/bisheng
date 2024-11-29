@@ -15,7 +15,7 @@ export function autoNodeName(nodes: Node[], name: string): string {
     return newName;
 }
 
-// 节点初始化
+// 节点初始化,node中的变量动态替换id
 export function initNode(node) {
     const { id } = node;
 

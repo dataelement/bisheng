@@ -17,7 +17,7 @@ interface IProps<T> {
   /** id为''时，表示新建 */
   id?: number | string,
   logo?: string,
-  type: "skill" | "sheet" | "assist" | "setting", // 技能列表｜侧边弹窗列表
+  type: "skill" | "sheet" | "assistant" | "setting", // 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
@@ -170,7 +170,7 @@ export default function CardComponent<T>({
           url={logo}
           id={id}
         >
-          {type === 'skill' ? <SkillIcon /> : type === 'assist' ? <AssistantIcon /> : <FlowIcon />}
+          {type === 'skill' ? <SkillIcon /> : type === 'assistant' ? <AssistantIcon /> : <FlowIcon />}
         </TitleLogo>
         <div className="flex gap-1 items-center">
           {headSelecter}
@@ -200,11 +200,12 @@ export default function CardComponent<T>({
         {edit
           && <div className="hidden group-hover:flex">
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
-            {isAdmin && type !== 'assist' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            {isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>
         }
       </div>
+      {footer}
     </CardFooter>
   </Card>
 };

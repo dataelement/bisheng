@@ -53,7 +53,7 @@ const Log = ({ type, name, data }) => {
                         <X size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
                     </div>
                     <div className="">
-                        {data.map(item => <ResultText title={item.label} text={item.value} key={item.label} />)}
+                        {Object.keys(data).map(key => <ResultText title={key} value={data[key]} key={key} />)}
                     </div>
                 </div>
             )}

@@ -5,15 +5,14 @@ import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
-import { formatDate } from "@/util/utils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
 import { CirclePause } from "lucide-react";
-import { useMessageStore } from "./messageStore";
 import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
+import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
     const { toast } = useToast()
@@ -67,7 +66,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
         currentChatIdRef.current = chatId
         // changeChatedRef.current = true
         // setFormShow(false)
-        createWebSocket(chatId).then(() => {
+        createWebSocket().then(() => {
             // 切换会话默认发送一条空消息(action, input)
             const wsMsg = onBeforSend('init_data', {})
             sendWsMsg(wsMsg)
@@ -103,13 +102,17 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
         // continueRef.current = false
         const wsMsg = onBeforSend('input', {
             nodeId: inputNodeIdRef.current,
-            msg: value
+            msg: value,
+            category: "user",
+            extra: '',
+            message_id: '',
+            source: 0
         })
         // msg to store
         createSendMsg(value)
         // 锁定 input
         setInputLock({ locked: true, reason: '' })
-        await createWebSocket(chatId)
+        await createWebSocket()
         sendWsMsg(wsMsg)
 
         // 滚动聊天到底
@@ -122,12 +125,18 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
     const handleSendForm = async ([data, msg]) => {
         setInputForm(null)
         createSendMsg(msg)
-        await createWebSocket(chatId)
+        await createWebSocket()
         sendWsMsg({
             action: 'input',
             data: {
-                node_id: inputNodeIdRef.current,
-                data
+                [inputNodeIdRef.current]: {
+                    data,
+                    message: msg,
+                    message_id: '',
+                    category: 'user',
+                    extra: '',
+                    source: 0
+                }
             }
         })
     }
@@ -245,13 +254,19 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.filter(q => q))
+        } else if (data.category === 'stream_msg') {
+            streamWsMsg(data)
         }
+
         if (data.type === 'close') {
-            return insetSeparator('本轮会话已结束')
+            insetSeparator('本轮会话已结束')
+            // 重新开启
+            return createWebSocket().then(() => {
+                const wsMsg = onBeforSend('init_data', {})
+                sendWsMsg(wsMsg)
+            })
         } else if (data.type === 'over') {
             createWsMsg(data)
-        } else if (data.type === 'stream') {
-            streamWsMsg(data)
         }
         //  else if (data.type === 'stream') {
         //     updateCurrentMessage(data)
@@ -298,9 +313,10 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
     // 日志广播->nodes
     const sendNodeLogEvent = (data) => {
         const { node_id } = data.message
+        const isError = !!data.message.reason
         const event = new CustomEvent('nodeLogEvent', {
             detail: {
-                nodeId: node_id, action: data.type === 'start' ? 'loading' : 'success', data: []
+                nodeId: node_id, action: isError ? '' : data.type === 'start' ? 'loading' : 'success', data: isError ? { 'error': data.message.reason } : data.message.log_data
             }
         })
         window.dispatchEvent(event)
@@ -315,12 +331,16 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             if (send) handleSendClick()
         }
         const handleOutPutEvent = async (e) => {
-            const { nodeId, data } = e.detail
-            await createWebSocket(chatId)
+            const { nodeId, data, message } = e.detail
+            await createWebSocket()
             sendWsMsg({
                 action: 'input',
                 data: {
-                    [nodeId]: data
+                    [nodeId]: {
+                        data,
+                        message: JSON.stringify(message.message),
+                        message_id: message.message_id
+                    }
                 }
             })
         }

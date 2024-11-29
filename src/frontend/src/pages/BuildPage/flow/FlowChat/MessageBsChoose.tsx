@@ -40,6 +40,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
         const myEvent = new CustomEvent('outputMsgEvent', {
             detail: {
                 nodeId: data.message.node_id,
+                message: data,
                 data: {
                     [data.message.key]: obj.id
                 }
@@ -64,6 +65,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
         const myEvent = new CustomEvent('outputMsgEvent', {
             detail: {
                 nodeId: data.message.node_id,
+                message: data,
                 data: {
                     [data.message.key]: val
                 }
