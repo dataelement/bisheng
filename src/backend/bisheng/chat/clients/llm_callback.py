@@ -77,10 +77,3 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                               msg=msg,
                               unique_id=self.unique_id,
                               output_key=self.output_key))
-        if self.output_len > 0:
-            # 说明有流式输出，则触发流式结束事件
-            self.callback_manager.on_stream_over(StreamMsgOverData(
-                node_id=self.node_id,
-                msg=response.generations[0][0].text,
-                unique_id=self.unique_id
-            ))

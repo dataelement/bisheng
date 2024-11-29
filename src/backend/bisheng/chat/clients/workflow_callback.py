@@ -5,6 +5,7 @@ from contextvars import copy_context
 from typing import Any, Callable, Coroutine, List, cast
 
 from bisheng.api.v1.schemas import ChatResponse
+from bisheng.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import (GuideQuestionData, GuideWordData, NodeEndData,
@@ -57,12 +58,23 @@ class WorkflowWsCallback(BaseCallback):
                                  copy_context().run), _run_coros,
                             [self.websocket.send_json(chat_response.dict())]).result()
 
-    def save_chat_message(self, chat_response: ChatResponse) -> int | None:
+    def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | None:
         """  save chat message to database
         return message id
         """
         if not self.chat_id:
             return
+
+        # 判断溯源
+        if source_documents:
+            result = {}
+            extra = {}
+            if len(source_documents) == 1:
+                result = source_documents[0]
+            source, result = sync_judge_source(result, source_documents, self.chat_id, extra)
+            chat_response.source = source
+            chat_response.extra = extra
+
         message = ChatMessageDao.insert_one(ChatMessage(
             user_id=self.user_id,
             chat_id=self.chat_id,
@@ -75,6 +87,11 @@ class WorkflowWsCallback(BaseCallback):
             extra=chat_response.extra,
             category=chat_response.category,
         ))
+
+        # 如果是文档溯源，处理召回的chunk
+        if chat_response.source not in [0, 4]:
+            sync_process_source_document(source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
+
         return message.id
 
     def on_node_start(self, data: NodeStartData):

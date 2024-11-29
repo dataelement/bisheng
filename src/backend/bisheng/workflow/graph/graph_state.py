@@ -45,7 +45,6 @@ class GraphState(BaseModel):
         if node_id not in self.variables_pool:
             return None
 
-        # todo 某些特殊变量的处理 chat_history、source_document等
         if key == 'chat_history':
             return self.get_history_memory(count=count)
         return self.variables_pool[node_id].get(key)

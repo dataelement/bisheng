@@ -15,6 +15,8 @@ class OutputNode(BaseNode):
         self._minio_client = MinioClient()
         self._output_type = self.node_params['output_way']['type']
 
+        self._source_documents = []
+
         # 非选择型交互，则下个节点就是连线的target。选择型交互，需要根据用户输入来判断
         self._next_node_id = self.target_edges[0].target
 
@@ -37,6 +39,7 @@ class OutputNode(BaseNode):
         return self._next_node_id
 
     def _run(self, unique_id: str):
+        self._source_documents = []
         self.parse_output_msg()
         self.send_output_msg(unique_id)
         res = {}
@@ -68,7 +71,8 @@ class OutputNode(BaseNode):
             'node_id': self.id,
             'msg': self.node_params['output_msg']['msg'],
             'files': self.node_params['output_msg']['files'],
-            'output_key': ''
+            'output_key': '',
+            'source_documents': self._source_documents
         }
         # 需要交互则有group_params
         if self._output_type == 'input':
@@ -91,7 +95,10 @@ class OutputNode(BaseNode):
         if len(variables) > 0:
             var_map = {}
             for one in variables:
-                # todo: 引用qa知识库节点时，展示溯源情况
+                node_id = one.split('.')[0]
+                # 引用qa知识库节点时，展示溯源情况
+                if node_id.startswith('qa_retriever'):
+                    self._source_documents = self.graph_state.get_variable(node_id, '$retrieval_result$')
                 var_map[one] = self.graph_state.get_variable_by_str(one)
             msg = msg_template.format(var_map)
         return msg

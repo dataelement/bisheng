@@ -80,7 +80,7 @@ def extract_answer_keys(answer, llm):
     return keywords
 
 
-async def judge_source(result, source_document, chat_id, extra: Dict):
+def sync_judge_source(result, source_document, chat_id, extra: Dict):
     source = 0
     if isinstance(result, Document):
         # 返回的是Document
@@ -125,7 +125,11 @@ async def judge_source(result, source_document, chat_id, extra: Dict):
     return source, result
 
 
-async def process_source_document(source_document: List[Document], chat_id, message_id, answer):
+async def judge_source(result, source_document, chat_id, extra: Dict):
+    return sync_judge_source(result, source_document, chat_id, extra)
+
+
+def sync_process_source_document(source_document: List[Document], chat_id, message_id, answer):
     if not source_document:
         return
 
@@ -150,6 +154,10 @@ async def process_source_document(source_document: List[Document], chat_id, mess
         with session_getter() as db_session:
             db_session.add_all(batch_insert)
             db_session.commit()
+
+
+async def process_source_document(source_document: List[Document], chat_id, message_id, answer):
+    sync_process_source_document(source_document, chat_id, message_id, answer)
 
 
 # 将需要额外输入的节点数据，转为tweak
