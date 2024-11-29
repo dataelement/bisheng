@@ -11,29 +11,16 @@ type Actions = {
     // updateNode: (id: string, data: any) => void;
 }
 
-const useFlowStore = create<State & Actions>((set) => ({
-    flow:  null,
+const useFlowStore = create<State & Actions & { notifications: Notification[]; addNotification: (notification: Notification) => void; clearNotifications: () => void }>((set) => ({
+    flow: null,
+    notifications: [], // 消息队列
     setFlow: (newFlow) => set({ flow: newFlow }),
-    // upload flow by json
     uploadFlow(file?: File) {
-        // if (file) {
-        //   file.text().then((text) => {
-        //     let flow: FlowType = JSON.parse(text);
-        //     paste(
-        //       { nodes: flow.data.nodes, edges: flow.data.edges },
-        //       { x: 10, y: 10 },
-        //       true
-        //     );
-        //   });
-        // } else {
-        // create a file input
         const input = document.createElement("input");
         input.type = "file";
         input.accept = ".json";
         input.onchange = (e: Event) => {
-            if (
-                (e.target as HTMLInputElement).files[0].type === "application/json"
-            ) {
+            if ((e.target as HTMLInputElement).files[0].type === "application/json") {
                 const currentfile = (e.target as HTMLInputElement).files[0];
                 currentfile.text().then((text) => {
                     let flow = JSON.parse(text);
@@ -47,10 +34,25 @@ const useFlowStore = create<State & Actions>((set) => ({
                 });
             }
         };
-        // trigger the file input click event to open the file dialog
         input.click();
-    }
-    //   }
+    },
+    // 添加消息到队列
+    addNotification: (notification) =>
+        set((state) => ({
+            notifications: [...state.notifications, notification]
+        })),
+    // 清空消息队列
+    clearNotifications: () => set({ notifications: [] })
 }));
 
+type Notification = {
+    title: string;
+    description: string;
+    type: "success" | "error" | "info" | "warning"; // 消息类型
+};
+
+
 export default useFlowStore;
+
+
+

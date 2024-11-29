@@ -1,4 +1,4 @@
-import { CircleMinus, Eye, EyeOff } from "lucide-react"
+import { CircleMinus, CirclePlus, Eye, EyeOff } from "lucide-react"
 import * as React from "react"
 import { useState } from "react"
 import { SearchIcon } from "../../bs-icons/search"
@@ -221,7 +221,12 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                         // }}
                         ></Input>
                         <p className="text-sm text-red-500" style={{ display: 'none' }}></p>
-                        {index !== inputs.length - 1 && <CircleMinus
+                        {index === inputs.length - 1 ? <CirclePlus className="w-4 h-4 absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer"
+                            onClick={() => {
+                                const newInputs = [...inputs, { id: generateUUID(8), value: '' }]
+                                setInputs(newInputs);
+                                props.onChange(newInputs.map(input => input.value));
+                            }} /> : <CircleMinus
                             onClick={(e) => {
                                 if (e.target.previousSibling) {
                                     e.target.previousSibling.style.display = 'none';

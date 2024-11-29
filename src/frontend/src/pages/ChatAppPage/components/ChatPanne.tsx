@@ -2,6 +2,7 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { AssistantIcon } from "@/components/bs-icons";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -31,6 +32,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // console.log('data :>> ', flow);
     const build = useBuild()
     const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
+    const { loadHistoryMsg: loadFlowHistoryMsg } = useFlowMessageStore()
+    useMessageStore
     useEffect(() => {
         return destroy
     }, [])
@@ -63,6 +66,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setAssistant(null)
             setFlow(null)
             const _flow = await getFlowApi(id, version)
+            version === 'v1' ? loadFlowHistoryMsg(_flow.id, chatId, {
+                appendHistory,
+                lastMsg: t('chat.historicalMessages')
+            }) : clearMsgs()
             const { data, ...f } = _flow
             const { nodes, edges, viewport } = data
             setWorkflow({ ...f, nodes, edges, viewport })
@@ -129,7 +136,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const host = appConfig.websocketHost || ''
     let wsUrl = type === 'flow' ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
         type === 'assistant' ? `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}` :
-            `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${workflow?.id}?t=${token}`
+            `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${workflow?.id}?chat_id=${chatId}&t=${token}`
 
     if (customWsHost) {
         wsUrl = `${host}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`

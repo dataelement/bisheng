@@ -14,7 +14,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
 import { userContext } from "../../contexts/userContext";
-import { createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
+import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 // import PaginationComponent from "../../components/PaginationComponent";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -145,14 +145,18 @@ export default function KnowledgeFile() {
     const [modelNameMap, setModelNameMap] = useState({})
     const { message } = useToast()
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
+    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
     )
 
     // 复制中开启轮询
     useEffect(() => {
         const todos = datalist.reduce((prev, curr) => {
-            curr.copy && prev.push({ id: curr.id, name: curr.name })
+            if (curr.state === 1) {
+                prev.push({ id: curr.id, name: curr.name })
+            } else {
+                doing[curr.id] = true
+            }
             return prev
         }, [])
 
@@ -163,8 +167,6 @@ export default function KnowledgeFile() {
                     description: `${todo.name} 复制完成`
                 })
                 delete doing[todo.id]
-            } else {
-                doing[todo.id] = true
             }
         })
 
@@ -208,8 +210,8 @@ export default function KnowledgeFile() {
 
     // copy
     const handleCopy = (elem) => {
-        // 当前有文件正在解析，不可复制
-        // api 复制
+        captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id))
+
         reload()
     }
 
@@ -254,7 +256,7 @@ export default function KnowledgeFile() {
                                     window.libname = [el.name, el.description];
                                 }}>
                                     <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                    {(user.role === 'admin' || user.user_id === el.user_id) && el.id % 2 === 0 ? <Button variant="link" onClick={el => handleCopy(el)}>复制</Button> : <Button variant="link" disabled>复制中</Button>}
+                                    {(user.role === 'admin' || user.user_id === el.user_id) && el.state === 1 ? <Button variant="link" onClick={() => handleCopy(el)}>复制</Button> : <Button variant="link" disabled>复制中</Button>}
                                     {user.role === 'admin' || user.user_id === el.user_id ?
                                         <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-0">{t('delete')}</Button> :
                                         <Button variant="link" className=" text-gray-400 px-0">{t('delete')}</Button>

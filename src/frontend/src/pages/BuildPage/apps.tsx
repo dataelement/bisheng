@@ -27,6 +27,7 @@ import { useQueryLabels } from "./assistant";
 import CreateApp from "./CreateApp";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
+import { Badge } from "@/components/bs-ui/badge";
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -80,20 +81,26 @@ export default function apps() {
                 return res
             }))
         } else if (data.flow_type === 5) {
-            return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 1 : 0)).then(res => {
+            return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
                 if (res === null) {
-                    refreshData((item) => item.id === data.id, { status: checked ? 1 : 0 })
+                    refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
                 return res
             })
         } else if (data.flow_type === 10) {
             return captureAndAlertRequestErrorHoc(onlineWorkflow(data, checked ? 2 : 1)).then(res => {
                 if (res === null) {
-                    refreshData((item) => item.id === data.id, { status: checked ? 1 : 0 })
+                    refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
                 return res
             })
         }
+    }
+
+    const typeCnNames = {
+        1: t('build.skill'),
+        5: t('build.assistant'),
+        10: '工作流'
     }
 
     const handleDelete = (data) => {
@@ -224,10 +231,15 @@ export default function apps() {
                                         <LabelShow
                                             data={item}
                                             user={user}
-                                            type={'skill'} // TODO: 三类
+                                            type={item.flow_type} // TODO: 三类
                                             all={filteredOptions}
                                             onChange={refetchLabels}>
                                         </LabelShow>
+                                    }
+                                    footer={
+                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === 1 && 'bg-gray-950'} ${item.flow_type === 5 && 'bg-blue-500'}`}>
+                                            {typeCnNames[item.flow_type]}
+                                        </Badge>
                                     }
                                 ></CardComponent>
                             ))

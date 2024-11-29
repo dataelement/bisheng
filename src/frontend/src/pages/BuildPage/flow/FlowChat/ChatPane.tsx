@@ -9,7 +9,7 @@ export default function ChatPane({ chatId, flow, wsUrl = '' }: { chatId: string,
         changeChatId(chatId)
     }, [chatId])
 
-    const getMessage = (action, { nodeId, msg }) => {
+    const getMessage = (action, { nodeId, msg, category, extra, source, message_id }) => {
         if (action === 'getInputForm') {
             const node = flow.nodes.find(node => node.id === nodeId)
             if (node.data.tab.value === 'input') return null
@@ -40,7 +40,14 @@ export default function ChatPane({ chatId, flow, wsUrl = '' }: { chatId: string,
                 action,
                 data: {
                     [nodeId]: {
-                        [variable]: msg
+                        data: {
+                            [variable]: msg
+                        },
+                        message: msg,
+                        message_id,
+                        category, 
+                        extra,
+                        source
                     }
                 }
             }

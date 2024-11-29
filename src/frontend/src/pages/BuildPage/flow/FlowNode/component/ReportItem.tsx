@@ -1,5 +1,5 @@
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
@@ -53,11 +53,8 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
                     编辑报告模板
                 </Button>
             </DialogTrigger>
-            <DialogContent className="size-full lg:max-w-full ">
-                {/* <DialogHeader> </DialogHeader> */}
-                <DialogTitle className="flex items-center">
-                    <ReportWordEdit nodeId={nodeId} versionKey={value.key} onChange={handleChange} />
-                </DialogTitle>
+            <DialogContent className="size-full lg:max-w-full pt-9">
+                <ReportWordEdit nodeId={nodeId} versionKey={value.key} onChange={handleChange} />
             </DialogContent>
         </Dialog>
     </div>

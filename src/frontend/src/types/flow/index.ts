@@ -200,4 +200,5 @@ export interface WorkflowMessage {
   user_id: number;               // User identifier, integer type
   end: boolean;
   update_time: string;
+  extra?: string;
 }

@@ -69,8 +69,8 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
             <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
         </div>
         <SelectVar nodeId={nodeId} itemKey={data.key} onSelect={handleChange}>
-            <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
-                <div className="flex flex-wrap size-full overflow-y-auto">
+            <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex min-h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
+                <div className="flex flex-wrap size-full max-h-32 overflow-y-auto">
                     {value.length ? value.map(item => <Badge onPointerDown={(e) => e.stopPropagation()} key={item} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
                         {data.varZh[item]}
                         <X className="h-3 w-3" onClick={() => handleDelete(item)}></X>

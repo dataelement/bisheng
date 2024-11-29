@@ -41,9 +41,9 @@ export default function Assistants() {
     }
 
     const handleCheckedChange = (checked, data) => {
-        return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 1 : 0)).then(res => {
+        return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
             if (res === null) {
-                refreshData((item) => item.id === data.id, { status: checked ? 1 : 0 })
+                refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
             }
             return res
         })
