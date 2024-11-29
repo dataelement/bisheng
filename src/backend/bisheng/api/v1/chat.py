@@ -422,7 +422,7 @@ def get_online_chat(*,
                                                    AssistantStatus.ONLINE.value,
                                                    tag_id,
                                                    page=search_page,
-                                                   limit=limit)chat.py
+                                                   limit=limit)
     all_assistant = all_assistant.data.get('data')
     flows = FlowService.get_all_flows(user,
                                       keyword,
