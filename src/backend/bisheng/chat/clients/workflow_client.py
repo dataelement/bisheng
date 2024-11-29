@@ -47,6 +47,12 @@ class WorkflowClient(BaseClient):
         }))
         return message.id
 
+    async def update_chat_message(self, message_id: int, message: dict | str):
+        db_message = ChatMessageDao.get_message_by_id(message_id)
+        if db_message:
+            db_message.message = message if isinstance(message, str) else json.dumps(message)
+            ChatMessageDao.update_message_model(db_message)
+
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
         if message.get('action') == 'init_data':
@@ -84,15 +90,18 @@ class WorkflowClient(BaseClient):
         for node_id, node_info in data.items():
             user_input[node_id] = node_info['data']
             # 保存用户输入到历史记录
-            await self.save_chat_message(ChatResponse(message=node_info['message'],
-                                                      category=node_info['category'],
-                                                      extra=node_info['extra'],
-                                                      source=node_info['source'],
-                                                      is_bot=False,
-                                                      type='end',
-                                                      flow_id=self.client_id,
-                                                      chat_id=self.chat_id,
-                                                      user_id=self.user_id,))
+            if node_info.get('message_id'):
+                # 更新聊天消息
+                await self.update_chat_message(node_info['message_id'], node_info['message'])
+            else:
+                # 插入新的聊天消息
+                await self.save_chat_message(ChatResponse(message=node_info['message'],
+                                                          category='user',
+                                                          is_bot=False,
+                                                          type='end',
+                                                          flow_id=self.client_id,
+                                                          chat_id=self.chat_id,
+                                                          user_id=self.user_id))
         if not self.workflow:
             logger.warning('workflow is over')
             return
