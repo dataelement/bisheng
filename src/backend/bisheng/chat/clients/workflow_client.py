@@ -99,7 +99,7 @@ class WorkflowClient(BaseClient):
             else:
                 # 插入新的聊天消息
                 await self.save_chat_message(ChatResponse(message=node_info['message'],
-                                                          category='user',
+                                                          category='question',
                                                           is_bot=False,
                                                           type='end',
                                                           flow_id=self.client_id,
