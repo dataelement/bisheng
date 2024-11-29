@@ -66,8 +66,8 @@ def file_copy_celery(param: json) -> str:
     logger.info('file_copy_celery end')
     source_knowledge.state = 1
     target_knowledge.state = 1
-    KnowledgeDao.update(source_knowledge)
-    KnowledgeDao.update(target_knowledge)
+    KnowledgeDao.update_one(source_knowledge)
+    KnowledgeDao.update_one(target_knowledge)
     return 'copy task done'
 
 
@@ -82,7 +82,7 @@ def copy_normal(
     one_dict.pop('id')
     one_dict.pop('update_time')
     one_dict['user_id'] = op_user_id
-    one_dict['knowledge_id'] = target_knowledge.id
+    one_dict['knowledge_id'] = f'{target_knowledge.id}'
     one_dict['status'] = KnowledgeFileStatus.PROCESSING.value
 
     source_file_pdf = one.id
@@ -104,7 +104,7 @@ def copy_normal(
     knowledge_new.object_name = target_source_file
 
     target_file_pdf = f'{knowledge_new.id}'
-    minio_client.copy_object(source_file_pdf, target_file_pdf)
+    minio_client.copy_object(f'{source_file_pdf}', target_file_pdf)
 
     # copy vector
     try:
@@ -112,7 +112,7 @@ def copy_normal(
         knowledge_new.status = KnowledgeFileStatus.SUCCESS.value
         KnowledgeFileDao.update(knowledge_new)
     except Exception as e:
-        logger.error(e)
+        logger.error('source={} new={} e={}', one.id, knowledge_new.id, e)
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
 
@@ -124,7 +124,7 @@ def copy_qa(qa: QAKnowledge, source_knowledge: Knowledge, target_knowledge: Know
     one_dict.pop('create_time')
     one_dict.pop('update_time')
     one_dict['user_id'] = op_user_id
-    one_dict['knowledge_id'] = target_knowledge.id
+    one_dict['knowledge_id'] = f'{target_knowledge.id}'
     one_dict['status'] = KnowledgeFileStatus.PROCESSING.value
 
     qa_knowledge = QAKnowledge(**one_dict)
@@ -156,7 +156,7 @@ def copy_vector(
         output_fields=fields,
     )
     for data in source_data:
-        data['knowledge_id'] = str(target_knowledge.id)
+        data['knowledge_id'] = target_knowledge.id
         data['file_id'] = target_file_id
     milvus_db: Milvus = decide_vectorstores(target_knowledge.collection_name, 'Milvus', embedding)
     if milvus_db:
