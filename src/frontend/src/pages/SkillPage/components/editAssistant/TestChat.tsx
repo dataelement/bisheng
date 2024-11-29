@@ -6,7 +6,7 @@ import { useAssistantStore } from "@/store/assistantStore";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function TestChat({ assisId, guideQuestion }) {
+export default function TestChat({ assisId, guideQuestion, onClear }) {
     const token = localStorage.getItem("ws_token") || '';
     const wsUrl = `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assisId}?t=${token}`
 
@@ -54,6 +54,7 @@ export default function TestChat({ assisId, guideQuestion }) {
             guideWord=''
             wsUrl={wsUrl}
             onBeforSend={getWsParamData}
+            onClickClear={onClear}
         ></ChatComponent>
     </div>
 };
