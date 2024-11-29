@@ -1,16 +1,18 @@
 import json
 from typing import Dict
 
+from fastapi import Request, WebSocket
+from loguru import logger
+
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.clients.workflow_callback import WorkflowWsCallback
 from bisheng.chat.types import WorkType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
+from bisheng.settings import settings
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.workflow import Workflow
-from fastapi import Request, WebSocket
-from loguru import logger
 
 
 class WorkflowClient(BaseClient):
@@ -66,9 +68,10 @@ class WorkflowClient(BaseClient):
     async def init_workflow(self, workflow_data: dict):
         if self.workflow is not None:
             return
-        # todo max_steps and timeout 放到系统配置内
+        workflow_conf = settings.get_workflow_conf()
         await self.send_response('processing', 'begin', '')
-        self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, 50, 60,
+        self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, workflow_conf.max_steps,
+                                 workflow_conf.timeout,
                                  self.callback)
         logger.debug('init workflow over')
         # 运行workflow

@@ -82,6 +82,11 @@ class ObjectStore(BaseModel):
     minio: MinioConf = Field(default_factory=MinioConf, description="minio 配置")
 
 
+class WorkflowConf(BaseModel):
+    max_steps: int = Field(default=50, description="节点运行最大步数")
+    timeout: int = Field(default=720, description="节点超时时间（min）")
+
+
 class Settings(BaseModel):
     class Config:
         validate_assignment = True
@@ -125,6 +130,7 @@ class Settings(BaseModel):
     system_login_method: SystemLoginMethod = {}
     vector_stores: VectorStores = {}
     object_storage: ObjectStore = {}
+    workflow_conf: WorkflowConf = WorkflowConf()
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -219,6 +225,11 @@ class Settings(BaseModel):
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
         return tmp
+
+    def get_workflow_conf(self) -> WorkflowConf:
+        # 获取密码相关的配置项
+        all_config = self.get_all_config()
+        return WorkflowConf(**all_config.get('workflow', {}))
 
     def get_from_db(self, key: str):
         # 先获取所有的key
