@@ -82,7 +82,7 @@ def copy_normal(
     one_dict.pop('id')
     one_dict.pop('update_time')
     one_dict['user_id'] = op_user_id
-    one_dict['knowledge_id'] = f'{target_knowledge.id}'
+    one_dict['knowledge_id'] = target_knowledge.id
     one_dict['status'] = KnowledgeFileStatus.PROCESSING.value
 
     source_file_pdf = one.id
@@ -108,11 +108,16 @@ def copy_normal(
 
     # copy vector
     try:
-        copy_vector(source_knowledge, target_knowledge, one.id, knowledge_new.id)
-        knowledge_new.status = KnowledgeFileStatus.SUCCESS.value
+        if one.status == KnowledgeFileStatus.SUCCESS.value:
+            copy_vector(source_knowledge, target_knowledge, one.id, knowledge_new.id)
+            knowledge_new.status = KnowledgeFileStatus.SUCCESS.value
+        else:
+            knowledge_new.status = one.status
         KnowledgeFileDao.update(knowledge_new)
     except Exception as e:
+        logger.exception(e)
         logger.error('source={} new={} e={}', one.id, knowledge_new.id, e)
+        knowledge_new.remark = str(e)[:500]
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
 
@@ -124,7 +129,7 @@ def copy_qa(qa: QAKnowledge, source_knowledge: Knowledge, target_knowledge: Know
     one_dict.pop('create_time')
     one_dict.pop('update_time')
     one_dict['user_id'] = op_user_id
-    one_dict['knowledge_id'] = f'{target_knowledge.id}'
+    one_dict['knowledge_id'] = target_knowledge.id
     one_dict['status'] = KnowledgeFileStatus.PROCESSING.value
 
     qa_knowledge = QAKnowledge(**one_dict)
@@ -156,7 +161,7 @@ def copy_vector(
         output_fields=fields,
     )
     for data in source_data:
-        data['knowledge_id'] = target_knowledge.id
+        data['knowledge_id'] = str(target_knowledge.id)
         data['file_id'] = target_file_id
     milvus_db: Milvus = decide_vectorstores(target_knowledge.collection_name, 'Milvus', embedding)
     if milvus_db:
@@ -192,10 +197,10 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
     res_list = []
     ids = [str(uuid.uuid4()) for _ in li]
     requests = []
-    for i, text in enumerate(li):
-        text = li.pop('text')
-        li.pop('vector', '')  # es 不包含vector
-        metadata = li
+    for i, data in enumerate(li):
+        text = data.pop('text')
+        data.pop('vector', '')  # es 不包含vector
+        metadata = data
         request = {
             '_op_type': 'index',
             '_index': target.index_name,
