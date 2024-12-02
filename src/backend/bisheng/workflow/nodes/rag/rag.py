@@ -1,7 +1,7 @@
 from typing import List, Any
 
 from bisheng.api.services.llm import LLMService
-from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
+from bisheng.chat.clients.llm_callback import LLMRagNodeCallbackHandler
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -68,11 +68,12 @@ class RagNode(BaseNode):
         ret = {}
         for index, question in enumerate(user_questions):
             output_key = self.node_params['output_user_input'][index]['key']
-            llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
-                                                  unique_id=unique_id,
-                                                  node_id=self.id,
-                                                  output=self._output_user,
-                                                  output_key=output_key)
+            # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
+            llm_callback = LLMRagNodeCallbackHandler(callback=self.callback_manager,
+                                                     unique_id=unique_id,
+                                                     node_id=self.id,
+                                                     output=self._output_user,
+                                                     output_key=output_key)
 
             result = retriever._call({'query': question}, run_manager=llm_callback)
 
@@ -92,6 +93,7 @@ class RagNode(BaseNode):
                         msg=result['result'],
                         unique_id=unique_id,
                         source_documents=result['source_documents'],
+                        output_key=output_key,
                     ))
             ret[output_key] = result[retriever.output_key]
             self._source_documents[output_key] = result['source_documents']

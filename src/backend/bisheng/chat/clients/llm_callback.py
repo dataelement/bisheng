@@ -55,25 +55,40 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         # azure偶尔会返回一个None
         if token is None:
             return
+        if not self.output or not self.stream:
+            return
 
-        if self.output and self.stream:
-            self.output_len += len(token)  # 判断是否已经流输出完成
-            self.callback_manager.on_stream_msg(
-                StreamMsgData(node_id=self.node_id,
-                              msg=token,
-                              unique_id=self.unique_id))
+        self.output_len += len(token)  # 判断是否已经流输出完成
+        self.callback_manager.on_stream_msg(
+            StreamMsgData(node_id=self.node_id,
+                          msg=token,
+                          unique_id=self.unique_id,
+                          output_key=self.output_key))
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        if not self.output:
+            return
+        msg = response.generations[0][0].text
+        if not msg:
+            logger.warning('LLM output is empty')
+            return
 
-        if self.output_len == 0 and self.output and self.stream:
-            # 需要输出，缺没有流输出，则补一条。命中缓存的情况下会出现这种情况
-            msg = response.generations[0][0].text
-            if not msg:
-                logger.warning('LLM output is empty')
-                return
-            self.output += len(msg)
-            self.callback_manager.on_output_msg(
-                OutputMsgData(node_id=self.node_id,
-                              msg=msg,
-                              unique_id=self.unique_id,
-                              output_key=self.output_key))
+        if self.stream and self.output_len > 0:
+            # 流式输出结束需要返回一个流式结束事件
+            self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.node_id,
+                                                                   msg=msg,
+                                                                   unique_id=self.unique_id,
+                                                                   output_key=self.output_key))
+            return
+
+        # 需要输出，但是没有执行流输出，则补一条。命中缓存的情况下会出现这种情况。需要输出的情况下也这样处理
+        self.callback_manager.on_output_msg(
+            OutputMsgData(node_id=self.node_id,
+                          msg=msg,
+                          unique_id=self.unique_id,
+                          output_key=self.output_key))
+
+
+class LLMRagNodeCallbackHandler(LLMNodeCallbackHandler):
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        pass

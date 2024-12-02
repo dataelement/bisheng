@@ -55,6 +55,7 @@ class StreamMsgData(BaseModel):
     unique_id: str = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     msg: str = Field('', description='Stream msg')
+    output_key: str = Field(..., description='Whether the message is stream')
 
 
 class StreamMsgOverData(StreamMsgData):
