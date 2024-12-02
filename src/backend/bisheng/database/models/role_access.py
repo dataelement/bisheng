@@ -70,6 +70,13 @@ class RoleAccessDao(RoleAccessBase):
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
 
     @classmethod
+    def get_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
+        with session_getter() as session:
+            if access_type:
+                return session.exec(
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
+                                             RoleAccess.type.in_([x.value for x in access_type]))).all()
+    @classmethod
     def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
         with session_getter() as session:
             return session.exec(select(RoleAccess).filter(

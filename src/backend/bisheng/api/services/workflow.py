@@ -63,13 +63,14 @@ class WorkFlowService(BaseService):
                 if flow_type == FlowType.ASSISTANT.value:
                     fdata = []
                     ftotal = 0
-                ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
+                if not assistant_ids:
+                    ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             data = fdata + ares
             total = ftotal + atotal
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW,AccessType.WORK_FLOW])
             a_role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
             flow_id_extra = []
             assistant_ids_extra = []
@@ -123,7 +124,7 @@ class WorkFlowService(BaseService):
             flow_group_dict[one.third_id].append(one.group_id)
 
         # 获取技能关联的tag
-        flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.FLOW, flow_ids)
+        flow_tags = TagDao.get_tags_by_resource_batch([ResourceTypeEnum.FLOW,ResourceTypeEnum.WORK_FLOW], flow_ids)
 
         # 查询助手所属的分组
         assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
