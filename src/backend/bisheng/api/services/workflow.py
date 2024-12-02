@@ -42,7 +42,7 @@ class WorkFlowService(BaseService):
             flow_ids = [UUID(one.resource_id) for one in ret]
             assistant_ids = [UUID(one.resource_id) for one in assistant]
             if not assistant:
-                assistant_ids = assistant_ids.extend(flow_ids)
+                assistant_ids.extend(flow_ids)
             if not assistant_ids and not ret:
                 return resp_200(data={
                     'data': [],
