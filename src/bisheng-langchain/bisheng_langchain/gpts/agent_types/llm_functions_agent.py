@@ -146,7 +146,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    app = workflow.compile()
+    app = workflow.compile(checkpoint=False)
     if interrupt_before_action:
         app.interrupt = ['action:inbox']
     return app
