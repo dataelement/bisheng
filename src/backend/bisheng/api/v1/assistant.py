@@ -87,7 +87,7 @@ async def update_status(*,
 
 
 # 自动优化prompt和工具选择
-@router.post('/auto', response_class=StreamingResponse)
+@router.get('/auto', response_class=StreamingResponse)
 async def auto_update_assistant(*,
                                 assistant_id: UUID = Body(description='助手唯一ID'),
                                 prompt: str = Body(description='用户填写的提示词')):
