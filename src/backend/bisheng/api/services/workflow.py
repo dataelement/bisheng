@@ -43,7 +43,7 @@ class WorkFlowService(BaseService):
             ret = ret + assistant
             flow_ids = [UUID(one.resource_id) for one in ret]
             assistant_ids = [UUID(one.resource_id) for one in assistant]
-            if not assistant_ids:
+            if not assistant_ids and not ret:
                 return resp_200(data={
                     'data': [],
                     'total': 0
