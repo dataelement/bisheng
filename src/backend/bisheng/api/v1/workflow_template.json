@@ -63,7 +63,7 @@
   },
   {
     "id": "input_xxx",
-    "name": "",
+    "name": "输入",
     "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
     "type": "input",
     "tab": {
@@ -75,7 +75,7 @@
           "help": "接收用户从对话框输入的内容。!(input)"
         },
         {
-          "label": "输入",
+          "label": "表单输入",
           "key": "form",
           "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。!(form)"
         }
@@ -83,12 +83,12 @@
     },
     "group_params": [
       {
-        "name": "输入",
+        "name": "",
         "params": [
           {
             "key": "user_input",
             "global": "key",
-            "label": "用户输入的内容",
+            "label": "用户输入内容",
             "type": "var",
             "tab": "input"
           },
@@ -383,7 +383,7 @@
             }
           },
           {
-            "key": "output_way",
+            "key": "output_result",
             "label": "交互类型",
             "global": "value.type=input",
             "type": "output_form",
