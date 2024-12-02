@@ -156,6 +156,13 @@ class TagDao(Tag):
             return session.exec(statement).all()
 
     @classmethod
+    def get_resources_by_tags_batch(cls, tag_ids: List[int], resource_type: List[ResourceTypeEnum]) -> List[TagLink]:
+        """ 查询标签下的所有资源 """
+
+        statement = select(TagLink).where(TagLink.tag_id.in_(tag_ids), TagLink.resource_type.in_([x.value for x in resource_type]) )
+        with session_getter() as session:
+            return session.exec(statement).all()
+    @classmethod
     def insert_tag_link(cls, tag_link: TagLink) -> TagLink:
         """ 插入标签关联数据 """
         with session_getter() as session:

@@ -36,9 +36,7 @@ class WorkFlowService(BaseService):
         flow_ids = []
         assistant_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
-            ret1 = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.WORK_FLOW)
-            ret = ret + ret1
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW])
             assistant = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
             ret = ret + assistant
             flow_ids = [UUID(one.resource_id) for one in ret]
@@ -63,7 +61,7 @@ class WorkFlowService(BaseService):
                 if flow_type == FlowType.ASSISTANT.value:
                     fdata = []
                     ftotal = 0
-                if not assistant_ids:
+                if assistant_ids:
                     ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             data = fdata + ares
             total = ftotal + atotal
