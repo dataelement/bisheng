@@ -71,6 +71,14 @@ class GraphState(BaseModel):
 
         return variable_val
 
+    def set_variable_by_str(self, contact_key: str, value: Any):
+        tmp_list = contact_key.split('.', 1)
+        node_id = tmp_list[0]
+        var_key = tmp_list[1]
+        if var_key.find('#') != -1:
+            var_key, variable_val_index = var_key.split('#')
+        self.set_variable(node_id, var_key, value)
+
     def get_all_variables(self) -> Dict[str, Any]:
         """ 获取所有的变量，key为node_id.key的格式 """
         ret = {}
