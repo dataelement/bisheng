@@ -45,7 +45,7 @@ class QARetrieverNode(BaseNode):
         if result['result']:
             result_str = json.loads(result['result'][0].metadata['extra'])['answer']
         else:
-            result_str = 'None'
+            result_str = ''
 
         # 存检索结果的源文档，key左右加上$作为来源文档key去查询
         self.graph_state.set_variable(self.id, '$retrieval_result$', result['result'])
