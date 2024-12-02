@@ -112,6 +112,7 @@ class BaseHostChatLLM(BaseChatModel):
     model_kwargs: Optional[Dict[str, Any]] = Field(default_factory=dict)
     """Holds any model parameters valid for `create` call not explicitly specified."""
     host_base_url: Optional[str] = None
+    is_ssl: Optional[bool] = False
 
     headers: Optional[Dict[str, str]] = Field(default_factory=dict)
 
@@ -170,7 +171,13 @@ class BaseHostChatLLM(BaseChatModel):
                 headers = values['headers']
             else:
                 headers = {'Content-Type': 'application/json'}
-            values['client'] = Requests(headers=headers, request_timeout=values['request_timeout'])
+            if cls.is_ssl and "https" in values['host_base_url']:
+                import aiohttp
+                values['client'] = Requests(headers=headers,
+                                            aiosession=aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)),
+                                            request_timeout=values['request_timeout'])
+            else:
+                values['client'] = Requests(headers=headers, request_timeout=values['request_timeout'])
         except AttributeError:
             raise ValueError('Try upgrading it with `pip install --upgrade requests`.')
         return values
