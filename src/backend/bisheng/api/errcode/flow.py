@@ -26,3 +26,7 @@ class FlowOnlineEditError(BaseErrorCode):
     Code: int = 10521
     Msg: str = '技能已上线，不可编辑'
 
+
+class FlowTemplateNameError(BaseErrorCode):
+    Code: int = 10530
+    Msg: str = '模板名称已存在'

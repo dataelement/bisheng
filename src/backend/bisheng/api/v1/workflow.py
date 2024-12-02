@@ -7,7 +7,7 @@ from bisheng.api.v1.skillcenter import ORDER_GAP
 from bisheng.database.models.template import Template, TemplateCreate, TemplateRead
 from sqlmodel import select
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError
+from bisheng.api.errcode.flow import FlowOnlineEditError, FlowTemplateNameError
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
@@ -292,7 +292,7 @@ def create_template(*, template: TemplateCreate):
         name_repeat = session.exec(
             select(Template).where(Template.name == db_template.name)).first()
     if name_repeat:
-        raise HTTPException(status_code=500, detail='Repeat name, please choose another name')
+        raise FlowTemplateNameError.http_exception()
     # 增加 order_num  x,x+65535
     with session_getter() as session:
         max_order = session.exec(select(Template).order_by(

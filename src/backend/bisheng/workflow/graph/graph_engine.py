@@ -154,6 +154,7 @@ class GraphEngine:
         self.graph = self.graph_builder.compile(checkpointer=MemorySaver(),
                                                 interrupt_before=interrupt_nodes)
         self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
+
         with open(f"./data/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
                   'wb') as f:
             f.write(self.graph.get_graph().draw_mermaid_png())

@@ -13,7 +13,7 @@ class OutputNode(BaseNode):
 
         # minio
         self._minio_client = MinioClient()
-        self._output_type = self.node_params['output_way']['type']
+        self._output_type = self.node_params['output_result']['type']
 
         self._source_documents = []
 
@@ -22,8 +22,8 @@ class OutputNode(BaseNode):
 
     def handle_input(self, user_input: dict) -> Any:
         # 需要存入state，
-        self.node_params['output_way']['value'] = user_input['output_way']
-        self.graph_state.set_variable(self.id, 'output_way', user_input['output_way'])
+        self.node_params['output_result']['value'] = user_input['output_result']
+        self.graph_state.set_variable(self.id, 'output_result', user_input['output_result'])
 
     def get_input_schema(self) -> Any:
         # 说明不需要交互
@@ -35,7 +35,7 @@ class OutputNode(BaseNode):
     def route_node(self, state: dict) -> str:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
-            return self.get_next_node_id(self.node_params['output_way']['value'])
+            return self.get_next_node_id(self.node_params['output_result']['value'])
         return self._next_node_id
 
     def _run(self, unique_id: str):
@@ -43,13 +43,13 @@ class OutputNode(BaseNode):
         self.parse_output_msg()
         self.send_output_msg(unique_id)
         res = {}
-        res['output_way'] = self.node_params['output_way']['value']
+        res['output_result'] = self.node_params['output_result']['value']
         return res
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         return {
             'output_msg': self.node_params['output_msg']['msg'],
-            'output_way': self.node_params['output_way']['value']
+            'output_result': self.node_params['output_result']['value']
         }
 
     def parse_output_msg(self):
@@ -76,13 +76,13 @@ class OutputNode(BaseNode):
         }
         # 需要交互则有group_params
         if self._output_type == 'input':
-            msg_params['key'] = 'output_way'
+            msg_params['key'] = 'output_result'
             msg_params['input_msg'] = self.parse_template_msg(
-                self.node_params['output_way']['value'])
+                self.node_params['output_result']['value'])
             self.callback_manager.on_output_input(data=OutputMsgInputData(**msg_params))
         elif self._output_type == 'choose':
-            msg_params['key'] = 'output_way'
-            msg_params['options'] = self.node_data.get_variable_info('output_way').options
+            msg_params['key'] = 'output_result'
+            msg_params['options'] = self.node_data.get_variable_info('output_result').options
             self.callback_manager.on_output_choose(data=OutputMsgChooseData(**msg_params))
         else:
             self.graph_state.save_context(content=self.node_params['output_msg']['msg'],
