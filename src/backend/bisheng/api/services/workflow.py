@@ -1,5 +1,9 @@
+import json
 from typing import Dict, List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
+
+from langchain.memory import ConversationBufferWindowMemory
+
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
@@ -13,18 +17,24 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 
+from bisheng.workflow.callback.base_callback import BaseCallback
+from bisheng.workflow.common.node import BaseNodeData
+from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.nodes.node_manage import NodeFactory
 from fastapi.encoders import jsonable_encoder
+
 
 class WorkFlowService(BaseService):
 
     @classmethod
-    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],page: int = 1,
+    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
+                      page: int = 1,
                       page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
         """
         获取所有技能
         """
         flow_ids = []
-        assistant_ids  = []
+        assistant_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
             assistant = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
@@ -37,14 +47,14 @@ class WorkFlowService(BaseService):
                     'total': 0
                 })
 
-        half_page = int(page_size/2)
+        half_page = int(page_size / 2)
         if flow_type:
             half_page = page_size
 
         # 获取用户可见的技能列表
         if user.is_admin():
-            fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page,flow_type)
-            ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids,flow_type)
+            fdata = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, half_page, flow_type)
+            ftotal = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids, flow_type)
             ares = []
             atotal = 0
             if not flow_type or flow_type == FlowType.ASSISTANT.value:
@@ -52,7 +62,7 @@ class WorkFlowService(BaseService):
                     fdata = []
                     ftotal = 0
                 ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
-            data = fdata + ares 
+            data = fdata + ares
             total = ftotal + atotal
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
@@ -63,8 +73,8 @@ class WorkFlowService(BaseService):
             assistant_ids_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, half_page,flow_type)
-            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids,flow_type)
+            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, half_page, flow_type)
+            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids, flow_type)
             if a_role_access:
                 assistant_ids_extra = [UUID(access.third_id).hex for access in a_role_access]
             a_res = []
@@ -72,18 +82,18 @@ class WorkFlowService(BaseService):
             if not flow_type or flow_type == FlowType.ASSISTANT.value:
                 if flow_type == FlowType.ASSISTANT.value:
                     data = []
-                    total= 0
-                a_res, a_total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, half_page,assistant_ids)
+                    total = 0
+                a_res, a_total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page,
+                                                             half_page, assistant_ids)
             data = data + a_res
             total = total + a_total
-
 
         # 获取技能列表对应的用户信息和版本信息
         # 技能ID列表
         flow_ids = []
         # 技能创建用户的ID列表
         user_ids = []
-        assistant_ids =[]
+        assistant_ids = []
         for one in data:
             if hasattr(one, "flow_type"):
                 flow_ids.append(one.id.hex)
@@ -151,3 +161,26 @@ class WorkFlowService(BaseService):
             "data": res,
             "total": total
         })
+
+    @classmethod
+    def run_once(cls, login_user: UserPayload,  node_input: Dict[str, any], node_data: Dict[any, any]):
+
+        node_data = BaseNodeData(**node_data.get('data', {}))
+        base_callback = BaseCallback()
+        graph_state = GraphState()
+        graph_state.history_memory = ConversationBufferWindowMemory(k=10)
+        for key, val in node_input.items():
+            graph_state.set_variable_by_str(key, val)
+        node = NodeFactory.instance_node(node_type=node_data.type,
+                                         node_data=node_data,
+                                         user_id=login_user.user_id,
+                                         workflow_id='tmp_workflow_single_node',
+                                         graph_state=graph_state,
+                                         target_edges=None,
+                                         max_steps=233,
+                                         callback=base_callback)
+
+
+        result = node._run(uuid4().hex)
+        print(result)
+        return result

@@ -73,7 +73,7 @@ class WorkflowWsCallback(BaseCallback):
                 result = source_documents[0]
             source, result = sync_judge_source(result, source_documents, self.chat_id, extra)
             chat_response.source = source
-            chat_response.extra = extra
+            chat_response.extra = json.dumps(extra, ensure_ascii=False)
 
         message = ChatMessageDao.insert_one(ChatMessage(
             user_id=self.user_id,

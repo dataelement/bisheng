@@ -1,13 +1,13 @@
-knowledges:  # 知识库相关配置
+knowledges: # 知识库相关配置
   unstructured_api_url: ""  # 非必填，若要开启溯源能力则必填。使用毕昇官网提供的测试服务，可以填入地址：https://bisheng.dataelem.com/api/v1/etl4llm/predict，如果在私有环境部署了bisheng-unstructured服务，可以填入地址：http://ip:port/v1/etl4llm/predict。注意：添加地址后，需要手动刷新页面后在知识库中上传文档。
 
 llm_request:
-# 控制技能 LLM 组件模型访问的超时配置, 以下是默认值
+  # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值
   request_timeout: 600
   max_retries: 1
 
 default_operator:
-# 使用免登录链接的方式需要配置，因为免登录链接相当于不知道用户信息，我们系统会自动把这些行为记录到某个用户头上，这里用来配置该用户的id
+  # 使用免登录链接的方式需要配置，因为免登录链接相当于不知道用户信息，我们系统会自动把这些行为记录到某个用户头上，这里用来配置该用户的id
   user: 1
   enable_guest_access: true # 免登录链接是否可访问
 
@@ -21,11 +21,11 @@ password_conf:
   max_error_times: 0
 
 system_login_method:
-     # 是否允许多点登录
-    allow_multi_login: true
-    # sso系统登录配置（毕昇商业扩展套件功能，开源版无需配置）
-    gateway_login: false # 是否开启sso登录
-    admin_username: admin # 从 SSO/LDAP 注册的管理员用户名
+  # 是否允许多点登录
+  allow_multi_login: true
+  # sso系统登录配置（毕昇商业扩展套件功能，开源版无需配置）
+  gateway_login: false # 是否开启sso登录
+  admin_username: admin # 从 SSO/LDAP 注册的管理员用户名
 
 # 登陆页面是否需要输入验证码，可设置为True或False
 use_captcha: True
@@ -44,3 +44,9 @@ env:
   show_github_and_help: true
   # 是否开启注册
   enable_registration: true
+
+workflow:
+  # 节点运行最大步数
+  max_steps: 50
+  # 等待用户输入的超时时间，单位分钟
+  timeout: 720

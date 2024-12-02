@@ -46,7 +46,6 @@ class ToolNode(BaseNode):
         if len(variables) > 0:
             var_map = {}
             for one in variables:
-                # todo: 引用qa知识库节点时，展示溯源情况
                 var_map[one] = self.graph_state.get_variable_by_str(one)
             msg = msg_template.format(var_map)
         return msg

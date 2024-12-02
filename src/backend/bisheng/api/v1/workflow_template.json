@@ -226,8 +226,7 @@
             "label": "系统提示词",
             "type": "var_textarea",
             "test": "input",
-            "value": "",
-            "required": true
+            "value": ""
           },
           {
             "key": "user_prompt",

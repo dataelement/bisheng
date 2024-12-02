@@ -44,6 +44,7 @@ class RagNode(BaseNode):
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
+        self._source_documents = {}
 
         self._milvus = None
         self._es = None
@@ -52,6 +53,7 @@ class RagNode(BaseNode):
         self.init_qa_prompt()
         self.init_milvus()
         self.init_es()
+        self._source_documents = {}
 
         retriever = BishengRetrievalQA.from_llm(
             llm=self._llm,
@@ -92,14 +94,15 @@ class RagNode(BaseNode):
                         source_documents=result['source_documents'],
                     ))
             ret[output_key] = result[retriever.output_key]
+            self._source_documents[output_key] = result['source_documents']
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         output_key = []
         source_documents = []
         for key, val in result.items():
-            output_key.append(val['result'])
-            source_documents.append(val['source_documents'])
+            output_key.append(val)
+            source_documents.append(self._source_documents[key])
         return {
             'user_question': self.init_user_question(),
             'output_key': output_key,
