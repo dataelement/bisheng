@@ -157,7 +157,10 @@ class WorkFlowService(BaseService):
                 simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
                 simple_assistant.tags = a_tags.get(one.id.hex, [])
                 simple_assistant.flow_type = 5
-                res.append(simple_assistant)
+                res.append(jsonable_encoder(simple_assistant))
+
+        # 重新按照时间排序
+        res.sort(key=lambda x: x['update_time'], reverse=True)
 
         return resp_200(data={
             "data": res,

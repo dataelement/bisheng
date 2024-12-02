@@ -257,19 +257,16 @@ async def update_flow(*,
 
 @router.get('/list', status_code=200)
 def read_flows(*,
+               login_user: UserPayload = Depends(get_login_user),
                name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
                tag_id: int = Query(default=None, description='标签ID'),
                flow_type: int = Query(default=None, description='类型 1 flow 5 assitant 10 workflow '),
                page_size: int = Query(default=10, description='每页数量'),
                page_num: int = Query(default=1, description='页数'),
-               status: int = None,
-               Authorize: AuthJWT = Depends()):
+               status: int = None):
     """Read all flows."""
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    user = UserPayload(**payload)
     try:
-        return WorkFlowService.get_all_flows(user, name, status, tag_id, flow_type, page_num, page_size)
+        return WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
