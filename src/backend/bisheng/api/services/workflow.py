@@ -63,7 +63,7 @@ class WorkFlowService(BaseService):
                 if flow_type == FlowType.ASSISTANT.value:
                     fdata = []
                     ftotal = 0
-                    ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
+                ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             data = fdata + ares
             total = ftotal + atotal
         else:
