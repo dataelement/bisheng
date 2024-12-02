@@ -62,6 +62,8 @@ class WorkflowClient(BaseClient):
             await self.init_workflow(message.get('data'))
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
+        elif message.get('action') == 'stop':
+            await self.stop_handle_message(message)
         else:
             logger.warning('not support action: %s', message.get('action'))
 
@@ -69,10 +71,10 @@ class WorkflowClient(BaseClient):
         if self.workflow is not None:
             return
         workflow_conf = settings.get_workflow_conf()
-        await self.send_response('processing', 'begin', '')
         self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, workflow_conf.max_steps,
                                  workflow_conf.timeout,
                                  self.callback)
+        await self.send_response('processing', 'begin', '')
         logger.debug('init workflow over')
         # 运行workflow
         await self.workflow_run()
