@@ -37,6 +37,8 @@ class WorkFlowService(BaseService):
         assistant_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
+            ret1 = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.WORK_FLOW)
+            ret = ret + ret1
             assistant = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
             ret = ret + assistant
             flow_ids = [UUID(one.resource_id) for one in ret]
