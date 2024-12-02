@@ -41,6 +41,7 @@ interface BaseProps<T> {
     placeholder?: string;
     searchPlaceholder?: string;
     tabs?: React.ReactNode;
+    hideSearch?: boolean;
     /** 锁定不可修改的值 */
     lockedValues?: string[];
     close?: boolean;
@@ -80,6 +81,7 @@ const MultiSelect = ({
     searchPlaceholder = '',
     lockedValues = [],
     tabs = null,
+    hideSearch = false,
     onSearch,
     onLoad,
     onScrollLoad,
@@ -245,7 +247,7 @@ const MultiSelect = ({
             headNode={
                 <div className="p-2">
                     {tabs}
-                    <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
+                    {!hideSearch && <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />}
                 </div>
             }
             footerNode={children}

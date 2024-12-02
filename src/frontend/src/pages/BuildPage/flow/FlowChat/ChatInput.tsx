@@ -103,7 +103,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
         const wsMsg = onBeforSend('input', {
             nodeId: inputNodeIdRef.current,
             msg: value,
-            category: "user",
+            category: "question",
             extra: '',
             message_id: '',
             source: 0
@@ -133,7 +133,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                     data,
                     message: msg,
                     message_id: '',
-                    category: 'user',
+                    category: 'question',
                     extra: '',
                     source: 0
                 }
@@ -338,7 +338,11 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                 data: {
                     [nodeId]: {
                         data,
-                        message: JSON.stringify(message.message),
+                        message: JSON.stringify({
+                            ...message.message,
+                            input_msg: Object.values(data)[0],
+                            hisValue: Object.values(data)[0]
+                        }),
                         message_id: message.message_id
                     }
                 }

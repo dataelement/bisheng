@@ -19,7 +19,7 @@ export default function SourceEntry({ extra, end, source, className = '', onSour
     const { t } = useTranslation()
 
     if (source === SourceType.NONE || !end) return <div className={className}></div>
-    const extraObj = extra ? JSON.parse(extra) : null
+    const extraObj = extra ? (typeof extra === 'string' ? JSON.parse(extra) : extra) : null
 
     return <div className={className}>
         {(() => {

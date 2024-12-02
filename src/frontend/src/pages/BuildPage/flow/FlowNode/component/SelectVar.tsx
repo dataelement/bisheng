@@ -133,8 +133,8 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect, classNa
             {children}
         </SelectTrigger>
         <SelectContent>
-            <div className="flex ">
-                <div className="w-36 border-l first:border-none overflow-y-auto max-h-[360px] scrollbar-hide">
+            <div className="flex max-h-[360px] ">
+                <div className="w-36 border-l first:border-none overflow-y-auto h-[360px] scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
                             className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"

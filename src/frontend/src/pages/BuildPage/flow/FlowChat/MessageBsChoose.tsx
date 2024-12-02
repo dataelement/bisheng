@@ -34,7 +34,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
 
-    const [selected, setSelected] = useState('')
+    const [selected, setSelected] = useState(data.message.hisValue || '')
     const handleSelect = (obj) => {
         if (selected) return
         const myEvent = new CustomEvent('outputMsgEvent', {
@@ -57,7 +57,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
 
     // input
     const textRef = useRef(null)
-    const [inputSended, setInputSended] = useState(false)
+    const [inputSended, setInputSended] = useState(!!data.message.hisValue || false)
     const handleSend = () => {
         const val = textRef.current.value
         if (!val.trim()) return

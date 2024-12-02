@@ -17,6 +17,13 @@ interface Iprops {
     onChange?: (options: Iprops["options"]) => void
 };
 
+// TODO 移动到业务组件
+const itemNames = {
+    'select': "下拉选项",
+    'file': "文件",
+    'text': "文本"
+}
+
 export default function DragOptions({ edges = false, options, onEditClick, onChange }: Iprops) {
     const [items, setItems] = useState([]); // 初始默认选项
     const [inputValue, setInputValue] = useState("");
@@ -91,7 +98,7 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
     };
 
     return (
-        <div className='mt-2'>
+        <div className='nowheel overflow-y-auto max-h-96 mt-2'>
             <DragDropContext onDragEnd={handleDragEnd} usePortal>
                 <Droppable droppableId="options-list">
                     {(provided) => (
@@ -119,7 +126,7 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
                                                     >{item.text}</div>
                                                 </div>
                                                 <div className='flex gap-1 items-center pr-2'>
-                                                    <span className='text-xs text-muted-foreground group-hover:hidden'>{item.type}</span>
+                                                    <span className='text-xs text-muted-foreground group-hover:hidden'>{itemNames[item.type] || item.type}</span>
                                                     {onEditClick && <Edit size={14} onClick={() => onEditClick(index, item)} className='cursor-pointer text-muted-foreground hover:text-foreground hidden group-hover:block' />}
                                                     {items.length > 1 && (
                                                         <Trash2

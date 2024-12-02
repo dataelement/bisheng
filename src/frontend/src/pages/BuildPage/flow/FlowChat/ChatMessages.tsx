@@ -97,10 +97,11 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             messagesList.map((msg, index) => {
                 // output节点特殊msg
                 switch (msg.category) {
-                    case 'user':
+                    case 'question':
                         return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
                     case 'guide_word':
                     case 'output_msg':
+                    case 'stream_msg':
                         return <MessageBs
                             mark={mark}
                             logo={logo}
@@ -127,7 +128,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                 }
             })
         }
-        {/* <ThumbsMessage ref={thumbRef}></ThumbsMessage>
-        <ResouceModal ref={sourceRef}></ResouceModal> */}
+        {/* <ThumbsMessage ref={thumbRef}></ThumbsMessage> */}
+        <ResouceModal ref={sourceRef}></ResouceModal>
     </div>
 };

@@ -9,12 +9,13 @@ export default function InputListItem({ data, onChange }) {
             {data.label}
             {data.help && <QuestionTooltip content={data.help} />}
         </Label>
-        <InputList
-            className="mt-2"
-            rules={[{ maxLength: 50, message: '最大50个字符' }]}
-            value={data.value.length ? data.value : ['']}
-            onChange={onChange}
-            placeholder={data.placeholder || ''}
-        ></InputList>
+        <div className="nowheel overflow-y-auto max-h-52 mt-2">
+            <InputList
+                rules={[{ maxLength: 50, message: '最大50个字符' }]}
+                value={data.value.length ? data.value : ['']}
+                onChange={onChange}
+                placeholder={data.placeholder || ''}
+            ></InputList>
+        </div>
     </div>
 };

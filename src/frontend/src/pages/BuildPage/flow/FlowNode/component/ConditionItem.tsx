@@ -22,7 +22,8 @@ interface Item {
 const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }) => {
 
     const handleCompTypeChange = (newType) => {
-        onUpdateItem(index, { ...item, comparison_operation: newType });
+        const valuetype = newType === 'regex' ? 'input' : item.right_value_type
+        onUpdateItem(index, { ...item, comparison_operation: newType, right_value_type: valuetype });
     };
 
     const handleTypeChange = (newType) => {
@@ -40,9 +41,10 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                 onUpdateItem(index, { ...item, left_label: v.label, left_var: `${E.id}.${v.value}` })
             }}>
                 <div className={`${required && !item.left_label && 'border-red-500'} no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
-                    <span className="flex items-center">
+                    {item.left_label ? <span className="flex items-center">
                         {item.left_label}
                     </span>
+                        : <span className="text-gray-400 mt-0.5">选择变量</span>}
                     <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                 </div>
             </SelectVar>
@@ -71,17 +73,19 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
             </Select>
             {/* type */}
             {!['is_not_empty', 'is_empty'].includes(item.comparison_operation) && <>
-                <Select value={item.right_value_type} onValueChange={handleTypeChange}>
-                    <SelectTrigger className="max-w-32 w-24 h-8">
-                        <SelectValue placeholder="请选择" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            <SelectItem value="quote">引用</SelectItem>
-                            <SelectItem value="input">输入</SelectItem>
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
+                {
+                    'regex' !== item.comparison_operation && <Select value={item.right_value_type} onValueChange={handleTypeChange}>
+                        <SelectTrigger className="max-w-32 w-24 h-8">
+                            <SelectValue placeholder="请选择" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value="quote">引用</SelectItem>
+                                <SelectItem value="input">输入</SelectItem>
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                }
                 {/* value */}
                 {item.right_value_type === 'quote' ? <SelectVar
                     nodeId={nodeId}

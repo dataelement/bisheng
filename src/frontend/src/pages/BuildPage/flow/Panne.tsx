@@ -328,17 +328,17 @@ const useFlow = (_reactFlowInstance, data) => {
 const useKeyBoard = (reactFlowWrapper, setNodes) => {
     const keyBoardPanneRef = useRef<HTMLDivElement>(null); // 绑定快捷键
     const [lastSelection, setLastSelection] = useState(null);
-    useCopyPaste(keyBoardPanneRef.current, lastSelection, (newSelection, position) => {
-        let bounds = reactFlowWrapper.current.getBoundingClientRect();
-        setNodes((nds) => nds.concat(
-            {
-                id: 'd', type: 'flowNode', position: {
-                    x: position.x - bounds.left,
-                    y: position.y - bounds.top,
-                }, data: { value: 'Node 2' }
-            }
-        ))
-    }, [setNodes])
+    // useCopyPaste(keyBoardPanneRef.current, lastSelection, (newSelection, position) => {
+    //     let bounds = reactFlowWrapper.current.getBoundingClientRect();
+    //     setNodes((nds) => nds.concat(
+    //         {
+    //             id: 'd', type: 'flowNode', position: {
+    //                 x: position.x - bounds.left,
+    //                 y: position.y - bounds.top,
+    //             }, data: { value: 'Node 2' }
+    //         }
+    //     ))
+    // }, [setNodes])
 
     return { keyBoardPanneRef, setLastSelection }
 }

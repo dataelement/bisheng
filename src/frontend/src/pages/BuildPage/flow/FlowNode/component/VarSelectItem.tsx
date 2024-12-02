@@ -73,7 +73,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
                 <div className="flex flex-wrap size-full max-h-32 overflow-y-auto">
                     {value.length ? value.map(item => <Badge onPointerDown={(e) => e.stopPropagation()} key={item} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
                         {data.varZh[item]}
-                        <X className="h-3 w-3" onClick={() => handleDelete(item)}></X>
+                        <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
                     ) : <span className="text-gray-400 mt-0.5">{data.placeholder}</span>}
                 </div>

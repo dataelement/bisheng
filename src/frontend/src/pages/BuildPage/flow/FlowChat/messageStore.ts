@@ -55,7 +55,9 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/'/g, '"');                    // 将单引号替换为双引号
     return data.map(item => {
         // let count = 0
-        let { message, files, is_bot, intermediate_steps, ...other } = item
+        let { message, files, is_bot, intermediate_steps, category, ...other } = item
+        // const map = { "stream_msg": "output_msg" }
+        // category = map[category] || category
         try {
             message = message && message[0] === '{' ? JSON.parse(message) : message || ''
         } catch (e) {
@@ -64,6 +66,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         }
         return {
             ...other,
+            category,
             chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
             end: true,
             files: files ? JSON.parse(files) : [],
@@ -93,7 +96,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         console.log('change createWsMsg');
         set((state) => {
             let newChat = cloneDeep(state.messages);
-            const { category, flow_id, chat_id, message_id, files, is_bot,extra, liked, message, receiver, type, source, user_id } = data
+            const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id } = data
             newChat.push({
                 category, flow_id, chat_id, message_id, files, is_bot,
                 message, receiver, source, user_id,
@@ -130,7 +133,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             messages:
                 [...state.messages, {
                     ...bsMsgItem,
-                    category: 'user',
+                    category: 'question',
                     message_id: generateUUID(8),
                     message: msg,
                     update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')

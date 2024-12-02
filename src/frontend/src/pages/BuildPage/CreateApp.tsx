@@ -102,7 +102,6 @@ ${t('build.exampleTwo')}
     const validateField = (name: string, value: string) => {
         switch (name) {
             case 'name':
-                if (!value) return AppType.ASSISTANT === appType ? `请填写助手名称` : '请填写工作流名称';
                 if (value.length > 50) return AppType.ASSISTANT === appType ? '名称最多50个字符' : '工作流名称不可超过 50 字';
                 return '';
             case 'desc':
@@ -220,7 +219,10 @@ ${t('build.exampleTwo')}
                         {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
                     </div>
                     <div className="mb-6">
-                        <label htmlFor="desc" className="bisheng-label">{appType === AppType.ASSISTANT ? '你希望助手的角色是什么，具体完成什么任务？' : '描述'}</label>
+                        <label htmlFor="desc" className="bisheng-label">
+                            {appType === AppType.ASSISTANT ? '你希望助手的角色是什么，具体完成什么任务？' : '描述'}
+                            <span className="bisheng-tip">*</span>
+                        </label>
                         <Textarea
                             id="desc"
                             name="desc"
@@ -243,7 +245,7 @@ ${t('build.exampleTwo')}
                             {t('cancel')}
                         </Button>
                     </DialogClose>
-                    <Button disabled={loading} type="submit" className="px-11" onClick={handleSubmit}>
+                    <Button disabled={!formData.name || !formData.desc || loading} type="submit" className="px-11" onClick={handleSubmit}>
                         {loading && <LoadIcon className="mr-2" />}
                         {t(isEditMode ? '保存' : '创建')}
                     </Button>

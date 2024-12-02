@@ -85,10 +85,10 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         // 校验变量名称
         if (!formData.variableName.trim()) {
             newErrors.variableName = "变量名称不可为空";
-        } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.variableName)) {
-            newErrors.variableName = "变量名称只能包含英文字符、数字和下划线，且不能以数字开头";
         } else if (formData.variableName.length > 50) {
             newErrors.variableName = "变量名称不能超过 50 个字符";
+        } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.variableName)) {
+            newErrors.variableName = "变量名称只能包含英文字符、数字和下划线，且不能以数字开头";
         } else if (existingOptions?.some(opt => opt.key === formData.variableName)) {
             newErrors.variableName = "变量名称已存在";
         }
@@ -298,7 +298,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             setError(false)
             return false
         })
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return (

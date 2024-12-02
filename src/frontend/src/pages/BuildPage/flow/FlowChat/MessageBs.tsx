@@ -12,6 +12,7 @@ import remarkMath from "remark-math";
 import { useMessageStore } from "./messageStore";
 import { WorkflowMessage } from "@/types/flow";
 import ChatFile from "./ChatFileFile";
+import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
 
 // 颜色列表
 const colorList = [
@@ -32,6 +33,9 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
+    const message = useMemo(() => {
+        return typeof data.message === 'string' ? data.message : data.message.msg
+    }, [data.message])
 
     const mkdown = useMemo(
         () => (
@@ -65,10 +69,10 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                     },
                 }}
             >
-                {data.message}
+                {message}
             </ReactMarkdown>
         ),
-        [data.message]
+        [message]
     )
 
     const messageRef = useRef<HTMLDivElement>(null)
@@ -76,10 +80,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
         // api data.id
         copyText(messageRef.current)
     }
-
     const chatId = useMessageStore(state => state.chatId)
-    console.log('data.files :>> ', data);
-
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
             <div className="flex justify-between items-center mb-1">
@@ -96,9 +97,9 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />
                         </div>}
-                    {data.message.toString() || data.files.length ?
+                    {message || data.files.length ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                            {data.message && mkdown}
+                            {message && mkdown}
                             {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                             {/* @user */}
                             {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
@@ -110,28 +111,29 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                 </div>
             </div>
             {/* 附加信息 */}
-            {/* {
-                !!data.id && data.end && <div className="flex justify-between mt-2">
+            {
+                data.end && <div className="flex justify-between mt-2">
                     <SourceEntry
-                        extra={data.extra}
+                        extra={data.extra || {}}
                         end={data.end}
                         source={data.source}
                         className="pl-4"
                         onSource={() => onSource?.({
                             chatId,
                             messageId: data.id,
-                            message: data.message || data.thought,
-                        })} />
-                    <MessageButtons
+                            message,
+                        })}
+                    />
+                    {/* <MessageButtons
                         mark={mark}
                         id={data.id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                    ></MessageButtons>
+                    ></MessageButtons> */}
                 </div>
-            } */}
+            }
         </div>
     </div>
 };

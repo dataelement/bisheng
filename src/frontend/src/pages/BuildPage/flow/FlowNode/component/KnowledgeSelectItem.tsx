@@ -7,9 +7,9 @@ import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
-const TabsHead = memo(({ onChange }) => {
+const TabsHead = memo(({ tab, onChange }) => {
 
-    return <Tabs defaultValue="knowledge" className="mb-2" onValueChange={onChange}>
+    return <Tabs defaultValue={tab} className="mb-2" onValueChange={onChange}>
         <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
             <TabsTrigger value="knowledge" className="text-xs">文档知识库</TabsTrigger>
             <TabsTrigger value="tmp" className="text-xs">临时会话文件<QuestionTooltip content={'存储用户在当前会话中发送的文件'} /></TabsTrigger>
@@ -117,7 +117,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
             return false
         })
 
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return <div className='node-item mb-4'>
@@ -128,9 +128,10 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
         <MultiSelect
             id="knowledge-select-item"
             error={error}
-            tabs={<TabsHead onChange={handleTabChange} />}
+            tabs={<TabsHead tab={tabType} onChange={handleTabChange} />}
             multiple
             className={''}
+            hideSearch={tabType === KnowledgeType.Temp}
             value={value}
             options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
             placeholder={t('build.selectKnowledgeBase')}

@@ -90,6 +90,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                         <NodeLogo type={node.type} colorStr={node.name} />
                         <div className='flex-1 w-44'>
                             <EditText
+                                className='nodrag'
                                 defaultValue={node.name}
                                 maxLength={50}
                                 disable={['start', 'end'].includes(node.type)}

@@ -130,7 +130,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
         {
             (!isMobile || !collapse) && <div className="sm:w-[300px] bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
                 {/* label */}
-                <div className="mb-4 text-sm font-bold  place-items-center space-x-1 hidden sm:block">
+                <div className="mb-4 text-sm font-bold space-x-1 hidden sm:block">
                     <div className="flex">
                         <span>{t('chat.filterLabel')}</span>
                         <TooltipProvider delayDuration={100}>
@@ -145,10 +145,10 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                         </TooltipProvider>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-2 hidden sm:block">
-                    {words.map((str, i) => <div key={str} className="badge badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)] dark:text-slate-50">{str}<span className="cursor-pointer font-thin" onClick={() => onClose(i)}>x</span></div>)}
+                <div className="flex flex-wrap gap-2 text-sm">
+                    {words.map((str, i) => <div key={str} className="badge rounded-md px-2 badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)] dark:text-slate-50">{str}<span className="cursor-pointer font-thin" onClick={() => onClose(i)}>x</span></div>)}
                     {
-                        editCustomKey ? <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
+                        editCustomKey ? <div className="badge badge-info cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
                             onKeyDown={(event) => {
                                 if (event.key === "Enter" && !event.shiftKey) {
                                     handleAddKeyword(inputRef.current.value);
@@ -157,7 +157,7 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             onBlur={() => {
                                 handleAddKeyword(inputRef.current.value);
                             }}></input></div> :
-                            <div className="badge badge-info gap-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
+                            <div className="badge badge-info rounded-md px-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
                     }
                 </div>
                 {/* files */}

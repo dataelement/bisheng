@@ -82,14 +82,14 @@ export default function apps() {
             }))
         } else if (data.flow_type === 5) {
             return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
-                if (res === null) {
+                if (res) {
                     refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
                 return res
             })
         } else if (data.flow_type === 10) {
             return captureAndAlertRequestErrorHoc(onlineWorkflow(data, checked ? 2 : 1)).then(res => {
-                if (res === null) {
+                if (res) {
                     refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
                 return res
@@ -231,7 +231,7 @@ export default function apps() {
                                         <LabelShow
                                             data={item}
                                             user={user}
-                                            type={item.flow_type} // TODO: 三类
+                                            type={item.flow_type}
                                             all={filteredOptions}
                                             onChange={refetchLabels}>
                                         </LabelShow>

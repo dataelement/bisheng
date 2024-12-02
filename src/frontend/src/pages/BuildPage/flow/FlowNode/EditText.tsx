@@ -41,12 +41,24 @@ export default function EditText({ type = 'input', children, disable = false, de
                 value={value}
                 onBlur={handleBlur}
                 onChange={handleChange}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleBlur();
+                    }
+                }}
             /> : <Textarea
                 className={className}
                 autoFocus={edit}
                 value={value}
                 onBlur={handleBlur}
                 onChange={handleChange}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleBlur();
+                    }
+                }}
             />
             : <div onClick={() => setEdit(true)}>{children}</div>}
     </div>
