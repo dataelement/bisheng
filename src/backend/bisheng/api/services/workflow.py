@@ -41,6 +41,8 @@ class WorkFlowService(BaseService):
             ret = ret + assistant
             flow_ids = [UUID(one.resource_id) for one in ret]
             assistant_ids = [UUID(one.resource_id) for one in assistant]
+            if not assistant_ids:
+                assistant_ids = assistant_ids.extend(flow_ids)
             if not assistant_ids and not ret:
                 return resp_200(data={
                     'data': [],
@@ -61,8 +63,6 @@ class WorkFlowService(BaseService):
                 if flow_type == FlowType.ASSISTANT.value:
                     fdata = []
                     ftotal = 0
-                    if tag_id and not assistant_ids:
-                        assistant_ids=["a"]
                     ares, atotal = AssistantDao.get_all_assistants(name, page, half_page, assistant_ids, status)
             data = fdata + ares
             total = ftotal + atotal
