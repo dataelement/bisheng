@@ -3,6 +3,7 @@ from typing import List
 from uuid import UUID
 
 from fastapi import Request, HTTPException
+from loguru import logger
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.tag import TagExistError, TagNotExistError
@@ -109,7 +110,11 @@ class TagService:
 
         new_link = TagLink(tag_id=tag_id, resource_id=UUID(resource_id).hex, resource_type=resource_type.value,
                            user_id=login_user.user_id)
-        new_link = TagDao.insert_tag_link(new_link)
+        try:
+            new_link = TagDao.insert_tag_link(new_link)
+        except Exception as e:
+            logger.error(f'tag_link_error: {e}')
+            raise TagExistError.http_exception()
         return new_link
 
     @classmethod
