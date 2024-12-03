@@ -386,8 +386,8 @@ def qa_delete(*,
     if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
         return HTTPException(status_code=500, detail='知识库类型错误')
 
+    knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
-    # knowledge_imp.delete_vector_data(knowledge.id, ids)
     return resp_200()
 
 
