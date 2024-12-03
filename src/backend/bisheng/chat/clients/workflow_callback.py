@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any, Callable, Coroutine, List, cast
 
+from loguru import logger
+
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
@@ -11,7 +13,6 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import (GuideQuestionData, GuideWordData, NodeEndData,
                                              NodeStartData, OutputMsgChooseData, OutputMsgData,
                                              OutputMsgInputData, UserInputData, StreamMsgData, StreamMsgOverData)
-from loguru import logger
 
 
 def _run_coros(coros: List[Coroutine[Any, Any, Any]]) -> None:
@@ -96,7 +97,7 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_node_start(self, data: NodeStartData):
         """ node start event """
-        print(f'node start: {data}')
+        logger.debug(f'node start: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
                          category='node_run',
@@ -106,7 +107,7 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_node_end(self, data: NodeEndData):
         """ node end event """
-        print(f'node end: {data}')
+        logger.debug(f'node end: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
                          category='node_run',
@@ -116,7 +117,7 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_user_input(self, data: UserInputData):
         """ user input event """
-        print(f'user input: {data}')
+        logger.debug(f'user input: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
                          category='user_input',
@@ -126,7 +127,7 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_guide_word(self, data: GuideWordData):
         """ guide word event """
-        print(f'guide word: {data}')
+        logger.debug(f'guide word: {data}')
         self.send_chat_response(
             ChatResponse(message=data.guide_word,
                          category='guide_word',
@@ -136,7 +137,7 @@ class WorkflowWsCallback(BaseCallback):
 
     def on_guide_question(self, data: GuideQuestionData):
         """ guide question event """
-        print(f'guide question: {data}')
+        logger.debug(f'guide question: {data}')
         self.send_chat_response(
             ChatResponse(message=data.guide_question,
                          category='guide_question',
@@ -145,7 +146,7 @@ class WorkflowWsCallback(BaseCallback):
                          chat_id=self.chat_id))
 
     def on_output_msg(self, data: OutputMsgData):
-        print(f'output msg: {data}')
+        logger.debug(f'output msg: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='output_msg',
                                      extra='',
@@ -159,7 +160,7 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(chat_response)
 
     def on_stream_msg(self, data: StreamMsgData):
-        print(f'stream msg: {data}')
+        logger.debug(f'stream msg: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
                          category='stream_msg',
@@ -169,7 +170,7 @@ class WorkflowWsCallback(BaseCallback):
                          chat_id=self.chat_id))
 
     def on_stream_over(self, data: StreamMsgOverData):
-        print(f'stream over: {data}')
+        logger.debug(f'stream over: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='stream_msg',
                                      extra='',
@@ -182,7 +183,7 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(chat_response)
 
     def on_output_choose(self, data: OutputMsgChooseData):
-        print(f'output choose: {data}')
+        logger.debug(f'output choose: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='output_choose_msg',
                                      extra='',
@@ -196,7 +197,7 @@ class WorkflowWsCallback(BaseCallback):
         self.send_chat_response(chat_response)
 
     def on_output_input(self, data: OutputMsgInputData):
-        print(f'output input: {data}')
+        logger.debug(f'output input: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='output_input_msg',
                                      extra='',
