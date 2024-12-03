@@ -71,9 +71,14 @@ class WorkflowClient(BaseClient):
         if self.workflow is not None:
             return
         workflow_conf = settings.get_workflow_conf()
-        self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, workflow_conf.max_steps,
-                                 workflow_conf.timeout,
-                                 self.callback)
+        try:
+            self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, workflow_conf.max_steps,
+                                     workflow_conf.timeout,
+                                     self.callback)
+        except Exception as e:
+            self.workflow = None
+            await self.send_response('error', 'over', str(e))
+            return
         await self.send_response('processing', 'begin', '')
         logger.debug('init workflow over')
         # 运行workflow
