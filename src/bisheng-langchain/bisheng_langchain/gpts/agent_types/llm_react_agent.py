@@ -152,7 +152,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledS
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    return workflow.compile(checkpoint=False)
+    return workflow.compile(checkpointer=False)
 
 
 if __name__ == '__main__':
