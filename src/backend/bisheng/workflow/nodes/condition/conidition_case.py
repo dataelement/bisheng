@@ -1,8 +1,10 @@
 import re
 from typing import List, Optional, Dict
 
-from bisheng.workflow.graph.graph_state import GraphState
 from pydantic import BaseModel, Field
+from loguru import logger
+
+from bisheng.workflow.graph.graph_state import GraphState
 
 
 class ConditionOne(BaseModel):
@@ -15,10 +17,13 @@ class ConditionOne(BaseModel):
 
     def evaluate(self, graph_state: GraphState) -> bool:
         left_value = graph_state.get_variable_by_str(self.left_var)
+        self.variable_key_value[self.left_var] = left_value
         right_value = self.right_value
         if self.right_value_type == 'ref' and self.right_value:
             right_value = graph_state.get_variable_by_str(self.right_value)
             self.variable_key_value[self.right_value] = right_value
+        logger.debug(f'condition evaluate ope: {self.comparison_operation},'
+                     f' left value: {left_value}, right value: {right_value}')
 
         return self.compare_two_value(left_value, right_value)
 
@@ -55,7 +60,6 @@ class ConditionOne(BaseModel):
 
 
 class ConditionCases(BaseModel):
-
     class Config:
         arbitrary_types_allowed = True
 
@@ -70,11 +74,12 @@ class ConditionCases(BaseModel):
             return True
 
         for condition in self.conditions:
+            flag = condition.evaluate(graph_state)
+            self.variable_key_value.update(condition.variable_key_value)
             if self.operator == 'and':
-                if not condition.evaluate(graph_state):
+                if not flag:
                     return False
             else:
-                if condition.evaluate(graph_state):
+                if flag:
                     return True
-            self.variable_key_value.update(condition.variable_key_value)
         return True if self.operator == 'and' else False

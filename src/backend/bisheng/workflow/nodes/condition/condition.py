@@ -18,16 +18,20 @@ class ConditionNode(BaseNode):
 
     def _run(self, unique_id: str):
         self._variable_key_value = {}
+        next_node_id = None
         for one in self._condition_cases:
-            if one.evaluate_conditions(self.graph_state):
-                self._variable_key_value.update(one.variable_key_value)
-                self._next_node_id = self.get_next_node_id(one.id)
+            flag = one.evaluate_conditions(self.graph_state)
+            self._variable_key_value.update(one.variable_key_value)
+            if flag:
+                next_node_id = self.get_next_node_id(one.id)
                 logger.info(f'Condition node {self.id} pass condition {self._next_node_id}')
                 break
 
         # 保底逻辑，使用默认的路由
-        if self._next_node_id is None:
+        if next_node_id is None:
             self._next_node_id = self.get_next_node_id('right_handle')
+        else:
+            self._next_node_id = next_node_id
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         return self._variable_key_value
