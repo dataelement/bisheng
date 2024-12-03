@@ -251,7 +251,7 @@ class RoleGroupService():
         elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
             return self.get_group_knowledge(group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
-            return self.get_group_flow(group_id, name, page_size, page_num, FlowType.WORKFLOW.value)
+            return self.get_group_flow(group_id, name, page_size, page_num, FlowType.WORKFLOW)
         elif resource_type.value == ResourceTypeEnum.ASSISTANT.value:
             return self.get_group_assistant(group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.GPTS_TOOL.value:
@@ -264,18 +264,19 @@ class RoleGroupService():
         user_map = {user.user_id: user.user_name for user in user_list}
         return user_map
 
-    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,flow_type:Optional[int] = None) -> (List[Any], int):
+    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,flow_type:Optional[FlowType] = None) -> (List[Any], int):
         """ 获取用户组下的知识库列表 """
         # 查询用户组下的技能ID列表
         rs_type = ResourceTypeEnum.FLOW
-        if flow_type == FlowType.WORKFLOW.value:
+        if flow_type == FlowType.WORKFLOW:
             rs_type = ResourceTypeEnum.WORK_FLOW
         resource_list = GroupResourceDao.get_group_resource(group_id, rs_type)
         if not resource_list:
             return [], 0
         res = []
         flow_ids = [UUID(resource.third_id) for resource in resource_list]
-        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size)
+        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value 
+        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)
         for one in data:
