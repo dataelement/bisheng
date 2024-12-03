@@ -67,8 +67,9 @@ class OpenApiSchema:
                                     }
                                 }
                                 one_api_info['parameters'].append(param)
-
-                one_api_info['parameters'].extend(method_info.get('parameters', []))
+                else:
+                    # no request body get parameters
+                    one_api_info['parameters'].extend(method_info.get('parameters', []))
                 self.apis.append(one_api_info)
         return self.apis
 
