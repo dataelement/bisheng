@@ -60,13 +60,17 @@ export default function ModelItem({ data, onChange, onValidate }) {
             return false
         })
 
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return <div className='node-item mb-4'>
-        <Label className="flex items-center bisheng-label mb-2">{data.label}</Label>
+        <Label className="flex items-center bisheng-label mb-2">
+            {data.required && <span className="text-red-500">*</span>}
+            {data.label}
+        </Label>
         {defaultValue ? <Cascader
             error={error}
+            placholder={data.placeholder}
             defaultValue={defaultValue}
             options={options}
             onChange={(val) => onChange(val[1])}

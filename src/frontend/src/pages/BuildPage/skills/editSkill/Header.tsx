@@ -212,12 +212,19 @@ const useVersion = (flow) => {
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
     const { version, setVersion, updateOnlineVid } = useContext(TabsContext)
     const lastVersionIndexRef = useRef(0)
+    const { toast } = useToast()
 
     const refrenshVersions = () => {
         return getFlowVersions(flow.id).then(({ data, total }) => {
             setVersions(data)
             lastVersionIndexRef.current = total - 1
             const currentV = data.find(el => el.is_current === 1)
+            if (!currentV) {
+                toast({
+                    description: '无法对应当前版本',
+                    variant: 'error'
+                })
+            }
             setVersion(currentV)
             // 记录上线的版本
             updateOnlineVid(currentV?.id)

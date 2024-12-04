@@ -3,7 +3,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { cname } from "@/components/bs-ui/utils";
 import { useState } from "react";
 
-export default function EditText({ type = 'input', children, disable = false, defaultValue, maxLength = 0, className = '', onChange }) {
+export default function EditText({ type = 'input', reDefaultValue = false, children, disable = false, defaultValue, maxLength = 0, className = '', onChange }) {
     const [edit, setEdit] = useState(false)
     const [value, setValue] = useState(defaultValue)
 
@@ -22,7 +22,7 @@ export default function EditText({ type = 'input', children, disable = false, de
             })
         }
         setEdit(false)
-        if (!value) {
+        if (reDefaultValue && !value) {
             // Restore default if empty
             setValue(defaultValue)
             return onChange(defaultValue)

@@ -32,6 +32,8 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
     const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
     const textAreaHtmlRef = useRef(null);
     const textMsgRef = useRef(value || '');
+    const selectVarRef = useRef(null);
+
     const { flow } = useFlowStore()
 
     const strToHtml = (str, vilidate = false) => {
@@ -71,7 +73,7 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
         }
     }, [])
 
-    const handleInput = () => {
+    const handleInput = (e) => {
         textAreaHtmlRef.current = textareaRef.current.innerHTML;
         textMsgRef.current = htmlToStr(textAreaHtmlRef.current)
         onChange(textMsgRef.current);
@@ -152,13 +154,13 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble)
         return () => onVarEvent && onVarEvent(() => { })
-    }, [])
+    }, [flowNode])
 
     return <div className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'}`}>
         <div className="flex justify-between gap-1 border-b px-2 py-1">
             <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>变量输入</Label>
             <div className="flex gap-2">
-                <SelectVar nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
+                <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
                     <Variable size={16} className="text-muted-foreground hover:text-gray-800" />
                 </SelectVar>
                 {onUpload && <Button variant="ghost" className="p-0 h-4 text-muted-foreground" onClick={onUpload}>
@@ -175,6 +177,13 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
             onPaste={handlePaste}
             onFocus={handleFocus}
             onBlur={handleBlur}
+            onKeyDown={(e) => {
+                // 唤起插入变量
+                if (e.key === '{') {
+                    selectVarRef.current.open()
+                    e.preventDefault();
+                }
+            }}
             className="nowheel bisheng-richtext px-3 py-2 whitespace-pre-line min-h-[80px] max-h-24 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         // value={value.msg}
         // onChange={(e) => setValue({ ...value, msg: e.target.value })}

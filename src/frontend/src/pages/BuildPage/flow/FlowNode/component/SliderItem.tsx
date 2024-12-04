@@ -32,7 +32,7 @@ export default function SliderItem({ data, onChange }) {
 export const SwitchSliderItem = ({ data, onChange }) => {
     const [value, setValue] = React.useState({
         flag: data.value.flag,
-        value: data.value.number
+        value: data.value.value
     })
 
     return <div className='node-item mb-4' data-key={data.key}>

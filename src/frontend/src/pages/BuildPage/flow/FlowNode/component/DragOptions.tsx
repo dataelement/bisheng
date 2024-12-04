@@ -13,6 +13,7 @@ interface Iprops {
         text: string;
         type: string;
     }[],
+    scroll?: boolean,
     onEditClick?: (index: number, option: Iprops["options"][0]) => void
     onChange?: (options: Iprops["options"]) => void
 };
@@ -24,7 +25,7 @@ const itemNames = {
     'text': "文本"
 }
 
-export default function DragOptions({ edges = false, options, onEditClick, onChange }: Iprops) {
+export default function DragOptions({ edges = false, scroll = false, options, onEditClick, onChange }: Iprops) {
     const [items, setItems] = useState([]); // 初始默认选项
     const [inputValue, setInputValue] = useState("");
     const [error, setError] = useState("");
@@ -98,7 +99,7 @@ export default function DragOptions({ edges = false, options, onEditClick, onCha
     };
 
     return (
-        <div className='nowheel overflow-y-auto max-h-96 mt-2'>
+        <div className={`${scroll && 'nowheel overflow-y-auto max-h-96'} mt-2`}>
             <DragDropContext onDragEnd={handleDragEnd} usePortal>
                 <Droppable droppableId="options-list">
                     {(provided) => (

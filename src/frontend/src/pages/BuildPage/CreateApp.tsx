@@ -8,6 +8,7 @@ import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
+import { readTempsDatabase } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant"; // 假设有对应的接口
 import { createWorkflowApi } from "@/controllers/API/workflow";
 // import { createWorkflowApi, getWorkflowApi, updateWorkflowApi } from "@/controllers/API/workflow"; // 假设有对应的接口
@@ -79,13 +80,13 @@ ${t('build.exampleTwo')}
 
     // 从模板中选择
     const tempDataRef = useRef<any>(null);
-    const handleSelectTemplate = (type: AppType, tempId: number) => {
-        // const tempInfo = type === AppType.ASSISTANT ? ApiAccess() : ApiAccess();
-        tempDataRef.current = {}; // template data
+    const handleSelectTemplate = async (type: AppType, tempId: number) => {
+        const [flow] = await readTempsDatabase('flow', tempId)
+        tempDataRef.current = flow;
         setFormData({
-            url: ``,
-            name: `tempInfo.name-${generateUUID(5)}`,
-            desc: 'tempInfo.desc',
+            url: flow.logo || '',
+            name: `${flow.name}-${generateUUID(5)}`,
+            desc: flow.description
         });
     }
 
@@ -160,10 +161,11 @@ ${t('build.exampleTwo')}
 
         // let res = null
         if (tempDataRef.current) {
-            // 模板创建
-            console.log('模板创建 :>> ');
-            // tempDataRef.current + formData
-            // await captureAndAlertRequestErrorHoc(createAssistantApi(formData.name, formData.desc, formData.url));
+            // 创建by模板
+            if (AppType.FLOW === appType) {
+                const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current))
+                if (res) navigate('/flow/' + res.id)
+            }
         } else {
             // 创建
             if (appType === AppType.ASSISTANT) {
@@ -236,7 +238,7 @@ ${t('build.exampleTwo')}
                     </div>
                 </div>
                 {/* 工作流安全审查 */}
-                {appConfig.isPro && <Accordion type="multiple" className="w-full">
+                {false && appConfig.isPro && <Accordion type="multiple" className="w-full">
                     <AssistantSetting id={'xxx'} type={3} />
                 </Accordion>}
                 <DialogFooter>

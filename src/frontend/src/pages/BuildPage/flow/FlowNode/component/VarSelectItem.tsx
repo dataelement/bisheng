@@ -40,7 +40,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
         return newValues.map(el => {
             const labelName = data.varZh[el]
             return {
-                key: el,
+                key: el.split('.')[1].replace('#', '_'),
                 label: labelName.split('/')[1]
             }
         })

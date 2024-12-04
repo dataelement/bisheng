@@ -1,9 +1,9 @@
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
+import { cname } from "@/components/bs-ui/utils";
 import { ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
-import { cname } from "@/components/bs-ui/utils";
 
 const isMatch = (obj, expression) => {
     const fn = new Function('value', `return ${expression}`);
@@ -14,9 +14,13 @@ const isMatch = (obj, expression) => {
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
  */
-export default function SelectVar({ nodeId, itemKey, children, onSelect, className = '' }) {
+const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
+
+    useImperativeHandle(ref, () => ({
+        open() { setOpen(true) }
+    }));
 
     const getNodeDataByTemp = (temp) => {
         const hasChild = temp.group_params.some(group =>
@@ -71,7 +75,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect, classNa
                         }]
                     }
                     _vars = [..._vars, ...result]
-                } else if (param.global === 'key'
+                } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {
                     _vars.push({
                         label: param.key,
@@ -178,4 +182,7 @@ export default function SelectVar({ nodeId, itemKey, children, onSelect, classNa
             </div>
         </SelectContent>
     </Select>
-};
+});
+
+
+export default SelectVar

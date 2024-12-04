@@ -64,7 +64,7 @@ export default function editAssistant() {
     const handleOnline = async () => {
         if (!handleCheck()) return
         await handleSave()
-        await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 1)).then(res => {
+        await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
             if (res === false) return
             message({
                 title: t('prompt'),

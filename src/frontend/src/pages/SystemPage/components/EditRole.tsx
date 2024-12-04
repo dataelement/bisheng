@@ -91,7 +91,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                     switch (item.type) {
                         case 1: useLibs.push(Number(item.third_id)); break;
                         case 2: useSkills.push(item.third_id); break;
-                        case 5: useFlows.push(item.third_id); break;
+                        case 9: useFlows.push(item.third_id); break;
                         case 3: manageLibs.push(Number(item.third_id)); break;
                         case 7: useTools.push(Number(item.third_id)); break;
                         case 5: useAssistant.push(item.third_id); break;

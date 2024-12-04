@@ -65,10 +65,16 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
 
     const [expend, setExpend] = useState(false)
     const nodeError = useBorderColor(node)
+
+    const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
+
     return (
-        <div className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[20px]`}>
+        <div
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[20px]`}>
             {/* head bars */}
-            <NodeToolbar align="end">
+            <NodeToolbar isVisible align="end" className={`${isVisible ? '' : 'hidden'}`} >
                 <NodeToolbarComponent nodeId={node.id} type={node.type} onRun={handleRun}></NodeToolbarComponent>
             </NodeToolbar>
 
@@ -88,9 +94,10 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 <div className='bisheng-node-head'>
                     <div className='relative z-10 flex gap-2'>
                         <NodeLogo type={node.type} colorStr={node.name} />
-                        <div className='flex-1 w-44'>
+                        <div className='flex-1 max-w-60'>
                             <EditText
                                 className='nodrag'
+                                reDefaultValue
                                 defaultValue={node.name}
                                 maxLength={50}
                                 disable={['start', 'end'].includes(node.type)}
@@ -98,7 +105,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                     node.name = val;
                                     setFocusUpdate(!focusUpdate)
                                 }}>
-                                <span className='truncate block'>{node.name}</span>
+                                <span className='truncate block min-h-4'>{node.name}</span>
                             </EditText>
                         </div>
                         {!['output', 'condition', 'end'].includes(node.type) && <ChevronDown
@@ -106,9 +113,6 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                             size={14}
                             onClick={() => setExpend(!expend)}
                         />}
-                        {/* <EditTitle str={node.name} className={'text-background'} onChange={() => { }}>
-                            {(val) => <p className='text-gray-50 font-bold'>{val}</p>}
-                        </EditTitle> */}
                     </div>
                     <EditText
                         className='nodrag mt-2 text-xs text-muted-foreground'
@@ -120,7 +124,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                             node.description = val;
                             setFocusUpdate(!focusUpdate)
                         }}>
-                        <p className='text-xs text-muted-foreground mt-2'>{node.description}</p>
+                        <p className='text-xs text-muted-foreground mt-2 min-h-4'>{node.description}</p>
                     </EditText>
                 </div>
                 {/* body */}
@@ -246,3 +250,27 @@ const useBorderColor = (node) => {
 
     return error
 }
+
+
+const useHoverToolbar = () => {
+    const [isVisible, setIsVisible] = useState(false);
+    const timeoutRef = useRef(null);
+
+    const handleMouseEnter = useCallback(() => {
+        // 清除隐藏的延时
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+        setIsVisible(true);
+    }, []);
+
+    const handleMouseLeave = useCallback(() => {
+        // 延迟隐藏
+        timeoutRef.current = setTimeout(() => {
+            setIsVisible(false);
+        }, 200); // 延迟200ms
+    }, []);
+
+    return { isVisible, handleMouseEnter, handleMouseLeave };
+};

@@ -33,7 +33,10 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
         return () => onValidate(() => { })
     }, [data.value])
     return <div className='node-item mb-4 nodrag' data-key={data.key}>
-        <Label className='bisheng-label'>{data.label}</Label>
+        <Label className='bisheng-label'>
+            {data.required && <span className="text-red-500">*</span>}
+            {data.label}
+        </Label>
         <Input value={value.name}
             className={`mt-2 ${error && 'border-red-500'}`}
             placeholder={data.placeholder}
@@ -53,7 +56,7 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
                     编辑报告模板
                 </Button>
             </DialogTrigger>
-            <DialogContent className="size-full lg:max-w-full pt-9">
+            <DialogContent close={false} className="size-full lg:max-w-full pt-12">
                 <ReportWordEdit nodeId={nodeId} versionKey={value.key} onChange={handleChange} />
             </DialogContent>
         </Dialog>

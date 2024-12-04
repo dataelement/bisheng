@@ -68,7 +68,7 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
             className={''}
             value={value}
             options={options}
-            placeholder={t('build.selectKnowledgeBase')}
+            placeholder={data.placeholder}
             searchPlaceholder={t('build.searchBaseName')}
             onChange={handleSelect}
             onLoad={() => reload(1, '')}

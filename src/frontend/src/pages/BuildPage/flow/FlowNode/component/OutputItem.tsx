@@ -90,7 +90,7 @@ const OutputItem = ({ nodeId, data, onChange, onValidate }) => {
                 <div className="flex items-center space-x-2">
                     <RadioGroupItem value="input" id="r3" />
                     <Label htmlFor="r3" className="flex items-center">输入型交互
-                        <QuestionTooltip content={'提供用户编辑文本的能力，适合多步任务处理场景，例如用户对模型生成内容直接进行修改，或者输入对生成内容优化意见。用户提交的内容将会存储到 Submitted_Result 变量中。'} />
+                        <QuestionTooltip content={'提供用户编辑文本的能力，适合多步任务处理场景，例如用户对模型生成内容直接进行修改，或者输入对生成内容优化意见。用户提交的内容将会存储到 output_result 变量中。'} />
                     </Label>
                 </div>
             </RadioGroup>

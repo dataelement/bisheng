@@ -534,7 +534,10 @@
     "apiKey": "API Key",
     "azureEndpoint": "Azure Endpoint",
     "apiVersion": "API Version",
-    "assistantAvatar": "Assistant avatar"
+    "assistantAvatar": "Assistant avatar",
+    "confirmDeleteSkill": "Confirm delete skill?",
+    "confirmDeleteFlow": "Confirm delete flow?",
+    "confirmDeleteAssistant": "Confirm delete assistant?"
   },
   "tools": {
     "addTool": "Add Tool",
@@ -822,6 +825,7 @@
     "10502": "Version name already exists",
     "10520": "Skill does not exist",
     "10521": "Skill is online, cannot edit",
+    "10525": "workflow is online, cannot edit",
     "10900": "Knowledge base name already exists",
     "10901": "Knowledge base must select an embedding model",
     "10910": "Current knowledge base version does not support segment modification. Please create a new knowledge base to modify segments.",

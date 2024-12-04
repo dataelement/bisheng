@@ -1,4 +1,3 @@
-import { ClearIcon } from "@/components/bs-icons/clear";
 import { FormIcon } from "@/components/bs-icons/form";
 import { SendIcon } from "@/components/bs-icons/send";
 import { Button } from "@/components/bs-ui/button";
@@ -9,12 +8,12 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
-import { CirclePause } from "lucide-react";
+import { CirclePause, RefreshCw } from "lucide-react";
 import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
 
-export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
+export default function ChatInput({ clear, form, wsUrl, onBeforSend, onLoad }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -37,7 +36,6 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
         show: false,
         disable: false
     })
-    const [autogenStop, setAutogenStop] = useState(false)
     /**
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
@@ -172,6 +170,13 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     console.log('result message data :>> ', data);
+
+                    if (data.type === 'begin') {
+                        setStop({ show: true, disable: false })
+                    } else if (data.type === 'close') {
+                        setStop({ show: false, disable: false })
+                    }
+
                     // const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // // 异常类型处理，提示
                     // if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
@@ -181,6 +186,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                         inputNodeIdRef.current = data.message.node_id
                     }
                     handleWsMessage(data)
+                    data.type === 'begin' && onLoad()
                     // // 群聊@自己时，开启input
                     // if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                     //     setInputLock({ locked: false, reason: '' })
@@ -260,11 +266,6 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
 
         if (data.type === 'close') {
             insetSeparator('本轮会话已结束')
-            // 重新开启
-            return createWebSocket().then(() => {
-                const wsMsg = onBeforSend('init_data', {})
-                sendWsMsg(wsMsg)
-            })
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
@@ -371,6 +372,25 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
         // setInputEmpty(textarea.value.trim() === '')
     }
 
+    // stop click
+    const handleStopClick = () => {
+        if (stop.disable) return
+        setStop({ show: true, disable: true });
+        setInputLock({ locked: true, reason: '' })
+        sendWsMsg({ "action": "stop" });
+    }
+    // restart
+    const handleRestartClick = () => {
+        wsRef.current.close()
+        wsRef.current = null
+        insetSeparator('本轮会话已结束')
+        setTimeout(() => {
+            createWebSocket().then(() => {
+                sendWsMsg(onBeforSend('init_data', {}))
+            })
+        }, 300);
+    }
+
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* form */}
@@ -387,19 +407,9 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
                 locked={inputLock.locked}
                 onClick={handleClickGuideWord}
             />
-            {/* clear */}
-            <div className="flex absolute left-0 top-4 z-10">
-                {
-                    clear && <div
-                        className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => {
-                            if (!stop.show) return
-                            destory()
-                            insetSeparator('本轮会话已结束')
-                            sendWsMsg({ "action": "stop" });
-                        }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828] hover:text-red-600`} ></ClearIcon></div>
-                }
+            {/* restart */}
+            <div className="flex absolute left-0 top-3 z-10">
+                <Button className="rounded-full" variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
             </div>
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
@@ -412,34 +422,30 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend }) {
             </div>
             {/* send */}
             <div className="flex gap-2 absolute right-3 top-4 z-10">
-                {stop.show ?
-                    <div
-                        onClick={() => {
-                            if (stop.disable) return
-                            setStop({ show: true, disable: true });
-                            insetSeparator('本轮会话已结束')
-                            sendWsMsg({ "action": "stop" });
-                        }}
-                        className={`w-6 h-6 bg-foreground rounded-full flex justify-center items-center cursor-pointer ${stop.disable && 'bg-muted-foreground text-muted-foreground'}`}>
-                        <span className="w-2 h-2.5 border-x-2 border-border"></span>
-                    </div>
-                    : <div
-                        id="bs-send-btn"
-                        className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
-                        onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
-                    </div>
-                }
+                <div
+                    id="bs-send-btn"
+                    className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
+                    onClick={() => { !inputLock.locked && handleSendClick() }}>
+                    <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
+                </div>
             </div>
-            {/* stop autogen等待输入时专用*/}
+            {/* stop & 重置 */}
             <div className="absolute w-full flex justify-center bottom-32">
-                {stop.show && <Button className="rounded-full" variant="outline" onClick={() => {
-                    if (stop.disable) return
-                    setStop({ show: true, disable: true });
-                    setAutogenStop(false)
-                    insetSeparator('本轮会话已结束')
-                    sendWsMsg({ "action": "stop" });
-                }}><CirclePause className="mr-2" />Stop</Button>}
+                {stop.show ?
+                    <Button
+                        className="rounded-full"
+                        variant="outline"
+                        disabled={stop.disable}
+                        onClick={handleStopClick}><CirclePause className="mr-2" />Stop
+                    </Button>
+                    : <Button
+                        className="rounded-full"
+                        variant="outline"
+                        onClick={handleRestartClick}>
+                        <RefreshCw className="mr-1" size={16} />
+                        运行新工作流
+                    </Button>
+                }
             </div>
             {/* question */}
             <Textarea

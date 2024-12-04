@@ -1,5 +1,3 @@
-import { TitleIconBg } from "@/components/bs-comp/cardComponent";
-import { ToolIcon } from "@/components/bs-icons";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
@@ -7,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { getToolTree } from "@/util/flowUtils";
+import { cloneDeep } from "lodash-es";
 import { ListVideo } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "react-query";
@@ -15,7 +14,8 @@ import NodeLogo from "./FlowNode/NodeLogo";
 export default function Sidebar({ dropdown = false, onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
     const { data: tempData, refetch } = useQuery({
         queryKey: "QueryWorkFlowTempKey",
-        queryFn: () => getWorkflowNodeTemplate()
+        queryFn: () => getWorkflowNodeTemplate(),
+        cacheTime: 0
     });
 
     const getNodeDataByTemp = (temp) => {
@@ -31,7 +31,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
         if (!tempData) return []
         return tempData.reduce((list, temp) => {
             const newNode = getNodeDataByTemp(temp)
-            temp.type === 'start' ? onInitStartNode(temp) : list.push(newNode)
+            temp.type === 'start' ? onInitStartNode(cloneDeep(temp)) : list.push(newNode)
             return list
         }, [])
     }, [tempData])
@@ -79,8 +79,8 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                         <TabsTrigger value="base">基础节点</TabsTrigger>
                         <TabsTrigger value="tool">工具节点</TabsTrigger>
                     </TabsList>
-                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] top-2 rounded-full`} onClick={() => setExpand(!expand)}>
-                        <ListVideo className={`size-5 ${expand ? 'rotate-180' : ''}`} />
+                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
+                        <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />
                     </Button>}
                 </div>
                 {/* base */}
@@ -165,9 +165,9 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                                             <span className="text-sm truncate">{el.name}</span>
                                                         </div>
                                                     </TooltipTrigger>
-                                                    <TooltipContent side="right">
+                                                    {el.description && <TooltipContent side="right">
                                                         <div className="max-w-96 text-left break-all whitespace-normal">{el.description}</div>
-                                                    </TooltipContent>
+                                                    </TooltipContent>}
                                                 </Tooltip>
                                             )
                                         }
@@ -176,9 +176,6 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                             )}
                         </TooltipProvider>
                     </Accordion>
-                    {
-
-                    }
                 </TabsContent>
             </Tabs>
             {/* 搜索 */}

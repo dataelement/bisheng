@@ -52,7 +52,7 @@ export default function Templates() {
         const currentItem = updatedList[destination.index]
         currentItem.order_num = sort
         const { name, description, order_num } = currentItem
-        // TODO 排序三类
+
         captureAndAlertRequestErrorHoc(updateTempApi(currentItem.id, { name, description, order_num }).then(onChange))
     }
 
@@ -103,7 +103,10 @@ export default function Templates() {
                                                 ref={provided.innerRef}
                                                 {...provided.draggableProps}
                                                 {...provided.dragHandleProps}
-                                                style={{ ...provided.draggableProps.style }}
+                                                style={{
+                                                    ...provided.draggableProps.style,
+                                                    display: snapshot.isDragging ? 'table' : ''
+                                                }}
                                             >
                                                 <TableCell className="font-medium min-w-[400px]">{temp.name}</TableCell>
                                                 <TableCell className={snapshot.isDragging ? 'break-words' : `max-w-0 break-words`}>{temp.description}</TableCell>

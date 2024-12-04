@@ -34,7 +34,7 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
                 onVarEvent={onVarEvent}
             >
             </VarInput>
-            <p className="text-xs text-primary/60">{data.desc}</p>
+            <p className="bisheng-label text-xs">{data.desc}</p>
         </div>
     );
 }

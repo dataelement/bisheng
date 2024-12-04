@@ -120,7 +120,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         // append
         const newCurrentMessage = {
             ...currentMsg,
-            message: currentMsg.message + data.message.msg,
+            message: data.type === 'end' ? currentMsg.message : currentMsg.message + data.message.msg,
             update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             end: data.type === 'end'
         }

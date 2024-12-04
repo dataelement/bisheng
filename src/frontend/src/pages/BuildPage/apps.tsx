@@ -32,9 +32,9 @@ import { Badge } from "@/components/bs-ui/badge";
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
     const options = [
+        { label: '工作流', value: 'flow' },
         { label: '助手', value: 'assistant' },
         { label: '技能', value: 'skill' },
-        { label: '工作流', value: 'flow' }
     ]
     if (all) {
         options.unshift({ label: '全部应用类型', value: 'all' })
@@ -104,14 +104,13 @@ export default function apps() {
     }
 
     const handleDelete = (data) => {
-        console.log('data :>> ', data);
         const descMap = {
-            [AppType.SKILL]: t('skills.confirmDeleteSkill'),
-            [AppType.FLOW]: t('flows.confirmDeleteFlow'),
-            [AppType.ASSISTANT]: t('assistants.confirmDeleteAssistant')
+            1: t('build.confirmDeleteSkill'),
+            10: t('build.confirmDeleteFlow'),
+            5: t('build.confirmDeleteAssistant')
         }
         bsConfirm({
-            desc: descMap[data.type],
+            desc: descMap[data.flow_type],
             okTxt: t('delete'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteFlowFromDatabase(data.id).then(reload));
@@ -180,7 +179,7 @@ export default function apps() {
                 {user.role === 'admin' && <Button
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
-                    onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.ASSISTANT}`)}
+                    onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
                 ><MoveOneIcon className="dark:text-slate-50" />管理应用模板</Button>}
             </div>
             {/* list */}

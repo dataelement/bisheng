@@ -1054,7 +1054,7 @@
     @apply opacity-100 ;
   }
   .textarea-badge{
-    @apply border border-[#E8EDF2] rounded-md px-1 bg-[#EFF3F8] text-primary
+    @apply border border-[#E8EDF2] rounded-md px-1 bg-[#EFF3F8] text-primary mr-2 mb-1 inline-block
   }
   .textarea-error {
     @apply border border-red-500 rounded-md px-1 bg-red-100 text-primary

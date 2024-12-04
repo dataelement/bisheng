@@ -15,9 +15,11 @@ import { onlineWorkflow, saveWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
-import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play } from "lucide-react";
+import { findParallelNodes } from "@/util/flowUtils";
+import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, Shield, ShieldCheck, TicketCheck } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
@@ -29,6 +31,7 @@ const Header = ({ flow, onTabChange }) => {
     const updateAppModalRef = useRef(null)
     const { uploadFlow } = useFlowStore()
     const { t } = useTranslation()
+    const navigate = useNavigate()
     console.log('flow :>> ', flow);
 
     const validateNodes = useNodeEvent(flow)
@@ -181,7 +184,7 @@ const Header = ({ flow, onTabChange }) => {
             <div className="flex items-center">
                 <Button variant="outline" size="icon" className="bg-[#fff] size-8"
                     onClick={() => {
-                        window.history.back()
+                        window.history.length > 1 ? window.history.back() : navigate('/build/apps')
                     }}
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
@@ -202,12 +205,12 @@ const Header = ({ flow, onTabChange }) => {
                             </Button>
                         </h1>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            <Badge variant="gray" className="font-light">当前版本: {version?.name}</Badge>
+                            <Badge variant="gray" className="font-light"><ShieldCheck size={14} />当前版本: {version?.name}</Badge>
                         </p>
                     </div>
                 </div>
             </div>
-            <div>
+            {/* <div>
                 <Button variant="secondary" className={`${tabType === 'edit' ? 'bg-[#fff] hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => { setTabType('edit'); onTabChange('edit') }}
                 >
@@ -217,7 +220,7 @@ const Header = ({ flow, onTabChange }) => {
                     onClick={() => { setTabType('api'); onTabChange('api') }}>
                     对外发布
                 </Button>
-            </div>
+            </div> */}
             {/* Right Section with Options */}
             <div className="flex items-center gap-3">
                 <Notification />
@@ -340,7 +343,21 @@ const useNodeEvent = (flow) => {
             errors = [...errors, ...nodeValidateEntitiesRef.current[key]()]
         })
 
+        // event func
+        const sendEvent = (ids) => {
+            const event = new CustomEvent('nodeErrorBorderEvent', {
+                detail: {
+                    nodeIds: ids
+                }
+            })
+            window.dispatchEvent(event)
+        }
+
         if (errors.length) return errors
+        if (!flow.edges.length) {
+            sendEvent([flow.nodes.find(node => node.data.type === 'start').id])
+            return ['缺少结束节点']
+        }
 
         /**
          * branch flows
@@ -380,36 +397,38 @@ const useNodeEvent = (flow) => {
         traverseTree(startNodeId, '0', [{ branch: '0', nodeId: startNodeId }])
         // console.log('flow :>> ', flow.edges, branchLines);
 
-        // event func
-        const sendEvent = (ids) => {
-            const event = new CustomEvent('nodeErrorBorderEvent', {
-                detail: {
-                    nodeIds: ids
-                }
-            })
-            window.dispatchEvent(event)
-        }
-
         // 并行校验
-        const [inputParallelNids, outputParallelNids] = branchLines.reduce(
-            ([inputNodes, outputNodes], line) => {
-                ['input', 'output'].forEach((type, index) => {
-                    const nodeId = line.nodeIds.find(node => node.nodeId.startsWith(type));
-                    if (nodeId && ![inputNodes, outputNodes][index].some(el => el.branch === nodeId.branch)) {
-                        [inputNodes, outputNodes][index].push(nodeId);
+        // input节点s & 分支节点s
+        const nodeLMap = {}
+        const [inputNodeLs, branchNodeLs] = branchLines.reduce(
+            ([inputNodeLs, branchNodeLs], line) => {
+                line.nodeIds.forEach(node => {
+                    if (node.nodeId.startsWith('input')) {
+                        const inputNode = flow.nodes.find(_node => _node.id === node.nodeId && _node.data.tab.value === 'input')
+                        // It is an input & ouput node and is different from the branch path in ids;
+                        if (inputNode && !inputNodeLs.some(el => el.branch === inputNode.branch)) {
+                            !nodeLMap[node.branch] && inputNodeLs.push(node);
+                        }
+                    } else if (node.nodeId.startsWith('output') || node.nodeId.startsWith('condition')) {
+                        !nodeLMap[node.branch] && branchNodeLs.push(node);
                     }
-                });
-                return [inputNodes, outputNodes];
+                    nodeLMap[node.branch] = true;
+                })
+                return [inputNodeLs, branchNodeLs];
             },
             [[], []]
         );
 
-        if (inputParallelNids.length > 1 || outputParallelNids.length > 1) {
+        const resutlt = findParallelNodes(inputNodeLs, branchNodeLs)
+        console.log('inputParallelNids, outputParallelNids :>> ', resutlt);
+        if (resutlt.length) {
+            // if (inputParallelNids.length > 1 || outputParallelNids.length > 1) {
             sendEvent([
-                ...inputParallelNids.length > 1 ? inputParallelNids.map(node => node.nodeId) : [],
-                ...outputParallelNids.length > 1 ? outputParallelNids.map(node => node.nodeId) : []
+                ...resutlt,
+                []
+                // ...outputParallelNids.length > 1 ? outputParallelNids.map(node => node.nodeId) : []
             ])
-            return ['不支持多个 input 节点或 output 节点（输入型交互）并行执行']
+            return ['不支持多个 input 节点（输入型交互）并行执行']
         }
 
         // 开始到结束流程是否完整
@@ -418,6 +437,28 @@ const useNodeEvent = (flow) => {
             sendEvent([errorLine.nodeIds[errorLine.nodeIds.length - 1].nodeId])
             return ['缺少结束节点']
         }
+
+        // 找出分支节点
+        const conditionOutputs = flow.nodes.reduce((res, node) => {
+            if (node.data.type === "condition") {
+                node.data.group_params[0].params[0].value.forEach(item => {
+                    res.push({ name: node.data.name, nodeId: node.id, output: item.id })
+                })
+                res.push({ name: node.data.name, nodeId: node.id, output: "right_handle" })
+            }
+            return res
+        }, [])
+        // 找出右侧没有链接的condtion节点
+        const incompleteNode = conditionOutputs.find(output => {
+            return !flow.edges.some(edge =>
+                edge.source === output.nodeId && edge.sourceHandle === output.output
+            )
+        })
+        if (incompleteNode) {
+            sendEvent(incompleteNode.nodeId)
+            return [`[${incompleteNode.name}]节点错误：存在未连接其他节点的触点`]
+        }
+
 
         sendEvent([]) // reduction
         return errors

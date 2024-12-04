@@ -106,3 +106,65 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
     )
     return res ? '' : `${nodeName}节点错误：${varNameCn}不存在`
 }
+
+
+/**
+ * 并行节点判断
+ * // 测速数据
+    var a = [
+        { branch: "0_0_0", nodeId: "input_28f7a" },
+        { branch: "0_0_0_0", nodeId: "input_6d972" },
+        { branch: "0_0_0_1", nodeId: "input_75275" },
+        { branch: "0_0_1", nodeId: "input_6bf08" },
+        { branch: "0_1", nodeId: "input_4f5cc" } // 直接分支自 0
+    ];
+
+    var b = [
+        { branch: "0_0", nodeId: "output_b808c" }
+    ];
+ */
+export function findParallelNodes(a, b) {
+    const result = [];
+    const parents = b.sort((a, b) => a.branch.length - b.branch.length);
+
+    for (let i = 0; i < a.length; i++) {
+        const branch1 = a[i].branch;
+        const parentBranch1 = branch1.split('_').slice(0, -1).join('_');
+        for (let j = i + 1; j < a.length; j++) {
+            const branch2 = a[j].branch;
+
+            // 是否同一个分支
+            if (branch1.startsWith(branch2) || branch2.startsWith(branch1)) {
+                continue
+            }
+
+            // 获取父分支
+            const parentBranch2 = branch2.split('_').slice(0, -1).join('_');
+
+            // 检查父分支相同 & 节点不属于 b 的分支
+            const isSameParent = parentBranch1 === parentBranch2;
+            if (isSameParent) {
+                const isUnderBBranch = parents.some(node =>
+                    node.branch === parentBranch1
+                );
+                if (isUnderBBranch) {
+                    continue
+                }
+                result.push(a[i].nodeId, a[j].nodeId);
+            }
+
+            // 不属于同一个父分支节点
+            const isUnderBBranch = parents.some(node =>
+                branch1.startsWith(node.branch) && branch2.startsWith(node.branch)
+            );
+            if (isUnderBBranch) {
+                continue
+            }
+            result.push(a[i].nodeId, a[j].nodeId);
+        }
+    }
+
+    // 去重并返回结果
+    return [...new Set(result)];
+}
+

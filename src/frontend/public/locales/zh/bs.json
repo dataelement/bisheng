@@ -531,7 +531,10 @@
     "apiKey": "API密钥",
     "azureEndpoint": "Azure端点",
     "apiVersion": "API版本",
-    "assistantAvatar": "助手头像"
+    "assistantAvatar": "助手头像",
+    "confirmDeleteSkill": "确认删除该技能?",
+    "confirmDeleteFlow": "确认删除该工作流?",
+    "confirmDeleteAssistant": "确认删除该助手?"
   },
   "tools": {
     "addTool": "添加工具",
@@ -819,6 +822,7 @@
     "10502": "版本名已存在",
     "10520": "技能不存在",
     "10521": "技能已上线，不可编辑",
+    "10525": "工作流已上线，不可编辑",
     "10900": "知识库名称不可重复",
     "10901": "知识库必须选择一个embedding模型",
     "10910": "当前知识库版本不支持修改分段，请创建新知识库后进行分段修改",

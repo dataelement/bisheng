@@ -5,7 +5,7 @@ import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DragOptions from "./DragOptions";
 
 const enum FormType {
@@ -32,6 +32,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     const [errors, setErrors] = useState<any>({}); // 用于存储校验错误
 
     // 当 initialData 存在时，填充表单数据（用于编辑模式）
+    const oldVarNameRef = useRef(""); // 存储初始的变量名称,用于对比是否修改    
     useEffect(() => {
         if (initialData) {
             const {
@@ -49,6 +50,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 allowMultiple, // 允许多选
                 options, // 选项，适用于下拉框
             });
+
+            oldVarNameRef.current = variableName;
         }
     }, [initialData]);
 
@@ -64,7 +67,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         let counter = 1;
         while (existingOptions?.some(opt => opt.key === initialVarName)) {
             counter += 1;
-            initialVarName = `${initialVarName}${counter}`;
+            initialVarName = `${names[formData.formType]}${counter}`;
         }
         setFormData((prevData) => ({
             ...prevData,
@@ -89,7 +92,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             newErrors.variableName = "变量名称不能超过 50 个字符";
         } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.variableName)) {
             newErrors.variableName = "变量名称只能包含英文字符、数字和下划线，且不能以数字开头";
-        } else if (existingOptions?.some(opt => opt.key === formData.variableName)) {
+        } else if (existingOptions?.some(opt => opt.key === formData.variableName) && formData.variableName !== oldVarNameRef.current) {
             newErrors.variableName = "变量名称已存在";
         }
 
@@ -305,6 +308,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
         <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
                 <DragOptions
+                    scroll
                     options={data.value.map(el => ({
                         key: el.key,
                         text: `${el.value}(${el.key})`,
