@@ -10,7 +10,7 @@ from loguru import logger
 from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
-    FlowOnlineEditError
+    FlowOnlineEditError, WorkFlowOnlineEditError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
@@ -176,7 +176,10 @@ class FlowService(BaseService):
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value:
-            return FlowOnlineEditError.return_resp()
+            if flow_info.flow_type == FlowType.WORKFLOW.value:
+                return WorkFlowOnlineEditError.return_resp()
+            else:
+                return FlowOnlineEditError.return_resp()
 
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
