@@ -36,7 +36,7 @@ class AgentNode(BaseNode):
 
         # 聊天消息
         self._chat_history_flag = self.node_params['chat_history_flag']['flag']
-        self._chat_history_num = self.node_params['chat_history_flag']['number']
+        self._chat_history_num = self.node_params['chat_history_flag']['value']
 
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
                                                temperature=self.node_params.get(
