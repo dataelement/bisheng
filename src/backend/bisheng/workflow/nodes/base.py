@@ -121,3 +121,6 @@ class BaseNode(ABC):
             self.callback_manager.on_node_end(data=NodeEndData(
                 unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
         return state
+
+    async def arun(self, state: dict) -> Any:
+        return self.run(state)

@@ -47,6 +47,9 @@ class BaseClient(ABC):
         trace_id = uuid4().hex
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
         with logger.contextualize(trace_id=trace_id):
+            if message.get('action') == 'stop':
+                await self._handle_message(message)
+                return
             thread_pool.submit(trace_id,
                                self.wrapper_task,
                                trace_id,
@@ -110,9 +113,10 @@ class BaseClient(ABC):
 
     async def stop_handle_message(self, message: Dict[any, any]):
         # 中止消息处理逻辑
-        logger.info(f'need stop agent, client_key: {self.client_key}, message: {message}')
+        logger.info(f'need stop agent, client_key: {self.client_key}, task_ids: {self.task_ids}')
 
         # 中止之前的处理函数 因为最新的任务id是中止任务的id，不能取消自己
-        thread_pool.cancel_task(self.task_ids[:-1])
+        thread_pool.cancel_task(self.task_ids)
+        logger.info(f'need stop over, client_key: {self.client_key}, task_ids: {self.task_ids}')
 
         await self.send_response('processing', 'close', '')

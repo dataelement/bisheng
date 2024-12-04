@@ -63,6 +63,7 @@ class WorkflowClient(BaseClient):
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
+            self.workflow = None
             await self.stop_handle_message(message)
         else:
             logger.warning('not support action: %s', message.get('action'))
@@ -72,7 +73,8 @@ class WorkflowClient(BaseClient):
             return
         workflow_conf = settings.get_workflow_conf()
         try:
-            self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, workflow_conf.max_steps,
+            self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, True,
+                                     workflow_conf.max_steps,
                                      workflow_conf.timeout,
                                      self.callback)
         except Exception as e:
@@ -86,7 +88,7 @@ class WorkflowClient(BaseClient):
         await self.workflow_run()
 
     async def workflow_run(self, input_data: dict = None):
-        status, reason = self.workflow.run(input_data)
+        status, reason = await self.workflow.arun(input_data)
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             self.workflow = None
             if status == WorkflowStatus.FAILED.value:
@@ -96,7 +98,12 @@ class WorkflowClient(BaseClient):
 
     async def handle_user_input(self, data: dict):
         logger.info(f'get user input: {data}')
-
+        if not self.workflow:
+            logger.warning('workflow is over')
+            return
+        if self.workflow.graph_engine.status != WorkflowStatus.INPUT.value:
+            logger.warning('workflow is not input status')
+            return
         user_input = {}
         for node_id, node_info in data.items():
             user_input[node_id] = node_info['data']
@@ -113,10 +120,4 @@ class WorkflowClient(BaseClient):
                                                           flow_id=self.client_id,
                                                           chat_id=self.chat_id,
                                                           user_id=self.user_id))
-        if not self.workflow:
-            logger.warning('workflow is over')
-            return
-        if self.workflow.graph_engine.status != WorkflowStatus.INPUT.value:
-            logger.warning('workflow is not in input status')
-            return
         await self.workflow_run(user_input)

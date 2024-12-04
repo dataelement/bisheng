@@ -17,5 +17,8 @@ class OutputFakeNode(BaseModel):
         """ 什么都不执行，只是用来处理output的中断，判断是否需要用户的输入 """
         return state
 
+    async def arun(self, state: dict):
+        return self.run(state)
+
     def get_input_schema(self):
         return self.output_node.get_input_schema()

@@ -29,12 +29,14 @@ class GraphEngine:
                  user_id: str = None,
                  workflow_id: str = None,
                  workflow_data: Dict = None,
+                 async_mode: bool = False,
                  max_steps: int = 0,
                  callback: BaseCallback = None):
         self.user_id = user_id
         self.workflow_id = workflow_id
         self.workflow_data = workflow_data
         self.max_steps = max_steps
+        self.async_mode = async_mode
         # 回调
         self.callback = callback
 
@@ -73,7 +75,10 @@ class GraphEngine:
         # output 节点后跟一个fake 节点用来处理中断
         if node_instance.type == NodeType.OUTPUT.value:
             fake_node = self.nodes_map[f'{node_instance.id}_fake']
-            self.graph_builder.add_node(fake_node.id, fake_node.run)
+            if self.async_mode:
+                self.graph_builder.add_node(fake_node.id, fake_node.arun)
+            else:
+                self.graph_builder.add_node(fake_node.id, fake_node.run)
             self.graph_builder.add_edge(node_instance.id, fake_node.id)
             self.graph_builder.add_conditional_edges(
                 fake_node.id, node_instance.route_node,
@@ -121,7 +126,10 @@ class GraphEngine:
             self.nodes_map[node_data.id] = node_instance
 
             # add node into langgraph
-            self.graph_builder.add_node(node_instance.id, node_instance.run)
+            if self.async_mode:
+                self.graph_builder.add_node(node_instance.id, node_instance.arun)
+            else:
+                self.graph_builder.add_node(node_instance.id, node_instance.run)
 
             # find special node
             if node_instance.type == NodeType.START.value:
@@ -169,8 +177,21 @@ class GraphEngine:
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
 
+    async def _arun(self, input_data: Any):
+        try:
+            async for _ in self.graph.astream(input_data, config=self.graph_config):
+                pass
+            self.judge_status()
+        except Exception as e:
+            logger.exception('graph run error')
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = str(e)
+
     def run(self):
         self._run({'flag': True})
+
+    async def arun(self):
+        await self._arun({'flag': True})
 
     def continue_run(self, data: Any = None):
         """
@@ -188,6 +209,23 @@ class GraphEngine:
 
         # 继续执行graph
         self._run(None)
+
+    async def acontinue_run(self, data: Any = None):
+        """
+        接收用户的输入
+        data：{node_id: {key: value}}
+        """
+        # 接收用户输入后，继续执行
+        if data is None:
+            data = {}
+
+        # 将用户输入赋值给对应的节点
+        for node_id, node_params in data.items():
+            node_instance = self.nodes_map[node_id]
+            node_instance.handle_input(node_params)
+
+        # 继续执行graph
+        await self._arun(None)
 
     def judge_status(self):
         # 判断状态
@@ -214,7 +252,4 @@ class GraphEngine:
                 if intput_schema:
                     # output 节点需要用户输入
                     self.status = WorkflowStatus.INPUT.value
-                else:
-                    self.continue_run(None)
                 return
-        self.continue_run(None)
