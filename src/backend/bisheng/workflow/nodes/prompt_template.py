@@ -33,11 +33,9 @@ class PromptTemplateParser:
 
         def replacer(match):
             key = match.group(1)
-            value = inputs.get(key,
-                               match.group(0))  # return original matched string if key not found
-            if isinstance(value, dict):
-                logger.info(f'value is dict, key={key}, value={value}')
-                value = value['result']  # rag result
+            value = inputs.get(key, match.group(0))  # return original matched string if key not found
+            if value is None:
+                value = 'None'
 
             if remove_template_variables:
                 return PromptTemplateParser.remove_template_variables(
