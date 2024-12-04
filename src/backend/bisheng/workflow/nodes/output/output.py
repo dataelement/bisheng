@@ -45,7 +45,7 @@ class OutputNode(BaseNode):
     def route_node(self, state: dict) -> str:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
-            return self.get_next_node_id(self.node_params['output_result']['value'])
+            return self.get_next_node_id(self._output_result)
         return self._next_node_id
 
     def _run(self, unique_id: str):
