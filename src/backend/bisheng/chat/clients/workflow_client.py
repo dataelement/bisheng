@@ -76,6 +76,7 @@ class WorkflowClient(BaseClient):
                                      workflow_conf.timeout,
                                      self.callback)
         except Exception as e:
+            logger.exception('init_workflow_error')
             self.workflow = None
             await self.send_response('error', 'over', str(e))
             return
