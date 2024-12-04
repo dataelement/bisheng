@@ -52,7 +52,7 @@ def read_template(page_size: Optional[int] = None,
                   id: Optional[int] = None,
                   name: Optional[str] = None):
     """Read all flows."""
-    sql = select(Template.id, Template.name, Template.description, Template.update_time)
+    sql = select(Template.id, Template.name, Template.description, Template.update_time,Template.order_num)
     if id:
         with session_getter() as session:
             template = session.get(Template, id)
