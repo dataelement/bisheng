@@ -34,8 +34,8 @@ class PromptTemplateParser:
         def replacer(match):
             key = match.group(1)
             value = inputs.get(key, match.group(0))  # return original matched string if key not found
-            if value is None:
-                value = 'None'
+            if not isinstance(value, str):
+                value = str(value)
 
             if remove_template_variables:
                 return PromptTemplateParser.remove_template_variables(
