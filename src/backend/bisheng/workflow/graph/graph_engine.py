@@ -169,6 +169,7 @@ class GraphEngine:
 
     def _run(self, input_data: Any):
         try:
+            self.status = WorkflowStatus.RUNNING.value
             for _ in self.graph.stream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
@@ -179,6 +180,7 @@ class GraphEngine:
 
     async def _arun(self, input_data: Any):
         try:
+            self.status = WorkflowStatus.RUNNING.value
             async for _ in self.graph.astream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
@@ -246,10 +248,10 @@ class GraphEngine:
                     self.status = WorkflowStatus.INPUT.value
                     self.callback.on_user_input(
                         UserInputData(node_id=node_id, group_params=input_schema))
-                return
+                    return
             elif node_instance.type == NodeType.FAKE_OUTPUT.value:
                 intput_schema = node_instance.get_input_schema()
                 if intput_schema:
                     # output 节点需要用户输入
                     self.status = WorkflowStatus.INPUT.value
-                return
+                    return
