@@ -126,11 +126,7 @@ class AgentNode(BaseNode):
         if self._output_user:
             # 非stream 模式，处理结果
             for k, v in ret.items():
-                answer = ''
-                for one in v:
-                    if isinstance(one, AIMessage):
-                        answer += one.content
-                ret[k] = answer
+                answer = v
                 self.graph_state.save_context(content=answer, msg_sender='AI')
 
         return ret
