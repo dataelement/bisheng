@@ -26,7 +26,7 @@ class ReportNode(BaseNode):
         all_variables = self.graph_state.get_all_variables()
         template_def = []
         for key, value in all_variables.items():
-            template_def.append(["{{" + key + "}}", value])
+            template_def.append(["{{" + key + "}}", str(value)])
 
         # 将变量渲染到docx模板文件
         output_doc = doc_parse.render(template_def)

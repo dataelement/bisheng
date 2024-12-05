@@ -190,4 +190,4 @@ class AgentNode(BaseNode):
             chat_history.append(HumanMessage(content=user))
             result = self._agent.invoke(chat_history, config=config)
 
-        return result
+        return result[-1].content
