@@ -152,8 +152,6 @@ class MinioClient:
         bucket_name=bucket,
     ):
         try:
-            if self.object_exists(bucket_name, source_object_name):
-                return
             copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
             response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
             return response

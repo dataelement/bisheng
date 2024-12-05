@@ -300,7 +300,7 @@ class FlowVersionCreate(BaseModel):
     description: Optional[str] = Field(default=None, description='版本的描述')
     data: Optional[Dict] = Field(default=None, description='技能版本的节点数据数据')
     original_version_id: Optional[int] = Field(default=None, description='版本的来源版本ID')
-    flow_type: Optional[int] = Field(default=1, description='版本的类型') # 1:普通版本 10:new 版本
+    flow_type: Optional[int] = Field(default=1, description='版本的类型')  # 1:普通版本 10:new 版本
 
 
 class FlowCompareReq(BaseModel):

@@ -96,10 +96,6 @@ def copy_normal(
 
     # 迁移 file
     try:
-        target_bbox_file = f'partitions/{knowledge_new.id}.json'
-        minio_client.copy_object(bbox_file, target_bbox_file)
-        knowledge_new.bbox_object_name = target_bbox_file
-
         source_type = source_file.rsplit('.', 1)[-1]
         source_path = source_file.split('/')[0]
         target_source_file = f'{source_path}/{knowledge_new.id}.{source_type}'
@@ -108,6 +104,11 @@ def copy_normal(
 
         target_file_pdf = f'{knowledge_new.id}'
         minio_client.copy_object(f'{source_file_pdf}', target_file_pdf)
+
+        if minio_client.object_exists('bisheng', bbox_file):
+            target_bbox_file = f'partitions/{knowledge_new.id}.json'
+            minio_client.copy_object(bbox_file, target_bbox_file)
+            knowledge_new.bbox_object_name = target_bbox_file
     except Exception as e:
         logger.error('copy_file_error file_id={} e={}', knowledge_new.id, str(e))
         knowledge_new.remark = str(e)[:500]

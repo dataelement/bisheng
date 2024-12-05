@@ -547,9 +547,9 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
             file.remark = str(e)[:500]
             KnowledgeFileDao.update(file)
         return
-    fake_req = FileProcessBase(knowledge_id=1)
 
     for file in db_files:
+        fake_req = FileProcessBase(**json.loads(file.split_rule))
         try:
             knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
             input_files = new_files.get(file.id)

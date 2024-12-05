@@ -3,7 +3,7 @@ import json
 import math
 import os
 import time
-from typing import Any, List
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
@@ -15,7 +15,7 @@ from bisheng.api.services.knowledge_imp import (KnowledgeUtils, decide_vectorsto
                                                 read_chunk_text, retry_files)
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
-from bisheng.api.v1.schemas import (FileChunk, FileChunkMetadata, KnowledgeFileOne,
+from bisheng.api.v1.schemas import (FileChunk, FileChunkMetadata, FileProcessBase, KnowledgeFileOne,
                                     KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk)
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
@@ -345,9 +345,10 @@ class KnowledgeService(KnowledgeUtils):
         # 处理每个文件
         process_files = []
         preview_cache_keys = []
+        split_rule_dict = req_data.dict(include=FileProcessBase.__fields__.keys())
         for one in req_data.file_list:
             # 上传源文件，创建数据记录
-            db_file = cls.process_one_file(login_user, knowledge, one)
+            db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
             # 不重复的文件数据使用异步任务去执行
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # 获取此文件的预览缓存key
@@ -405,11 +406,12 @@ class KnowledgeService(KnowledgeUtils):
     def retry_files(cls, request: Request, login_user: UserPayload,
                     background_tasks: BackgroundTasks, req_data: dict):
         db_file_retry = req_data.get('file_objs')
+        split_rule = FileProcessBase(**req_data).__dict__
         if not db_file_retry:
             return []
         id2input = {file.get('id'): file for file in db_file_retry}
         file_ids = list(id2input.keys())
-        db_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+        db_files: List[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids=file_ids)
         if not db_files:
             return []
         knowledge = KnowledgeDao.query_by_id(db_files[0].knowledge_id)
@@ -426,6 +428,7 @@ class KnowledgeService(KnowledgeUtils):
                 file.file_name = input_file['remark'].split(' 对应已存在文件 ')[0]
                 file.remark = ''
             file.status = 1  # 解析中
+            file.split_rule = json.dumps(split_rule)
             file = KnowledgeFileDao.update(file)
             res.append(file)
         background_tasks.add_task(retry_files, res, id2input)
@@ -448,8 +451,13 @@ class KnowledgeService(KnowledgeUtils):
                                               file_name)
 
     @classmethod
-    def process_one_file(cls, login_user: UserPayload, knowledge: Knowledge,
-                         file_info: KnowledgeFileOne) -> KnowledgeFile:
+    def process_one_file(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        file_info: KnowledgeFileOne,
+        split_rule: Dict,
+    ) -> KnowledgeFile:
         """ 处理上传的文件 """
         minio_client = MinioClient()
         # download original file
@@ -478,6 +486,7 @@ class KnowledgeService(KnowledgeUtils):
         db_file = KnowledgeFile(knowledge_id=knowledge.id,
                                 file_name=file_name,
                                 md5=md5_,
+                                split_rule=json.dumps(split_rule),
                                 user_id=login_user.user_id)
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存
