@@ -225,7 +225,7 @@ class FlowService(BaseService):
         """
         flow_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW,ResourceTypeEnum.WORK_FLOW])
             flow_ids = [UUID(one.resource_id) for one in ret]
             assistant_ids = [UUID(one.resource_id) for one in ret]
             if not assistant_ids:
@@ -240,7 +240,7 @@ class FlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW,AccessType.WORK_FLOW])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
