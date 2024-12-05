@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 
-export default function ChatPane({ chatId, flow, wsUrl = '' }: { chatId: string, flow: any, wsUrl?: string}) {
+export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '' }: { autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
     const { changeChatId } = useMessageStore()
 
     useEffect(() => {
@@ -45,7 +45,7 @@ export default function ChatPane({ chatId, flow, wsUrl = '' }: { chatId: string,
                         },
                         message: msg,
                         message_id,
-                        category, 
+                        category,
                         extra,
                         source
                     }
@@ -60,6 +60,7 @@ export default function ChatPane({ chatId, flow, wsUrl = '' }: { chatId: string,
     }
 
     return <Chat
+        autoRun={autoRun}
         useName=''
         guideWord=''
         clear

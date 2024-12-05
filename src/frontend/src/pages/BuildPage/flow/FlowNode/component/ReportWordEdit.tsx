@@ -20,6 +20,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
         if (!iframeRef.current) return
         const iframeDom = iframeRef.current.querySelector('iframe')
         if (!iframeDom) return
+        // console.log('value :>> ', value);
         iframeDom.contentWindow.postMessage(JSON.stringify({
             type: "onExternalPluginMessage",
             action: 'insetMarker',

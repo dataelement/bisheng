@@ -31,13 +31,15 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore() // TODO del
     const { loadHistoryMsg: loadFlowHistoryMsg } = useFlowMessageStore()
-    useMessageStore
+    
     useEffect(() => {
         return destroy
     }, [])
 
+    const [autoRun, setAutoRun] = useState(false)
+    console.log('autoRun :>> ', autoRun);
     const init = async () => {
         if (type === 'flow') {
             setAssistant(null)
@@ -67,13 +69,17 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setFlow(null)
             const _flow = await getFlowApi(id, version)
             version === 'v1' ? loadFlowHistoryMsg(_flow.id, chatId, {
-                appendHistory,
-                lastMsg: t('chat.historicalMessages')
-            }) : clearMsgs()
+                lastMsg: '本轮会话已结束'
+            }).then(res =>
+                setAutoRun(!res.length)
+                // setAutoRun()
+            ) : clearMsgs()
             const { data, ...f } = _flow
             const { nodes, edges, viewport } = data
-            setWorkflow({ ...f, nodes, edges, viewport })
-            changeChatId(chatId)
+            setTimeout(() => { // holding change autorun
+                setWorkflow({ ...f, nodes, edges, viewport })
+                changeChatId(chatId)
+            }, 100);
         }
     }
     useEffect(() => {
@@ -200,7 +206,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
     </div>
 
-    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
@@ -251,7 +257,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         {/* 工作流会话 */}
         {
             workflow && <div className={`w-full chat-box h-full relative px-6 ${type === 'workflow' ? 'block' : 'hidden'}`}>
-                <ChatPane chatId={chatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
             </div>
         }
     </div>

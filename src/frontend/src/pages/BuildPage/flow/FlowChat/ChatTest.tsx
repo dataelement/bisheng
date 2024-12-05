@@ -62,7 +62,7 @@ export const ChatTest = forwardRef((props, ref) => {
             </div>
         </div>
         <div className={`h-[calc(100vh-28px)] overflow-y-auto px-4 ${small ? 'hidden' : ''}`}>
-            <ChatPane chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
+            <ChatPane autoRun chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
         </div>
     </div>
 })

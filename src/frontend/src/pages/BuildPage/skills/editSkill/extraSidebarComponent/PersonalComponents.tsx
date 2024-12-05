@@ -74,7 +74,7 @@ export default function PersonalComponents({ onDragStart }) {
             </TooltipTrigger>
             <TooltipContent className="bg-gray-0 rounded-md " side="right" collisionPadding={20}>
                 <div className="">
-                    <Button variant="outline" className="w-full rounded-full" onClick={upFile}>{t('skills.importLocal')}</Button>
+                    <Button variant="outline" className="w-full bg-gray-50 rounded-full text-gray-500" onClick={upFile}>{t('skills.importLocal')}</Button>
                 </div>
                 <div className="max-h-[540px] overflow-y-auto no-scrollbar">
                     {

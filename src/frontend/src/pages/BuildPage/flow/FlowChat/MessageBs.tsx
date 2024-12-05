@@ -1,7 +1,8 @@
+import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
-import { ChatMessageType } from "@/types/chat";
+import { WorkflowMessage } from "@/types/flow";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
 import { useMemo, useRef } from "react";
@@ -9,10 +10,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useMessageStore } from "./messageStore";
-import { WorkflowMessage } from "@/types/flow";
 import ChatFile from "./ChatFileFile";
-import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
+import { useMessageStore } from "./messageStore";
 
 // 颜色列表
 const colorList = [
@@ -50,8 +49,9 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                             if (children[0] === "▍") {
                                 return (<span className="form-modal-markdown-span"> ▍ </span>);
                             }
-
-                            children[0] = (children[0] as string).replace("`▍`", "▍");
+                            if (typeof children[0] === "string") {
+                                children[0] = children[0].replace("▍", "▍");
+                            }
                         }
 
                         const match = /language-(\w+)/.exec(className || "");
@@ -106,7 +106,9 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                             {/* 光标 */}
                             {/* {data.message.toString() && !data.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>} */}
                         </div>
-                        : <div><LoadingIcon className="size-6 text-primary" /></div>
+                        : <div>{
+                            !data.end && <LoadingIcon className="size-6 text-primary" />
+                        }</div>
                     }
                 </div>
             </div>

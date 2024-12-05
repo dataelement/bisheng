@@ -256,7 +256,7 @@ export default function KnowledgeFile() {
                                     window.libname = [el.name, el.description];
                                 }}>
                                     <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                    {(user.role === 'admin' || user.user_id === el.user_id) && el.state === 1 ? <Button variant="link" onClick={() => handleCopy(el)}>复制</Button> : <Button variant="link" disabled>复制中</Button>}
+                                    {/* {(user.role === 'admin' || user.user_id === el.user_id) && el.state === 1 ? <Button variant="link" onClick={() => handleCopy(el)}>复制</Button> : <Button variant="link" disabled>复制中</Button>} */}
                                     {user.role === 'admin' || user.user_id === el.user_id ?
                                         <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-0">{t('delete')}</Button> :
                                         <Button variant="link" className=" text-gray-400 px-0">{t('delete')}</Button>

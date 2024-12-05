@@ -171,24 +171,26 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             return { messages: newChat }
         })
     },
-    async loadHistoryMsg(flowid, chatId, { appendHistory, lastMsg }) {
+    async loadHistoryMsg(flowid, chatId, { lastMsg }) {
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
+        const hisMessages = msgs.reverse()
         currentChatId = chatId
-        const hisMessages = appendHistory ? [] : msgs.reverse()
-        if (hisMessages.length) {
+        if (msgs.length && lastMsg) {
             hisMessages.push({
                 ...bsMsgItem,
-                id: Math.random() * 1000000,
-                category: 'divider',
-                message: lastMsg,
+                category: 'separator',
+                message_id: generateUUID(8),
+                message: '本轮会话已结束',
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             })
         }
         set({
             historyEnd: false,
-            messages: appendHistory ? msgs.reverse() : [],
+            messages: hisMessages,
             hisMessages
         })
+        return msgs
     },
 
     // stream end old

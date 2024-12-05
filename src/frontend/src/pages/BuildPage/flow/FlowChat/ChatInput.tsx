@@ -13,7 +13,7 @@ import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
 
-export default function ChatInput({ clear, form, wsUrl, onBeforSend, onLoad }) {
+export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -56,6 +56,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend, onLoad }) {
     }, [messages, hisMessages])
     useEffect(() => {
         if (!chatId) return
+        if (!autoRun) return
         // continueRef.current = false
         // setInputLock({ locked: false, reason: '' })
         // console.log('message chatid', messages, form, chatId);
@@ -381,7 +382,7 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend, onLoad }) {
     }
     // restart
     const handleRestartClick = () => {
-        wsRef.current.close()
+        wsRef.current?.close()
         wsRef.current = null
         insetSeparator('本轮会话已结束')
         setTimeout(() => {
@@ -431,13 +432,13 @@ export default function ChatInput({ clear, form, wsUrl, onBeforSend, onLoad }) {
             </div>
             {/* stop & 重置 */}
             <div className="absolute w-full flex justify-center bottom-32">
-                {stop.show ?
-                    <Button
-                        className="rounded-full"
-                        variant="outline"
-                        disabled={stop.disable}
-                        onClick={handleStopClick}><CirclePause className="mr-2" />Stop
-                    </Button>
+                {stop.show ? null
+                    // <Button
+                    //     className="rounded-full"
+                    //     variant="outline"
+                    //     disabled={stop.disable}
+                    //     onClick={handleStopClick}><CirclePause className="mr-2" />Stop
+                    // </Button>
                     : <Button
                         className="rounded-full"
                         variant="outline"

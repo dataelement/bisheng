@@ -6,115 +6,100 @@ import { useEffect, useRef } from "react";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
 
-// ' ' -> '&nbsp;'
-const htmlDecode = (input) => {
-    const doc = new DOMParser().parseFromString(input, "text/html");
-    return doc.documentElement.textContent;
-}
-// '&nbsp;' -> ' ' & 去html
-const htmlEncode = (input) => {
-    const doc = document.createElement('div');
-    doc.textContent = input;
-    return doc.innerHTML;
+// 解析富文本内容为保存格式
+function parseToValue(input, flowNode) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = input.replace(
+        /<span[^>]*?>(.*?)<\/span>/g, // 匹配所有 <span> 标签
+        (match, content) => {
+            // 在对象中查找匹配的 key
+            const key = Object.keys(flowNode.varZh).find((k) => flowNode.varZh[k] === content);
+            return key ? `{{#${key}#}}` : content; // 如果找到 key，返回 key，否则保持原内容
+        }
+    );
+
+    // 遍历子节点，将 <br> 转换为 \n，同时处理文本内容
+    const traverseNodes = (node) => {
+        let result = '';
+        node.childNodes.forEach((child) => {
+            if (child.nodeName === 'BR') {
+                result += '\n'; // 换行符
+            } else if (child.nodeType === Node.TEXT_NODE) {
+                result += child.textContent; // 文本内容
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                result += traverseNodes(child); // 递归解析子元素
+            }
+        });
+        return result;
+    };
+    return traverseNodes(tempDiv);
 }
 
-const findKeyByValue = (obj, value) => {
-    if (!obj) return value
-    for (const key in obj) {
-        if (obj[key] === value) {
-            return key;
-        }
-    }
-    return value;
-};
 
 export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, value, error = false, children = null, onUpload = undefined, onChange, onVarEvent = undefined }) {
     const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
-    const textAreaHtmlRef = useRef(null);
-    const textMsgRef = useRef(value || '');
+    const valueRef = useRef(value || '');
     const selectVarRef = useRef(null);
 
     const { flow } = useFlowStore()
 
-    const strToHtml = (str, vilidate = false) => {
-        let error = ''
-        const regex = /{{#(.*?)#}}/g;
-        const parts = htmlDecode(str).split(regex);
-        const html = parts.map((part, index) => {
-            if (index % 2 === 1) {
-                const msgZh = flowNode.varZh?.[part] || part;
+    // 校验变量是否可用
+    const validateVarAvailble = () => {
+        const value = valueRef.current;
+        const [html, error] = parseToHTML(value || '', true)
+        textareaRef.current.innerHTML = html
+        return error
+    }
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble)
+        return () => onVarEvent && onVarEvent(() => { })
+    }, [flowNode])
 
-                if (vilidate) {
+
+    const handleInput = () => {
+        const value = parseToValue(textareaRef.current.innerHTML, flowNode)
+        // console.log('textarea value :>> ', value);
+        valueRef.current = value;
+        onChange(value);
+    }
+
+    function parseToHTML(input, validate = false) {
+        let error = ''
+        const html = input
+            .replace(/{{#(.*?)#}}/g, (a, part) => {
+                if (validate) {
                     error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part])
                 }
-                return `<span class=${error ? "textarea-error" : "textarea-badge"} contentEditable="false">${msgZh}</span>` // 校验逻辑增加id
-            }
-            return part;
-        }).join('');
-
+                const msgZh = flowNode.varZh?.[part] || part;
+                return `<span class=${error ? "textarea-error" : "textarea-badge"} contentEditable="false">${msgZh}</span>`
+            })
+            .replace(/\n/g, '<br>');
         return [html, error]
     }
 
-    const htmlToStr = (html) => {
-        return htmlDecode(html.replace(/<span[^>]*>.*?<\/span>/g, (match) => {
-            const innerText = match.replace(/<[^>]+>/g, '');
-            // label -> value
-            return `{{#${findKeyByValue(flowNode.varZh, innerText)}#}}`; // 将 span 内容转换回表达式格式
-        }));
-    }
-
     useEffect(() => {
-        textAreaHtmlRef.current = strToHtml(value || '')[0]
-        if (textAreaHtmlRef.current) {
-            textareaRef.current.innerHTML = textAreaHtmlRef.current;
-        } else {
-            textareaRef.current.innerHTML = placeholder;
-            textareaRef.current.classList.add("placeholder");
-        }
+        // console.log('value :>> ', value);
+        textareaRef.current.innerHTML = parseToHTML(value || '')[0];
+        handleBlur()
     }, [])
 
-    const handleInput = (e) => {
-        textAreaHtmlRef.current = textareaRef.current.innerHTML;
-        textMsgRef.current = htmlToStr(textAreaHtmlRef.current)
-        onChange(textMsgRef.current);
-    }
-    // 记录光标位置
-    const cursorPositionRef = useRef(0);
-    const handleSelection = () => {
+    // 在光标位置插入内容
+    function handleInsertVariable(item, _var) {
+        handleFocus()
+
         const selection = window.getSelection();
-        if (selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            const container = textareaRef.current;
+        let range = selection.getRangeAt(0);
+        if (!selection.rangeCount) return;
 
-            let position = 0;
-            // 计算光标在文本中的位置
-            const nodes = Array.from(container.childNodes);
-            for (const node of nodes) {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    if (node === range.startContainer) {
-                        position += range.startOffset; // 获取当前文本节点中的偏移量
-                        break;
-                    } else {
-                        position += node.textContent.length; // 累加节点的文本长度
-                    }
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    // 对于元素节点直接加上其文本长度
-                    // {{##}}.length -> 6
-                    position += findKeyByValue(flowNode.varZh, node.textContent).length + 6;
-                }
-            }
-            cursorPositionRef.current = position;
-            // console.log('cursorPositionRef :>> ', cursorPositionRef.current);
+        if (!textareaRef.current.contains(range.commonAncestorContainer)) {
+            range = document.createRange();
+            range.selectNodeContents(textareaRef.current); // 设置范围为富文本框内容
+            range.collapse(false); // 将光标定位到内容末尾
+            selection.removeAllRanges();
+            selection.addRange(range);
         }
-    };
 
-    // // 在光标位置插入内容
-    const handleInsertVariable = (item, _var) => {
-        const msg = textMsgRef.current
-        // console.log('positon :>> ', cursorPositionRef.current, msg);
-        const beforeCursor = msg.slice(0, cursorPositionRef.current);
-        const afterCursor = msg.slice(cursorPositionRef.current);
-        // // lang zh map
+        // 文本框内容
         const key = `${item.id}.${_var.value}`
         const label = `${item.name}/${_var.label}`
         if (flowNode.varZh) {
@@ -124,17 +109,26 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
                 [key]: label
             }
         }
-        const newContent = beforeCursor + `{{#${key}#}}` + afterCursor;
-        const newHtmlContent = strToHtml(newContent)[0]
 
-        textMsgRef.current = newContent;
-        textAreaHtmlRef.current = newHtmlContent;
-        textareaRef.current.innerHTML = textAreaHtmlRef.current;
-        cursorPositionRef.current += `{{#${key}#}}`.length
-        // console.log('cursorPositionRef:>> ', cursorPositionRef.current);
+        const html = `<span class="textarea-badge" contentEditable="false">${label}</span>`
+        const fragment = range.createContextualFragment(html);
 
-        onChange(textMsgRef.current);
-    };
+        const lastChild = fragment.lastChild; // 提前保存引用
+        if (lastChild) {
+            range.deleteContents();
+            range.insertNode(fragment);
+
+            // 现在用保存的引用而不是 fragment.lastChild
+            range.setStartAfter(lastChild);
+            range.setEndAfter(lastChild);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } else {
+            console.warn('No valid child nodes to insert.');
+        }
+
+        handleInput()
+    }
 
     const handlePaste = (e) => {
         // fomat text
@@ -143,21 +137,8 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
         document.execCommand('insertText', false, text);
     }
 
-    // 校验变量是否可用
-    const validateVarAvailble = () => {
-        const value = textMsgRef.current;
-        const [html, error] = strToHtml(value || '', true)
-        textAreaHtmlRef.current = html
-        textareaRef.current.innerHTML = textAreaHtmlRef.current;
-        return error
-    }
-    useEffect(() => {
-        onVarEvent && onVarEvent(validateVarAvailble)
-        return () => onVarEvent && onVarEvent(() => { })
-    }, [flowNode])
-
     return <div className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'}`}>
-        <div className="flex justify-between gap-1 border-b px-2 py-1">
+        <div className="flex justify-between gap-1 border-b px-2 py-1" onClick={() => textareaRef.current.focus()}>
             <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>变量输入</Label>
             <div className="flex gap-2">
                 <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
@@ -172,8 +153,6 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
             ref={textareaRef}
             contentEditable
             onInput={handleInput}
-            onClick={handleSelection}
-            onKeyUp={handleSelection}
             onPaste={handlePaste}
             onFocus={handleFocus}
             onBlur={handleBlur}
@@ -185,8 +164,6 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
                 }
             }}
             className="nowheel bisheng-richtext px-3 py-2 whitespace-pre-line min-h-[80px] max-h-24 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-        // value={value.msg}
-        // onChange={(e) => setValue({ ...value, msg: e.target.value })}
         ></div>
         {children}
     </div>
@@ -204,7 +181,7 @@ function usePlaceholder(placeholder) {
     };
 
     const handleBlur = () => {
-        if (divRef.current && divRef.current.innerHTML.trim() === "") {
+        if (divRef.current && ['<br>', ''].includes(divRef.current.innerHTML.trim())) {
             divRef.current.innerHTML = placeholder;
             divRef.current.classList.add("placeholder");
         }

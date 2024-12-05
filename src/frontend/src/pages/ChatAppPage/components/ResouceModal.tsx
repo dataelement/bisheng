@@ -1,6 +1,7 @@
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { CircleHelp, Download, Import } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -168,18 +169,18 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                             <p className="text-sm break-all">{_file.fileName}</p>
                             <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                                 {
-                                    _file.fileUrl && <div className="tooltip tooltip-left" data-tip={t('chat.downloadPDFTooltip')}>
+                                    _file.fileUrl && <Tip content={t('chat.downloadPDFTooltip')}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                             <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                         </a>
-                                    </div>
+                                    </Tip>
                                 }
                                 {
-                                    _file.originUrl && <div className="tooltip tooltip-left" data-tip={t('chat.downloadOriginalTooltip')}>
+                                    _file.originUrl && <Tip content={t('chat.downloadOriginalTooltip')}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                             <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
                                         </a>
-                                    </div>
+                                    </Tip>
                                 }
                             </div>
                             <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
