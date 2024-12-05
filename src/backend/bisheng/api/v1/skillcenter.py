@@ -62,9 +62,9 @@ def read_template(page_size: Optional[int] = None,
     if flow_type:
         sql = sql.where(Template.flow_type == flow_type)
 
-    sql.order_by(Template.order_num.desc())
+    sql = sql.order_by(Template.order_num.desc())
     if page_size and page_name:
-        sql.offset(page_size * (page_name - 1)).limit(page_size)
+        sql = sql.offset(page_size * (page_name - 1)).limit(page_size)
     try:
         with session_getter() as session:
             template_session = session.exec(sql)
