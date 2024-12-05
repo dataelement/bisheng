@@ -22,10 +22,11 @@ def file_copy_celery(param: json) -> str:
     2. 文件的复制
     3. 向量的复制
     """
-    logger.info('file_copy_celery start')
+
     source_knowledge_id = param.get('source_knowledge_id')
     target_id = param.get('target_id')
     login_user = param.get('login_user')
+    logger.info('file_copy_celery start source_id={} target_id={}', source_knowledge_id, target_id)
     minio_client = MinioClient()
     page_size = 20
     page_num = 0
@@ -54,6 +55,7 @@ def file_copy_celery(param: json) -> str:
                     )
                 except Exception as e:
                     logger.error(f'copy file error: {one.file_name} {e}')
+
         else:
             qa: List[QAKnowledge] = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
                 source_knowledge_id, page=page_num, page_size=page_size)
@@ -93,18 +95,25 @@ def copy_normal(
     knowledge_new = KnowledgeFileDao.add_file(knowledge_new)
 
     # 迁移 file
-    target_bbox_file = f'partitions/{knowledge_new.id}.json'
-    minio_client.copy_object(bbox_file, target_bbox_file)
-    knowledge_new.bbox_object_name = target_bbox_file
+    try:
+        target_bbox_file = f'partitions/{knowledge_new.id}.json'
+        minio_client.copy_object(bbox_file, target_bbox_file)
+        knowledge_new.bbox_object_name = target_bbox_file
 
-    source_type = source_file.rsplit('.', 1)[-1]
-    source_path = source_file.split('/')[0]
-    target_source_file = f'{source_path}/{knowledge_new.id}.{source_type}'
-    minio_client.copy_object(source_file, target_source_file)
-    knowledge_new.object_name = target_source_file
+        source_type = source_file.rsplit('.', 1)[-1]
+        source_path = source_file.split('/')[0]
+        target_source_file = f'{source_path}/{knowledge_new.id}.{source_type}'
+        minio_client.copy_object(source_file, target_source_file)
+        knowledge_new.object_name = target_source_file
 
-    target_file_pdf = f'{knowledge_new.id}'
-    minio_client.copy_object(f'{source_file_pdf}', target_file_pdf)
+        target_file_pdf = f'{knowledge_new.id}'
+        minio_client.copy_object(f'{source_file_pdf}', target_file_pdf)
+    except Exception as e:
+        logger.error('copy_file_error file_id={} e={}', knowledge_new.id, str(e))
+        knowledge_new.remark = str(e)[:500]
+        knowledge_new.status = KnowledgeFileStatus.FAILED.value
+        KnowledgeFileDao.update(knowledge_new)
+        return
 
     # copy vector
     try:
