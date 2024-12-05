@@ -73,7 +73,7 @@ class WorkflowClient(BaseClient):
             return
         workflow_conf = settings.get_workflow_conf()
         try:
-            self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, True,
+            self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, False,
                                      workflow_conf.max_steps,
                                      workflow_conf.timeout,
                                      self.callback)
@@ -88,7 +88,7 @@ class WorkflowClient(BaseClient):
         await self.workflow_run()
 
     async def workflow_run(self, input_data: dict = None):
-        status, reason = await self.workflow.arun(input_data)
+        status, reason = self.workflow.run(input_data)
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             self.workflow = None
             if status == WorkflowStatus.FAILED.value:
