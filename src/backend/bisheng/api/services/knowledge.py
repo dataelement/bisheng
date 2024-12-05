@@ -406,7 +406,6 @@ class KnowledgeService(KnowledgeUtils):
     def retry_files(cls, request: Request, login_user: UserPayload,
                     background_tasks: BackgroundTasks, req_data: dict):
         db_file_retry = req_data.get('file_objs')
-        split_rule = FileProcessBase(**req_data).__dict__
         if not db_file_retry:
             return []
         id2input = {file.get('id'): file for file in db_file_retry}
@@ -421,6 +420,8 @@ class KnowledgeService(KnowledgeUtils):
                                        AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
         res = []
+        req_data['knowledge_id'] = knowledge.id
+        split_rule = FileProcessBase(**req_data).__dict__
         for file in db_files:
             # file exist
             input_file = id2input.get(file.id)
