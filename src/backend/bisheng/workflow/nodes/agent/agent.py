@@ -7,7 +7,7 @@ from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
@@ -169,9 +169,9 @@ class AgentNode(BaseNode):
         user = self._user_prompt.format(variable_map)
         self._user_prompt_list.append(user)
 
-        chat_history = None
+        chat_history = []
         if self._chat_history_flag:
-            chat_history = self.graph_state.get_history_memory(self._chat_history_num)
+            chat_history = self.graph_state.get_history_list(self._chat_history_num)
 
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
@@ -180,13 +180,14 @@ class AgentNode(BaseNode):
                                               output_key=output_key)
         config = RunnableConfig(callbacks=[llm_callback])
 
-        if self._agent_executor_type == 'get_react_agent_executor':
+        if self._agent_executor_type == 'ReAct':
             result = self._agent.invoke({
                 'input': user,
                 'chat_history': chat_history
             },
                 config=config)
         else:
-            result = self._agent.invoke(user, config=config)
+            chat_history.append(HumanMessage(content=user))
+            result = self._agent.invoke(chat_history, config=config)
 
         return result

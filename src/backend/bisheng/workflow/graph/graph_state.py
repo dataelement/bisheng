@@ -1,7 +1,7 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from langchain.memory import ConversationBufferWindowMemory
-from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
+from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string, BaseMessage
 from pydantic import BaseModel
 
 
@@ -25,6 +25,10 @@ class GraphState(BaseModel):
             human_prefix=self.history_memory.human_prefix,
             ai_prefix=self.history_memory.ai_prefix,
         )
+
+    def get_history_list(self, count: int) -> List[BaseMessage]:
+        return self.history_memory.buffer_as_messages[-count:]
+
 
     def save_context(self, content: str, msg_sender: str) -> None:
         """  保存聊天记录
