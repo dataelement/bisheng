@@ -26,8 +26,8 @@ type KnowledgeTypeValues = `${KnowledgeType}`;
 export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
     const { flow } = useFlowStore()
 
-    const currentTabRef = useRef(data.value.type)
-    const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.type)
+    const currentTabRef = useRef(data.value.tab)
+    const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.tab)
     const [value, setValue] = useState<any>(() => data.value.value.map(el => {
         return { label: el.label, value: el.key }
     }))
@@ -134,7 +134,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
             hideSearch={tabType === KnowledgeType.Temp}
             value={value}
             options={tabType === KnowledgeType.Knowledge ? options : fileOptions}
-            placeholder={data.help || ''}
+            placeholder={data.placeholder || ''}
             searchPlaceholder={t('build.searchBaseName')}
             onChange={handleSelect}
             onLoad={() => reload(1, '')}

@@ -399,6 +399,7 @@ const workflowTemplate = [
                         "key": "knowledge_id",
                         "label": "检索知识库范围",
                         "type": "knowledge_select_multi",
+                        "placeholder": "请选择知识库",
                         "value": {
                             "tab": "knowledge",
                             "value": []
