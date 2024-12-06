@@ -108,23 +108,22 @@ class AgentNode(BaseNode):
         for knowledge_id in self._knowledge_ids:
             if self._knowledge_type == 'knowledge':
                 knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
-                name = knowledge_info.name
-                description = knowledge_info.description
-
+                name = f'knowledge_{knowledge_id}'
+                description = f'{knowledge_info.name}:{knowledge_info.description}'
                 vector_client = self.init_knowledge_milvus(knowledge_info)
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
                 file_metadata = self.graph_state.get_variable_by_str(knowledge_id)
-                name = 'file name'
-                description = file_metadata.get('source')
+                name = f'knowledge_{knowledge_id.replace(".", "").replace("#", "")}'
+                description = f'file name: {file_metadata.get("source")}'
 
                 vector_client = self.init_file_milvus(file_metadata)
                 es_client = self.init_file_es(file_metadata)
 
             tool_params = {
                 'bisheng_rag': {
-                    'name': f'knowledge_{knowledge_id}',
-                    'description': f'{name}:{description}',
+                    'name': name,
+                    'description': description,
                     'vector_store': vector_client,
                     'keyword_store': es_client,
                     'llm': self._llm,
