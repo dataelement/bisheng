@@ -428,8 +428,13 @@ class KnowledgeService(KnowledgeUtils):
             if input_file['remark'] and '对应已存在文件' in input_file['remark']:
                 file.file_name = input_file['remark'].split(' 对应已存在文件 ')[0]
                 file.remark = ''
+                # 覆盖, 使用前端传入的
+                file.split_rule = json.dumps(split_rule)
+            else:
+                # 重试
+                file.split_rule = input_file['split_rule']
             file.status = 1  # 解析中
-            file.split_rule = json.dumps(split_rule)
+
             file = KnowledgeFileDao.update(file)
             res.append(file)
         background_tasks.add_task(retry_files, res, id2input)
