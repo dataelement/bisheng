@@ -245,6 +245,15 @@ class LLMService:
         return cls.get_bisheng_llm(model_id=knowledge_llm.qa_similar_model_id)
 
     @classmethod
+    def get_knowledge_default_embedding(cls) -> Optional[Embeddings]:
+        """ 获取知识库默认的embedding模型 """
+        knowledge_llm = cls.get_knowledge_llm()
+        # 没有配置模型，则用jieba
+        if not knowledge_llm.embedding_model_id:
+            return None
+        return cls.get_bisheng_embedding(model_id=knowledge_llm.embedding_model_id)
+
+    @classmethod
     def update_knowledge_llm(cls, request: Request, login_user: UserPayload, data: KnowledgeLLMConfig) \
             -> KnowledgeLLMConfig:
         """ 更新知识库相关的默认模型配置 """

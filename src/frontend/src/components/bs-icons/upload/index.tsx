@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Upload } from "./icon.svg";
+import Upload from "./icon.svg?react";
 
 export const UploadIcon = forwardRef<
     SVGSVGElement & { className: any },

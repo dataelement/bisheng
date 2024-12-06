@@ -13,6 +13,7 @@ import { downloadFile } from "@/util/utils";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import CreateDataSet from "./CreateDataSet";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function index() {
     const { t } = useTranslation();
@@ -47,7 +48,7 @@ export default function index() {
         <div className="relative h-full px-2 py-4">
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <span className="loading loading-infinity loading-lg"></span>
+                    <LoadingIcon />
                 </div>
             )}
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">

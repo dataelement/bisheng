@@ -82,7 +82,17 @@ class ObjectStore(BaseModel):
     minio: MinioConf = Field(default_factory=MinioConf, description="minio 配置")
 
 
-class Settings(BaseSettings):
+class WorkflowConf(BaseModel):
+    max_steps: int = Field(default=50, description="节点运行最大步数")
+    timeout: int = Field(default=720, description="节点超时时间（min）")
+
+
+class Settings(BaseModel):
+    class Config:
+        validate_assignment = True
+        arbitrary_types_allowed = True
+        extra = 'ignore'
+
     chains: dict = {}
     agents: dict = {}
     prompts: dict = {}
@@ -113,13 +123,14 @@ class Settings(BaseSettings):
     default_llm: dict = {}
     jwt_secret: str = 'secret'
     gpts: dict = {}
-    openai_conf = {}
-    minio_conf = {}
+    openai_conf: dict = {}
+    minio_conf: dict = {}
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
     system_login_method: SystemLoginMethod = {}
     vector_stores: VectorStores = {}
     object_storage: ObjectStore = {}
+    workflow_conf: WorkflowConf = WorkflowConf()
 
     @validator('database_url', pre=True)
     def set_database_url(cls, value):
@@ -161,10 +172,6 @@ class Settings(BaseSettings):
                     new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
                     values['redis_url'] = new_redis_url
         return values
-
-    class Config:
-        validate_assignment = True
-        extra = 'ignore'
 
     @root_validator()
     def validate_lists(cls, values):
@@ -218,6 +225,11 @@ class Settings(BaseSettings):
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
         return tmp
+
+    def get_workflow_conf(self) -> WorkflowConf:
+        # 获取密码相关的配置项
+        all_config = self.get_all_config()
+        return WorkflowConf(**all_config.get('workflow', {}))
 
     def get_from_db(self, key: str):
         # 先获取所有的key

@@ -29,7 +29,7 @@ class APIToolBase(BaseModel):
     headers: Dict[str, Any] = {}
     request_timeout: int = 30
     url: str = None
-    params: Dict[str, Any] = Field(default_factory=dict)
+    params: Dict[str, Any] = {}
     input_key: str = 'keyword'
     args_schema: Type[BaseModel] = ApiArg
 

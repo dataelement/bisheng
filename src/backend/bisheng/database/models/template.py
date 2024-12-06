@@ -12,6 +12,8 @@ class TemplateSkillBase(SQLModelSerializable):
     description: str = Field(index=False)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
     order_num: Optional[int] = Field(default=True)
+    # 1 flow 5 assistant 10 workflow
+    flow_type: Optional[int] = Field(default=1)
     flow_id: Optional[UUID] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -33,6 +35,8 @@ class TemplateRead(TemplateSkillBase):
 
 
 class TemplateCreate(TemplateSkillBase):
+    # 1 flow 5 assistant 10 workflow
+    # flow_type: int = 1
     pass
 
 

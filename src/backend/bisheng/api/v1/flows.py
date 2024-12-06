@@ -10,7 +10,7 @@ from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remov
 from bisheng.api.v1.schemas import (FlowCompareReq, FlowListRead, FlowVersionCreate, StreamData,
                                     UnifiedResponseModel, resp_200)
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle,
+from bisheng.database.models.flow import (Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType,
                                           FlowUpdate)
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
@@ -37,7 +37,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     # 创建新的技能
-    db_flow = FlowDao.create_flow(db_flow)
+    db_flow = FlowDao.create_flow(db_flow,FlowType.FLOW.value)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
     ret = FlowRead.model_validate(db_flow)

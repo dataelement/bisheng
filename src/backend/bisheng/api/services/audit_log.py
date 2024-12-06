@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import UUID
 
 from loguru import logger
@@ -6,7 +6,7 @@ from loguru import logger
 from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.assistant import AssistantDao, Assistant
-from bisheng.database.models.flow import FlowDao, Flow
+from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import GroupDao, Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.api.errcode.base import UnAuthorizedError
@@ -133,33 +133,48 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str,flow_type:Optional[int] = None):
         """
         新建技能的审计日志
         """
+        obj_type = ObjectType.FLOW
+        rs_type = ResourceTypeEnum.FLOW
+        if flow_type == FlowType.WORKFLOW.value:
+            obj_type = ObjectType.WORK_FLOW
+            rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=create_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.FLOW,
-                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+        cls._build_log(user, ip_address, EventType.CREATE_BUILD, obj_type,
+                       flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
-    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str,flow_type:Optional[int] = None):
         """
         更新技能的审计日志
         """
+        obj_type = ObjectType.FLOW
+        rs_type = ResourceTypeEnum.FLOW
+        if flow_type == FlowType.WORKFLOW.value:
+            obj_type = ObjectType.WORK_FLOW
+            rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, ObjectType.FLOW,
-                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+        cls._build_log(user, ip_address, EventType.UPDATE_BUILD, obj_type,
+                       flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
-    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
+    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow,flow_type:Optional[int] = None):
         """
         删除技能的审计日志
         """
+        obj_type = ObjectType.FLOW
+        rs_type = ResourceTypeEnum.FLOW
+        if flow_type == FlowType.WORKFLOW.value:
+            obj_type = ObjectType.WORK_FLOW
+            rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.FLOW,
-                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+        cls._build_log(user, ip_address, EventType.DELETE_BUILD, obj_type,
+                       flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
     def create_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):

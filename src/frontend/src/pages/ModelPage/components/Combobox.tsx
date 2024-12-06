@@ -1,19 +1,9 @@
-import { CaretSortIcon, CheckIcon } from "@radix-ui/react-icons"
+import { Button } from "@/components/bs-ui/button"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/bs-ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
+import { Check, ChevronsUpDown } from "lucide-react"
 import { useState } from "react"
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-} from "../../../components/ui/command"
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "../../../components/ui/popover"
 import { cn } from "../../../utils"
-import { Button } from "../../../components/ui/button"
 
 interface IProps {
     options: any[],
@@ -46,7 +36,7 @@ export default function Combobox({
                         ? options.find((option) => option[valueKey] + '' === value)?.[labelKey]
                         : <span>{placeholder}</span>
                 }
-                <CaretSortIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[200px] p-0">
@@ -71,7 +61,7 @@ export default function Combobox({
                             }}
                         >
                             {option[labelKey]}
-                            <CheckIcon
+                            <Check
                                 className={cn(
                                     "ml-auto h-4 w-4",
                                     value === option[valueKey] + '' ? "opacity-100" : "opacity-0"

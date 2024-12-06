@@ -1,6 +1,6 @@
 import cloneDeep from "lodash-es/cloneDeep";
 import { ReactNode, createContext, useContext, useState } from "react";
-import { addEdge } from "reactflow";
+import { addEdge } from "@xyflow/react";
 import { updateFlowApi } from "../controllers/API/flow";
 import { APIClassType, APITemplateType } from "../types/api";
 import { FlowType, FlowVersionItem, NodeType } from "../types/flow";
@@ -170,7 +170,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
     const insidePosition = position.paneX
       ? { x: position.paneX + position.x, y: position.paneY + position.y }
-      : reactFlowInstance.project({ x: position.x, y: position.y });
+      : reactFlowInstance.screenToFlowPosition({ x: position.x, y: position.y });
 
     selectionInstance.nodes.forEach((n: NodeType) => {
       // Generate a unique node ID

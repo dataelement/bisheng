@@ -2,8 +2,7 @@ import { Alert, AlertDescription } from '@/components/bs-ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import Skeleton from '@/components/bs-ui/skeleton';
 import { copyText } from '@/utils';
-import { CrossCircledIcon, InfoCircledIcon } from '@radix-ui/react-icons';
-import { Check, Clipboard } from 'lucide-react';
+import { Check, CircleX, Clipboard, Info } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -36,7 +35,7 @@ const BorwserSkeleton = ({ size = '' }) => {
               <Skeleton className="h-6 w-16 ml-2 rounded" /> {/* 发送按钮骨架 */}
             </div>
           </div>
-          <CrossCircledIcon className='h-6 w-6 text-foreground' />
+          <CircleX className='h-6 w-6 text-foreground' />
         </div>
           : <div className="p-4 bg-white">
             <div className="border border-border rounded-lg p-4 space-y-4">
@@ -104,7 +103,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
   return (
     <section className='pb-20 max-w-[1600px]'>
       <Alert className='mb-4'>
-        <InfoCircledIcon className="h-4 w-4" />
+        <Info className="h-4 w-4" />
         <AlertDescription className='mt-0.5'>
           {noLogin
             ? t('api.noLoginLinkDescription')

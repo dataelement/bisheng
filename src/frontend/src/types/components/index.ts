@@ -1,5 +1,5 @@
 import { ReactElement, ReactNode } from "react";
-import { ReactFlowJsonObject, XYPosition } from "reactflow";
+import { ReactFlowJsonObject, XYPosition } from "@xyflow/react";
 import { APIClassType, APITemplateType, TemplateVariableType } from "../api";
 import { ChatMessageType } from "../chat";
 import { FlowStyleType, FlowType, NodeDataType, NodeType } from "../flow/index";

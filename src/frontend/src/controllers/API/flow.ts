@@ -1,4 +1,4 @@
-import { ReactFlowJsonObject } from "reactflow";
+import { ReactFlowJsonObject } from "@xyflow/react";
 import { FlowStyleType, FlowType, FlowVersionItem } from "../../types/flow";
 import axios from "../request";
 
@@ -152,6 +152,23 @@ export async function readFlowsFromDatabase(page: number = 1, pageSize: number =
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
     const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}${tagIdStr}`);
     return { data, total };
+}
+
+/* app list */
+export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type }) {
+    const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
+    const map = { assistant: 5, skill: 1, flow: 10 }
+    const flowType = map[type] ? `&flow_type=${map[type]}` : ''
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/workflow/list?page_num=${page}&page_size=${pageSize}&name=${keyword}${tagIdStr}${flowType}`);
+    const newData = data.map(item => {
+        if (item.flow_type !== 5) return item
+        return {
+            ...item,
+            description: item.desc,
+            version_list: item.version_list || [],
+        }
+    })
+    return { data: newData, total };
 }
 
 /**

@@ -4,7 +4,7 @@ import json
 from typing import List, Optional
 
 import requests
-from langchain.document_loaders.blob_loaders import Blob
+from langchain_community.document_loaders.blob_loaders import Blob
 from langchain.schema import Document
 
 

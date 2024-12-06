@@ -87,11 +87,11 @@ def mysql_query(mysql_url):
 
 mysql_url = 'mysql+pymysql://root:E1SkG0PaDMEPTAxY@192.168.106.116:3306/langflow?charset=utf8mb4'
 exist_knowledge, collection_list, es_list = mysql_query(mysql_url)
-clean_es("192.168.106.116:9200",
-         'elastic',
-         auth="",
-         exist_knowledge=exist_knowledge,
-         es_index=es_list)
-clean_milvus("http://192.168.106.116:19530",
+# clean_es("192.168.106.116:9200",
+#          'elastic',
+#          auth="",
+#          exist_knowledge=exist_knowledge,
+#          es_index=es_list)
+clean_milvus("http://192.168.106.109:19530",
              exist_knowledge=exist_knowledge,
              collection_list=collection_list)

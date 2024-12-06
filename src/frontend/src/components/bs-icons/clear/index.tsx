@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Clear } from "./Clear.svg";
+import Clear from "./Clear.svg?react";
 
 export const ClearIcon = forwardRef<
     SVGSVGElement & { className: any },

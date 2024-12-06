@@ -7,21 +7,19 @@ import "ace-builds/src-noconflict/theme-twilight";
 import { TerminalSquare } from "lucide-react";
 import { useContext, useState } from "react";
 import AceEditor from "react-ace";
-import { Button } from "../../components/ui/button";
+import { useTranslation } from "react-i18next";
+import { Button } from "../../components/bs-ui/button";
 import { alertContext } from "../../contexts/alertContext";
 import { darkContext } from "../../contexts/darkContext";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { postValidateCode } from "../../controllers/API";
+import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { APIClassType } from "../../types/api";
 import BaseModal from "../baseModal";
-import { useTranslation } from "react-i18next";
-import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 
 export default function CodeAreaModal({
   value,
-  setValue,
-  nodeClass,
-  setNodeClass,
+  setValue
 }: {
   setValue: (value: string) => void;
   value: string;

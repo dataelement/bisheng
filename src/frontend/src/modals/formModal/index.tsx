@@ -10,14 +10,8 @@ import ChatInput from "./chatInput";
 import ChatMessage from "./chatMessage";
 
 import cloneDeep from "lodash-es/cloneDeep";
-import ToggleShadComponent from "../../components/toggleShadComponent";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "../../components/ui/accordion";
-import { Badge } from "../../components/ui/badge";
+import { useTranslation } from "react-i18next";
+import { Badge } from "../../components/bs-ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -25,12 +19,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "../../components/ui/dialog";
-import { Textarea } from "../../components/ui/textarea";
-import { CHAT_FORM_DIALOG_SUBTITLE, THOUGHTS_ICON } from "../../constants";
-import { TabsContext } from "../../contexts/tabsContext";
-import { useTranslation } from "react-i18next";
+} from "../../components/bs-ui/dialog";
+import { Textarea } from "../../components/bs-ui/input";
+import ToggleShadComponent from "../../components/toggleShadComponent";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../../components/ui/accordion";
+import { THOUGHTS_ICON } from "../../constants";
 import { locationContext } from "../../contexts/locationContext";
+import { TabsContext } from "../../contexts/tabsContext";
 
 export default function FormModal({
   flow,

@@ -1,4 +1,5 @@
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -104,7 +105,7 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                     <div className="relative">
                         {loading && (
                             <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                                <span className="loading loading-infinity loading-lg"></span>
+                                <LoadingIcon />
                             </div>
                         )}
                         <div className="h-[510px] overflow-y-auto">

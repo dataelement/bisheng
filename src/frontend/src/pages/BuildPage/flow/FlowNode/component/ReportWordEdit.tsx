@@ -1,17 +1,18 @@
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Button } from "@/components/bs-ui/button"
-import { generateUUID } from "@/components/bs-ui/utils"
+import { getWorkflowReportTemplate } from "@/controllers/API/workflow"
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload"
 import Word from "@/pages/Report/components/Word"
-import { ChevronDown } from "lucide-react"
-import { useRef, useState } from "react"
+import { ChevronDown, ChevronLeft } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import SelectVar from "./SelectVar"
+import { DialogClose } from "@/components/bs-ui/dialog"
 // save(fe) -> office(onlyofc) -> upload(be)
-export default function ReportWordEdit({ nodeId }) {
+export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     const { t } = useTranslation()
 
-    const { docx, loading, createDocx, importDocx } = useReport()
+    const { docx, loading, createDocx, importDocx } = useReport(versionKey, onChange)
 
     // inset var
     const iframeRef = useRef(null)
@@ -19,6 +20,7 @@ export default function ReportWordEdit({ nodeId }) {
         if (!iframeRef.current) return
         const iframeDom = iframeRef.current.querySelector('iframe')
         if (!iframeDom) return
+        // console.log('value :>> ', value);
         iframeDom.contentWindow.postMessage(JSON.stringify({
             type: "onExternalPluginMessage",
             action: 'insetMarker',
@@ -27,7 +29,12 @@ export default function ReportWordEdit({ nodeId }) {
     }
 
     // new
-    if (!docx.path) return <div className="flex size-full">
+    if (!docx.path) return <div className="relative size-full">
+        <div className="absolute -top-10 z-10 flex gap-4">
+            <DialogClose className="">
+                <Button variant="outline" size="icon" className="bg-[#fff] size-8"><ChevronLeft /></Button>
+            </DialogClose>
+        </div>
         <div className="bg-accent size-full flex justify-center items-center">
             <div className="border rounded-md p-8 py-10 w-1/2 bg-card">
                 <p className="text-xl">{t('report.reportTemplate')}</p>
@@ -49,12 +56,15 @@ export default function ReportWordEdit({ nodeId }) {
         </div>}
         <div className="flex h-full">
             <div ref={iframeRef} className="relative flex-1 border bg-accent">
-                <div className="absolute right-10 top-2 z-10">
+                <div className="absolute -top-10 z-10 flex gap-4">
+                    <DialogClose className="">
+                        <Button variant="outline" size="icon" className="bg-[#fff] size-8"><ChevronLeft /></Button>
+                    </DialogClose>
                     <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => handleInset(`${E.id}.${v.value}`)}>
-                        <Button variant="black" className="h-8">插入变量 <ChevronDown size={14} /></Button>
+                        <Button className="h-8">插入变量 <ChevronDown size={14} /></Button>
                     </SelectVar>
                 </div>
-                <Word data={docx}></Word>
+                <Word data={docx} workflow></Word>
                 {/* <LabelPanne onInset={handleInset}></LabelPanne> */}
             </div>
         </div>
@@ -62,7 +72,7 @@ export default function ReportWordEdit({ nodeId }) {
 };
 
 
-const useReport = (onChange) => {
+const useReport = (versionKey, onchange) => {
     const [loading, setLoading] = useState(false)
 
     const [docx, setDocx] = useState({
@@ -70,16 +80,20 @@ const useReport = (onChange) => {
         path: ''
     })
 
-    const handleCreate = () => {
-        const newData = {
-            key: generateUUID(32),
-            path: res.file_path
-        }
-        setDocx({
-            key: '',
-            path: 'http://192.168.106.120:3002/empty.docx'
-            // path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx' // 文档服务能访问到的文件地址
+    useEffect(() => {
+        getWorkflowReportTemplate(versionKey).then(res => {
+            setDocx({
+                key: res.version_key,
+                path: res.url
+            })
+            onchange(res.version_key)
         })
+    }, [])
+
+
+    const handleCreate = async () => {
+        // setDocx(docx => ({ ...docx, path: 'http://192.168.106.120:3002/empty.docx' }))
+        setDocx(doc => ({...docx, path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx'}))// 文档服务能访问到的文件地址
     }
 
     const handleImport = () => {
@@ -98,12 +112,7 @@ const useReport = (onChange) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             uploadFileWithProgress(file, (progress) => { }).then(res => {
                 setLoading(false);
-                const newData = {
-                    key: generateUUID(32),
-                    path: res.file_path
-                }
-                setDocx(newData)
-                onChange(newData)
+                setDocx(docx => ({ ...docx, path: res.file_path }))
             })
         };
 

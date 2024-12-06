@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as AddTo } from "./AddTo.svg";
+import AddTo from "./AddTo.svg?react";
 
 export const AddToIcon = forwardRef<
     SVGSVGElement & { className: any },

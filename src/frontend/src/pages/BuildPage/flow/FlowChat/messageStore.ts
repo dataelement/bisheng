@@ -55,8 +55,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
     return data.filter(item => ['answer', 'question', 'processing', 'system', 'report', 'tool', 'knowledge', 'divider', 'flow'].includes(item.category)).map(item => {
-        // let count = 0
-        let { message, files, is_bot, intermediate_steps, ...other } = item
+        let { message, files, is_bot, intermediate_steps, category, ...other } = item
         try {
             message = message && message[0] === '{' ? JSON.parse(message) : message || ''
         } catch (e) {
@@ -65,6 +64,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         }
         return {
             ...other,
+            category,
             chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
             end: true,
             files: files ? JSON.parse(files) : [],
@@ -94,16 +94,16 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         console.log('change createWsMsg');
         set((state) => {
             let newChat = cloneDeep(state.messages);
-            const { category, flow_id, chat_id, message_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
+            const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id } = data
             newChat.push({
                 category, flow_id, chat_id, message_id, files, is_bot,
-                message: typeof message === 'string' ? message : message.msg, receiver, source, user_id,
+                message, receiver, source, user_id,
                 liked: !!liked,
                 end: type === 'over',
                 sender: '',
                 node_id: message?.node_id || '',
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-                // extra,
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+                extra
             })
             return { messages: newChat }
         })
@@ -118,8 +118,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         // append
         const newCurrentMessage = {
             ...currentMsg,
-            message: currentMsg.message + data.message.msg,
-            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+            message: data.type === 'end' ? currentMsg.message : currentMsg.message + data.message.msg,
+            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+            end: data.type === 'end'
         }
 
         messages[currentMessageIndex] = newCurrentMessage
@@ -130,7 +131,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             messages:
                 [...state.messages, {
                     ...bsMsgItem,
-                    category: 'user',
+                    category: 'question',
                     message_id: generateUUID(8),
                     message: msg,
                     update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
@@ -168,6 +169,27 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             return { messages: newChat }
         })
     },
+    async loadHistoryMsg(flowid, chatId, { lastMsg }) {
+        const res = await getChatHistory(flowid, chatId, 30, 0)
+        const msgs = handleHistoryMsg(res)
+        const hisMessages = msgs.reverse()
+        currentChatId = chatId
+        if (msgs.length && lastMsg) {
+            hisMessages.push({
+                ...bsMsgItem,
+                category: 'separator',
+                message_id: generateUUID(8),
+                message: '本轮会话已结束',
+                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+            })
+        }
+        set({
+            historyEnd: false,
+            messages: hisMessages,
+            hisMessages
+        })
+        return msgs
+    },
 
     // stream end old
     updateCurrentMessage(data) {
@@ -190,25 +212,6 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
-    },
-    async loadHistoryMsg(flowid, chatId, { appendHistory, lastMsg }) {
-        const res = await getChatHistory(flowid, chatId, 30, 0)
-        const msgs = handleHistoryMsg(res)
-        currentChatId = chatId
-        const hisMessages = appendHistory ? [] : msgs.reverse()
-        if (hisMessages.length) {
-            hisMessages.push({
-                ...bsMsgItem,
-                id: Math.random() * 1000000,
-                category: 'divider',
-                message: lastMsg,
-            })
-        }
-        set({
-            historyEnd: false,
-            messages: appendHistory ? msgs.reverse() : [],
-            hisMessages
-        })
     },
     async loadMoreHistoryMsg(flowid, appendHistory) {
         if (get().running) return // 会话进行中禁止加载more历史

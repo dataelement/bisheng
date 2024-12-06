@@ -1,3 +1,4 @@
+import { AppType } from "@/types/app";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
@@ -74,8 +75,13 @@ export async function saveThemeApi(data: string): Promise<any> {
  * @returns The flows data.
  * @throws Will throw an error if reading fails.
  */
-export async function readTempsDatabase(id?: number): Promise<FlowType[]> {
-  return await axios.get(`/api/v1/skill/template${id ? '?id=' + id : ''}`);
+export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> {
+  const typeMap = {
+    [AppType.FLOW]: 10,
+    [AppType.ASSISTANT]: 5,
+    [AppType.SKILL]: 1
+  }
+  return await axios.get(`/api/v1/skill/template?flow_type=${typeMap[type]}${id ? '&id=' + id : ''}`);
 }
 
 /**
@@ -84,8 +90,9 @@ export async function readTempsDatabase(id?: number): Promise<FlowType[]> {
  * @param data {flow_id name description}
  * @returns  null.
  */
-export function createTempApi(params) {
-  return axios.post(`/api/v1/skill/template/create`, params);
+export function createTempApi(params, type) {
+  const map = { assistant: 5, skill: 1, flow: 10 }
+  return axios.post(`/api/v1/skill/template/create`, { ...params, flow_type: map[type] });
 }
 
 /**
@@ -110,6 +117,7 @@ export function updateTempApi(temp_id, data) {
 
 /**
  * 获取知识库列表
+ * type 0文件库 1qa库
  */
 export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0 }) {
   try {
@@ -129,6 +137,13 @@ export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', 
 }
 
 /**
+ * 复制知识库
+ */
+export async function copyLibDatabase(knowledge_id) {
+  await axios.post(`/api/v1/knowledge/copy`, { knowledge_id });
+}
+
+/**
  * 获取知识库下文件列表
  */
 export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status }) {
@@ -141,19 +156,19 @@ export async function readFileByLibDatabase({ id, page, pageSize = 20, name = ''
 /**
  * 重试解析文件
  */
-export async function retryKnowledgeFileApi(objs) {
-  await axios.post(`/api/v1/knowledge/retry`, { file_objs: objs });
+export async function retryKnowledgeFileApi(data) {
+  await axios.post(`/api/v1/knowledge/retry`, data);
 }
 
 /**
  * 上传文件
  */
-export async function uploadLibFile(data, config, type: 'knowledge' | 'icon') {
+export async function uploadLibFile(data, config, type: 'knowledge' | 'icon', url) {
   const urls = {
     knowledge: '/api/v1/knowledge/upload',
     icon: '/api/v1/upload/icon',
   }
-  return await axios.post(urls[type], data, config);
+  return await axios.post(url || urls[type], data, config);
 }
 
 /**

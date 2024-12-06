@@ -11,6 +11,7 @@ import { formatDate } from "@/util/utils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { transformEvent, transformModule, transformObjectType } from "../utils";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -66,7 +67,7 @@ export default function SystemLog() {
     return <div className="relative">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <span className="loading loading-infinity loading-lg"></span>
+               <LoadingIcon />
             </div>
         )}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">

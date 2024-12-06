@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Avatar } from "./Avatar.svg";
+import Avatar from "./Avatar.svg?react";
 
 export const AvatarIcon = forwardRef<
     SVGSVGElement & { className: any },

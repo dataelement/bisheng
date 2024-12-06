@@ -1,5 +1,3 @@
-import httpx
-from langchain.chat_models import ChatOpenAI
 from bisheng_langchain.chat_models import ChatQWen
 from langchain.chains import LLMChain
 from langchain.prompts.chat import (

@@ -1,5 +1,5 @@
 import { Badge } from "@/components/bs-ui/badge";
-import { InfoCircledIcon } from "@radix-ui/react-icons";
+import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 const enum SourceType {
@@ -19,7 +19,7 @@ export default function SourceEntry({ extra, end, source, className = '', onSour
     const { t } = useTranslation()
 
     if (source === SourceType.NONE || !end) return <div className={className}></div>
-    const extraObj = extra ? JSON.parse(extra) : null
+    const extraObj = extra ? (typeof extra === 'string' ? JSON.parse(extra) : extra) : null
 
     return <div className={className}>
         {(() => {
@@ -27,7 +27,7 @@ export default function SourceEntry({ extra, end, source, className = '', onSour
                 case SourceType.FILE:
                     return <Badge className="cursor-pointer" onClick={onSource}>{t('chat.source')}</Badge>;
                 case SourceType.NO_PERMISSION:
-                    return <p className="flex text-xs text-gray-400 gap-1 items-center"><InfoCircledIcon className="text-red-300" />{t('chat.noAccess')}</p>;
+                    return <p className="flex text-xs text-gray-400 gap-1 items-center"><Info className="text-red-300" />{t('chat.noAccess')}</p>;
                 case SourceType.LINK:
                     return (
                         <div className="flex flex-col text-blue-500 text-xs">

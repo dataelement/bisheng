@@ -252,8 +252,58 @@
 	padding: 2px 4px !important;
 	word-break: break-all !important;
 }
+
+
+/* .react-flow.theme-attribution {
+	animation: scrollBackground 10s linear infinite;
+  }
+
+  @keyframes scrollBackground {
+	from {
+	  background-position: 0 0;
+	}
+	to {
+	  background-position: 100% 100%;
+	}
+  }
+ */
+  .react-flow__panel.react-flow__attribution{
+	display: none !important;
+  }
 .vditor-content ol>li[data-marker]:before {
     content: attr(data-marker); 
     margin-right: 5px;
     font-weight: bold;
 }
+
+.hover-reveal .hover-reveal-child{
+	opacity: 0;
+	transition: opacity .2s ease-in-out;
+}
+.hover-reveal:hover .hover-reveal-child{
+	opacity: 100;
+}
+
+
+.flow-bg-logo {
+	position: relative;
+	width: 100%;
+	height: 100px; /* 根据需要调整高度 */
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	background-color: #F4F5F8 !important;
+}
+
+.flow-bg-logo::before {
+	content: "BISHENG"; /* 设置文字内容 */
+	font-size: 180px;
+	font-weight: bold;
+	color: rgba(232, 235 ,242,0.7);
+	/* color: rgba(0,102,204,0.7); */
+		text-shadow:1px 3px 6px #fff,0 0 0 #000,1px 3px 6px #fff;
+	display: block;
+	text-align: center;
+	opacity: 0.2;
+}
+  

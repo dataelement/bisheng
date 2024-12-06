@@ -8,11 +8,12 @@ from bisheng.interface.importing.utils import import_class
 from bisheng_langchain import chat_models
 from bisheng_langchain import document_loaders as contribute_loader
 from bisheng_langchain import embeddings as contribute_embeddings
-from langchain import llms, memory, requests, text_splitter
+from langchain import llms, memory, text_splitter
+from langchain_community.utilities import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_community import agent_toolkits, document_loaders, embeddings
 from langchain_community.chat_models import ChatVertexAI, MiniMaxChat, ChatOllama
-from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings
+from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
 
 # LLMs
 llm_type_to_cls_dict = {}
@@ -21,12 +22,13 @@ for k, v in llms.get_type_to_cls_dict().items():
         llm_type_to_cls_dict[k] = v()
     except Exception:
         pass
-llm_type_to_cls_dict['anthropic-chat'] = ChatAnthropic  # type: ignore
-llm_type_to_cls_dict['azure-chat'] = AzureChatOpenAI  # type: ignore
-llm_type_to_cls_dict['openai-chat'] = ChatOpenAI  # type: ignore
-llm_type_to_cls_dict['vertexai-chat'] = ChatVertexAI  # type: ignore
+llm_type_to_cls_dict['ChatAnthropic'] = ChatAnthropic  # type: ignore
+llm_type_to_cls_dict['AzureChatOpenAI'] = AzureChatOpenAI  # type: ignore
+llm_type_to_cls_dict['ChatOpenAI'] = ChatOpenAI  # type: ignore
+llm_type_to_cls_dict['ChatVertexAI'] = ChatVertexAI  # type: ignore
 llm_type_to_cls_dict['MiniMaxChat'] = MiniMaxChat
 llm_type_to_cls_dict['ChatOllama'] = ChatOllama
+llm_type_to_cls_dict["OpenAI"] = OpenAI
 
 # llm contribute
 llm_type_to_cls_dict.update({
@@ -48,10 +50,19 @@ toolkit_type_to_cls_dict: dict[str, Any] = {
 }
 
 # Memories
-memory_type_to_cls_dict: dict[str, Any] = {
-    memory_name: import_class(f'langchain.memory.{memory_name}')
-    for memory_name in memory.__all__
-}
+memory_type_to_cls_dict: dict[str, Any] = {}
+for memory_name in memory.__all__:
+    if memory_name.find("ChatMessageHistory") != -1:
+        memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.chat_message_histories.{memory_name}")
+    elif memory_name == "ConversationKGMemory":
+        memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.memory.kg.{memory_name}")
+    elif memory_name == "MotorheadMemory":
+        memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.memory.motorhead_memory.{memory_name}")
+    elif memory_name == "ZepMemory":
+        memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.memory.zep_memory.{memory_name}")
+    else:
+        memory_type_to_cls_dict[memory_name] = import_class(f'langchain.memory.{memory_name}')
+
 
 # Wrappers
 wrapper_type_to_cls_dict: dict[str, Any] = {

@@ -1,8 +1,7 @@
+import { Camera } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../button";
 import { useToast } from "../toast/use-toast";
 import { cname } from "../utils";
-import { CameraIcon, ImageIcon } from "@radix-ui/react-icons";
 
 // 头像
 export default function Avator({
@@ -47,7 +46,7 @@ export default function Avator({
                     accept={accept}
                     onChange={handleFileChange}
                 />
-                <CameraIcon className="text-gray-50 w-6 h-6" />
+                <Camera className="text-gray-50 w-6 h-6" />
             </div>
         </div>
         {/* <Button variant="outline" className="relative">

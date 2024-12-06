@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "0.3.7.1"
+version = "0.4.0.dev1"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -18,25 +18,25 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "0.3.7.1"
+bisheng_langchain = "0.4.0.dev1"
 bisheng_pyautogen = "0.3.2"
-langchain = "0.1.12"
+langchain = "^0.2.16"
 langchain_experimental = "*"
-langchain_openai = "0.1.5"
-langchain-community = "0.0.38"
-firecrawl-py="*"
-openai = "1.14.3"
-langchain-google-genai = "^0.0.6"
+langchain_openai = "^0.1.25"
+langchain-community = "^0.2.17"
+langgraph = "^0.2.37"
+openai = "^1.51.2"
+langchain-google-genai = "^1.0.10"
 langchain-anthropic = "^0.1.4"
 minio = "7.2.0"
 loguru = "^0.7.1"
 fastapi_jwt_auth = "^0.5.0"
 captcha = "^0.5.0"
 rsa = "4.9"
-pydantic = "^1.10.13"
+pydantic = "^1.10.18"
 numexpr = "^2.8.6"
 pypinyin = "0.50.0"
-celery = { extras = ["redis"], version = "^5.3.6", optional = true }
+celery = { extras = ["redis"], version = "^5.3.6" }
 redis = "^5.0.0"
 jieba = "^0.42.1"
 PyMuPDF = "^1.23.8"

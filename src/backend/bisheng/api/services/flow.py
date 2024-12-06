@@ -1,6 +1,6 @@
 import asyncio
 import copy
-from typing import List, Dict, AsyncGenerator
+from typing import List, Dict, AsyncGenerator, Optional
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
@@ -10,7 +10,7 @@ from loguru import logger
 from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \
     NotFoundFlowError, \
-    FlowOnlineEditError
+    FlowOnlineEditError, WorkFlowOnlineEditError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
@@ -18,7 +18,7 @@ from bisheng.api.utils import get_L2_param_from_flow, get_request_ip
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
-from bisheng.database.models.flow import FlowDao, FlowStatus, Flow
+from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import RoleAccessDao, AccessType
@@ -66,8 +66,12 @@ class FlowService(BaseService):
         if not flow_info:
             return NotFoundFlowError.return_resp()
 
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW_WRITE
+
         # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
         if version_info.is_current == 1:
@@ -86,8 +90,12 @@ class FlowService(BaseService):
         if not flow_info:
             return NotFoundFlowError.return_resp()
 
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW_WRITE
+
         # 判断权限
-        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
         # 技能上线状态不允许 切换版本
@@ -127,7 +135,8 @@ class FlowService(BaseService):
 
         flow_version = FlowVersion(flow_id=flow_id, name=flow_version.name, description=flow_version.description,
                                    user_id=user.user_id, data=flow_version.data,
-                                   original_version_id=flow_version.original_version_id)
+                                   original_version_id=flow_version.original_version_id,
+                                   flow_type=flow_version.flow_type)
 
         # 创建新版本
         flow_version = FlowVersionDao.create_version(flow_version)
@@ -158,13 +167,19 @@ class FlowService(BaseService):
         if not flow_info:
             return NotFoundFlowError.return_resp()
 
+        atype = AccessType.FLOW_WRITE
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW_WRITE
         # 判断权限
-        if not user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW_WRITE):
+        if not user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
         # 版本是当前版本, 且技能处于上线状态则不可编辑
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value:
-            return FlowOnlineEditError.return_resp()
+            if flow_info.flow_type == FlowType.WORKFLOW.value:
+                return WorkFlowOnlineEditError.return_resp()
+            else:
+                return FlowOnlineEditError.return_resp()
 
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
@@ -174,12 +189,13 @@ class FlowService(BaseService):
 
         flow_version = FlowVersionDao.update_version(version_info)
 
-        try:
-            # 重新整理此版本的表单数据
-            if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
-                logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
-        except:
-            pass
+        if flow_version.flow_type == FlowType.FLOW.value:
+            try:
+                # 重新整理此版本的表单数据
+                if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):
+                    logger.error(f'flow_id={flow_version.id} version_id={flow_version.id} extract file_node fail')
+            except:
+                pass
         cls.update_flow_hook(request, user, flow_info)
         return resp_200(data=flow_version)
 
@@ -191,7 +207,10 @@ class FlowService(BaseService):
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if not flow_info:
             raise NotFoundFlowError.http_exception()
-        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, AccessType.FLOW):
+        atype = AccessType.FLOW
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            atype = AccessType.WORK_FLOW
+        if not login_user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             raise UnAuthorizedError.http_exception()
         flow_info.logo = cls.get_logo_share_link(flow_info.logo)
 
@@ -199,13 +218,14 @@ class FlowService(BaseService):
 
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: int = 0, page: int = 1,
-                      page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
+                      page_size: int = 10, flow_type: Optional[int] = FlowType.FLOW.value) -> UnifiedResponseModel[
+        List[Dict]]:
         """
         获取所有技能
         """
         flow_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.FLOW)
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW,ResourceTypeEnum.WORK_FLOW])
             flow_ids = [UUID(one.resource_id) for one in ret]
             assistant_ids = [UUID(one.resource_id) for one in ret]
             if not assistant_ids:
@@ -215,17 +235,17 @@ class FlowService(BaseService):
                 })
         # 获取用户可见的技能列表
         if user.is_admin():
-            data = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size)
-            total = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids)
+            data = FlowDao.get_flows(user.user_id, "admin", name, status, flow_ids, page, page_size, flow_type)
+            total = FlowDao.count_flows(user.user_id, "admin", name, status, flow_ids, flow_type)
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access(role_ids, AccessType.FLOW)
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW,AccessType.WORK_FLOW])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, page_size)
-            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids)
+            data = FlowDao.get_flows(user.user_id, flow_id_extra, name, status, flow_ids, page, page_size, flow_type)
+            total = FlowDao.count_flows(user.user_id, flow_id_extra, name, status, flow_ids, flow_type)
 
         # 获取技能列表对应的用户信息和版本信息
         # 技能ID列表
@@ -394,7 +414,8 @@ class FlowService(BaseService):
         return index, answer_result
 
     @classmethod
-    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow, version_id) -> bool:
+    def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow, version_id,
+                         flow_type: Optional[int] = None) -> bool:
         logger.info(f'create_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
         # 将技能所需的表单写到数据库内
         try:
@@ -406,14 +427,18 @@ class FlowService(BaseService):
         user_group = UserGroupDao.get_user_group(login_user.user_id)
         if user_group:
             batch_resource = []
+            resource_type = ResourceTypeEnum.FLOW.value
+            if flow_type and flow_type == FlowType.WORKFLOW.value:
+                resource_type = ResourceTypeEnum.WORK_FLOW.value
+
             for one in user_group:
                 batch_resource.append(
                     GroupResource(group_id=one.group_id,
                                   third_id=flow_info.id.hex,
-                                  type=ResourceTypeEnum.FLOW.value))
+                                  type=resource_type))
             GroupResourceDao.insert_group_batch(batch_resource)
         # 写入审计日志
-        AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+        AuditLogService.create_build_flow(login_user, get_request_ip(request), flow_info.id.hex, flow_type)
 
         # 写入logo缓存
         cls.get_logo_share_link(flow_info.logo)
@@ -422,7 +447,8 @@ class FlowService(BaseService):
     @classmethod
     def update_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
         # 写入审计日志
-        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex)
+        AuditLogService.update_build_flow(login_user, get_request_ip(request), flow_info.id.hex,
+                                          flow_type=flow_info.flow_type)
 
         # 写入logo缓存
         cls.get_logo_share_link(flow_info.logo)
@@ -433,7 +459,7 @@ class FlowService(BaseService):
         logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
 
         # 写入审计日志
-        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info)
+        AuditLogService.delete_build_flow(login_user, get_request_ip(request), flow_info, flow_type=flow_info.flow_type)
 
         # 将用户组下关联的技能删除
         GroupResourceDao.delete_group_resource_by_third_id(flow_info.id.hex, ResourceTypeEnum.FLOW)

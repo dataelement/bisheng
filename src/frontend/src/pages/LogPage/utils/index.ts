@@ -36,6 +36,7 @@ export function transformEvent(event: string): string {
 export function transformObjectType(object: string): string {
     switch(object) {
         case 'none': return '无'
+        case 'workflow': return '工作流' // TODO 确认名称
         case 'flow': return '技能'
         case 'assistant': return '助手'
         case 'knowledge': return '知识库'

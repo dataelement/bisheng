@@ -80,17 +80,25 @@ def import_inputoutput(input_output: str) -> Any:
 
 def import_output_parser(output_parser: str) -> Any:
     """Import output parser from output parser name"""
-    return import_module(f'from langchain.output_parsers import {output_parser}')
+    from bisheng.interface.output_parsers.base import output_parser_creator
+    if output_parser in output_parser_creator.type_to_loader_dict:
+        return output_parser_creator.type_to_loader_dict[output_parser]
+    return import_module(f'from langchain_community.output_parsers import {output_parser}')
 
 
 def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
     from bisheng.interface.llms.base import llm_creator
-    return next(x for x in llm_creator.type_to_loader_dict.values() if x.__name__ == llm)
+    if llm in llm_creator.type_to_loader_dict:
+        return llm_creator.type_to_loader_dict[llm]
+    return import_class(f'bisheng_langchain.chat_models.{llm}')
 
 
 def import_chain_contribute_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
+    from bisheng.interface.llms.base import llm_creator
+    if llm in llm_creator.type_to_loader_dict:
+        return llm_creator.type_to_loader_dict[llm]
     return import_class(f'bisheng_langchain.chat_models.{llm}')
 
 
@@ -109,6 +117,9 @@ def import_autogenRoles(autogen: str) -> Any:
 
 def import_memory(memory: str) -> Any:
     """Import memory from memory name"""
+    from bisheng.interface.memories.base import memory_creator
+    if memory in memory_creator.type_to_loader_dict:
+        return memory_creator.type_to_loader_dict[memory]
     return import_module(f'from langchain.memory import {memory}')
 
 
@@ -121,19 +132,18 @@ def import_class(class_path: str) -> Any:
 
 def import_prompt(prompt: str) -> Type[PromptTemplate]:
     """Import prompt from prompt name"""
-    from bisheng.interface.prompts.custom import CUSTOM_PROMPTS
+    from bisheng.interface.prompts.base import prompt_creator
 
-    if prompt == 'ZeroShotPrompt':
-        return import_class('langchain.prompts.PromptTemplate')
-    elif prompt in CUSTOM_PROMPTS:
-        return CUSTOM_PROMPTS[prompt]
+    if prompt in prompt_creator.type_to_loader_dict:
+        return prompt_creator.type_to_loader_dict[prompt]
+
     return import_class(f'langchain.prompts.{prompt}')
 
 
 def import_wrapper(wrapper: str) -> Any:
     """Import wrapper from wrapper name"""
-    if (isinstance(wrapper_creator.type_dict, dict) and wrapper in wrapper_creator.type_dict):
-        return wrapper_creator.type_dict.get(wrapper)
+    if wrapper in wrapper_creator.type_to_loader_dict:
+        return wrapper_creator.type_to_loader_dict[wrapper]
 
 
 def import_toolkit(toolkit: str) -> Any:
@@ -153,8 +163,6 @@ def import_agent(agent: str) -> Agent:
 
 def import_llm(llm: str) -> BaseLanguageModel:
     """Import llm from llm name"""
-    if llm == 'OpenAI':
-        return import_class('langchain_openai.OpenAI')
     from bisheng.interface.llms.base import llm_creator
     return next(x for x in llm_creator.type_to_loader_dict.values() if x.__name__ == llm)
 

@@ -3,7 +3,7 @@ import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useStat
 import { useTranslation } from "react-i18next";
 import InputComponent from "../../../components/inputComponent";
 import InputFileComponent from "../../../components/inputFileComponent";
-import { Button } from "../../../components/ui/button";
+import { Button } from "../../../components/bs-ui/button";
 import { alertContext } from "../../../contexts/alertContext";
 import { Variable, VariableType, getVariablesApi } from "../../../controllers/API/flow";
 

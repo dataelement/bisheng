@@ -1,13 +1,13 @@
-import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { AssistantIcon, FlowIcon } from "@/components/bs-icons/";
 import { cname } from "@/components/bs-ui/utils";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SkillIcon } from "../../bs-icons";
 import { AddToIcon } from "../../bs-icons/addTo";
 import { DelIcon } from "../../bs-icons/del";
 import { GoIcon } from "../../bs-icons/go";
 import { PlusIcon } from "../../bs-icons/plus";
 import { SettingIcon } from "../../bs-icons/setting";
-import { SkillIcon } from "../../bs-icons/skill";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
@@ -17,7 +17,7 @@ interface IProps<T> {
   /** id为''时，表示新建 */
   id?: number | string,
   logo?: string,
-  type: "skill" | "sheet" | "assist" | "setting", // 技能列表｜侧边弹窗列表
+  type: "skill" | "sheet" | "assistant" | "setting", // 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
@@ -64,7 +64,7 @@ export const gradients = [
 // 'bg-pink-600',
 // 'bg-rose-600'
 export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
-  return <div className={cname(`rounded-sm flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
+  return <div className={cname(`rounded-md flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
 export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {
@@ -107,11 +107,15 @@ export default function CardComponent<T>({
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
-      <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
-      <CardTitle className="">{title}</CardTitle>
+      <CardTitle>
+        <div className="flex gap-2 items-center">
+          <div className="justify-between"><PlusIcon className="group-hover:text-primary transition-none" /></div>
+          <span>{title}</span>
+        </div>
+      </CardTitle>
     </CardHeader>
-    <CardContent className="h-0 overflow-auto scrollbar-hide p-2">
-      <CardDescription>{description}</CardDescription>
+    <CardContent className="h-fit max-h-[44px] overflow-auto scrollbar-hide">
+      <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-end h-10">
       <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
@@ -158,15 +162,15 @@ export default function CardComponent<T>({
     </CardFooter>
   </Card>
 
-  // 技能组件
-  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
+  // 助手&技能&工作流列表卡片组件
+  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleLogo
           url={logo}
           id={id}
         >
-          {type === 'skill' ? <SkillIcon /> : <AssistantIcon />}
+          {type === 'skill' ? <SkillIcon /> : type === 'assistant' ? <AssistantIcon /> : <FlowIcon />}
         </TitleLogo>
         <div className="flex gap-1 items-center">
           {headSelecter}
@@ -185,7 +189,7 @@ export default function CardComponent<T>({
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
-    <CardFooter className="h-20 grid grid-rows-2">
+    <CardFooter className="h-20 grid grid-rows-2 self-end">
       {labelPannel}
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">
@@ -196,11 +200,12 @@ export default function CardComponent<T>({
         {edit
           && <div className="hidden group-hover:flex">
             {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>}
-            {isAdmin && type === 'skill' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
-            <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>
+            {isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
+            {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>
         }
       </div>
+      {footer}
     </CardFooter>
   </Card>
 };

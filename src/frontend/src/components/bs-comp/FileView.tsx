@@ -3,6 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FixedSizeList as List, areEqual } from 'react-window';
+import { LoadingIcon } from '../bs-icons/loading';
 
 // A4 比例(itemSize：item的高度)
 // 595.32 * 841.92 采用宽高比0.70约束
@@ -358,7 +359,7 @@ export default function FileView({
         {
             loading
                 ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <span className="loading loading-infinity loading-lg"></span>
+                    <LoadingIcon />
                 </div>
                 : <div id="warp-pdf" className="file-view absolute">
                     <List

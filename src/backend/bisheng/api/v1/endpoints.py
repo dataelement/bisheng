@@ -1,6 +1,6 @@
 import copy
 import json
-from typing import Annotated, Optional, Union
+from typing import Annotated, List, Optional, Union
 from uuid import UUID
 
 import yaml
@@ -23,7 +23,7 @@ from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 from sqlmodel import select
 
 try:
@@ -278,29 +278,45 @@ async def process_flow(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None, bucket_name: str = None) \
+        -> UploadFileResponse:
+    if file.size == 0:
+        raise HTTPException(status_code=500, detail='上传文件不能为空')
+    file_ext = file.filename.split('.')[-1].lower()
+    if file_supports and file_ext not in file_supports:
+        raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
+    try:
+        object_name = f'{object_name_prefix}/{generate_uuid()}.png'
+        file_path = upload_file_to_minio(file, object_name=object_name, bucket_name=bucket_name)
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
+        return UploadFileResponse(
+            file_path=MinioClient.clear_minio_share_host(file_path),  # minio可访问的链接
+            relative_path=object_name,  # minio中的object_name
+        )
+    except Exception as exc:
+        logger.exception(f'Error saving file: {str(exc)}')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post('/upload/icon')
 async def upload_icon(request: Request,
                       login_user: UserPayload = Depends(get_login_user),
                       file: UploadFile = None):
-    if file.size == 0:
-        raise HTTPException(status_code=500, detail='上传文件不能为空')
-    file_ext = file.filename.split('.')[-1].lower()
-    if file_ext not in ('jpeg', 'jpg', 'png'):
-        raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
+    resp = _upload_file(file,
+                        object_name_prefix='icon',
+                        file_supports=['jpeg', 'jpg', 'png'],
+                        bucket_name=bucket)
+    return resp_200(data=resp)
 
-    try:
-        file_name = f'icon/{generate_uuid()}.{file_ext}'
-        file_path = upload_file_to_minio(file, object_name=file_name, bucket_name=bucket)
-        if not isinstance(file_path, str):
-            file_path = str(file_path)
-        return resp_200(
-            UploadFileResponse(
-                file_path=MinioClient.clear_minio_share_host(file_path),  # minio可访问的链接
-                relative_path=file_name,  # minio中的object_name
-            ))
-    except Exception as exc:
-        logger.exception(f'Error saving file: {str(exc)}')
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+@router.post('/upload/workflow/{workflow_id}')
+async def upload_icon_workflow(request: Request,
+                               login_user: UserPayload = Depends(get_login_user),
+                               file: UploadFile = None,
+                               workflow_id: str = Path(..., description='workflow id')):
+    resp = _upload_file(file, object_name_prefix=f'workflow/{workflow_id}', bucket_name=bucket)
+    return resp_200(data=resp)
 
 
 @router.post('/upload/{flow_id}',

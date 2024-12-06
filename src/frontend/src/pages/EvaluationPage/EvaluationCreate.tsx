@@ -5,7 +5,7 @@ import { AssistantItemDB, getAssistantsApi } from "@/controllers/API/assistant";
 import { createEvaluationApi } from "@/controllers/API/evaluate";
 import { TypeModal } from "@/utils";
 import { SelectViewport } from "@radix-ui/react-select";
-import { debounce, find } from "lodash";
+import { debounce, find } from "lodash-es";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";

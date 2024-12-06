@@ -1,5 +1,5 @@
 import { ShadToolTipType } from "../../types/components";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../bs-ui/tooltip";
 
 export default function ShadTooltip({
   content,

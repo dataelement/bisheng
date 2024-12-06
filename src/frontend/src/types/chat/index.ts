@@ -1,4 +1,4 @@
-import { ReactFlowInstance } from "reactflow";
+import { ReactFlowInstance } from "@xyflow/react";
 import { FlowType } from "../flow";
 
 export type ChatType = { flow: FlowType; reactFlowInstance: ReactFlowInstance };

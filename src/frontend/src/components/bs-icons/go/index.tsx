@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Go } from "./Go.svg";
+import Go from "./Go.svg?react";
 
 export const GoIcon = forwardRef<
     SVGSVGElement & { className: any },

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { useNodes } from "reactflow";
+import { useNodes } from "@xyflow/react";
 import { ChatType } from "../../types/chat";
 import BuildTrigger from "./buildTrigger";
 import ChatTrigger from "./chatTrigger";

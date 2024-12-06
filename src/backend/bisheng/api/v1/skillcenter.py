@@ -48,19 +48,23 @@ def create_template(*, template: TemplateCreate):
 @router.get('/template', response_model=UnifiedResponseModel[list[Template]], status_code=200)
 def read_template(page_size: Optional[int] = None,
                   page_name: Optional[int] = None,
+                  flow_type: Optional[int] = None,
                   id: Optional[int] = None,
                   name: Optional[str] = None):
     """Read all flows."""
-    sql = select(Template.id, Template.name, Template.description, Template.update_time)
+    sql = select(Template.id, Template.name, Template.description, Template.update_time,Template.order_num)
     if id:
         with session_getter() as session:
             template = session.get(Template, id)
         return resp_200([template])
     if name:
-        sql.where(Template.name == name)
-    sql.order_by(Template.order_num.desc())
+        sql = sql.where(Template.name == name)
+    if flow_type:
+        sql = sql.where(Template.flow_type == flow_type)
+
+    sql = sql.order_by(Template.order_num.desc())
     if page_size and page_name:
-        sql.offset(page_size * (page_name - 1)).limit(page_size)
+        sql = sql.offset(page_size * (page_name - 1)).limit(page_size)
     try:
         with session_getter() as session:
             template_session = session.exec(sql)

@@ -1,6 +1,5 @@
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { ReaderIcon } from "@radix-ui/react-icons";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -59,7 +58,7 @@ export default function FilesUpload() {
             }} />
             {!showView && (
                 <div className="flex justify-center items-center flex-col h-full text-gray-400">
-                    <ReaderIcon width={160} height={160} className="text-border" />
+                    <FileText width={160} height={160} className="text-border" />
                     {stepEnd ? t('previewHint') : t('uploadHint')}
                 </div>
             )}

@@ -2,7 +2,8 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { AssistantIcon } from "@/components/bs-icons/assistant";
+import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
+import { AssistantIcon } from "@/components/bs-icons";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
@@ -16,6 +17,8 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -24,17 +27,23 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const [flow, setFlow] = useState<any>(null)
     const flowRef = useRef(null)
     const [assistant, setAssistant] = useState<any>(null)
+    const [workflow, setWorkflow] = useState<any>(null)
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore() // TODO del
+    const { loadHistoryMsg: loadFlowHistoryMsg } = useFlowMessageStore()
+    
     useEffect(() => {
         return destroy
     }, [])
 
+    const [autoRun, setAutoRun] = useState(false)
+    console.log('autoRun :>> ', autoRun);
     const init = async () => {
         if (type === 'flow') {
             setAssistant(null)
+            setWorkflow(null)
             const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
             version === 'v1' ? loadHistoryMsg(_flow.id, chatId, {
@@ -44,9 +53,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
-        } else {
+        } else if (type === 'assistant') {
             flowRef.current = null
             setFlow(null)
+            setWorkflow(null)
             const _assistant = await loadAssistantState(id, version)
             version === 'v1' ? loadHistoryMsg(_assistant.id, chatId, {
                 appendHistory,
@@ -54,6 +64,22 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             }) : clearMsgs()
             setAssistant(_assistant)
             changeChatId(chatId) // ws
+        } else {
+            setAssistant(null)
+            setFlow(null)
+            const _flow = await getFlowApi(id, version)
+            version === 'v1' ? loadFlowHistoryMsg(_flow.id, chatId, {
+                lastMsg: '本轮会话已结束'
+            }).then(res =>
+                setAutoRun(!res.length)
+                // setAutoRun()
+            ) : clearMsgs()
+            const { data, ...f } = _flow
+            const { nodes, edges, viewport } = data
+            setTimeout(() => { // holding change autorun
+                setWorkflow({ ...f, nodes, edges, viewport })
+                changeChatId(chatId)
+            }, 100);
         }
     }
     useEffect(() => {
@@ -61,6 +87,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             flowRef.current = null
             setFlow(null)
             setAssistant(null)
+            setWorkflow(null)
             return
         }
         init()
@@ -114,7 +141,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const token = localStorage.getItem("ws_token") || '';
     const host = appConfig.websocketHost || ''
     let wsUrl = type === 'flow' ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
-        `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}`
+        type === 'assistant' ? `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}` :
+            `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${workflow?.id}?chat_id=${chatId}&t=${token}`
 
     if (customWsHost) {
         wsUrl = `${host}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
@@ -158,9 +186,9 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    if (!(flow || assistant || workflow)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         {chatId && <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
@@ -178,7 +206,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
     </div>
 
-    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >
         {/* 技能会话 */}
         {
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
@@ -205,7 +233,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
         {/* 助手会话 */}
         {
-            assistant && <div className={`w-full chat-box h-full relative px-6 ${type !== 'flow' ? 'block' : 'hidden'}`}>
+            assistant && <div className={`w-full chat-box h-full relative px-6 ${type === 'assistant' ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleLogo url={assistant.logo} className="" id={assistant.id}><AssistantIcon /></TitleLogo>
@@ -224,6 +252,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 />
                 {/* 强制提醒 */}
                 <ForcePrompt id={assistant.id} />
+            </div>
+        }
+        {/* 工作流会话 */}
+        {
+            workflow && <div className={`w-full chat-box h-full relative px-6 ${type === 'workflow' ? 'block' : 'hidden'}`}>
+                <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
             </div>
         }
     </div>

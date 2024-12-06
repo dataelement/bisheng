@@ -2,10 +2,10 @@ import { FileText, Variable } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import SanitizedHTMLWrapper from "../../components/SanitizedHTMLWrapper";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
-import { DialogTitle } from "../../components/ui/dialog";
-import { Textarea } from "../../components/ui/textarea";
+import { Badge } from "../../components/bs-ui/badge";
+import { Button } from "../../components/bs-ui/button";
+import { DialogTitle } from "../../components/bs-ui/dialog";
+import { Textarea } from "../../components/bs-ui/input";
 import {
   MAX_WORDS_HIGHLIGHT
 } from "../../constants";

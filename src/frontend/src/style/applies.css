@@ -1008,4 +1008,68 @@
     @apply flex justify-between items-center
   }
 
+  .dragging {
+    background-color: var(--tw-bg-muted);
+    border-color: var(--tw-border-gray-200);
+  }
+
+  .bisheng-node {
+    @apply relative flex w-[332px] flex-col justify-center rounded-[20px] border-4 group-hover:shadow-sm
+  }
+  .bisheng-node-top{
+    @apply bg-[#EFF1F5] rounded-t-[20px] px-3 py-1.5
+  }
+  .bisheng-node-head{
+    overflow: hidden;
+    position: relative;
+    background: #F9F9FA;
+    @apply p-3 border-t border-[#cad0de]
+  }
+
+  .bisheng-flow-handle {
+    @apply h-6 w-6 bg-transparent border-none flex justify-center items-center
+  }
+  .bisheng-flow-handle:hover span{
+    @apply size-10/12
+  }
+  .bisheng-flow-handle span {
+    @apply w-2 h-2 bg-primary rounded-full transition-all relative pointer-events-none
+  }
+  .bisheng-flow-handle span::before {
+    content: '';
+    @apply absolute bg-[#fff] w-[1px] h-2/3 top-[3px] left-1/2 transform -translate-x-1/2 opacity-0 transition-opacity duration-300;
+  }
+  
+  .bisheng-flow-handle span::after {
+    content: '';
+    @apply absolute bg-[#fff] h-[1px] w-2/3 left-[3px] top-1/2 transform -translate-y-1/2 opacity-0 transition-opacity duration-300;
+  }
+  
+  /* .bisheng-flow-handle:hover {
+    @apply bg-primary;
+  } */
+  
+  .bisheng-flow-handle:hover span::before,
+  .bisheng-flow-handle:hover span::after {
+    @apply opacity-100 ;
+  }
+  .textarea-badge{
+    @apply border border-[#E8EDF2] rounded-md px-1 bg-[#EFF3F8] text-primary mr-2 mb-1 inline-block
+  }
+  .textarea-error {
+    @apply border border-red-500 rounded-md px-1 bg-red-100 text-primary
+  }
+  .bisheng-richtext{
+    @apply text-[#111]
+  }
+  .bisheng-richtext.placeholder{
+    @apply text-gray-400
+  }
+  /* .textarea-badge::before{
+    content: '(x)';
+  } */
+  /* .bisheng-flow-handle:hover::after{
+    content: '';
+    @apply size-full rounded-full absolute bg-primary top-0 animate-ping pointer-events-none
+  } */
 }

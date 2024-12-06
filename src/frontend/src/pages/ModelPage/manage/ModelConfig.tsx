@@ -9,11 +9,11 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { PlusIcon } from "@radix-ui/react-icons";
-import { ArrowLeft, Trash2Icon } from "lucide-react";
+import { ArrowLeft, Plus, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 function ModelItem({ data, onDelete, onInput }) {
     const { t } = useTranslation('model')
@@ -241,7 +241,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     }, [id])
 
     if (!formData) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <span className="loading loading-infinity loading-lg"></span>
+        <LoadingIcon />
     </div>
 
     return <div className="relative size-full py-4">
@@ -301,7 +301,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                             formData.models.map((m, i) => <ModelItem data={m} onInput={(name, type) => handleModelChange(name, type, i)} key={m.name} onDelete={() => handleDelete(i)} />)
                         }
                         <Button className="w-full mt-2 border-dashed border-border" variant="outline" onClick={handleAddModel}>
-                            <PlusIcon className="size-5 text-primary mr-1" />
+                            <Plus className="size-5 text-primary mr-1" />
                             <span>{t('model.addModel')}</span>
                         </Button>
                     </div>

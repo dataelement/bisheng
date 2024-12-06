@@ -23,6 +23,7 @@ import {
 import { deleteQa, generateSimilarQa, getQaDetail, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const defaultQa = {
     question: '',
@@ -298,7 +299,7 @@ export default function QasPage() {
 
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="h-full bg-background-login">
             <div className="flex justify-between">

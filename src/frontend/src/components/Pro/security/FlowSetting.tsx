@@ -4,7 +4,7 @@ import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { CircleHelp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import FormSet from "./FormSet";
@@ -71,7 +71,7 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
                     <TooltipProvider delayDuration={0}>
                         <Tooltip>
                             <TooltipTrigger>
-                                <QuestionMarkCircledIcon />
+                                <CircleHelp className="w-4 h-4" />
                             </TooltipTrigger>
                             <TooltipContent>
                                 <p className="text-[white]">{t('build.contentSecurityDesc')}</p>

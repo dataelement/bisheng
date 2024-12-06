@@ -12,26 +12,25 @@ import {
     SystemIcon,
     TechnologyIcon
 } from "@/components/bs-icons";
+import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
-import { CaretDownIcon, LockClosedIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import i18next from "i18next";
-import { Globe } from "lucide-react";
+import { ChevronDown, Globe, Lock, MoonStar, Sun } from "lucide-react";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import CrashErrorComponent from "../components/CrashErrorComponent";
-import { Separator } from "../components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
+import { Separator } from "../components/bs-ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/bs-ui/tooltip";
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
 import HeaderMenu from "./HeaderMenu";
-import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -90,9 +89,9 @@ export default function MainLayout() {
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={() => setDark(!dark)}>
                                     <div className="">
                                         {dark ? (
-                                            <SunIcon className="side-bar-button-size dark:text-slate-50 mx-auto w-[13px] h-[13px]" />
+                                            <Sun className="side-bar-button-size dark:text-slate-50 mx-auto w-[13px] h-[13px]" />
                                         ) : (
-                                            <MoonIcon className="side-bar-button-size mx-auto w-[17px] h-[17px]" />
+                                            <MoonStar className="side-bar-button-size mx-auto w-[17px] h-[17px]" />
                                         )}
                                     </div>
                                 </TooltipTrigger>
@@ -120,10 +119,10 @@ export default function MainLayout() {
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">
-                                    {user.user_name} <CaretDownIcon className="inline-block mt-[-2px]" />
+                                    {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            <SelectHoverItem onClick={JumpResetPage}><LockClosedIcon className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
+                            <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
                     </div>

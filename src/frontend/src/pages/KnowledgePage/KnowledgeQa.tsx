@@ -1,4 +1,5 @@
 
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -172,7 +173,7 @@ export default function KnowledgeQa(params) {
 
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
             <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">

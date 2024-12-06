@@ -11,8 +11,8 @@ from sqlmodel import Field, select
 
 
 class AssistantStatus(Enum):
-    OFFLINE = 0
-    ONLINE = 1
+    OFFLINE = 1
+    ONLINE = 2
 
 
 class AssistantBase(SQLModelSerializable):
@@ -60,7 +60,7 @@ class AssistantLink(AssistantLinkBase, table=True):
     pass
 
 
-class AssistantDao(Assistant):
+class AssistantDao(AssistantBase):
 
     @classmethod
     def create_assistant(cls, data: Assistant) -> Assistant:

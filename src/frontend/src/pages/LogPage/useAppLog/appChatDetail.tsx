@@ -3,6 +3,7 @@ import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore
 import { Button } from "@/components/bs-ui/button";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { useAssistantStore } from "@/store/assistantStore";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,7 +33,7 @@ export default function AppChatDetail() {
 
     return <div>
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="bg-background-login px-4">
             <div className="flex justify-between items-center py-4">

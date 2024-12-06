@@ -2,11 +2,12 @@ import i18next from "i18next"
 import { useEffect, useContext } from "react"
 import { locationContext } from "../../../contexts/locationContext"
 
-export default function Word({ data }) {
+export default function Word({ data, workflow }) {
     const { appConfig } = useContext(locationContext)
 
     const wordUrl = appConfig.officeUrl
-    const backUrl = `${location.origin}${__APP_ENV__.BASE_URL}/api/v1/report/callback` // 后端服务地址
+    const backUrl = workflow ? `${location.origin}${__APP_ENV__.BASE_URL}/api/v1/workflow/report/callback`
+    : `${location.origin}${__APP_ENV__.BASE_URL}/api/v1/report/callback` // 后端服务地址
 
     const editorConfig = {
         // 编辑器宽度
@@ -88,6 +89,7 @@ export default function Word({ data }) {
         }
 
         return () => {
+            console.log('destroyEditor :>> ');
             window.editor.destroyEditor();
         }
     }, [])

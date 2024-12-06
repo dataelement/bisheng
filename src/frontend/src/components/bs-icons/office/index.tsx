@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Word } from "./Word.svg";
+import Word from "./Word.svg?react";
 
 export const WordIcon = forwardRef<
     SVGSVGElement & { className: any },

@@ -25,3 +25,8 @@ class KnowledgeSimilarError(BaseErrorCode):
 class KnowledgeQAError(BaseErrorCode):
     Code: int = 10930
     Msg: str = '该问题已被标注过'
+
+
+class KnowledgeCPError(BaseErrorCode):
+    Code: int = 10940
+    Msg: str = '当前有文件正在解析，不可复制'

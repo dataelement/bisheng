@@ -2,6 +2,15 @@ import { ErrorBoundary } from "react-error-boundary";
 import { Navigate, createBrowserRouter } from "react-router-dom";
 import CrashErrorComponent from "./components/CrashErrorComponent";
 import MainLayout from "./layout/MainLayout";
+import Templates from "./pages/BuildPage/appTemps";
+import Apps from "./pages/BuildPage/apps";
+import SkillAssisPage from "./pages/BuildPage/assistant";
+import EditAssistantPage from "./pages/BuildPage/assistant/editAssistant";
+import FlowPage from "./pages/BuildPage/flow";
+import SkillsPage from "./pages/BuildPage/skills";
+import SkillPage from "./pages/BuildPage/skills/editSkill";
+import L2Edit from "./pages/BuildPage/skills/l2Edit";
+import SkillToolsPage from "./pages/BuildPage/tools";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatShare from "./pages/ChatAppPage/chatShare";
@@ -10,7 +19,6 @@ import DataSetPage from "./pages/DataSetPage";
 import DiffFlowPage from "./pages/DiffFlowPage";
 import EvaluatingPage from "./pages/EvaluationPage";
 import EvaluatingCreate from "./pages/EvaluationPage/EvaluationCreate";
-import FlowPage from "./pages/FlowPage";
 import KnowledgePage from "./pages/KnowledgePage";
 import FilesPage from "./pages/KnowledgePage/detail";
 import FilesUpload from "./pages/KnowledgePage/filesUpload";
@@ -27,12 +35,6 @@ import { Finetune } from "./pages/ModelPage/finetune";
 import Management from "./pages/ModelPage/manage";
 import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
-import EditAssistantPage from "./pages/SkillPage/editAssistant";
-import L2Edit from "./pages/SkillPage/l2Edit";
-import SkillAssisPage from "./pages/SkillPage/tabAssistant";
-import SkillsPage from "./pages/SkillPage/tabSkills";
-import SkillToolsPage from "./pages/SkillPage/tabTools";
-import Templates from "./pages/SkillPage/temps";
 import SystemPage from "./pages/SystemPage";
 import ResoucePage from "./pages/resoucePage";
 
@@ -69,14 +71,15 @@ const privateRouter = [
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
-      { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
-      { path: "build/skills", element: <SkillsPage />, permission: 'build', },
+      { path: "build/apps", element: <Apps />, permission: 'build', },
+      // { path: "build/assist", element: <SkillAssisPage />, permission: 'build', },
+      // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
-      { path: "build", element: <Navigate to="assist" replace /> },
+      { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
-      { path: "build/temps", element: <Templates />, permission: 'build', },
+      { path: "build/temps/:type", element: <Templates />, permission: 'build', },
       { path: "model/management", element: <Management /> },
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
@@ -92,6 +95,12 @@ const privateRouter = [
     ],
   },
   { path: "model/doc", element: <Doc /> },
+  {
+    path: "/skill/:id/",
+    children: [
+      { path: "", element: <ErrorHoc Comp={SkillPage} /> }
+    ]
+  },
   {
     path: "/flow/:id/",
     children: [

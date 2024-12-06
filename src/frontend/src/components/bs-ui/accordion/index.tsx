@@ -1,8 +1,8 @@
 "use client"
 
-import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "@radix-ui/react-icons"
+import { ChevronRight } from "lucide-react"
+import * as React from "react"
 import { cname } from "../utils"
 
 const Accordion = AccordionPrimitive.Root
@@ -32,7 +32,7 @@ const AccordionTrigger = React.forwardRef<
             )}
             {...props}
         >
-            <ChevronRightIcon className="mx-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
+            <ChevronRight className="mx-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200" />
             {children}
         </AccordionPrimitive.Trigger>
     </AccordionPrimitive.Header>
@@ -53,4 +53,5 @@ const AccordionContent = React.forwardRef<
 ))
 AccordionContent.displayName = AccordionPrimitive.Content.displayName
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent }
+export { Accordion, AccordionContent, AccordionItem, AccordionTrigger }
+

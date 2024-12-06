@@ -2,11 +2,12 @@ import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
 import { getReportFormApi } from "../../controllers/API/flow";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import LabelPanne from "./components/Label";
 import Word from "./components/Word";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function Report() {
     const { t } = useTranslation()
@@ -29,7 +30,7 @@ export default function Report() {
 
     return <div className="">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10">
-            <span className="loading loading-infinity loading-lg"></span>
+            <LoadingIcon />
         </div>}
         <div className="absolute top-0 w-full flex justify-center items-center h-10 ">
             <span className="absolute left-10 flex items-center gap-1 cursor-pointer" onClick={() => navigate(-1)}><ChevronLeft size={20} />{t('back')}</span>
@@ -74,6 +75,7 @@ const useReport = () => {
     const { id } = useParams()
     useEffect(() => {
         setLoading(true);
+        /** 新建or编辑 key 由后端生成 */
         getReportFormApi(id).then(({ version_key, temp_url }) => {
             setLoading(false);
             setDocx({

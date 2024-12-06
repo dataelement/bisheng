@@ -132,6 +132,22 @@ class TagDao(Tag):
             return ret
 
     @classmethod
+    def get_tags_by_resource_batch(cls, resource_type: List[ResourceTypeEnum], resource_ids: list[str]) -> Dict[str, List[Tag]]:
+        """ 查询资源下的所有标签 """
+        with session_getter() as session:
+            statement = select(Tag.id, Tag.name, TagLink.resource_id).join(TagLink,
+                                                                           and_(
+                                                                               Tag.id == TagLink.tag_id,
+                                                                               TagLink.resource_id.in_(resource_ids),
+                                                                               TagLink.resource_type.in_([x.value for x in resource_type]) ))
+            result = session.exec(statement).all()
+            ret = {}
+            for one in result:
+                if one[2] not in ret:
+                    ret[one[2]] = []
+                ret[one[2]].append(Tag(id=one[0], name=one[1]))
+            return ret
+    @classmethod
     def get_resources_by_tags(cls, tag_ids: List[int], resource_type: ResourceTypeEnum) -> List[TagLink]:
         """ 查询标签下的所有资源 """
 
@@ -139,6 +155,13 @@ class TagDao(Tag):
         with session_getter() as session:
             return session.exec(statement).all()
 
+    @classmethod
+    def get_resources_by_tags_batch(cls, tag_ids: List[int], resource_type: List[ResourceTypeEnum]) -> List[TagLink]:
+        """ 查询标签下的所有资源 """
+
+        statement = select(TagLink).where(TagLink.tag_id.in_(tag_ids), TagLink.resource_type.in_([x.value for x in resource_type]) )
+        with session_getter() as session:
+            return session.exec(statement).all()
     @classmethod
     def insert_tag_link(cls, tag_link: TagLink) -> TagLink:
         """ 插入标签关联数据 """

@@ -1,10 +1,10 @@
 
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "."
-import ReactDOM from "react-dom"
-import i18next from "i18next"
-import { useRef, useState } from "react"
 import { TipIcon } from "@/components/bs-icons/tip"
-import { Cross2Icon } from "@radix-ui/react-icons"
+import i18next from "i18next"
+import { X } from "lucide-react"
+import { useRef, useState } from "react"
+import ReactDOM from "react-dom"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
 interface ConfirmParams {
     title?: string
@@ -53,7 +53,7 @@ function ConfirmWrapper() {
             <AlertDialogContent>
                 <AlertDialogHeader className="relative">
                     <div><TipIcon /></div>
-                    {showClose && <Cross2Icon onClick={close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></Cross2Icon>}
+                    {showClose && <X onClick={close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
                     <AlertDialogTitle>{title}</AlertDialogTitle>
                     <AlertDialogDescription className="text-popover-foreground">
                         {desc}

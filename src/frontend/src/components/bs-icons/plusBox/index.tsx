@@ -1,6 +1,6 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as PlusBox } from "./PlusBox.svg";
-import { ReactComponent as PlusBoxDark } from "./PlusBox-dark.svg";
+import PlusBox from "./PlusBox.svg?react";
+import PlusBoxDark from "./PlusBox-dark.svg?react";
 
 export const PlusBoxIcon = forwardRef<
     SVGSVGElement & { className: any },

@@ -1,20 +1,15 @@
-import os
-import uuid
-from loguru import logger
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, List, Optional
 
-from bisheng_langchain.vectorstores.milvus import Milvus
+from langchain.text_splitter import TextSplitter
 from langchain_core.documents import Document
 from langchain_core.pydantic_v1 import Field
 from langchain_core.retrievers import BaseRetriever
-from langchain_core.vectorstores import VectorStore
-
-from langchain.callbacks.manager import CallbackManagerForRetrieverRun
-from langchain.text_splitter import TextSplitter
+from loguru import logger
 
 
 class BaselineVectorRetriever(BaseRetriever):
-    vector_store: Milvus
+
+    vector_store: Any
     text_splitter: TextSplitter
     search_type: str = 'similarity'
     search_kwargs: dict = Field(default_factory=dict)
@@ -27,13 +22,14 @@ class BaselineVectorRetriever(BaseRetriever):
         **kwargs,
     ) -> None:
         split_docs = self.text_splitter.split_documents(documents)
-        logger.info(f"BaselineVectorRetriever: split document into {len(split_docs)} chunks")
+        logger.info(f'BaselineVectorRetriever: split document into {len(split_docs)} chunks')
         for chunk_index, split_doc in enumerate(split_docs):
             if 'chunk_bboxes' in split_doc.metadata:
                 split_doc.metadata.pop('chunk_bboxes')
             split_doc.metadata['chunk_index'] = chunk_index
             if kwargs.get('add_aux_info', False):
-                split_doc.page_content = split_doc.metadata["source"] + '\n' + split_doc.metadata["title"] + '\n' + split_doc.page_content
+                split_doc.page_content = split_doc.metadata['source'] + '\n' + split_doc.metadata[
+                    'title'] + '\n' + split_doc.page_content
 
         connection_args = self.vector_store.connection_args
         embedding_function = self.vector_store.embedding_func

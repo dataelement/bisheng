@@ -99,7 +99,8 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
     const [retryLoad, setRetryLoad] = useState(false)
     const handleRetry = (objs) => {
         setRetryLoad(true)
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(objs).then(res => {
+        const params = { ...getParams(size, overlap), file_objs: objs }
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
             setRepeatFiles([])
             setRetryLoad(false)
             // onNext()

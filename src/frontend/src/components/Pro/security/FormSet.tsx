@@ -4,9 +4,8 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import { uploadFile } from "@/controllers/API";
-import { UploadIcon } from "@radix-ui/react-icons";
 import { t } from "i18next";
+import { Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function FormSet({ data, onChange, onSave, onCancel }) {
@@ -16,7 +15,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
         setForm(data)
     }, [data])
 
-    const handleCheckboxChange = (val, name) => {    
+    const handleCheckboxChange = (val, name) => {
         let temp = form.wordsType
         // setForm({ ...form, wordsType: [1] })
         val ? setForm({
@@ -65,10 +64,10 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                 <div className="mt-4 mb-6 space-y-3">
                     <div className="space-x-2 flex items-center">
                         <Checkbox
-                        id="c1"
-                        value="1"
-                        checked={form.wordsType?.includes(1)}
-                        onCheckedChange={(val) => handleCheckboxChange(val, 1)}
+                            id="c1"
+                            value="1"
+                            checked={form.wordsType?.includes(1)}
+                            onCheckedChange={(val) => handleCheckboxChange(val, 1)}
                         />
                         <Label htmlFor="c1" className="cursor-pointer">{t('build.builtinWordList')}</Label>
                     </div>
@@ -89,7 +88,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                     <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
                     {/* @ts-ignore */}
                     <div className="flex items-center absolute right-1 top-1 cursor-pointer" onClick={() => document.querySelector('#fileUpload').click()}>
-                        <UploadIcon id="ul" color="blue" className="w-3 h-3" />
+                        <Upload id="ul" color="blue" className="w-3 h-3" />
                         <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">{t('build.txtFile')}</span></Label>
                     </div>
                 </div>

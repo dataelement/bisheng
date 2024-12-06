@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as BookOpen } from "./BookOpen.svg";
+import BookOpen from "./BookOpen.svg?react";
 
 export const BookOpenIcon = forwardRef<
     SVGSVGElement & { className: any },

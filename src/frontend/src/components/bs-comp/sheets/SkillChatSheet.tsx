@@ -1,8 +1,8 @@
-import { AssistantIcon } from "@/components/bs-icons/assistant";
-import { SkillIcon } from "@/components/bs-icons/skill";
+import { AssistantIcon, SkillIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
+import { useDebounce } from "@/util/hook";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +10,6 @@ import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import LoadMore from "../loadMore";
-import { useDebounce } from "@/util/hook";
 
 export default function SkillChatSheet({ children, onSelect }) {
     const [open, setOpen] = useState(false)

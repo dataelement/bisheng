@@ -10,8 +10,8 @@ import IntComponent from "../../components/intComponent";
 import PromptAreaComponent from "../../components/promptComponent";
 import TextAreaComponent from "../../components/textAreaComponent";
 import ToggleShadComponent from "../../components/toggleShadComponent";
-import { Badge } from "../../components/ui/badge";
-import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/bs-ui/badge";
+import { Button } from "../../components/bs-ui/button";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "../../components/ui/dialog";
+} from "../../components/bs-ui/dialog";
 import EditLabel from "../../components/ui/editLabel";
 import {
   Table,
@@ -29,7 +29,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../components/ui/table";
+} from "../../components/bs-ui/table";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { typesContext } from "../../contexts/typesContext";

@@ -1,9 +1,9 @@
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Download } from "lucide-react";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import EditFlowSettings from "../../components/EditFlowSettingsComponent";
-import { Button } from "../../components/ui/button";
-import { Checkbox } from "../../components/ui/checkbox";
+import { Button } from "../../components/bs-ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "../../components/ui/dialog";
+} from "../../components/bs-ui/dialog";
 import { alertContext } from "../../contexts/alertContext";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { TabsContext } from "../../contexts/tabsContext";

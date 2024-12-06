@@ -1,8 +1,8 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Info } from "./Info.svg";
-import { ReactComponent as Success } from "./Success.svg";
-import { ReactComponent as Warning } from "./Warning.svg";
-import { ReactComponent as Error } from "./Error.svg";
+import Info from "./Info.svg?react";
+import Success from "./Success.svg?react";
+import Warning from "./Warning.svg?react";
+import Error from "./Error.svg?react";
 
 type Type = 'info' | 'error' | 'success' | 'warning'
 

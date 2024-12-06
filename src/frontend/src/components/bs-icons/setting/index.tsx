@@ -1,6 +1,6 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as Setting } from "./Setting.svg";
 import { cname } from "@/components/bs-ui/utils";
+import Setting from "./Setting.svg?react";
 
 export const SettingIcon = forwardRef<
     SVGSVGElement & { className: any },

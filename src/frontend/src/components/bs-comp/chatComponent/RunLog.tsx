@@ -2,7 +2,7 @@ import { LoadIcon } from "@/components/bs-icons/loading";
 import { ToastIcon } from "@/components/bs-icons/toast";
 import { cname } from "@/components/bs-ui/utils";
 import { useAssistantStore } from "@/store/assistantStore";
-import { CaretDownIcon } from "@radix-ui/react-icons";
+import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export default function RunLog({ data }) {
@@ -54,7 +54,7 @@ export default function RunLog({ data }) {
                     }
                     <span>{title}</span>
                 </div>
-                <CaretDownIcon className={open && 'rotate-180'} />
+                <ChevronDown className={open && 'rotate-180'} />
             </div>
             <div className={cname('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
                 {data.thought.split('\n').map((line, index) => (

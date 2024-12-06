@@ -48,12 +48,13 @@ services:
       JWT_ENABLED: false
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/office/default.json:/etc/onlyoffice/documentserver/default.json
     command: bash -c "supervisorctl restart all"
     restart: on-failure
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v0.3.7.1
+    image: dataelement/bisheng-backend:v0.4.0.dev1
     ports:
       - "7860:7860"
     environment:
@@ -92,7 +93,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v0.3.7.1
+    image: dataelement/bisheng-frontend:v0.4.0.dev1
     ports:
       - "3001:3001"
     environment:

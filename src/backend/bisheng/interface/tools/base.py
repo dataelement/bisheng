@@ -9,7 +9,7 @@ from bisheng.template.field.base import TemplateField
 from bisheng.template.template.base import Template
 from bisheng.utils import util
 from bisheng.utils.util import build_template_from_class
-from langchain.agents.load_tools import _EXTRA_LLM_TOOLS, _EXTRA_OPTIONAL_TOOLS, _LLM_TOOLS
+from langchain_community.agent_toolkits.load_tools import _EXTRA_LLM_TOOLS, _EXTRA_OPTIONAL_TOOLS, _LLM_TOOLS
 
 TOOL_INPUTS = {
     'str':

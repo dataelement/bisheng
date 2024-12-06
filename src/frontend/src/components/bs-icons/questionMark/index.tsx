@@ -1,5 +1,5 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as QuestionMark } from "./QuestionMark.svg";
+import QuestionMark from "./QuestionMark.svg?react";
 
 export const QuestionMarkIcon = forwardRef<
     SVGSVGElement & { className: any },

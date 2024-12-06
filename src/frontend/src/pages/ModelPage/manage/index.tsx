@@ -1,20 +1,19 @@
-import { Button } from "@/components/bs-ui/button"
 import { SettingIcon } from "@/components/bs-icons"
-import { useContext, useEffect, useState } from "react"
-import { userContext } from "@/contexts/userContext"
-import { useTranslation } from "react-i18next"
-import { PlusCircledIcon } from "@radix-ui/react-icons"
-import { MinusCircledIcon } from "@radix-ui/react-icons"
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons"
+import { Button } from "@/components/bs-ui/button"
 import { Switch } from "@/components/bs-ui/switch"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
+import { userContext } from "@/contexts/userContext"
+import { useContext, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { changeLLmServerStatus, getModelListApi } from "@/controllers/API/finetune"
-import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger, QuestionTooltip } from "@/components/bs-ui/tooltip"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { CircleMinus, CirclePlus } from "lucide-react"
 import ModelConfig from "./ModelConfig"
 import SystemModelConfig from "./SystemModelConfig"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { LoadingIcon } from "@/components/bs-icons/loading"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
@@ -25,8 +24,8 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
             <div className="bs-table-td h-full p-2 flex items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
                 {
                     expand ?
-                        <MinusCircledIcon className="cursor-pointer min-w-4" onClick={() => setExpand(false)} />
-                        : <PlusCircledIcon onClick={() => setExpand(true)} className="cursor-pointer min-w-4" />
+                        <CircleMinus className="cursor-pointer min-w-4 w-4 h-4" onClick={() => setExpand(false)} />
+                        : <CirclePlus onClick={() => setExpand(true)} className="cursor-pointer min-w-4 w-4 h-4" />
                 }
                 {data.name}
             </div>
@@ -135,7 +134,7 @@ export default function Management() {
     return <div className="relative bg-background-login h-full px-2 py-4">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <span className="loading loading-infinity loading-lg"></span>
+                <LoadingIcon />
             </div>
         )}
         <div className="h-full overflow-y-auto">

@@ -31,7 +31,7 @@ export default function FileUploadStep1({ hidden, onNext, onChange }) {
         </div>
         <Upload
             ref={uploadRef}
-            url='/api/v1/knowledge/upload'
+            url={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
             accept={appConfig.libAccepts}
             progressClassName='max-h-[374px]'
             onFileCountChange={(count, all) => {

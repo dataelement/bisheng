@@ -1,4 +1,4 @@
-import { DoubleArrowLeftIcon, DoubleArrowRightIcon } from '@radix-ui/react-icons';
+import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
 
 interface IProps {
@@ -34,7 +34,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
             items.push(
                 <PaginationItem key="start">
                     <PaginationLink href="#" onClick={() => handlePageChange(1)} >
-                        <DoubleArrowLeftIcon />
+                        <ChevronsLeft />
                     </PaginationLink>
                 </PaginationItem>
             );
@@ -108,7 +108,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
             items.push(
                 <PaginationItem key="end">
                     <PaginationLink href="#" onClick={() => handlePageChange(totalPages)} >
-                        <DoubleArrowRightIcon />
+                        <ChevronsRight />
                     </PaginationLink>
                 </PaginationItem>
             );

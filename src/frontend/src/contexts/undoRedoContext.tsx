@@ -6,7 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { Edge, Node, useReactFlow } from "reactflow";
+import { Edge, Node, useReactFlow } from "@xyflow/react";
 import { TabsContext } from "./tabsContext";
 
 type undoRedoContextType = {

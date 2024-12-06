@@ -1,6 +1,6 @@
-import { CheckIcon, Cross1Icon } from "@radix-ui/react-icons"
-import React, { useEffect, useMemo, useRef, useState } from "react"
-import { Select, SelectContent, SelectItem, SelectTrigger } from "."
+import { Check, X } from "lucide-react"
+import React, { useEffect, useRef, useState } from "react"
+import { Select, SelectContent, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
 import { cname, useDebounce } from "../utils"
@@ -16,7 +16,7 @@ const MultiItem: React.FC<
         onClick={() => { onClick(value, children as string) }}
     >
         <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
-            {active && <CheckIcon className="h-4 w-4"></CheckIcon>}
+            {active && <Check className="h-4 w-4"></Check>}
         </span>
         {children}
     </div>
@@ -30,6 +30,7 @@ interface BaseProps<T> {
     /** 多选 */
     id?: string;
     multiple?: boolean;
+    error?: boolean;
     /** 高度不变，内部滚动 */
     scroll?: boolean;
     disabled?: boolean;
@@ -40,6 +41,7 @@ interface BaseProps<T> {
     placeholder?: string;
     searchPlaceholder?: string;
     tabs?: React.ReactNode;
+    hideSearch?: boolean;
     /** 锁定不可修改的值 */
     lockedValues?: string[];
     close?: boolean;
@@ -65,6 +67,7 @@ type IProps = ScrollLoadProps | NonScrollLoadProps;
 
 const MultiSelect = ({
     id = `${Date.now()}`,
+    error = false,
     multiple = false,
     className,
     contentClassName,
@@ -78,6 +81,7 @@ const MultiSelect = ({
     searchPlaceholder = '',
     lockedValues = [],
     tabs = null,
+    hideSearch = false,
     onSearch,
     onLoad,
     onScrollLoad,
@@ -203,7 +207,7 @@ const MultiSelect = ({
             }
         }}
     >
-        <SelectTrigger className={cname(`group min-h-9 py-1 ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
+        <SelectTrigger className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
                 !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
@@ -214,7 +218,7 @@ const MultiSelect = ({
                             values.map(item =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
                                     {item.label}
-                                    {lockedValues.includes(item.value) || <Cross1Icon className="h-3 w-3" onClick={() => handleDelete(item.value)}></Cross1Icon>}
+                                    {lockedValues.includes(item.value) || <X className="h-3 w-3" onClick={() => handleDelete(item.value)}></X>}
                                 </Badge>
                             )
                         }
@@ -223,14 +227,14 @@ const MultiSelect = ({
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all">
                                     {option.label}
-                                    {lockedValues.includes(option.value) || <Cross1Icon className="h-3 w-3" onClick={() => handleDelete(option.value)}></Cross1Icon>}
+                                    {lockedValues.includes(option.value) || <X className="h-3 w-3" onClick={() => handleDelete(option.value)}></X>}
                                 </Badge>
                             )
                         }
                     </div>)
                     : placeholder)
             }
-            {close && values.length !== 0 && <Cross1Icon
+            {close && values.length !== 0 && <X
                 className="group-hover:block hidden bg-border text-[#666] rounded-full p-0.5 min-w-[14px] mt-1"
                 width={14}
                 height={14}
@@ -239,11 +243,11 @@ const MultiSelect = ({
             />}
         </SelectTrigger>
         <SelectContent
-            className={contentClassName}
+            className={contentClassName + ' overflow-visible'}
             headNode={
                 <div className="p-2">
                     {tabs}
-                    <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />
+                    {!hideSearch && <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" />}
                 </div>
             }
             footerNode={children}

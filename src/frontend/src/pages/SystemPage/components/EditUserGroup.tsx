@@ -11,7 +11,7 @@ import { getGroupFlowsApi, saveGroupApi } from "@/controllers/API/pro";
 import { getAdminsApi, saveUserGroup, updateUserGroup } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
-import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
+import { CircleHelp } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, SearchInput } from "../../../components/bs-ui/input";
@@ -120,7 +120,7 @@ function FlowControl({ groupId, type, onChange }) {
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger>
-                            <QuestionMarkCircledIcon />
+                            <CircleHelp className="w-4 h-4" />
                         </TooltipTrigger>
                         <TooltipContent>
                             <p>{t('system.iconHover')}</p>

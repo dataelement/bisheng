@@ -1,4 +1,4 @@
-import { ReactFlowInstance } from "reactflow";
+import { ReactFlowInstance } from "@xyflow/react";
 import { APIClassType } from "../api";
 
 const types: { [char: string]: string } = {};

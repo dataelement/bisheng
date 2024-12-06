@@ -1,8 +1,8 @@
 from bisheng.interface.importing.utils import import_class
 from bisheng.interface.tools.custom import PythonFunction, PythonFunctionTool
-from langchain.agents import Tool
-from langchain.agents.load_tools import (_BASE_TOOLS, _EXTRA_LLM_TOOLS, _EXTRA_OPTIONAL_TOOLS,
-                                         _LLM_TOOLS)
+from langchain_community.tools import Tool
+from langchain_community.agent_toolkits.load_tools import (_BASE_TOOLS, _EXTRA_LLM_TOOLS, _EXTRA_OPTIONAL_TOOLS,
+                                                           _LLM_TOOLS)
 from langchain_community import tools
 from langchain_community.tools.json.tool import JsonSpec
 from langchain_experimental import tools as python_tools

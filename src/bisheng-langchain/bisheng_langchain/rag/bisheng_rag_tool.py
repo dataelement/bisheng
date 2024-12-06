@@ -1,27 +1,25 @@
-import time
 import os
-import yaml
-import httpx
-from typing import Any, Dict, Tuple, Type, Union, Optional
+from typing import Any, Dict, Optional, Tuple, Union
 
-from langchain_core.vectorstores import VectorStoreRetriever
-from loguru import logger
-from langchain_core.tools import BaseTool, Tool
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
-from langchain_core.language_models.base import LanguageModelLike
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains.llm import LLMChain
-from langchain.chains.question_answering import load_qa_chain
+import httpx
+import yaml
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.rag.init_retrievers import (BaselineVectorRetriever, KeywordRetriever,
+                                                   MixRetriever, SmallerChunksVectorRetriever)
+from bisheng_langchain.rag.utils import import_by_type, import_class
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from bisheng_langchain.rag.init_retrievers import (
-    BaselineVectorRetriever,
-    KeywordRetriever,
-    MixRetriever,
-    SmallerChunksVectorRetriever,
-)
-from bisheng_langchain.rag.utils import import_by_type, import_class
-from bisheng_langchain.rag.extract_info import extract_title
+from langchain.chains.llm import LLMChain
+from langchain.chains.question_answering import load_qa_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.callbacks import CallbackManagerForChainRun
+from langchain_core.language_models.base import LanguageModelLike
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, Tool
+from langchain_core.vectorstores import VectorStoreRetriever
+from loguru import logger
 
 
 class MultArgsSchemaTool(Tool):
@@ -37,26 +35,27 @@ class MultArgsSchemaTool(Tool):
 
 class BishengRAGTool:
 
-    def __init__(
-        self,
-        vector_store: Optional[Milvus] = None,
-        keyword_store: Optional[ElasticKeywordsSearch] = None,
-        llm: Optional[LanguageModelLike] = None,
-        collection_name: Optional[str] = None,
-        QA_PROMPT: Optional[ChatPromptTemplate] = None,
-        **kwargs
-    ) -> None:
+    def __init__(self,
+                 vector_store: Optional[Milvus] = None,
+                 keyword_store: Optional[ElasticKeywordsSearch] = None,
+                 llm: Optional[LanguageModelLike] = None,
+                 collection_name: Optional[str] = None,
+                 QA_PROMPT: Optional[ChatPromptTemplate] = None,
+                 **kwargs) -> None:
         if collection_name is None and (keyword_store is None or vector_store is None):
-            raise ValueError('collection_name must be provided if keyword_store or vector_store is not provided')
+            raise ValueError(
+                'collection_name must be provided if keyword_store or vector_store is not provided'
+            )
         self.collection_name = collection_name
-        
-        yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config/baseline_v2.yaml')
+
+        yaml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 'config/baseline_v2.yaml')
         with open(yaml_path, 'r', encoding='utf-8') as f:
             self.params = yaml.safe_load(f)
-        
+
         # update params
-        max_content = kwargs.get("max_content", 15000)
-        sort_by_source_and_index = kwargs.get("sort_by_source_and_index", True)
+        max_content = kwargs.get('max_content', 15000)
+        sort_by_source_and_index = kwargs.get('sort_by_source_and_index', True)
         self.params['generate']['max_content'] = max_content
         self.params['post_retrieval']['sort_by_source_and_index'] = sort_by_source_and_index
 
@@ -68,11 +67,12 @@ class BishengRAGTool:
             llm_object = import_by_type(_type='llms', name=llm_params['type'])
             if llm_params['type'] == 'ChatOpenAI' and llm_params['openai_proxy']:
                 llm_params.pop('type')
-                self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']), **llm_params)
+                self.llm = llm_object(http_client=httpx.Client(proxies=llm_params['openai_proxy']),
+                                      **llm_params)
             else:
                 llm_params.pop('type')
                 self.llm = llm_object(**llm_params)
-        
+
         # init milvus
         if vector_store:
             # if vector_store is retriever, get vector_store instance
@@ -87,26 +87,27 @@ class BishengRAGTool:
             if embedding_params['type'] == 'OpenAIEmbeddings' and embedding_params['openai_proxy']:
                 embedding_params.pop('type')
                 self.embeddings = embedding_object(
-                    http_client=httpx.Client(proxies=embedding_params['openai_proxy']), **embedding_params
-                )
+                    http_client=httpx.Client(proxies=embedding_params['openai_proxy']),
+                    **embedding_params)
             else:
                 embedding_params.pop('type')
                 self.embeddings = embedding_object(**embedding_params)
-            
+
             self.vector_store = Milvus(
                 embedding_function=self.embeddings,
                 connection_args={
-                    "host": self.params['milvus']['host'],
-                    "port": self.params['milvus']['port'],
+                    'host': self.params['milvus']['host'],
+                    'port': self.params['milvus']['port'],
                 },
             )
-        
+
         # init keyword store
         if keyword_store:
             self.keyword_store = keyword_store
         else:
             if self.params['elasticsearch'].get('extract_key_by_llm', False):
-                extract_key_prompt = import_class(f'bisheng_langchain.rag.prompts.EXTRACT_KEY_PROMPT')
+                extract_key_prompt = import_class(
+                    'bisheng_langchain.rag.prompts.EXTRACT_KEY_PROMPT')
                 llm_chain = LLMChain(llm=self.llm, prompt=extract_key_prompt)
             else:
                 llm_chain = None
@@ -128,10 +129,11 @@ class BishengRAGTool:
                 'splitter_kwargs': retriever['splitter'],
                 'retrieval_kwargs': retriever['retrieval'],
             }
-            retriever_list.append(self._post_init_retriever(retriever_type=retriever_type, **retriever_params))
+            retriever_list.append(
+                self._post_init_retriever(retriever_type=retriever_type, **retriever_params))
         self.retriever = EnsembleRetriever(retrievers=retriever_list)
 
-        # init qa chain    
+        # init qa chain
         if QA_PROMPT:
             prompt = QA_PROMPT
         else:
@@ -140,13 +142,8 @@ class BishengRAGTool:
                 prompt = import_class(f'bisheng_langchain.rag.prompts.{prompt_type}')
             else:
                 prompt = None
-        self.qa_chain = load_qa_chain(
-            llm=self.llm, 
-            chain_type=self.params['generate']['chain_type'], 
-            prompt=prompt, 
-            verbose=False
-        )
-    
+        self.qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=prompt)
+
     def _post_init_retriever(self, retriever_type, **kwargs):
         retriever_classes = {
             'KeywordRetriever': KeywordRetriever,
@@ -181,9 +178,9 @@ class BishengRAGTool:
         loader_object = import_by_type(_type='documentloaders', name=loader_params.pop('type'))
 
         logger.info(f'file_path: {file_path}')
-        loader = loader_object(
-            file_name=os.path.basename(file_path), file_path=file_path, **loader_params
-        )
+        loader = loader_object(file_name=os.path.basename(file_path),
+                               file_path=file_path,
+                               **loader_params)
         documents = loader.load()
         logger.info(f'documents: {len(documents)}, page_content: {len(documents[0].page_content)}')
         if len(documents[0].page_content) == 0:
@@ -197,30 +194,26 @@ class BishengRAGTool:
                     title = extract_title(llm=self.llm, text=doc.page_content)
                     logger.info(f'extract title: {title}')
                 except Exception as e:
-                    logger.error(f"Failed to extract title: {e}")
+                    logger.error(f'Failed to extract title: {e}')
                     title = ''
                 doc.metadata['title'] = title
 
         for idx, retriever in enumerate(self.retriever.retrievers):
-            retriever.add_documents(
-                documents, 
-                self.collection_name, 
-                drop_old=drop_old, 
-                add_aux_info=add_aux_info
-            )
-    
+            retriever.add_documents(documents,
+                                    self.collection_name,
+                                    drop_old=drop_old,
+                                    add_aux_info=add_aux_info)
+
     def retrieval_and_rerank(self, query):
         """
         retrieval and rerank
         """
         # EnsembleRetriever直接检索召回会默认去重
-        docs = self.retriever.get_relevant_documents(
-            query=query, 
-            collection_name=self.collection_name
-        )
+        docs = self.retriever.get_relevant_documents(query=query,
+                                                     collection_name=self.collection_name)
         logger.info(f'retrieval docs origin: {len(docs)}')
 
-        # delete redundancy according to max_content 
+        # delete redundancy according to max_content
         doc_num, doc_content_sum = 0, 0
         for doc in docs:
             doc_content_sum += len(doc.page_content)
@@ -235,28 +228,37 @@ class BishengRAGTool:
             logger.info('sort chunks by source and chunk_index')
             docs = sorted(docs, key=lambda x: (x.metadata['source'], x.metadata['chunk_index']))
         return docs
-    
-    def run(self, query, return_only_outputs=True) -> Any:
+
+    def run(self,
+            query,
+            return_only_outputs=True,
+            run_manager: Optional[CallbackManagerForChainRun] = None) -> Any:
         docs = self.retrieval_and_rerank(query)
         try:
-            ans = self.qa_chain({"input_documents": docs, "question": query}, return_only_outputs=return_only_outputs)
+            kwargs = {}
+            if run_manager:
+                kwargs['config'] = RunnableConfig(callbacks=[run_manager])
+            ans = self.qa_chain.invoke(
+                {
+                    'context': docs,
+                    'question': query
+                }, **kwargs
+            )
         except Exception as e:
-            logger.error(f'question: {query}\nerror: {e}')
-            ans = {'output_text': str(e)}
+            logger.exception(f'question: {query}\nerror: {e}')
+            ans = str(e)
         if return_only_outputs:
-            rag_answer = ans['output_text']
-            return rag_answer
+            return ans
         else:
-            rag_answer = ans['output_text']
-            input_documents = ans['input_documents']
-            return rag_answer, input_documents
-    
+            return ans, docs
+
     async def arun(self, query: str, return_only_outputs=True) -> str:
         rag_answer = self.run(query, return_only_outputs)
         return rag_answer
-    
+
     @classmethod
     def get_rag_tool(cls, name, description, **kwargs: Any) -> BaseTool:
+
         class InputArgs(BaseModel):
             query: str = Field(description='question asked by the user.')
 
@@ -265,7 +267,7 @@ class BishengRAGTool:
                                   func=cls(**kwargs).run,
                                   coroutine=cls(**kwargs).arun,
                                   args_schema=InputArgs)
-    
+
 
 if __name__ == '__main__':
     # rag_tool = BishengRAGTool(collection_name='rag_finance_report_0_test')
@@ -280,31 +282,29 @@ if __name__ == '__main__':
     collection_name = 'rag_finance_report_0_benchmark_caibao_1000_source_title'
     # milvus
     vector_store = Milvus(
-            collection_name=collection_name,
-            embedding_function=embeddings,
-            connection_args={
-                "host": '110.16.193.170',
-                "port": '50062',
-            },
+        collection_name=collection_name,
+        embedding_function=embeddings,
+        connection_args={
+            'host': '110.16.193.170',
+            'port': '50062',
+        },
     )
     # es
     keyword_store = ElasticKeywordsSearch(
         index_name=collection_name,
         elasticsearch_url='http://110.16.193.170:50062/es',
-        ssl_verify={'basic_auth': ["elastic", "oSGL-zVvZ5P3Tm7qkDLC"]},
+        ssl_verify={'basic_auth': ['elastic', 'oSGL-zVvZ5P3Tm7qkDLC']},
     )
 
-    tool = BishengRAGTool.get_rag_tool(
-        name='rag_knowledge_retrieve', 
-        description='金融年报财报知识库问答',
-        vector_store=vector_store, 
-        keyword_store=keyword_store, 
-        llm=llm
-    )
+    tool = BishengRAGTool.get_rag_tool(name='rag_knowledge_retrieve',
+                                       description='金融年报财报知识库问答',
+                                       vector_store=vector_store,
+                                       keyword_store=keyword_store,
+                                       llm=llm)
     print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？'))
 
     # tool = BishengRAGTool.get_rag_tool(
-    #     name='rag_knowledge_retrieve', 
+    #     name='rag_knowledge_retrieve',
     #     description='金融年报财报知识库问答',
     #     collection_name='rag_finance_report_0_benchmark_caibao_1000_source_title'
     # )

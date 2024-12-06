@@ -2,7 +2,6 @@ import cloneDeep from "lodash-es/cloneDeep";
 import uniqueId from "lodash-es/uniqueId";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { RouterProvider } from "react-router-dom";
-import "reactflow/dist/style.css";
 import "./App.css";
 
 import i18next from "i18next";
@@ -15,6 +14,7 @@ import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
 import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
+import { LoadingIcon } from "./components/bs-icons/loading";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -181,7 +181,9 @@ export default function App() {
     //need parent component with width and height
     <div className="flex h-full flex-col">
       {(user?.user_id || noAuthPages.includes(path)) && router ? <RouterProvider router={router} />
-        : user ? <div className="loading"></div>
+        : user ? <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
+          <LoadingIcon className="size-48 text-primary" />
+        </div>
           : <RouterProvider router={publicRouter} />}
       <div></div>
       <div className="app-div" style={{ zIndex: 1000 }}>

@@ -1,12 +1,12 @@
 import { Accordion } from "@/components/bs-ui/accordion";
+import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
-import ToolItem from "@/pages/SkillPage/components/ToolItem";
-import { useTranslation } from "react-i18next";
-import { PersonIcon, StarFilledIcon } from "@radix-ui/react-icons";
+import ToolItem from "@/pages/BuildPage/tools/ToolItem";
+import { Star, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/bs-ui/button";
+import { useTranslation } from "react-i18next";
 
 export default function ToolsSheet({ select, onSelect, children }) {
     const { t } = useTranslation()
@@ -27,7 +27,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
             // 搜索范围：工具名称、工具描述、工具api名称、工具api描述
             const targetStr = `${el.name}-${el.description}-${el.children?.map((el) => el.name + el.desc).join("-") || ''}`
             return targetStr.toLowerCase().includes(keyword.toLowerCase());
-          });
+        });
     }, [keyword, allData])
 
     return (
@@ -51,14 +51,14 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === 'default' && 'bg-muted-foreground/10'}`}
                                 onClick={() => setType('default')}
                             >
-                                <PersonIcon />
+                                <User />
                                 <span>{t('tools.builtinTools')}</span>
                             </div>
                             <div
                                 className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mt-1 ${type === 'custom' && 'bg-muted-foreground/10'}`}
                                 onClick={() => setType('custom')}
                             >
-                                <StarFilledIcon />
+                                <Star />
                                 <span>{t('tools.customTools')}</span>
                             </div>
                         </div>

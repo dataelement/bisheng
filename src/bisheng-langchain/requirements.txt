@@ -1,4 +1,4 @@
-langchain==0.1.12
+langchain==0.2.*
 zhipuai
 websocket-client
 elasticsearch
@@ -6,12 +6,12 @@ opencv-python==4.5.5.64
 Pillow==9.5.0
 bisheng-pyautogen
 jieba==0.42.1
-pydantic==1.10.13
+pydantic
 pymupdf==1.23.8
 shapely==2.0.2
 filetype==1.2.0
-langgraph==0.0.50
-openai==1.14.3
-langchain-openai==0.1.5
+langgraph==0.2.*
+openai==1.51.*
+langchain_openai>=0.1.25
 llama-index==0.9.48
 bisheng-ragas==1.0.0

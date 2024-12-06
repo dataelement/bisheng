@@ -1,9 +1,9 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as En } from "./En.svg";
+import En from "./En.svg?react";
 
 export const EnIcon = forwardRef<
     SVGSVGElement & { className: any },
     React.PropsWithChildren<{ className?: string }>
->(({className,...props}, ref) => {
-    return <En ref={ref} {...props} className={className || ''}/>;
+>(({ className, ...props }, ref) => {
+    return <En ref={ref} {...props} className={className || ''} />;
 });

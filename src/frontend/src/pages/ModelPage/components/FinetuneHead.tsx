@@ -10,7 +10,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "../../../components/bs-ui/select";
-import { ToggleGroup, ToggleGroupItem } from "../../../components/ui/toggle-group";
+import { ToggleGroup, ToggleGroupItem } from "../../../components/bs-ui/toggle-group";
 import { getAllServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
 

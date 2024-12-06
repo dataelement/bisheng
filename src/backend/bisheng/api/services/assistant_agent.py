@@ -1,28 +1,12 @@
+import asyncio
 import json
 import os
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 from uuid import UUID
 
-from langchain_core.callbacks import Callbacks
-from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
-from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, Tool
-from langchain_core.utils.function_calling import format_tool_to_openai_tool
-from langchain_core.vectorstores import VectorStoreRetriever
-from loguru import logger
-
-from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
-                                                      generate_opening_dialog,
-                                                      optimize_assistant_prompt)
-from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
-from bisheng_langchain.gpts.load_tools import load_tools
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.llm import LLMService
@@ -31,12 +15,26 @@ from bisheng.api.utils import build_flow_no_yield
 from bisheng.api.v1.schemas import InputRequest
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.database.models.flow import FlowDao, FlowStatus
-from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, AuthMethod
-from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.interface.initialize.loading import instantiate_llm, import_by_type
-from bisheng.interface.llms.custom import BishengLLM
-from bisheng.utils.embedding import decide_embeddings
+from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
+                                                      generate_opening_dialog,
+                                                      optimize_assistant_prompt)
+from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
+from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from langchain_core.callbacks import Callbacks
+from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, Tool
+from langchain_core.utils.function_calling import format_tool_to_openai_tool
+from langchain_core.vectorstores import VectorStoreRetriever
+from loguru import logger
 
 
 class AssistantAgent(AssistantUtils):
@@ -54,9 +52,9 @@ class AssistantAgent(AssistantUtils):
     Finally, Write 'Grounded answer:' followed by a response to the user's last input in high quality natural english. Use the symbols <co: doc> and </co: doc> to indicate when a fact comes from a document in the search result, e.g <co: 4>my fact</co: 4> for a fact from document 4.
 
     Additional instructions to note:
-    - If the user's question is in Chinese, please answer it in Chinese. 
+    - If the user's question is in Chinese, please answer it in Chinese.
     - 当问题中有涉及到时间信息时，比如最近6个月、昨天、去年等，你需要用时间工具查询时间信息。
-    """
+    """  # noqa
 
     def __init__(self, assistant_info: Assistant, chat_id: str):
         self.assistant = assistant_info
@@ -74,10 +72,7 @@ class AssistantAgent(AssistantUtils):
         self.knowledge_skill_path = str(Path(__file__).parent / 'knowledge_skill.json')
         self.knowledge_skill_data = None
         # 知识库检索相关参数
-        self.knowledge_retriever = {
-            "max_content": 15000,
-            "sort_by_source_and_index": False
-        }
+        self.knowledge_retriever = {'max_content': 15000, 'sort_by_source_and_index': False}
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -97,7 +92,7 @@ class AssistantAgent(AssistantUtils):
             elif not default_llm and one.default:
                 default_llm = one
         if not default_llm:
-            raise Exception("未配置助手推理模型")
+            raise Exception('未配置助手推理模型')
 
         self.llm_agent_executor = default_llm.agent_executor_type
         self.knowledge_retriever = {
@@ -114,42 +109,53 @@ class AssistantAgent(AssistantUtils):
         """ 初始化自动优化prompt等信息的llm实例 """
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.auto_llm:
-            raise Exception("未配置助手画像自动优化模型")
+            raise Exception('未配置助手画像自动优化模型')
 
         self.llm = LLMService.get_bisheng_llm(model_id=assistant_llm.auto_llm.model_id,
                                               temperature=self.assistant.temperature,
                                               streaming=assistant_llm.auto_llm.streaming)
 
-    def parse_tool_params(self, tool: GptsTools) -> Dict:
+    @staticmethod
+    def parse_tool_params(tool: GptsTools) -> Dict:
         """
         解析预置工具的初始化参数
         """
         # 特殊处理下bisheng_code_interpreter的参数
         if tool.tool_key == 'bisheng_code_interpreter':
-            return {
-                "minio": settings.get_knowledge().get("minio", {})
-            }
+            return {'minio': settings.get_knowledge().get('minio', {})}
         if not tool.extra:
             return {}
         params = json.loads(tool.extra)
 
         return params
 
+    @staticmethod
+    def sync_init_preset_tools(tool_list: List[GptsTools],
+                               llm: BaseLanguageModel = None,
+                               callbacks: Callbacks = None):
+        """
+        初始化预置工具列表
+        """
+        tool_name_param = {
+            tool.tool_key: AssistantAgent.parse_tool_params(tool)
+            for tool in tool_list
+        }
+        tool_langchain = load_tools(tool_params=tool_name_param, llm=llm, callbacks=callbacks)
+        return tool_langchain
+
     async def init_preset_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
         """
         初始化预置工具列表
         """
         tool_name_param = {
-            tool.tool_key: self.parse_tool_params(tool)
+            tool.tool_key: AssistantAgent.parse_tool_params(tool)
             for tool in tool_list
         }
-        tool_langchain = load_tools(tool_params=tool_name_param,
-                                    llm=self.llm,
-                                    callbacks=callbacks)
+        tool_langchain = load_tools(tool_params=tool_name_param, llm=self.llm, callbacks=callbacks)
         return tool_langchain
 
     @staticmethod
-    async def parse_personal_params(tool: GptsTools, all_tool_type: Dict[int, GptsToolsType]) -> Dict:
+    def parse_personal_params(tool: GptsTools, all_tool_type: Dict[int, GptsToolsType]) -> Dict:
         """
         解析自定义工具的初始化参数
         """
@@ -157,10 +163,13 @@ class AssistantAgent(AssistantUtils):
         if not tool_type_info:
             raise Exception(f'获取工具类型失败，tool_type_id: {tool.type}')
         return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, tool.extra,
-                                                       tool_type_info.server_host, tool_type_info.auth_method,
-                                                       tool_type_info.auth_type, tool_type_info.api_key)
+                                                       tool_type_info.server_host,
+                                                       tool_type_info.auth_method,
+                                                       tool_type_info.auth_type,
+                                                       tool_type_info.api_key)
 
-    async def init_personal_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+    @staticmethod
+    def sync_init_personal_tools(tool_list: List[GptsTools], callbacks: Callbacks = None):
         """
         初始化自定义工具列表
         """
@@ -169,13 +178,24 @@ class AssistantAgent(AssistantUtils):
         all_tool_type = {one.id: one for one in all_tool_type}
         tool_langchain = []
         for one in tool_list:
-            tool_params = await self.parse_personal_params(one, all_tool_type)
+            tool_params = AssistantAgent.parse_personal_params(one, all_tool_type)
             openapi_tool = OpenApiTools.get_api_tool(one.tool_key, **tool_params)
             openapi_tool.callbacks = callbacks
             tool_langchain.append(openapi_tool)
         return tool_langchain
 
-    async def init_knowledge_tool(self, knowledge: Knowledge, callbacks: Callbacks = None):
+    async def init_personal_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+        """
+        初始化自定义工具列表
+        """
+        return asyncio.get_running_loop().run_in_executor(None, self.sync_init_personal_tools,
+                                                          tool_list, callbacks)
+
+    @staticmethod
+    def sync_init_knowledge_tool(knowledge: Knowledge,
+                                 llm: BaseLanguageModel,
+                                 callbacks: Callbacks = None,
+                                 knowledge_retriever: dict = None):
         """
         初始化知识库工具
         """
@@ -185,19 +205,58 @@ class AssistantAgent(AssistantUtils):
             vector_client = vector_client.vectorstore
         vector_client.partition_key = knowledge.id
 
-        es_vector_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+        es_vector_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch',
+                                               embeddings)
         tool_params = {
-            "bisheng_rag": {
-                "name": f"knowledge_{knowledge.id}",
-                "description": f"{knowledge.name}:{knowledge.description}",
-                "vector_store": vector_client,
-                "keyword_store": es_vector_client,
-                "llm": self.llm
+            'bisheng_rag': {
+                'name': f'knowledge_{knowledge.id}',
+                'description': f'{knowledge.name}:{knowledge.description}',
+                'vector_store': vector_client,
+                'keyword_store': es_vector_client,
+                'llm': llm
             }
         }
-        tool_params['bisheng_rag'].update(self.knowledge_retriever)
-        tool = load_tools(tool_params=tool_params, llm=self.llm, callbacks=callbacks)
+        if knowledge_retriever:
+            tool_params['bisheng_rag'].update(knowledge_retriever)
+        tool = load_tools(tool_params=tool_params, llm=llm, callbacks=callbacks)
         return tool
+
+    async def init_knowledge_tool(self, knowledge: Knowledge, callbacks: Callbacks = None):
+        """
+        初始化知识库工具
+        """
+        return self.sync_init_knowledge_tool(knowledge,
+                                             self.llm,
+                                             callbacks,
+                                             self.knowledge_retriever)
+
+    @staticmethod
+    def init_tools_by_toolid(
+            tool_ids: List[int],
+            llm: BaseLanguageModel,
+            callbacks: Callbacks = None,
+    ):
+        """通过id初始化tool"""
+        tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
+        preset_tools = []
+        personal_tools = []
+        tools: List[BaseTool] = []
+        for one in tools_model:
+            if one.is_preset:
+                preset_tools.append(one)
+            else:
+                personal_tools.append(one)
+        if preset_tools:
+            tool_langchain = AssistantAgent.sync_init_preset_tools(preset_tools, llm, callbacks)
+            logger.info('act=build_preset_tools size={} return_tools={}', len(preset_tools),
+                        len(tool_langchain))
+            tools += tool_langchain
+        if personal_tools:
+            tool_langchain = AssistantAgent.sync_init_personal_tools(personal_tools, callbacks)
+            logger.info('act=build_personal_tools size={} return_tools={}', len(personal_tools),
+                        len(tool_langchain))
+            tools += tool_langchain
+        return tools
 
     async def init_tools(self, callbacks: Callbacks = None):
         """通过名称获取tool 列表
@@ -215,23 +274,7 @@ class AssistantAgent(AssistantUtils):
             else:
                 flow_links.append(link)
         if tool_ids:
-            tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-            preset_tools = []
-            personal_tools = []
-            for one in tools_model:
-                if one.is_preset:
-                    preset_tools.append(one)
-                else:
-                    personal_tools.append(one)
-            if preset_tools:
-                tool_langchain = await self.init_preset_tools(preset_tools, callbacks)
-                logger.info('act=build_preset_tools size={} return_tools={}', len(preset_tools), len(tool_langchain))
-                tools += tool_langchain
-            if personal_tools:
-                tool_langchain = await self.init_personal_tools(personal_tools, callbacks)
-                logger.info('act=build_personal_tools size={} return_tools={}', len(personal_tools),
-                            len(tool_langchain))
-                tools += tool_langchain
+            tools = self.init_tools_by_toolid(tool_ids, self.llm, callbacks)
 
         # flow + knowledge
         flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
@@ -243,7 +286,8 @@ class AssistantAgent(AssistantUtils):
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
-                knowledge_tool = await self.init_knowledge_tool(knowledge_data[knowledge_id], callbacks)
+                knowledge_tool = await self.init_knowledge_tool(knowledge_data[knowledge_id],
+                                                                callbacks)
                 tools.extend(knowledge_tool)
             else:
                 tmp_flow_id = UUID(link.flow_id).hex
@@ -288,10 +332,11 @@ class AssistantAgent(AssistantUtils):
         agent_executor_type = self.llm_agent_executor
         self.current_agent_executor = agent_executor_type
         # 做转换
-        agent_executor_type = self.agent_executor_dict.get(agent_executor_type, agent_executor_type)
+        agent_executor_type = self.agent_executor_dict.get(agent_executor_type,
+                                                           agent_executor_type)
 
         prompt = self.assistant.prompt
-        if getattr(self.llm, "model_name", "").startswith("command-r"):
+        if getattr(self.llm, 'model_name', '').startswith('command-r'):
             prompt = self.ASSISTANT_PROMPT_COHERE.format(preamble=prompt)
 
         # 初始化agent
@@ -345,23 +390,30 @@ class AssistantAgent(AssistantUtils):
             run_id = uuid.uuid4()
             await callback[0].on_tool_start({
                 'name': one,
-            }, input_str='flow if offline', run_id=run_id)
+            },
+                input_str='flow is offline',
+                run_id=run_id)
             await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
 
     async def record_chat_history(self, message: List[Any]):
         # 记录助手的聊天历史
-        if not os.getenv("BISHENG_RECORD_HISTORY"):
+        if not os.getenv('BISHENG_RECORD_HISTORY'):
             return
         try:
-            os.makedirs("/app/data/history", exist_ok=True)
-            with open(f"/app/data/history/{self.assistant.id}_{time.time()}.json", "w", encoding="utf-8") as f:
-                json.dump({
-                    "system": self.assistant.prompt,
-                    "message": message,
-                    "tools": [format_tool_to_openai_tool(t) for t in self.tools]
-                }, f, ensure_ascii=False)
+            os.makedirs('/app/data/history', exist_ok=True)
+            with open(f'/app/data/history/{self.assistant.id}_{time.time()}.json',
+                      'w',
+                      encoding='utf-8') as f:
+                json.dump(
+                    {
+                        'system': self.assistant.prompt,
+                        'message': message,
+                        'tools': [format_tool_to_openai_tool(t) for t in self.tools]
+                    },
+                    f,
+                    ensure_ascii=False)
         except Exception as e:
-            logger.error(f"record assistant history error: {str(e)}")
+            logger.error(f'record assistant history error: {str(e)}')
 
     async def trim_messages(self, messages: List[Any]) -> List[Any]:
         # 获取encoding

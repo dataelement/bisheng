@@ -1,13 +1,13 @@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { PlusIcon } from "@radix-ui/react-icons"
+import { generateUUID } from "@/components/bs-ui/utils"
+import { updateUserGroups, updateUserRoles } from "@/controllers/API/user"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { Plus } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button"
 import UserRoleItem from "./UserRoleItem"
-import { updateUserGroups, updateUserRoles } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { generateUUID } from "@/components/bs-ui/utils"
 
 export default function UserRoleModal({ user, onClose, onChange }) {
     const { t } = useTranslation()
@@ -69,7 +69,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             </div>
             <Button variant="outline" size="icon" onClick={() =>
                 setRoleItems(items => [...items, { key: Date.now(), groupId: '', roles: [] }])
-            }><PlusIcon></PlusIcon> </Button>
+            }><Plus className="size-5" /> </Button>
             <DialogFooter>
                 <Button variant="outline" className="h-10 w-[120px] px-16" onClick={onClose}>{t('cancel')}</Button>
                 <Button className="px-16 h-10 w-[120px]" onClick={handleSave}>{t('save')}</Button>

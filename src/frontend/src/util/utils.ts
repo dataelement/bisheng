@@ -9,6 +9,8 @@ export function classNames(...classes: Array<string>): string {
 }
 
 export function downloadFile(url, label) {
+    console.log('download file :>> ', url);
+
     return axios.get(url, { responseType: "blob" }).then((res: any) => {
         const blob = new Blob([res.data]);
         const link = document.createElement("a");

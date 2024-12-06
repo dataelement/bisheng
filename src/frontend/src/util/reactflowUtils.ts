@@ -1,4 +1,4 @@
-import { cloneDeep } from "lodash";
+import { cloneDeep } from "lodash-es";
 import {
   Connection,
   Edge,
@@ -6,7 +6,7 @@ import {
   OnSelectionChangeParams,
   ReactFlowJsonObject,
   XYPosition,
-} from "reactflow";
+} from "@xyflow/react";
 
 // import { downloadFlowsFromDatabase } from "../controllers/API";
 import {

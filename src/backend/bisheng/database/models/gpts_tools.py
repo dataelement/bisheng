@@ -337,3 +337,9 @@ class GptsToolsDao(GptsToolsBase):
             session.exec(statement)
             session.commit()
             return True
+
+    @classmethod
+    def get_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
+        with session_getter() as session:
+            statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+            return session.exec(statement).first()

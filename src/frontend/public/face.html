@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+  <title>毕昇印刷术</title>
+
+  <style>
+    body {
+      overflow: hidden;
+      margin: 0;
+      height: 100vh;
+      perspective: 65em;
+      perspective-origin: 50% calc(50% - 18em);
+      background: #e9ebed;
+    }
+
+    div {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform-style: preserve-3d;
+    }
+
+    .assembly {
+      /* transform: rotateY(0deg) translate3d(24em, -24em, 30em); */
+      transform: rotateY(0deg) translate3d(-4.2em, -6em, -4em);
+      animation: move 13.8s ease infinite;
+    }
+
+    @keyframes move {
+
+      0%,
+      100% {
+        transform: rotateY(45deg) translate3d(8.8em, -10em, -5em);
+
+      }
+
+      /* 75% {
+        transform: rotateY(0deg) translate3d(-4.2em, -6em, -4em);
+      } */
+
+      50% {
+        transform: rotateY(-45deg) translate3d(-19.8em, -10em, -5em);
+      }
+    }
+
+    .plane {
+      margin: -100vmax;
+      width: 200vmax;
+      height: 200vmax;
+      transform: rotateX(90deg) translateZ(-12em);
+      background: radial-gradient(rgba(0, 0, 0, 0) 50%, transparent 71%), linear-gradient(rgba(252, 249, 216, 0.1) 0.125em, transparent 0), linear-gradient(90deg, rgba(252, 249, 216, 0.1) 0.125em, transparent 0);
+      background-position: 50% 50%;
+      background-size: 100%, 3em 3em, 3em 3em;
+    }
+
+    .bar {
+      transform-origin: 0 12em 0;
+    }
+
+    .bar:nth-child(1) {
+      margin-left: -6em;
+      animation: grow-5 4s -12s ease-in infinite;
+    }
+
+    body:hover .bar {
+      animation-duration: 1.6s;
+    }
+
+    .bar:nth-child(1) .face:nth-child(1) {
+      -webkit-filter: brightness(0.6);
+      filter: brightness(0.6);
+    }
+
+    .bar:nth-child(1) .face:nth-child(2) {
+      -webkit-filter: brightness(0.55);
+      filter: brightness(0.55);
+    }
+
+    .bar:nth-child(1) .face:nth-child(3) {
+      -webkit-filter: brightness(0.5);
+      filter: brightness(0.5);
+    }
+
+    .bar:nth-child(1) .face:nth-child(4) {
+      -webkit-filter: brightness(0.45);
+      filter: brightness(0.45);
+    }
+
+    @keyframes grow-1 {
+
+      0%,
+      0% {
+        transform: scaleY(0.01);
+      }
+
+      8.33333%,
+      100% {
+        transform: scaleY(0.1);
+      }
+    }
+
+    .bar:nth-child(2) {
+      margin-left: -3em;
+      animation: grow-5 4s -4.5s ease-in infinite;
+    }
+
+    .bar:nth-child(2) .face:nth-child(1) {
+      -webkit-filter: brightness(0.65);
+      filter: brightness(0.65);
+    }
+
+    .bar:nth-child(2) .face:nth-child(2) {
+      -webkit-filter: brightness(0.6);
+      filter: brightness(0.6);
+    }
+
+    .bar:nth-child(2) .face:nth-child(3) {
+      -webkit-filter: brightness(0.55);
+      filter: brightness(0.55);
+    }
+
+    .bar:nth-child(2) .face:nth-child(4) {
+      -webkit-filter: brightness(0.5);
+      filter: brightness(0.5);
+    }
+
+    @keyframes grow-2 {
+
+      0%,
+      8.33333% {
+        transform: scaleY(0.01);
+      }
+
+      16.66667%,
+      100% {
+        transform: scaleY(0.16);
+      }
+    }
+
+    .bar:nth-child(3) {
+      margin-left: 0em;
+      animation: grow-5 4s -5s ease-in infinite;
+    }
+
+    .bar:nth-child(3) .face:nth-child(1) {
+      -webkit-filter: brightness(0.7);
+      filter: brightness(0.7);
+    }
+
+    .bar:nth-child(3) .face:nth-child(2) {
+      -webkit-filter: brightness(0.65);
+      filter: brightness(0.65);
+    }
+
+    .bar:nth-child(3) .face:nth-child(3) {
+      -webkit-filter: brightness(0.6);
+      filter: brightness(0.6);
+    }
+
+    .bar:nth-child(3) .face:nth-child(4) {
+      -webkit-filter: brightness(0.55);
+      filter: brightness(0.55);
+    }
+
+    @keyframes grow-3 {
+
+      0%,
+      16.66667% {
+        transform: scaleY(0.01);
+      }
+
+      25%,
+      100% {
+        transform: scaleY(0.25);
+      }
+    }
+
+    .bar:nth-child(4) {
+      margin-left: 3em;
+      animation: grow-5 4s -4.4s ease-in infinite;
+    }
+
+    .bar:nth-child(4) .face:nth-child(1) {
+      -webkit-filter: brightness(0.75);
+      filter: brightness(0.75);
+    }
+
+    .bar:nth-child(4) .face:nth-child(2) {
+      -webkit-filter: brightness(0.7);
+      filter: brightness(0.7);
+    }
+
+    .bar:nth-child(4) .face:nth-child(3) {
+      -webkit-filter: brightness(0.65);
+      filter: brightness(0.65);
+    }
+
+    .bar:nth-child(4) .face:nth-child(4) {
+      -webkit-filter: brightness(0.6);
+      filter: brightness(0.6);
+    }
+
+    @keyframes grow-4 {
+
+      0%,
+      25% {
+        transform: scaleY(0.01);
+      }
+
+      33.33333%,
+      100% {
+        transform: scaleY(0.37);
+      }
+    }
+
+    .bar:nth-child(5) {
+      margin-left: 6em;
+      animation: grow-5 4s -4s ease-in infinite;
+    }
+
+    .bar:nth-child(5) .face:nth-child(1) {
+      -webkit-filter: brightness(0.8);
+      filter: brightness(0.8);
+    }
+
+    .bar:nth-child(5) .face:nth-child(2) {
+      -webkit-filter: brightness(0.75);
+      filter: brightness(0.75);
+    }
+
+    .bar:nth-child(5) .face:nth-child(3) {
+      -webkit-filter: brightness(0.7);
+      filter: brightness(0.7);
+    }
+
+    .bar:nth-child(5) .face:nth-child(4) {
+      -webkit-filter: brightness(0.65);
+      filter: brightness(0.65);
+    }
+
+    @keyframes grow-5 {
+
+      0%,
+      100% {
+        transform: scaleY(0.01);
+      }
+
+      41.66667% {
+        transform: scaleY(0.5);
+      }
+    }
+
+    .bar:nth-child(6) {
+      margin-left: 9em;
+      animation: grow-5 4s -9s ease-in infinite;
+    }
+
+    .bar:nth-child(6) .face:nth-child(1) {
+      -webkit-filter: brightness(0.85);
+      filter: brightness(0.85);
+    }
+
+    .bar:nth-child(6) .face:nth-child(2) {
+      -webkit-filter: brightness(0.8);
+      filter: brightness(0.8);
+    }
+
+    .bar:nth-child(6) .face:nth-child(3) {
+      -webkit-filter: brightness(0.75);
+      filter: brightness(0.75);
+    }
+
+    .bar:nth-child(6) .face:nth-child(4) {
+      -webkit-filter: brightness(0.7);
+      filter: brightness(0.7);
+    }
+
+    @keyframes grow-6 {
+
+      0%,
+      41.66667% {
+        transform: scaleY(0.01);
+      }
+
+      50%,
+      100% {
+        transform: scaleY(0.64);
+      }
+    }
+
+    .bar:nth-child(7) {
+      margin-left: 12em;
+      animation: grow-5 4s -1.8s ease-in infinite;
+    }
+
+    .bar:nth-child(7) .face:nth-child(1) {
+      -webkit-filter: brightness(0.9);
+      filter: brightness(0.9);
+    }
+
+    .bar:nth-child(7) .face:nth-child(2) {
+      -webkit-filter: brightness(0.85);
+      filter: brightness(0.85);
+    }
+
+    .bar:nth-child(7) .face:nth-child(3) {
+      -webkit-filter: brightness(0.8);
+      filter: brightness(0.8);
+    }
+
+    .bar:nth-child(7) .face:nth-child(4) {
+      -webkit-filter: brightness(0.75);
+      filter: brightness(0.75);
+    }
+
+    @keyframes grow-7 {
+
+      0%,
+      50% {
+        transform: scaleY(0.01);
+      }
+
+      58.33333%,
+      100% {
+        transform: scaleY(0.81);
+      }
+    }
+
+    .bar:nth-child(8) {
+      margin-left: 15em;
+      animation: grow-5 4s -2s ease-in infinite;
+    }
+
+    .bar:nth-child(8) .face:nth-child(1) {
+      -webkit-filter: brightness(0.95);
+      filter: brightness(0.95);
+    }
+
+    .bar:nth-child(8) .face:nth-child(2) {
+      -webkit-filter: brightness(0.9);
+      filter: brightness(0.9);
+    }
+
+    .bar:nth-child(8) .face:nth-child(3) {
+      -webkit-filter: brightness(0.85);
+      filter: brightness(0.85);
+    }
+
+    .bar:nth-child(8) .face:nth-child(4) {
+      -webkit-filter: brightness(0.8);
+      filter: brightness(0.8);
+    }
+
+    @keyframes grow-8 {
+
+      0%,
+      58.33333% {
+        transform: scaleY(0.01);
+      }
+
+      66.66667%,
+      100% {
+        transform: scaleY(1);
+      }
+    }
+
+    .face {
+      margin: -1.5em;
+      width: 3em;
+      height: 3em;
+      backface-visibility: hidden;
+      box-shadow: 0 0 1px currentColor;
+      color: #0055e3;
+      background: currentColor;
+    }
+
+    .face:nth-child(n + 2) {
+      margin-top: -12em;
+      height: 24em;
+    }
+
+    .face:nth-child(n + 2):before {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: inherit;
+      height: inherit;
+      opacity: .08;
+      background: inherit;
+      content: '';
+    }
+
+    .face:nth-child(1) {
+      transform: rotate3d(1, 0, 0, 90deg) translateZ(12em);
+    }
+
+    .face:nth-child(2) {
+      transform: rotate3d(0, 1, 0, -90deg) translateZ(1.5em);
+    }
+
+    .face:nth-child(3) {
+      transform: rotate3d(0, 1, 0, 0deg) translateZ(1.5em);
+    }
+
+    .face:nth-child(4) {
+      transform: rotate3d(0, 1, 0, 90deg) translateZ(1.5em);
+    }
+  </style>
+
+</head>
+
+<body>
+
+  <div class="assembly">
+    <div class="plane"></div>
+    <div class="bars">
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+      <div class="bar">
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+        <div class="face"></div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

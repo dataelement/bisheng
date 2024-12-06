@@ -1,6 +1,6 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
 import LoadMore from "@/components/bs-comp/loadMore";
-import { AssistantIcon, SettingIcon, SkillIcon } from "@/components/bs-icons";
+import { AssistantIcon, FlowIcon, SettingIcon, SkillIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -13,19 +13,20 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import MarkLabel from "./MarkLabel";
 
+
 export default function HomePage({ onSelect }) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const chatListRef = useRef([])
     const navigate = useNavigate()
-
+    
     const [labels, setLabels] = useState([])
     const [open, setOpen] = useState(false)
     const pageRef = useRef(1)
     const [options, setOptions] = useState([])
     const searchRef = useRef('')
     const [flag, setFlag] = useState(null) // 解决筛选之后再次发起请求覆盖筛选数据
-
+    
     const loadData = (more = false) => {
         getChatOnlineApi(pageRef.current, searchRef.current, -1).then((res: any) => {
             setFlag(true)
@@ -39,22 +40,22 @@ export default function HomePage({ onSelect }) {
             setLabels(res.map(d => ({ label: d.name, value: d.id, selected: true })))
         })
     }, [])
-
+    
     const debounceLoad = useDebounce(loadData, 600, false)
-
+    
     const handleSearch = (e) => {
         pageRef.current = 1
         searchRef.current = e.target.value
         debounceLoad()
     }
-
+    
     const handleClose = async (bool) => {
         const newHome = await getHomeLabelApi()
         // @ts-ignore
         setLabels(newHome.map(d => ({ label: d.name, value: d.id, selected: true })))
         setOpen(bool)
     }
-
+    
     const [chooseId, setChooseId] = useState() // 筛选项样式变化
     const handleTagSearch = (id) => {
         setChooseId(id)
@@ -64,12 +65,17 @@ export default function HomePage({ onSelect }) {
             setOptions(res)
         })
     }
-
+    
     const handleLoadMore = async () => {
         pageRef.current++
         await debounceLoad(true)
     }
-
+    
+    const typeCnNames = {
+        'flow': t('build.skill'),
+        'assistant': t('build.assistant'),
+        'workflow': '工作流'
+    }
     // const [cardBoxWidth, cardboxRef] = useAutoWidth()
     {/* @ts-ignore */ }
     return <div className="h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
@@ -111,10 +117,10 @@ export default function HomePage({ onSelect }) {
                             title={flow.name}
                             description={flow.desc}
                             type="sheet"
-                            icon={flow.flow_type === 'flow' ? SkillIcon : AssistantIcon}
+                            icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
                             footer={
-                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${flow.flow_type === 'flow' && 'bg-gray-950'}`}>
-                                    {flow.flow_type === 'flow' ? t('build.skill') : t('build.assistant')}
+                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 'flow' && 'bg-gray-950'} ${flow.flow_type === 'assistant' && 'bg-blue-600'}`}>
+                                    {typeCnNames[flow.flow_type]}
                                 </Badge>
                             }
                             onClick={() => { onSelect(flow) }}

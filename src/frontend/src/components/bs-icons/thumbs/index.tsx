@@ -1,7 +1,7 @@
 import React, { forwardRef } from "react";
-import { ReactComponent as copy } from "./copy.svg";
-import { ReactComponent as like } from "./like.svg";
-import { ReactComponent as unLike } from "./unLike.svg";
+import copy from "./copy.svg?react";
+import like from "./like.svg?react";
+import unLike from "./unLike.svg?react";
 import { cname } from "@/components/bs-ui/utils";
 
 type ThunmbIconType = 'copy' | 'like' | 'unLike' | 'copyDark' | 'likeDark' | 'unLikeDark';

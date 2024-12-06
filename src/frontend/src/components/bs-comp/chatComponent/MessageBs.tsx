@@ -1,9 +1,10 @@
 import { AvatarIcon } from "@/components/bs-icons/avatar";
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
+import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -11,7 +12,6 @@ import remarkMath from "remark-math";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
-import { formatStrTime } from "@/util/utils";
 
 // 颜色列表
 const colorList = [
@@ -103,7 +103,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                             {/* 光标 */}
                             {/* {data.message.toString() && !data.end && <div className="animate-cursor absolute w-2 h-5 ml-1 bg-gray-600" style={{ left: cursor.x, top: cursor.y }}></div>} */}
                         </div>
-                        : <div><LoadIcon className="text-gray-400" /></div>
+                        : <div><LoadingIcon className="size-6 text-primary" /></div>
                     }
                 </div>
             </div>

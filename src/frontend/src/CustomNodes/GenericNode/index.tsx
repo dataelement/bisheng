@@ -1,15 +1,16 @@
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import NodeToolbarComponent from "@/pages/BuildPage/skills/editSkill/nodeToolbarComponent";
 import { Zap } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { NodeToolbar } from "reactflow";
+import { NodeToolbar } from "@xyflow/react";
 import ShadTooltip from "../../components/ShadTooltipComponent";
-import Tooltip from "../../components/TooltipComponent";
-import { Button } from "../../components/ui/button";
+import { Button } from "../../components/bs-ui/button";
+import EditLabel from "../../components/ui/editLabel";
 import { useSSE } from "../../contexts/SSEContext";
 import { alertContext } from "../../contexts/alertContext";
 import { PopUpContext } from "../../contexts/popUpContext";
 import { typesContext } from "../../contexts/typesContext";
-import NodeToolbarComponent from "../../pages/FlowPage/components/nodeToolbarComponent";
 import { NodeDataType } from "../../types/flow";
 import {
   classNames,
@@ -18,12 +19,11 @@ import {
   toTitleCase,
 } from "../../utils";
 import ParameterComponent from "./components/parameterComponent";
-import EditLabel from "../../components/ui/editLabel";
 
-export default function GenericNode({ data, xPos, yPos, selected }: {
+export default function GenericNode({ data, positionAbsoluteX, positionAbsoluteY, selected }: {
   data: NodeDataType;
-  xPos: number;
-  yPos: number;
+  positionAbsoluteX: number;
+  positionAbsoluteY: number;
   selected: boolean;
 }) {
   const { id: flowId } = useParams();
@@ -78,7 +78,7 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
     <>
       <NodeToolbar>
         <NodeToolbarComponent
-          position={{ x: xPos, y: yPos }}
+          position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
           data={data}
           openPopUp={openPopUp}
           deleteNode={deleteNode}
@@ -102,40 +102,45 @@ export default function GenericNode({ data, xPos, yPos, selected }: {
             /> */}
             <div className="round-button-div">
               <div>
-                <Tooltip
-                  title={
-                    isBuilding ? (<span>build...</span>) :
-                      !validationStatus ? (
-                        <span className="flex">
-                          Build{" "} <Zap className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1" strokeWidth={1.5} />{" "} flow to validate status.
-                        </span>
-                      ) : (
-                        <div className="max-h-96 overflow-auto">
-                          {validationStatus.params ? validationStatus.params.split("\n")
-                            .map((line, index) => <div key={index}>{line}</div>)
-                            : ""}
-                        </div>
-                      )
-                  }
-                >
-                  <div className="generic-node-status-position">
-                    <div
-                      className={classNames(
-                        validationStatus && validationStatus.valid ? "green-status" : "status-build-animation", "status-div"
-                      )}
-                    ></div>
-                    <div
-                      className={classNames(
-                        validationStatus && !validationStatus.valid ? "red-status" : "status-build-animation", "status-div"
-                      )}
-                    ></div>
-                    <div
-                      className={classNames(
-                        !validationStatus || isBuilding ? "yellow-status" : "status-build-animation", "status-div"
-                      )}
-                    ></div>
-                  </div>
-                </Tooltip>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="generic-node-status-position">
+                        <div
+                          className={classNames(
+                            validationStatus && validationStatus.valid ? "green-status" : "status-build-animation", "status-div"
+                          )}
+                        ></div>
+                        <div
+                          className={classNames(
+                            validationStatus && !validationStatus.valid ? "red-status" : "status-build-animation", "status-div"
+                          )}
+                        ></div>
+                        <div
+                          className={classNames(
+                            !validationStatus || isBuilding ? "yellow-status" : "status-build-animation", "status-div"
+                          )}
+                        ></div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-background text-foreground">
+                      {
+                        isBuilding ? (<span>build...</span>) :
+                          !validationStatus ? (
+                            <span className="flex">
+                              Build{" "} <Zap className="mx-0.5 h-5 fill-build-trigger stroke-build-trigger stroke-1" strokeWidth={1.5} />{" "} flow to validate status.
+                            </span>
+                          ) : (
+                            <div className="max-h-96 overflow-auto">
+                              {validationStatus.params ? validationStatus.params.split("\n")
+                                .map((line, index) => <div key={index}>{line}</div>)
+                                : ""}
+                            </div>
+                          )
+                      }
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
             <div className="generic-node-tooltip-div">

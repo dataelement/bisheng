@@ -46,6 +46,8 @@ class AccessType(Enum):
     ASSISTANT_WRITE = 6
     GPTS_TOOL_READ = 7
     GPTS_TOOL_WRITE = 8
+    WORK_FLOW= 9
+    WORK_FLOW_WRITE= 10
 
     WEB_MENU = 99  # 前端菜单栏权限限制
 
@@ -67,6 +69,13 @@ class RoleAccessDao(RoleAccessBase):
                                              RoleAccess.type == access_type.value)).all()
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
 
+    @classmethod
+    def get_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
+        with session_getter() as session:
+            if access_type:
+                return session.exec(
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
+                                             RoleAccess.type.in_([x.value for x in access_type]))).all()
     @classmethod
     def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
         with session_getter() as session:

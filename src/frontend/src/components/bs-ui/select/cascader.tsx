@@ -1,7 +1,7 @@
-import { ArrowRightIcon, ChevronRightIcon, Cross1Icon } from "@radix-ui/react-icons";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from ".";
-import { useEffect, useRef, useState } from "react";
 import { LoadIcon } from "@/components/bs-icons";
+import { ChevronRight, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Select, SelectContent, SelectTrigger } from ".";
 import { Input } from "../input";
 
 /**
@@ -22,6 +22,7 @@ interface Option {
 }
 
 interface IProps {
+    error?: boolean,
     placholder?: string,
     defaultValue?: Option[],
     options: Option[],
@@ -59,7 +60,7 @@ const Item = (props: {
         onMouseEnter={() => onHover(option, isLeaf)}
         onClick={handleClick}>
         <span className="w-28 overflow-hidden text-ellipsis">{option.label}</span>
-        {!isLeaf && (loading ? <LoadIcon className="text-foreground" /> : <ChevronRightIcon />)}
+        {!isLeaf && (loading ? <LoadIcon className="text-foreground" /> : <ChevronRight className="size-4" />)}
     </div>
 }
 
@@ -91,7 +92,7 @@ const resetCols = (values, options) => {
     return vals
 }
 
-export default function Cascader({ selectClass = '', close = false, selectPlaceholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
+export default function Cascader({ error = false, selectClass = '', close = false, placholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
 
     const [open, setOpen] = useState(false)
     const [values, setValues] = useState<any>(defaultValue)
@@ -154,9 +155,9 @@ export default function Cascader({ selectClass = '', close = false, selectPlaceh
     }
 
     return <Select open={open} onOpenChange={setOpen}>
-        <SelectTrigger className={'group data-[placeholder]:text-inherit ' + selectClass}>
-            <Input className="border-none bg-transparent px-0" readOnly value={values.map(el => el.label).join('/')} />
-            {close && values.length !== 0 && <Cross1Icon
+        <SelectTrigger className={`${error && 'border-red-500'} group data-[placeholder]:text-inherit ${selectClass}`}>
+            <Input className="border-none bg-transparent px-0" placeholder={placholder} readOnly value={values.map(el => el.label).join('/')} />
+            {close && values.length !== 0 && <X
                 className="hidden group-hover:block bg-border text-[#666] rounded-full p-0.5"
                 width={14}
                 height={14}
