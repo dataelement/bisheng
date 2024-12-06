@@ -1,10 +1,11 @@
 import json
-from typing import Dict, Callable
+from typing import Dict, Callable, List
 from uuid import UUID, uuid4
 from queue import Queue
 
+from bisheng_langchain.gpts.message_types import LiberalToolMessage
 from loguru import logger
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from fastapi import WebSocket, status, Request
 
 from bisheng.api.services.assistant_agent import AssistantAgent
@@ -39,7 +40,7 @@ class ChatClient:
         self.gpts_async_callback = None
         self.chat_history = []
         # 和模型对话时传入的 完整的历史对话轮数
-        self.latest_history_num = 5
+        self.latest_history_num = 10
         self.gpts_conf = settings.get_from_db('gpts')
         # 异步任务列表
         self.task_ids = []
@@ -162,7 +163,8 @@ class ChatClient:
             return
         # 从数据库加载历史会话
         if self.chat_id:
-            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ['question', 'answer'],
+            res = ChatMessageDao.get_messages_by_chat_id(self.chat_id,
+                                                         ['question', 'answer', 'tool_call', 'tool_result'],
                                                          self.latest_history_num * 4)
             for one in res:
                 self.chat_history.append({
@@ -171,7 +173,7 @@ class ChatClient:
                     'remark': one.remark
                 })
 
-    async def get_latest_history(self):
+    async def get_latest_history(self) -> List[BaseMessage]:
         # 需要将无效的历史消息剔除，只包含一问一答的完整会话记录
         tmp = []
         find_i = 0
@@ -189,6 +191,10 @@ class ChatClient:
                 tmp.insert(0, HumanMessage(content=json.loads(one_item['message'])['input']))
                 is_answer = True
                 find_i += 1
+            elif one_item['category'] == 'tool_call':
+                tmp.insert(0, AIMessage(**json.loads(one_item['message'])))
+            elif one_item['category'] == 'tool_result':
+                tmp.insert(0, LiberalToolMessage(**json.loads(one_item['message'])))
 
         return tmp
 
@@ -263,10 +269,20 @@ class ChatClient:
             # 调用agent获取结果
             result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
             logger.debug(f'gpts agent {self.client_key} result: {result}')
-            answer = ''
-            for one in result:
+            answer = result[-1].content
+
+            # 记录包含
+            new_history = result[len(chat_history):-1]
+            for one in new_history:
                 if isinstance(one, AIMessage):
-                    answer += one.content
+                    _ = await self.add_message('bot', one.json(), 'tool_call')
+                elif isinstance(one, LiberalToolMessage) or isinstance(one, ToolMessage):
+                    _ = await self.add_message('bot', one.json(), 'tool_result')
+                else:
+                    logger.warning("unexpected message type")
+            # for one in result:
+            #     if isinstance(one, AIMessage):
+            #         answer += one.content
 
             # todo: 后续优化代码解释器的实现方案，保证输出的文件可以公开访问 ugly solve
             # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下

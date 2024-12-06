@@ -173,6 +173,7 @@
     "saveSuccessful": "Save Successful",
     "supportVersions": "Support splitting into multiple version branches for development and comparison between versions.",
     "guideQuestions50": "Guide questions to a maximum of 50 characters",
+    "chatHistoryMaxToken": "The maximum number of tokens in chat history must be an integer",
     "promptWords1000": "The opening statement can be up to 1000 characters",
     "contactAdmin": "Please contact the administrator's online assistant",
     "deleteSure": "Are you sure you want to delete this tool?",
@@ -384,6 +385,7 @@
     "complete": "Complete",
     "setSplitSize": "Please set the file split size",
     "selectFileToUpload": "Please select a file to upload first",
+    "fileSizeExceedsLimit": "File size cannot exceed 50MB,removed",
     "file": "File",
     "sizeExceedsLimit": "Size exceeds 50MB",
     "editDictionary": "Edit Dictionary",
@@ -410,7 +412,6 @@
   },
   "build": {
     "create": "Create",
-    "app": "App",
     "assistant": "Assistant",
     "skill": "Skill",
     "tools": "Tools",
@@ -537,7 +538,9 @@
     "assistantAvatar": "Assistant avatar",
     "confirmDeleteSkill": "Confirm delete skill?",
     "confirmDeleteFlow": "Confirm delete flow?",
-    "confirmDeleteAssistant": "Confirm delete assistant?"
+    "confirmDeleteAssistant": "Confirm delete assistant?",
+    "maxToken": "Max Token",
+    "maxTokenTip": "The maximum number of tokens to generate in the completion. The token length of the input text is automatically calculated and cannot exceed the model's context length. Increasing the value will increase the cost"
   },
   "tools": {
     "addTool": "Add Tool",
@@ -825,7 +828,6 @@
     "10502": "Version name already exists",
     "10520": "Skill does not exist",
     "10521": "Skill is online, cannot edit",
-    "10525": "workflow is online, cannot edit",
     "10900": "Knowledge base name already exists",
     "10901": "Knowledge base must select an embedding model",
     "10910": "Current knowledge base version does not support segment modification. Please create a new knowledge base to modify segments.",

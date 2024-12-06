@@ -77,6 +77,12 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     variant: 'error',
                     description: ''
                 });
+            } else {
+                toast({
+                    title: '提示词过长,请缩减内容',
+                    variant: 'error',
+                    description: ''
+                });
             }
         };
     }

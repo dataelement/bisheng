@@ -26,6 +26,7 @@ class AssistantBase(SQLModelSerializable):
     guide_question: Optional[List] = Field(sa_column=Column(JSON), description='引导问题')
     model_name: str = Field(default='', description='对应模型管理里模型的唯一ID')
     temperature: float = Field(default=0.5, description='模型温度')
+    max_token: int = Field(default=32000, description='最大token数')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
     user_id: int = Field(default=0, description='创建用户ID')
     is_delete: int = Field(default=0, description='删除标志')

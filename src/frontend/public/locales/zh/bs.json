@@ -171,6 +171,7 @@
     "saveSuccessful": "保存成功",
     "supportVersions": "支持分成多个版本分支，分别进行开发以及版本间的比较。",
     "guideQuestions50": "引导问题最多50个字符",
+    "chatHistoryMaxToken": "聊天历史最大 token 数必须是一个整数",
     "promptWords1000": "开场白最多为1000个字符",
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
@@ -381,6 +382,7 @@
     "complete": "完成",
     "setSplitSize": "请设置文件切分大小",
     "selectFileToUpload": "请先选择文件上传",
+    "fileSizeExceedsLimit": "文件不能超50M",
     "file": "文件",
     "sizeExceedsLimit": "超过50M,已移除",
     "editDictionary": "编辑词典",
@@ -407,7 +409,6 @@
   },
   "build": {
     "create": "创建",
-    "app": "应用",
     "assistant": "助手",
     "skill": "技能",
     "tools": "工具",
@@ -469,7 +470,7 @@
     "addTool": "添加工具",
     "search": "搜索",
     "empty": "空空如也",
-    "onlineSA": "上线应用",
+    "onlineSA": "上线技能&助手",
     "params": "参数",
     "added": "已添加",
     "add": "添加",
@@ -534,7 +535,9 @@
     "assistantAvatar": "助手头像",
     "confirmDeleteSkill": "确认删除该技能?",
     "confirmDeleteFlow": "确认删除该工作流?",
-    "confirmDeleteAssistant": "确认删除该助手?"
+    "confirmDeleteAssistant": "确认删除该助手?",
+    "maxToken": "聊天历史最大token数",
+    "maxTokenTip": "通过此参数对聊天历史记录进行裁剪，控制发送给模型的历史消息数量，避免出现超长错误，因此不可大于模型支持的最大上下文长度"
   },
   "tools": {
     "addTool": "添加工具",
@@ -822,7 +825,6 @@
     "10502": "版本名已存在",
     "10520": "技能不存在",
     "10521": "技能已上线，不可编辑",
-    "10525": "工作流已上线，不可编辑",
     "10900": "知识库名称不可重复",
     "10901": "知识库必须选择一个embedding模型",
     "10910": "当前知识库版本不支持修改分段，请创建新知识库后进行分段修改",

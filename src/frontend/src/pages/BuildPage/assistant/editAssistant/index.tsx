@@ -19,7 +19,7 @@ export default function editAssistant() {
     const navigate = useNavigate()
     // assistant data
     const { assistantState, changed, loadAssistantState, saveAfter, destroy } = useAssistantStore()
-    const { startNewRound, insetSystemMsg, insetBsMsg, setShowGuideQuestion } = useMessageStore()
+    const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
         loadAssistantState(assisId, 'v1').then((res) => {
@@ -31,13 +31,17 @@ export default function editAssistant() {
 
     // 展示的引导词独立存储
     const [guideQuestion, setGuideQuestion] = useState([])
-    const handleStartChat = async (params) => {
+    const [openChat, setOpenChat] = useState(true)
+    const handleStartChat = async (save) => {
         if (!handleCheck()) return
-        await handleSave(true)
+        destory()
+        setOpenChat(false)
+        save ? await handleSave(true) : await new Promise((resolve) => setTimeout(resolve, 0))
         saveAfter()
         startNewRound(t('build.configurationUpdated'))
         setGuideQuestion(assistantState.guide_question.filter((item) => item))
         assistantState.guide_word && insetBsMsg(assistantState.guide_word)
+        setOpenChat(true)
     }
 
     const { message, toast } = useToast()
@@ -80,9 +84,17 @@ export default function editAssistant() {
     // 校验助手数据
     const handleCheck = () => {
         const errors = []
-        // if (!assistantState.model_name) {
-        //     errors.push(t('skills.modelRequired'))
-        // }
+        if (
+            assistantState.max_token === undefined ||
+            !Number.isInteger(assistantState.max_token) ||
+            assistantState.max_token < 0 ||
+            assistantState.max_token > 100 * 10000
+        ) {
+            errors.push(t('skills.chatHistoryMaxToken'));
+        }
+        if (!assistantState.model_name) {
+            errors.push('模型不能为空')
+        }
         if (assistantState.guide_question.some(que => que.length > 50)) {
             errors.push(t('skills.guideQuestions50'))
         }
@@ -120,9 +132,9 @@ export default function editAssistant() {
                     </div>
                 </div>
                 <div className="w-[40%] h-full bg-[#fff] relative">
-                    <TestChat guideQuestion={guideQuestion} assisId={assisId}></TestChat>
+                    {openChat && <TestChat guideQuestion={guideQuestion} assisId={assisId} onClear={() => handleStartChat(false)}></TestChat>}
                     {/* 变更触发保存的蒙版按钮 */}
-                    {changed && <div className="absolute w-full bottom-0 h-60" onClick={handleStartChat}></div>}
+                    {changed && <div className="absolute w-full bottom-0 h-60" onClick={() => handleStartChat(true)}></div>}
                 </div>
             </div>
             <div className={`h-full ${showApiPage ? '' : 'hidden'}`}>

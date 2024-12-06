@@ -337,10 +337,9 @@ def add_file_embedding(vector_client,
                 metadatas.append(val['metadata'])
     for index, one in enumerate(texts):
         if len(one) > 10000:
-            raise ValueError('分段结果超长，请尝试使用自定义策略进行切分')
+            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \n）进行切分')
         # 入库时 拼接文件名和文档摘要
-        texts[
-            index] = f"{metadatas[index]['source']}\n{metadatas[index]['title']}{KnowledgeUtils.chunk_split}{one}"
+        texts[index] = f"{metadatas[index]['source']}\n{metadatas[index]['title']}{KnowledgeUtils.chunk_split}{one}"
 
     db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果

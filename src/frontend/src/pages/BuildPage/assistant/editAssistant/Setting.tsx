@@ -11,7 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
-import { InputList, Textarea } from "@/components/bs-ui/input";
+import { Input, InputList, Textarea } from "@/components/bs-ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -69,6 +69,24 @@ export default function Setting() {
                   dispatchAssistant("setting", { temperature: val })
                 }
               ></Temperature>
+            </div>
+            <div className="mb-4 px-6">
+              <label htmlFor="slider" className="bisheng-label flex gap-1">
+                {t("build.maxToken")}
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <QuestionMarkCircledIcon />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{t("build.maxTokenTip")}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </label>
+              <Input value={assistantState.max_token} type="number" className="mt-2" defaultValue={32000} min={0} onChange={e =>
+                dispatchAssistant("setting", { max_token: Number(e.target.value) })
+              }></Input>
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -156,6 +174,7 @@ export default function Setting() {
             <div className="mb-4 px-6">
               <div className="flex gap-4">
                 <KnowledgeSelect
+                  type="file"
                   multiple
                   value={assistantState.knowledge_list.map(el => ({ label: el.name, value: el.id }))}
                   onChange={(vals) =>

@@ -12,7 +12,7 @@ import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import { CirclePause } from "lucide-react";
 
-export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend }) {
+export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -299,7 +299,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 {
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => { !inputLock.locked && destory() }}
+                        onClick={() => { !inputLock.locked && onClickClear?.() }}
                     ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
                 }
             </div>

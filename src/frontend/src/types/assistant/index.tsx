@@ -35,6 +35,7 @@ export interface AssistantDetail {
     flow_list?: FlowType[];
     /** 知识库ID列表，为None则不更新 */
     knowledge_list?: { id: number, name: string, index_name: string }[];
+    max_token: number;
 }
 
 
