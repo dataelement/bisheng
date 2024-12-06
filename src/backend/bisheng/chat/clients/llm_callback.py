@@ -1,4 +1,5 @@
-from typing import Any
+from typing import Any, Dict, Optional, List, Union
+from uuid import UUID
 
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgData, StreamMsgOverData
@@ -50,6 +51,21 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.output_key = output_key
         self.stream = stream
         logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
+
+    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
+                            **kwargs: Any) -> Any:
+        """Run when tool starts running."""
+        logger.debug(
+            f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+
+    async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
+        """Run when tool ends running."""
+        logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+
+    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
+                            **kwargs: Any) -> Any:
+        """Run when tool errors."""
+        logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         # azure偶尔会返回一个None

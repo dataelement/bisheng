@@ -11,6 +11,7 @@ from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from langchain.chains.llm import LLMChain
 from langchain.chains.question_answering import load_qa_chain
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.prompts import ChatPromptTemplate
@@ -141,10 +142,7 @@ class BishengRAGTool:
                 prompt = import_class(f'bisheng_langchain.rag.prompts.{prompt_type}')
             else:
                 prompt = None
-        self.qa_chain = load_qa_chain(llm=self.llm,
-                                      chain_type=self.params['generate']['chain_type'],
-                                      prompt=prompt,
-                                      verbose=False)
+        self.qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=prompt)
 
     def _post_init_retriever(self, retriever_type, **kwargs):
         retriever_classes = {
@@ -237,24 +235,22 @@ class BishengRAGTool:
             run_manager: Optional[CallbackManagerForChainRun] = None) -> Any:
         docs = self.retrieval_and_rerank(query)
         try:
+            kwargs = {}
+            if run_manager:
+                kwargs['config'] = RunnableConfig(callbacks=[run_manager])
             ans = self.qa_chain.invoke(
                 {
-                    'input_documents': docs,
+                    'context': docs,
                     'question': query
-                },
-                return_only_outputs=return_only_outputs,
-                config=RunnableConfig(callbacks=[run_manager]),
+                }, **kwargs
             )
         except Exception as e:
-            logger.error(f'question: {query}\nerror: {e}')
-            ans = {'output_text': str(e)}
+            logger.exception(f'question: {query}\nerror: {e}')
+            ans = str(e)
         if return_only_outputs:
-            rag_answer = ans['output_text']
-            return rag_answer
+            return ans
         else:
-            rag_answer = ans['output_text']
-            input_documents = ans['input_documents']
-            return rag_answer, input_documents
+            return ans, docs
 
     async def arun(self, query: str, return_only_outputs=True) -> str:
         rag_answer = self.run(query, return_only_outputs)

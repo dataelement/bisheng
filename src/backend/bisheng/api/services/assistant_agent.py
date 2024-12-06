@@ -54,7 +54,7 @@ class AssistantAgent(AssistantUtils):
     Additional instructions to note:
     - If the user's question is in Chinese, please answer it in Chinese.
     - 当问题中有涉及到时间信息时，比如最近6个月、昨天、去年等，你需要用时间工具查询时间信息。
-    """   # noqa
+    """  # noqa
 
     def __init__(self, assistant_info: Assistant, chat_id: str):
         self.assistant = assistant_info
@@ -195,7 +195,7 @@ class AssistantAgent(AssistantUtils):
     def sync_init_knowledge_tool(knowledge: Knowledge,
                                  llm: BaseLanguageModel,
                                  callbacks: Callbacks = None,
-                                 **kwargs):
+                                 knowledge_retriever: dict = None):
         """
         初始化知识库工具
         """
@@ -216,7 +216,8 @@ class AssistantAgent(AssistantUtils):
                 'llm': llm
             }
         }
-        tool_params['bisheng_rag'].update(kwargs.get('knowledge_retriever', {}))
+        if knowledge_retriever:
+            tool_params['bisheng_rag'].update(knowledge_retriever)
         tool = load_tools(tool_params=tool_params, llm=llm, callbacks=callbacks)
         return tool
 
@@ -224,20 +225,16 @@ class AssistantAgent(AssistantUtils):
         """
         初始化知识库工具
         """
-        return asyncio.get_running_loop().run_in_executor(
-            None,
-            self.sync_init_knowledge_tool,
-            knowledge,
-            self.llm,
-            callbacks,
-            knowledge_retriever=self.assistant.knowledge_retriever,
-        )
+        return self.sync_init_knowledge_tool(knowledge,
+                                             self.llm,
+                                             callbacks,
+                                             self.knowledge_retriever)
 
     @staticmethod
     def init_tools_by_toolid(
-        tool_ids: List[int],
-        llm: BaseLanguageModel,
-        callbacks: Callbacks = None,
+            tool_ids: List[int],
+            llm: BaseLanguageModel,
+            callbacks: Callbacks = None,
     ):
         """通过id初始化tool"""
         tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
@@ -351,14 +348,14 @@ class AssistantAgent(AssistantUtils):
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
         chain = ({
-            'assistant_name': lambda x: x['assistant_name'],
-            'assistant_description': lambda x: x['assistant_description'],
-        }
+                     'assistant_name': lambda x: x['assistant_name'],
+                     'assistant_description': lambda x: x['assistant_description'],
+                 }
                  | ASSISTANT_PROMPT_OPT
                  | self.llm)
         async for one in chain.astream({
-                'assistant_name': self.assistant.name,
-                'assistant_description': self.assistant.prompt,
+            'assistant_name': self.assistant.name,
+            'assistant_description': self.assistant.prompt,
         }):
             yield one
 
@@ -394,8 +391,8 @@ class AssistantAgent(AssistantUtils):
             await callback[0].on_tool_start({
                 'name': one,
             },
-                                            input_str='flow if offline',
-                                            run_id=run_id)
+                input_str='flow is offline',
+                run_id=run_id)
             await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
 
     async def record_chat_history(self, message: List[Any]):

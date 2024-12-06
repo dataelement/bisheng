@@ -1,15 +1,20 @@
-from typing import Any
+from typing import Any, Dict
+
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
-from bisheng.database.models.knowledge import KnowledgeDao
+from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.interface.importing.utils import import_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.utils.embedding import decide_embeddings
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.runnables import RunnableConfig
-from loguru import logger
+from bisheng_langchain.gpts.load_tools import load_tools
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -49,20 +54,30 @@ class AgentNode(BaseNode):
         self._tools = self.node_params['tool_list']
 
         # knowledge
-        self._knowledge_ids = self.node_params['knowledge_id']
+        # self._knowledge_ids = self.node_params['knowledge_id']
+        # 判断是知识库还是临时文件列表
+        self._knowledge_type = self.node_params['knowledge_id']['type']
+        self._knowledge_ids = [
+            one['key'] for one in self.node_params['knowledge_id']['value']
+        ]
 
         # agent
         self._agent_executor_type = 'get_react_agent_executor'
         self._agent = None
 
     def _init_agent(self, system_prompt: str):
+        if self._agent:
+            return
         # 获取配置的助手模型列表
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
             raise Exception('助手推理模型列表为空')
         default_llm = [
             one for one in assistant_llm.llm_list if one.model_id == self.node_params['model_id']
-        ][0]
+        ]
+        if not default_llm:
+            raise Exception('选择的推理模型不在助手推理模型列表内')
+        default_llm = default_llm[0]
         self._agent_executor_type = default_llm.agent_executor_type
         knowledge_retriever = {
             'max_content': default_llm.knowledge_max_content,
@@ -89,17 +104,87 @@ class AgentNode(BaseNode):
     def _init_knowledge_tools(self, knowledge_retriever: dict):
         if not self._knowledge_ids:
             return []
-        knowledge_list = KnowledgeDao.get_list_by_ids(self._knowledge_ids)
         tools = []
-        for one in knowledge_list:
-            tool = AssistantAgent.sync_init_knowledge_tool(
-                one,
-                self._llm,
-                None,
-                knowledge_retriever=knowledge_retriever,
-            )
-            tools += tool
+        for knowledge_id in self._knowledge_ids:
+            if self._knowledge_type == 'knowledge':
+                knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
+                name = knowledge_info.name
+                description = knowledge_info.description
+
+                vector_client = self.init_knowledge_milvus(knowledge_info)
+                es_client = self.init_knowledge_es(knowledge_info)
+            else:
+                file_metadata = self.graph_state.get_variable_by_str(knowledge_id)
+                name = 'file name'
+                description = file_metadata.get('source')
+
+                vector_client = self.init_file_milvus(file_metadata)
+                es_client = self.init_file_es(file_metadata)
+
+            tool_params = {
+                'bisheng_rag': {
+                    'name': f'knowledge_{knowledge_id}',
+                    'description': f'{name}:{description}',
+                    'vector_store': vector_client,
+                    'keyword_store': es_client,
+                    'llm': self._llm,
+                    **knowledge_retriever
+                }
+            }
+            tools.extend(load_tools(tool_params=tool_params, llm=self._llm))
+
         return tools
+
+    def init_knowledge_milvus(self, knowledge: Knowledge) -> 'Milvus':
+        """ 初始化用户选择的知识库的milvus """
+        params = {
+            'collection_name': knowledge.collection_name,
+            'embedding': decide_embeddings(knowledge.model)
+        }
+        if knowledge.collection_name.startswith('partition'):
+            params['partition_key'] = knowledge.id
+        return self._init_milvus(params)
+
+    def init_file_milvus(self, file_metadata: Dict) -> 'Milvus':
+        """ 初始化用户选择的临时文件的milvus """
+        embeddings = LLMService.get_knowledge_default_embedding()
+        if not embeddings:
+            raise Exception('没有配置默认的embedding模型')
+        file_ids = [file_metadata['file_id']]
+        params = {
+            'collection_name': self.tmp_collection_name,
+            'partition_key': self.workflow_id,
+            'embedding': embeddings,
+            'metadata_expr': f'file_id in {file_ids}'
+        }
+        return self._init_milvus(params)
+
+    @staticmethod
+    def _init_milvus(params: dict):
+        class_obj = import_vectorstore('Milvus')
+        return instantiate_vectorstore('Milvus', class_object=class_obj, params=params)
+
+    def init_knowledge_es(self, knowledge: Knowledge):
+        params = {
+            'index_name': knowledge.index_name
+        }
+        return self._init_es(params)
+
+    def init_file_es(self, file_metadata: Dict):
+        params = {
+            'index_name': self.tmp_collection_name,
+            'post_filter': {
+                'terms': {
+                    'metadata.file_id': [file_metadata['file_id']]
+                }
+            }
+        }
+        return self._init_es(params)
+
+    @staticmethod
+    def _init_es(params: Dict):
+        class_obj = import_vectorstore('ElasticKeywordsSearch')
+        return instantiate_vectorstore('ElasticKeywordsSearch', class_object=class_obj, params=params)
 
     def _run(self, unique_id: str):
         ret = {}
