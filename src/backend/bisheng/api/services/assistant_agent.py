@@ -29,7 +29,7 @@ from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool

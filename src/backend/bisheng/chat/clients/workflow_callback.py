@@ -87,6 +87,7 @@ class WorkflowWsCallback(BaseCallback):
             message=json.dumps(chat_response.message, ensure_ascii=False),
             extra=chat_response.extra,
             category=chat_response.category,
+            files=json.dumps(chat_response.files, ensure_ascii=False)
         ))
 
         # 如果是文档溯源，处理召回的chunk
