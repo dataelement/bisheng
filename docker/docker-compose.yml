@@ -48,6 +48,7 @@ services:
       JWT_ENABLED: false
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/office/default.json:/etc/onlyoffice/documentserver/default.json
     command: bash -c "supervisorctl restart all"
     restart: on-failure
 
