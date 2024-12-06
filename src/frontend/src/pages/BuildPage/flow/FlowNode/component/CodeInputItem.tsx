@@ -41,13 +41,13 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="quote">引用</SelectItem>
+                        <SelectItem value="ref">引用</SelectItem>
                         <SelectItem value="input">输入</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
             {/* value */}
-            {item.type === 'quote' ? <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
+            {item.type === 'ref' ? <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
                 onUpdateItem(index, { ...item, label: v.label, value: `${E.id}.${v.value}` })
             }}>
                 <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
@@ -68,7 +68,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
 
     const handleAddItem = () => {
         setError(false)
-        const newItems = [...items, { key: '', type: 'quote', label: '', value: '' }];
+        const newItems = [...items, { key: '', type: 'ref', label: '', value: '' }];
         setItems(newItems);
         onChange(newItems);
     };

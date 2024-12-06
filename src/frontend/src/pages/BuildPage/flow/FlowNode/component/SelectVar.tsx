@@ -23,34 +23,27 @@ const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className =
     }));
 
     const getNodeDataByTemp = (temp) => {
-        const hasChild = temp.group_params.some(group =>
-            group.params.some(param => param.global)
-        )
-
-        return {
+        // const hasChild = temp.group_params.some(group =>
+        //     group.params.some(param => param.global)
+        // )
+        const firstMenu = {
             id: temp.id,
             type: temp.type,
             name: temp.name,
             icon: <NodeLogo type={temp.type} colorStr={temp.name} />,
             desc: temp.description,
             tab: temp.tab?.value || '',
-            data: hasChild ? temp.group_params : null
+            data: temp.group_params
         }
+        const children = getGlobalChild(firstMenu)
+        firstMenu.data = children.length ? children : null
+        return firstMenu
     }
-    const nodeTemps = useMemo(() => {
-        if (!flow.nodes || !open) return []
-        return flow.nodes.reduce((list, temp) => {
-            const newNode = getNodeDataByTemp(temp.data)
-            newNode.data && list.push(newNode)
-            return list
-        }, [])
-    }, [open])
 
     // vars
     const [vars, setVars] = useState([])
     const currentMenuRef = useRef(null)
-    const handleShowVars = (item) => {
-        currentMenuRef.current = item
+    const getGlobalChild = (item) => {
         // start节点 preset_question#0(中文)
         // input节点 key
         // agent xxx#0
@@ -110,9 +103,17 @@ const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className =
             });
         });
 
-        setVars(_vars)
-        setQuestions([])
+        return _vars
     }
+
+    const nodeTemps = useMemo(() => {
+        if (!flow.nodes || !open) return []
+        return flow.nodes.reduce((list, temp) => {
+            const newNode = getNodeDataByTemp(temp.data)
+            newNode.data && list.push(newNode)
+            return list
+        }, [])
+    }, [open])
 
     // 三级变量 预置问题
     const [questions, setQuestions] = useState([])
@@ -136,13 +137,16 @@ const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className =
         <SelectTrigger showIcon={false} className={cname('group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent position="popper" avoidCollisions={false}>
             <div className="flex max-h-[360px] ">
-                <div className="w-36 border-l first:border-none overflow-y-auto h-[360px] scrollbar-hide">
+                <div className="w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
                             className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                            onMouseEnter={() => handleShowVars(item)}
+                            onMouseEnter={() => {
+                                currentMenuRef.current = item;
+                                setVars(item.data)
+                            }}
                         >
                             {item.icon}
                             <span className="w-28 overflow-hidden text-ellipsis ml-2">{item.name}</span>

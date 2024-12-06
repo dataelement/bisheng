@@ -163,7 +163,7 @@ export default function CardComponent<T>({
   </Card>
 
   // 助手&技能&工作流列表卡片组件
-  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
         <TitleLogo
@@ -189,7 +189,7 @@ export default function CardComponent<T>({
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
-    <CardFooter className="h-20 grid grid-rows-2">
+    <CardFooter className="h-20 grid grid-rows-2 self-end">
       {labelPannel}
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">

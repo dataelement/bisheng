@@ -3,6 +3,7 @@ import create from 'zustand';
 
 type State = {
     flow: WorkFlow
+    fitView: boolean
 }
 
 type Actions = {
@@ -13,6 +14,7 @@ type Actions = {
 
 const useFlowStore = create<State & Actions & { notifications: Notification[]; addNotification: (notification: Notification) => void; clearNotifications: () => void }>((set) => ({
     flow: null,
+    fitView: false,
     notifications: [], // 消息队列
     setFlow: (newFlow) => set({ flow: newFlow }),
     uploadFlow(file?: File) {
@@ -28,8 +30,10 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
                         flow: {
                             ...state.flow,
                             edges: flow.edges,
-                            nodes: flow.nodes
-                        }
+                            nodes: flow.nodes,
+                            viewport: flow.viewport
+                        },
+                        fitView: !state.fitView
                     }));
                 });
             }

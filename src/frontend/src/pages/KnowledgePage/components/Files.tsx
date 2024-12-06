@@ -71,7 +71,7 @@ export default function Files({ onPreview }) {
 
     // 重试解析
     const handleRetry = (objs) => {
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(objs).then(res => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({file_objs: objs}).then(res => {
             reload()
         }))
     }

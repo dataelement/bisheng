@@ -53,14 +53,9 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/\r/g, '\\r')                  // 转义回车符
         .replace(/\t/g, '\\t')                  // 转义制表符
         .replace(/'/g, '"');                    // 将单引号替换为双引号
-    return data.map(item => {
 
     return data.filter(item => ['answer', 'question', 'processing', 'system', 'report', 'tool', 'knowledge', 'divider', 'flow'].includes(item.category)).map(item => {
-        // let count = 0
         let { message, files, is_bot, intermediate_steps, category, ...other } = item
-        // const map = { "stream_msg": "output_msg" }
-        // category = map[category] || category
-        let { message, files, is_bot, intermediate_steps, ...other } = item
         try {
             message = message && message[0] === '{' ? JSON.parse(message) : message || ''
         } catch (e) {

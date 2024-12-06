@@ -80,14 +80,14 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="quote">引用</SelectItem>
+                                <SelectItem value="ref">引用</SelectItem>
                                 <SelectItem value="input">输入</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 }
                 {/* value */}
-                {item.right_value_type === 'quote' ? <SelectVar
+                {item.right_value_type === 'ref' ? <SelectVar
                     nodeId={nodeId}
                     itemKey={item.id}
                     onSelect={(E, v) => {

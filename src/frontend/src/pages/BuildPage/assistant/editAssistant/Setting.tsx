@@ -185,12 +185,12 @@ export default function Setting() {
                     <div className="flex justify-between">
                       <Link to={"/filelib"} target="_blank">
                         <Button variant="link">
-                          <CirclePlus className="mr-1" />{" "}
+                          <CirclePlus size={16} className="mr-1" />{" "}
                           {t("build.createNewKnowledge")}
                         </Button>
                       </Link>
                       <Button variant="link" onClick={() => reload(1, '')}>
-                        <RefreshCw className="mr-1" /> {t("build.refresh")}
+                        <RefreshCw size={16} className="mr-1" /> {t("build.refresh")}
                       </Button>
                     </div>
                   )}

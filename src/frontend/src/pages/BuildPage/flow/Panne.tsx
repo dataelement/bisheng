@@ -1,6 +1,7 @@
 import { generateUUID } from "@/components/bs-ui/utils";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
-import { useCopyPaste, useUndoRedo } from "@/util/hook";
+import { autoNodeName, initNode } from "@/util/flowUtils";
+import { useUndoRedo } from "@/util/hook";
 import { Background, BackgroundVariant, Connection, Controls, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import '@xyflow/react/dist/style.css';
@@ -10,13 +11,23 @@ import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-import { autoNodeName, initNode } from "@/util/flowUtils";
+import useFlowStore from "./flowStore";
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
 // 流程编排面板
 export default function Panne({ flow }: { flow: WorkFlow }) {
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
+    // 导入自适应布局
+    const fitView = useFlowStore(state => state.fitView)
+    useEffect(() => {
+        if (reactFlowInstance) {
+            setTimeout(() => {
+                reactFlowInstance.fitView();
+            }, 0);
+        }
+    }, [fitView])
+
     useEffect(() => {
         return () => {
             setReactFlowInstance(null) // 销毁reactflow实例

@@ -181,8 +181,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
                     // // 异常类型处理，提示
                     // if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
-                    // // 拦截会话串台情况
-                    // if (currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
+                    // // 拦截会话串台
+                    if (data.chat_id && currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
                     if (data.category === 'node_run') {
                         inputNodeIdRef.current = data.message.node_id
                     }
@@ -270,11 +270,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
-        //  else if (data.type === 'stream') {
-        //     updateCurrentMessage(data)
-        // } else if (data.type === 'end') {
-        //     updateCurrentMessage(data)
-        // }
 
         // if (Array.isArray(data) && data.length) return
         // if (data.type === 'start') {
@@ -384,7 +379,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const handleRestartClick = () => {
         wsRef.current?.close()
         wsRef.current = null
-        insetSeparator('本轮会话已结束')
+        stop.show && insetSeparator('本轮会话已结束')
         setTimeout(() => {
             createWebSocket().then(() => {
                 sendWsMsg(onBeforSend('init_data', {}))
