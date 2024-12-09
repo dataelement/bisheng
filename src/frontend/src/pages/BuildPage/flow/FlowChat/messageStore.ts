@@ -54,7 +54,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/\t/g, '\\t')                  // 转义制表符
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
-    return data.filter(item => ['answer', 'question', 'processing', 'system', 'report', 'tool', 'knowledge', 'divider', 'flow'].includes(item.category)).map(item => {
+    return data.filter(item => ["question", "output_input_msg", "output_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "user_input", "node_run"].includes(item.category)).map(item => {
         let { message, files, is_bot, intermediate_steps, category, ...other } = item
         try {
             message = message && message[0] === '{' ? JSON.parse(message) : message || ''
@@ -170,6 +170,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         })
     },
     async loadHistoryMsg(flowid, chatId, { lastMsg }) {
+        console.log('1234 :>> ', 1234);
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
         const hisMessages = msgs.reverse()

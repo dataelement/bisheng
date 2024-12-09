@@ -27,7 +27,7 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
             case 'no-login-link':
                 return <ChatLink noLogin type={type} />;
             case 'login-link':
-            // return <ChatLink type={type} />;
+                return <ChatLink type={type} />;
             default:
                 return <ApiAccess />;
         }

@@ -5,6 +5,7 @@ import { UploadCloud, Variable } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
+import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 
 // 解析富文本内容为保存格式
 function parseToValue(input, flowNode) {
@@ -189,9 +190,9 @@ export default function VarInput({
             ></div>
             {children}
             <div
-                className="resize-handle w-4 h-4 bg-transparent absolute cursor-ns-resize right-0 bottom-0"
+                className="resize-handle w-4 h-4 bg-transparent absolute cursor-ns-resize right-0 bottom-0 rounded-ee-md overflow-hidden"
                 onMouseDown={handleMouseDown}
-            ></div>
+            ><RbDragIcon /></div>
         </div>
     );
 }
