@@ -146,7 +146,8 @@ async def mark(data: MarkData,
 
     task = MarkTaskDao.get_task_byid(task_id=data.task_id) 
     msg_list = ChatMessageDao.get_msg_by_flows(task.app_id.split(","))
-    m_list = [msg.chat_id for msg in msg_list]
+    #m_list = [msg.chat_id for msg in msg_list]
+    m_list = msg_list
     r_list = MarkRecordDao.get_list_by_taskid(data.task_id)
     app_record = [r.session_id for r in r_list ]
 
