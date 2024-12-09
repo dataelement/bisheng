@@ -192,8 +192,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         if record:
             queue = deque()
             for r in record:
-                if r.session_id == chat_id:
-                    break
+                # if r.session_id == chat_id:
+                #     break
                 queue.append(r)
 
             if len(queue) == 0:
@@ -236,6 +236,17 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
             return resp_200(data=result)
+        else:
+            cur = k_list[linked.head().data]
+            flow = FlowDao.get_flow_by_idstr(cur.flow_id)
+            if flow:
+                result['flow_type'] = 'flow'
+            else:
+                result['flow_type'] = 'assistant'
+            result["chat_id"] = cur.chat_id
+            result["flow_id"] = cur.flow_id
+            return resp_200(data=result)
+
 
     return resp_200()
 
