@@ -127,7 +127,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                     </TooltipProvider>
                 </TabsContent>
                 {/* tool */}
-                <TabsContent value="tool" className="overflow-y-auto h-[calc(100vh-10rem)]">
+                <TabsContent value="tool" className="overflow-y-auto h-[calc(100vh-10rem)] max-w-44">
                     <Accordion type="multiple" className="w-full">
                         <TooltipProvider delayDuration={100}>
                             {toolTemps.map((temp, index) =>

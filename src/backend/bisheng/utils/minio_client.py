@@ -138,12 +138,14 @@ class MinioClient:
             raise e
 
     def get_object(self, bucket_name, object_name, **kwargs) -> bytes:
+        response = None
         try:
             response = self.minio_client.get_object(bucket_name, object_name, **kwargs)
             return response.read()
         finally:
-            response.close()
-            response.release_conn()
+            if response:
+                response.close()
+                response.release_conn()
 
     def copy_object(
         self,

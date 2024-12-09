@@ -255,6 +255,7 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
     if is_openai_v1() and params.get('openai_proxy'):
         params['http_client'] = httpx.Client(proxies=params.get('openai_proxy'))
         params['http_async_client'] = httpx.AsyncClient(proxies=params.get('openai_proxy'))
+        del params['openai_proxy']
 
     if node_type == '':
         anthropic_api_key = params.pop('anthropic_api_key', None)

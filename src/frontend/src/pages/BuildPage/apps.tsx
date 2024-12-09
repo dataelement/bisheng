@@ -4,6 +4,7 @@ import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { MoveOneIcon } from "@/components/bs-icons/moveOne";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
@@ -12,7 +13,7 @@ import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { readTempsDatabase } from "@/controllers/API";
-import { changeAssistantStatusApi } from "@/controllers/API/assistant";
+import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
 import { deleteFlowFromDatabase, getAppsApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
 import { onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -27,7 +28,6 @@ import { useQueryLabels } from "./assistant";
 import CreateApp from "./CreateApp";
 import CardSelectVersion from "./skills/CardSelectVersion";
 import CreateTemp from "./skills/CreateTemp";
-import { Badge } from "@/components/bs-ui/badge";
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
@@ -113,7 +113,8 @@ export default function apps() {
             desc: descMap[data.flow_type],
             okTxt: t('delete'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(deleteFlowFromDatabase(data.id).then(reload));
+                const promise = data.flow_type == 5 ? deleteAssistantApi(data.id) : deleteFlowFromDatabase(data.id)
+                captureAndAlertRequestErrorHoc(promise.then(reload));
                 next()
             }
         })

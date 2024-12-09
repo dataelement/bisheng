@@ -830,6 +830,7 @@
     "10520": "Skill does not exist",
     "10521": "Skill is online, cannot edit",
     "10525": "Workflow is online and cannot be edited",
+    "10530": "Template name already exists",
     "10900": "Knowledge base name already exists",
     "10901": "Knowledge base must select an embedding model",
     "10910": "Current knowledge base version does not support segment modification. Please create a new knowledge base to modify segments.",

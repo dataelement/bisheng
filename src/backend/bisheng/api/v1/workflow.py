@@ -3,13 +3,10 @@ import os
 from typing import Optional
 from uuid import UUID
 
-from bisheng.api.v1.skillcenter import ORDER_GAP
-from bisheng.database.models.template import Template, TemplateCreate, TemplateRead
 from sqlmodel import select
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError, FlowTemplateNameError
+from bisheng.api.errcode.flow import FlowOnlineEditError
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.utils import get_L2_param_from_flow
 from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -270,34 +267,3 @@ def read_flows(*,
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-@router.post('/template/create',
-             response_model=UnifiedResponseModel[TemplateRead],
-             status_code=201)
-def create_template(*, template: TemplateCreate):
-    """Create a new workflow or assitant."""
-    template.flow_type = FlowType.WORKFLOW.value
-    db_template = Template.model_validate(template)
-    # TODO: if assitant need more data 
-    if not db_template.data:
-        with session_getter() as session:
-            db_flow = session.get(Flow, template.flow_id)
-        db_template.data = db_flow.data
-    # 校验name
-    with session_getter() as session:
-        name_repeat = session.exec(
-            select(Template).where(Template.name == db_template.name)).first()
-    if name_repeat:
-        raise FlowTemplateNameError.http_exception()
-    # 增加 order_num  x,x+65535
-    with session_getter() as session:
-        max_order = session.exec(select(Template).order_by(
-            Template.order_num.desc()).limit(1)).first()
-    # 如果没有数据，就从 65535 开始
-    db_template.order_num = max_order.order_num + ORDER_GAP if max_order else ORDER_GAP
-    with session_getter() as session:
-        session.add(db_template)
-        session.commit()
-        session.refresh(db_template)
-    return resp_200(db_template)

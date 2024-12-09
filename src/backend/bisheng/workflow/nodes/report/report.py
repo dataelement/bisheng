@@ -20,6 +20,8 @@ class ReportNode(BaseNode):
 
     def _run(self, unique_id: str):
         # 下载报告模板文件
+        if not self._minio_client.object_exists(self._minio_client.bucket, self._object_name):
+            raise Exception(f"{self.name}节点模板文件不存在，请先编辑对应的报告模板")
         file_content = self._minio_client.get_object(self._minio_client.bucket, self._object_name)
         doc_parse = DocxTemplateRender(file_content=io.BytesIO(file_content))
         # 获取所有的节点变量

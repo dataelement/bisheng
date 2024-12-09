@@ -68,10 +68,13 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setAssistant(null)
             setFlow(null)
             const _flow = await getFlowApi(id, version)
-            version === 'v1' ? loadFlowHistoryMsg(_flow.id, chatId, {
+             version === 'v1' ? await loadFlowHistoryMsg(_flow.id, chatId, {
                 lastMsg: '本轮会话已结束'
             }).then(res =>
+            {
+                console.log('1234 :>> ', 1234);
                 setAutoRun(!res.length)
+            }
                 // setAutoRun()
             ) : clearMsgs()
             const { data, ...f } = _flow

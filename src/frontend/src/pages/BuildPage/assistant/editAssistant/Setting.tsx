@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/bs-ui/button";
 import { Input, InputList, Textarea } from "@/components/bs-ui/input";
 import {
+  QuestionTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -73,16 +74,7 @@ export default function Setting() {
             <div className="mb-4 px-6">
               <label htmlFor="slider" className="bisheng-label flex gap-1">
                 {t("build.maxToken")}
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <QuestionMarkCircledIcon />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{t("build.maxTokenTip")}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <QuestionTooltip content={t("build.maxTokenTip")}></QuestionTooltip>
               </label>
               <Input value={assistantState.max_token} type="number" className="mt-2" defaultValue={32000} min={0} onChange={e =>
                 dispatchAssistant("setting", { max_token: Number(e.target.value) })

@@ -177,8 +177,7 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(
-                not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
+            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
                 ChatMessage.create_time)
             return session.exec(statement).all()
 
@@ -192,7 +191,7 @@ class ChatMessageDao(MessageBase):
     def get_msg_by_flow(cls, flow_id: str):
         with session_getter() as session:
             # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
-            st = select(ChatMessage).where(ChatMessage.flow_id == flow_id).group_by(ChatMessage.chat_id)
+            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id == flow_id).group_by(ChatMessage.chat_id)
             return session.exec(st).all()
 
     @classmethod
@@ -200,7 +199,7 @@ class ChatMessageDao(MessageBase):
         ids = [UUID(i) for i in flow_id]
         with session_getter() as session:
             # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
-            st = select(ChatMessage).where(ChatMessage.flow_id.in_(ids)).group_by(ChatMessage.chat_id)
+            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id.in_(ids)).group_by(ChatMessage.chat_id)
             return session.exec(st).all()
 
     @classmethod

@@ -67,6 +67,8 @@ export default function Parameter({ nodeId, item, onOutPutChange, onStatusChange
             return <OutputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
         case 'bisheng_model':
             return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+        case 'agent_model':
+            return <ModelItem agent data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
         case 'slide':
             return <SliderItem data={item} onChange={handleOnNewValue} />
         case 'slide_switch':
