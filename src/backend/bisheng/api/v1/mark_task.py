@@ -192,8 +192,8 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
         if record:
             queue = deque()
             for r in record:
-                # if r.session_id == chat_id:
-                #     break
+                if r.session_id == chat_id:
+                   continue 
                 queue.append(r)
 
             if len(queue) == 0:
@@ -218,7 +218,7 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
 
         cur = linked.find(chat_id)
 
-        logger.info("k_list={} cur={}",k_list,cur.data)
+        logger.info("k_list={} cur={}",k_list,cur)
 
         if cur:
             if cur.next is None:
