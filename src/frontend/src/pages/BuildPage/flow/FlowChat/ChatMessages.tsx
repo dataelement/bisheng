@@ -119,10 +119,6 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                         return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.message_id} data={msg} />;
-                    // case 'file':
-                    //     return <FileBs key={msg.id} data={msg} />;
-                    // case 'runLog':
-                    //     return <RunLog key={msg.id} data={msg} />;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.message_id}>Unknown message type</div>;
                 }

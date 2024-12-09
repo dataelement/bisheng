@@ -85,7 +85,7 @@ export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> 
 }
 
 /**
- * 创建模板.
+ * 创建模板.(工作流\助手\技能)
  *
  * @param data {flow_id name description}
  * @returns  null.

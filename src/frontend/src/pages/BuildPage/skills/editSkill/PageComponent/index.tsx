@@ -457,7 +457,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
         </main>
       </div>
       <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? '' : 'hidden'}`}>
-        <ApiMainPage type={'flow'} />
+        <ApiMainPage type={'skill'} />
       </div>
       {/* 删除确认 */}
       <Dialog open={blocker.state === "blocked"}>
