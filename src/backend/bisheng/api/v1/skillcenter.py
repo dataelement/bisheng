@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 
 from bisheng.api.services.user_service import get_login_user
+from bisheng.api.errcode.flow import FlowTemplateNameError
 from bisheng.api.utils import remove_api_keys
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.base import session_getter
@@ -31,7 +32,7 @@ def create_template(*, template: TemplateCreate):
         name_repeat = session.exec(
             select(Template).where(Template.name == db_template.name)).first()
     if name_repeat:
-        raise HTTPException(status_code=500, detail='Repeat name, please choose another name')
+        raise FlowTemplateNameError.http_exception()
     # 增加 order_num  x,x+65535
     with session_getter() as session:
         max_order = session.exec(select(Template).order_by(
