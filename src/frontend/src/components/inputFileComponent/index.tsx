@@ -5,6 +5,8 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { uploadFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { FileComponentType } from "../../types/components";
+import { LoadIcon } from "../bs-icons/loading";
+import { Button } from "../bs-ui/button";
 
 export default function InputFileComponent({
   value,
@@ -115,20 +117,17 @@ export default function InputFileComponent({
         >
           {myValue !== "" ? myValue : placeholder}
         </span>
-        <button onClick={handleButtonClick}>
+        <Button size="icon" variant="ghost" onClick={handleButtonClick}>
           {!editNode && !loading && (
             <FileSearch2
               strokeWidth={1.5}
               className={
-                "icons-parameters-comp" +
                 (disabled ? " text-ring " : " hover:text-accent-foreground")
               }
             />
           )}
-          {!editNode && loading && (
-            <span className="loading loading-spinner loading-sm pointer-events-none h-8 pl-3"></span>
-          )}
-        </button>
+          {!editNode && loading && (<LoadIcon className="text-primary duration-300 pointer-events-none" />)}
+        </Button>
       </div>
     </div>
   );

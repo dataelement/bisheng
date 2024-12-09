@@ -1,13 +1,13 @@
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
-import { getModelListApi } from "@/controllers/API/finetune";
+import { getAssistantModelList, getModelListApi } from "@/controllers/API/finetune";
 import { useEffect, useMemo, useState } from "react";
 
-export default function ModelItem({ data, onChange, onValidate }) {
+export default function ModelItem({ agent = false, data, onChange, onValidate }) {
     const [options, setOptions] = useState<any[]>([])
 
     useEffect(() => {
-        getModelListApi().then(res => {
+        (agent ? getAssistantModelList() : getModelListApi()).then(res => {
             let llmOptions = []
             let embeddings = []
             res.forEach(server => {

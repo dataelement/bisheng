@@ -336,7 +336,7 @@ const workflowTemplate = [
                     {
                         "key": "model_id",
                         "label": "模型",
-                        "type": "bisheng_model",
+                        "type": "agent_model",
                         "required": true,
                         "value": "",
                         "placeholder": "请选择模型"
@@ -401,7 +401,7 @@ const workflowTemplate = [
                         "type": "knowledge_select_multi",
                         "placeholder": "请选择知识库",
                         "value": {
-                            "tab": "knowledge",
+                            "type": "knowledge",
                             "value": []
                         }
                     }
