@@ -35,7 +35,7 @@ class AgentNode(BaseNode):
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
 
-        self.batch_variable_list = []
+        self._batch_variable_list = {}
         self._system_prompt_list = []
         self._user_prompt_list = []
 
@@ -189,7 +189,7 @@ class AgentNode(BaseNode):
         ret = {}
         variable_map = {}
 
-        self._batch_variable_list = []
+        self._batch_variable_list = {}
         self._system_prompt_list = []
         self._user_prompt_list = []
 
@@ -235,7 +235,7 @@ class AgentNode(BaseNode):
         for one in self._system_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
-                self._batch_variable_list.append(variable_map[one])
+                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         # system = self._system_prompt.format(variable_map)
@@ -244,6 +244,7 @@ class AgentNode(BaseNode):
         for one in self._user_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)
