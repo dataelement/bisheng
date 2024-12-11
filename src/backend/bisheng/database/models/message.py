@@ -177,8 +177,7 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
-                ChatMessage.create_time)
+            statement = select(ChatMessage.chat_id,ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id,ChatMessage.flow_id)
             return session.exec(statement).all()
 
     @classmethod
