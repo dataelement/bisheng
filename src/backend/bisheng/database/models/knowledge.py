@@ -181,10 +181,14 @@ class KnowledgeDao(KnowledgeBase):
         # 查询角色 有使用权限的知识库列表
         role_access_list = RoleAccessDao.find_role_access(role_id_list, knowledge_ids,
                                                           AccessType.KNOWLEDGE)
-        if not role_access_list:
+
+        # 查询是否包含了用户自己创建的知识库
+        user_knowledge_list = KnowledgeDao.get_user_knowledge(user_info.user_id, knowledge_ids)
+        if not role_access_list and not user_knowledge_list:
             return []
+        finally_knowledge_list = [access.third_id for access in role_access_list].extend([str(one.id) for one in user_knowledge_list])
         statement = select(Knowledge).where(
-            Knowledge.id.in_([access.third_id for access in role_access_list]))
+            Knowledge.id.in_(finally_knowledge_list))
 
         with session_getter() as session:
             return session.exec(statement).all()
