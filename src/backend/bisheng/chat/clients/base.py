@@ -36,6 +36,9 @@ class BaseClient(ABC):
         # 异步任务列表
         self.task_ids = []
 
+    async def close(self):
+        pass
+
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
 

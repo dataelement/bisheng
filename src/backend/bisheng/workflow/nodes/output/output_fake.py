@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bisheng.workflow.nodes.output.output import OutputNode
 
@@ -22,3 +22,6 @@ class OutputFakeNode(BaseModel):
 
     def get_input_schema(self):
         return self.output_node.get_input_schema()
+
+    def stop(self):
+        pass

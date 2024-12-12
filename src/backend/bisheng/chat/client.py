@@ -47,6 +47,9 @@ class ChatClient:
         # 流式输出的队列，用来接受流式输出的内容，每次处理新的question时都清空
         self.stream_queue = Queue()
 
+    async def close(self):
+        pass
+
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
 

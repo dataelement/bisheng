@@ -44,6 +44,8 @@ class BaseNode(ABC):
         # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
         self.tmp_collection_name = 'tmp_workflow_data'
 
+        self.stop_flag = False
+
         # 简单参数解析
         self.init_data()
 
@@ -97,6 +99,8 @@ class BaseNode(ABC):
         Run node entry
         :return:
         """
+        if self.stop_flag:
+            raise Exception('stop by user')
         if self.current_step >= self.max_steps:
             raise Exception(f'node {self.name} exceeded more than max steps')
 
@@ -124,3 +128,6 @@ class BaseNode(ABC):
 
     async def arun(self, state: dict) -> Any:
         return self.run(state)
+
+    def stop(self):
+        self.stop_flag = True

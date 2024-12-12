@@ -70,3 +70,6 @@ class Workflow:
         while self.graph_engine.status == WorkflowStatus.RUNNING.value:
             await self.graph_engine.acontinue_run()
         return self.graph_engine.status, self.graph_engine.reason
+
+    def stop(self):
+        self.graph_engine.stop()
