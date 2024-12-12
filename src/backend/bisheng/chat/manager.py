@@ -180,8 +180,9 @@ class ChatManager:
     async def close_client(self, client_key: str, code: int, reason: str):
         if chat_client := self.active_clients.get(client_key):
             try:
-                await chat_client.websocket.close(code=code, reason=reason)
                 self.clear_client(client_key)
+                await chat_client.close()
+                await chat_client.websocket.close(code=code, reason=reason)
             except RuntimeError as exc:
                 # This is to catch the following error:
                 #  Unexpected ASGI message 'websocket.close', after sending 'websocket.close'

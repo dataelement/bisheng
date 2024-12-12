@@ -255,3 +255,7 @@ class GraphEngine:
                     # output 节点需要用户输入
                     self.status = WorkflowStatus.INPUT.value
                     return
+
+    def stop(self):
+        for _, node_instance in self.nodes_map.items():
+            node_instance.stop()
