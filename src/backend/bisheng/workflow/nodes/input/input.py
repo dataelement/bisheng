@@ -49,6 +49,7 @@ class InputNode(BaseNode):
          记录文件的metadata数据
         """
         if not value:
+            logger.warning(f"{self.id}.{key} value is None")
             return None
 
         # 1、获取默认的embedding模型

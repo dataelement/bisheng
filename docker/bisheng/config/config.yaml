@@ -20,6 +20,8 @@ redis_url: "redis://redis:6379/1"
 #   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
 #   db: 1
 
+# celery的broken地址
+celery_redis_url: "redis://redis:6379/2"
 
 # 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
 vector_stores:
