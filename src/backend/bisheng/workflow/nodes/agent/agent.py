@@ -114,6 +114,9 @@ class AgentNode(BaseNode):
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
                 file_metadata = self.graph_state.get_variable_by_str(knowledge_id)
+                if not file_metadata:
+                    raise Exception(f'未找到对应的临时文件数据：{knowledge_id}')
+
                 name = f'knowledge_{knowledge_id.replace(".", "").replace("#", "")}'
                 description = f'file name: {file_metadata.get("source")}'
 

@@ -158,6 +158,8 @@ class RagNode(BaseNode):
             file_ids = []
             for one in self._knowledge_value:
                 file_metadata = self.graph_state.get_variable_by_str(one)
+                if not file_metadata:
+                    raise Exception(f'未找到对应的临时文件数据：{one}')
                 file_ids.append(file_metadata['file_id'])
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'
