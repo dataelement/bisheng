@@ -12,35 +12,35 @@ class BaseCallback(ABC):
 
     def on_node_start(self, data: NodeStartData):
         """ node start event """
-        print(f"node start: {data}")
+        raise NotImplementedError()
 
     def on_node_end(self, data: NodeEndData):
         """ node end event """
-        print(f"node end: {data}")
+        raise NotImplementedError()
 
     def on_user_input(self, data: UserInputData):
         """ user input event """
-        print(f"user input: {data}")
+        raise NotImplementedError()
 
     def on_guide_word(self, data: GuideWordData):
         """ guide word event """
-        print(f"guide word: {data}")
+        raise NotImplementedError()
 
     def on_guide_question(self, data: GuideQuestionData):
         """ guide question event """
-        print(f"guide question: {data}")
+        raise NotImplementedError()
 
     def on_stream_msg(self, data: StreamMsgData):
-        print(f"stream msg: {data}")
+        raise NotImplementedError()
 
     def on_stream_over(self, data: StreamMsgOverData):
-        print(f"stream over: {data}")
+        raise NotImplementedError()
 
     def on_output_msg(self, data: OutputMsgData):
-        print(f"output msg: {data}")
+        raise NotImplementedError()
 
     def on_output_choose(self, data: OutputMsgChooseData):
-        print(f"output choose: {data}")
+        raise NotImplementedError()
 
     def on_output_input(self, data: OutputMsgInputData):
-        print(f"output input: {data}")
+        raise NotImplementedError()

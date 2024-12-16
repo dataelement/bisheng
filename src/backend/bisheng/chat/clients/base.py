@@ -42,7 +42,10 @@ class BaseClient(ABC):
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
 
-    async def send_json(self, message: ChatMessage):
+    async def send_json(self, message: ChatMessage | dict):
+        if isinstance(message, dict):
+            await self.websocket.send_json(message)
+            return
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):

@@ -150,10 +150,20 @@ class RedisClient:
         finally:
             self.close()
 
-    def rpush(self, key, value):
+    def rpush(self, key, value, expiration=3600):
         try:
             self.cluster_nodes(key)
-            return self.connection.rpush(key, value)
+            ret = self.connection.rpush(key, value)
+            if expiration:
+                self.expire_key(key, expiration)
+            return ret
+        finally:
+            self.close()
+
+    def lpop(self, key, count: int=None):
+        try:
+            self.cluster_nodes(key)
+            return self.connection.lpop(key, count)
         finally:
             self.close()
 

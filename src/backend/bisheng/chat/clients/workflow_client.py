@@ -1,5 +1,7 @@
+import asyncio
 import json
-from typing import Dict
+import uuid
+from typing import Dict, Optional
 
 from fastapi import Request, WebSocket
 from loguru import logger
@@ -7,12 +9,11 @@ from loguru import logger
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
-from bisheng.chat.clients.workflow_callback import WorkflowWsCallback
 from bisheng.chat.types import WorkType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
-from bisheng.settings import settings
+from bisheng.worker.workflow.redis_callback import RedisCallback
+from bisheng.worker.workflow.tasks import execute_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
-from bisheng.workflow.graph.workflow import Workflow
 
 
 class WorkflowClient(BaseClient):
@@ -23,15 +24,12 @@ class WorkflowClient(BaseClient):
         super().__init__(request, client_key, client_id, chat_id, user_id, login_user, work_type,
                          websocket, **kwargs)
 
-        self.workflow = None
-        self.callback = WorkflowWsCallback(websocket=self.websocket,
-                                           chat_id=self.chat_id,
-                                           workflow_id=self.client_id,
-                                           user_id=self.user_id)
+        self.workflow: Optional[RedisCallback] = None
 
     async def close(self):
         if self.workflow:
-            self.workflow.stop()
+            self.workflow.set_workflow_stop()
+            self.workflow = None
 
     async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
         if not self.chat_id:
@@ -67,7 +65,7 @@ class WorkflowClient(BaseClient):
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
-            self.workflow = None
+            await self.close()
             await self.stop_handle_message(message)
         else:
             logger.warning('not support action: %s', message.get('action'))
@@ -75,12 +73,19 @@ class WorkflowClient(BaseClient):
     async def init_workflow(self, workflow_data: dict):
         if self.workflow is not None:
             return
-        workflow_conf = settings.get_workflow_conf()
         try:
-            self.workflow = Workflow(self.client_id, str(self.user_id), workflow_data, False,
-                                     workflow_conf.max_steps,
-                                     workflow_conf.timeout,
-                                     self.callback)
+            # 查询chat_id对应的异步任务唯一标识
+            unique_id = uuid.uuid4().hex
+            if self.chat_id:
+                unique_id = f'{self.chat_id}_async_task_id'
+            logger.debug(f'init workflow with unique_id: {unique_id}, client_id: {self.client_id}, chat_id: {self.chat_id}')
+            self.workflow = RedisCallback(unique_id, self.client_id, self.chat_id, str(self.user_id))
+            status_info = self.workflow.get_workflow_status()
+            if not status_info:
+                self.workflow.set_workflow_data(workflow_data)
+                self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
+                # 发起异步任务
+                execute_workflow.delay(unique_id, self.client_id, self.chat_id, str(self.user_id))
         except Exception as e:
             logger.exception('init_workflow_error')
             self.workflow = None
@@ -91,21 +96,49 @@ class WorkflowClient(BaseClient):
         # 运行workflow
         await self.workflow_run()
 
-    async def workflow_run(self, input_data: dict = None):
-        status, reason = self.workflow.run(input_data)
-        if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+    async def workflow_run(self):
+        status_info = self.workflow.get_workflow_status()
+        if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             self.workflow = None
-            if status == WorkflowStatus.FAILED.value:
-                await self.send_response('error', 'over', reason)
+            if status_info['status'] == WorkflowStatus.FAILED.value:
+                await self.send_response('error', 'over', status_info['reason'])
             await self.send_response('processing', 'close', '')
-        # 否则就是需要用户输入
+            return status_info
+        # 需要不断从redis中获取workflow返回的消息
+        while True:
+            if not self.workflow:
+                break
+            status_info = self.workflow.get_workflow_status()
+            if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+                # 防止有消息未发送，查询下消息队列
+                send_msg = True
+                while send_msg:
+                    chat_response = self.workflow.get_workflow_response()
+                    if chat_response:
+                        await self.send_json(chat_response)
+                    else:
+                        send_msg = False
+
+                self.workflow = None
+                if status_info['status'] == WorkflowStatus.FAILED.value:
+                    await self.send_response('error', 'over', status_info['reason'])
+                await self.send_response('processing', 'close', '')
+                break
+            else:
+                chat_response = self.workflow.get_workflow_response()
+                if not chat_response:
+                    await asyncio.sleep(1)
+                    continue
+                await self.send_json(chat_response)
+
 
     async def handle_user_input(self, data: dict):
         logger.info(f'get user input: {data}')
         if not self.workflow:
             logger.warning('workflow is over')
             return
-        if self.workflow.graph_engine.status != WorkflowStatus.INPUT.value:
+        status_info = self.workflow.get_workflow_status(user_cache=False)
+        if status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning('workflow is not input status')
             return
         user_input = {}
@@ -124,4 +157,4 @@ class WorkflowClient(BaseClient):
                                                           flow_id=self.client_id,
                                                           chat_id=self.chat_id,
                                                           user_id=self.user_id))
-        await self.workflow_run(user_input)
+        self.workflow.set_user_input(user_input)
