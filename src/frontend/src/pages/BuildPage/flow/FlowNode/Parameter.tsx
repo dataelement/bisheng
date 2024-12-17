@@ -13,6 +13,7 @@ import ModelItem from "./component/ModelItem";
 import OutputItem from "./component/OutputItem";
 import ReportItem from "./component/ReportItem";
 import SliderItem, { SwitchSliderItem } from "./component/SliderItem";
+import SqlConfigItem from "./component/SqlConfigItem";
 import SwitchItem from "./component/SwitchItem";
 import TextAreaItem from "./component/TextAreaItem";
 import ToolItem from "./component/ToolItem";
@@ -97,6 +98,8 @@ export default function Parameter({ nodeId, item, onOutPutChange, onStatusChange
             return <ConditionItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'report':
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+        case 'sql_config':
+            return <SqlConfigItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         default:
             return <div>Unsupported parameter type</div>;
     }
