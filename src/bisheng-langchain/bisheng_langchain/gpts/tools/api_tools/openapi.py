@@ -43,6 +43,8 @@ class OpenApiTools(APIToolBase):
                 field_type = int
             elif field_type == 'string':
                 field_type = str
+            elif field_type == 'boolean':
+                field_type = bool
             elif field_type in {'object', 'dict'}:
                 param_object_param = {}
                 for param in one['schema']['properties'].keys():
@@ -53,6 +55,8 @@ class OpenApiTools(APIToolBase):
                         field_type = int
                     elif field_type == 'string':
                         field_type = str
+                    elif field_type == 'boolean':
+                        field_type = bool
                     param_object_param[param] = (
                         field_type,
                         Field(description=one['schema']['properties'][param]['description']))
