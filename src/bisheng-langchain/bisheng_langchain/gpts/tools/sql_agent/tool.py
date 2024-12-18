@@ -250,12 +250,12 @@ class SqlAgentAPIWrapper(BaseModel):
 
 
 class SqlAgentInput(BaseModel):
-    query: str = Field(description="Search the database based on user questions.")
+    query: str = Field(description="用户数据查询需求的自然语言描述（需要尽可能完整、准确）")
 
 
 class SqlAgentTool(BaseTool):
     name = "sql_agent"
-    description = "回答与 SQL 数据库有关的问题。给定用户问题（需要尽可能准确的自然语言描述），将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
+    description = "回答与 SQL 数据库有关的问题。给定用户问题，将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
     args_schema: Type[BaseModel] = SqlAgentInput
     api_wrapper: SqlAgentAPIWrapper
 
