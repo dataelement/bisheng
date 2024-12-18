@@ -268,7 +268,7 @@ def add_qa(*,
     return resp_200(res)
 
 
-@router.post('/add_relative_qa', response_model=List[QAKnowledge])
+@router.post('/add_relative_qa', response_model=QAKnowledge)
 def append_qa(*,
               knowledge_id: int = Body(embed=True),
               data: APIAppendQAParam = Body(embed=True),
@@ -279,7 +279,9 @@ def append_qa(*,
     if not qa_db:
         return HTTPException(404, detail='qa 对没有找到')
 
-    qa_insert = QAKnowledgeUpsert.validate(knowledge)
+    t = qa_db.dict()
+    t["answers"] = json.loads(t["answers"])
+    qa_insert = QAKnowledgeUpsert.validate(t)
     qa_insert.questions.extend(data.relative_questions)
 
     return resp_200(knowledge_imp.add_qa(knowledge, qa_insert))
