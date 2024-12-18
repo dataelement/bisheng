@@ -1,14 +1,16 @@
 import datetime
 import functools
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 import inspect
 
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import Field
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
-from langchain_core.language_models import BaseLanguageModel, BaseChatModel
+from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
@@ -164,3 +166,10 @@ class BishengLLM(BaseChatModel):
         """更新模型状态"""
         # todo 接入到异步任务模块
         LLMDao.update_model_status(self.model_id, status, remark)
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        return self.llm.bind_tools(tools, **kwargs)

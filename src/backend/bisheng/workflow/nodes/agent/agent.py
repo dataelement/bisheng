@@ -1,9 +1,5 @@
 from typing import Any, Dict
 
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
-from loguru import logger
-
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
@@ -15,6 +11,9 @@ from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from loguru import logger
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -61,6 +60,12 @@ class AgentNode(BaseNode):
             one['key'] for one in self.node_params['knowledge_id']['value']
         ]
 
+        # 是否支持nl2sql
+        self._sql_agent = self.node_params['sql_agent']
+        self._sql_address = ''
+        if self._sql_agent['open']:
+            self._sql_address = f'mysql+pymysql://{self._sql_agent["db_username"]}:{self._sql_agent["db_password"]}@{self._sql_agent["db_address"]}/{self._sql_agent["db_name"]}?charset=utf8mb4'
+
         # agent
         self._agent_executor_type = 'get_react_agent_executor'
         self._agent = None
@@ -86,7 +91,9 @@ class AgentNode(BaseNode):
 
         func_tools = self._init_tools()
         knowledge_tools = self._init_knowledge_tools(knowledge_retriever)
+        sql_agent_tools = self.init_sql_agent_tool()
         func_tools.extend(knowledge_tools)
+        func_tools.extend(sql_agent_tools)
         self._agent = ConfigurableAssistant(
             agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
             tools=func_tools,
@@ -100,6 +107,17 @@ class AgentNode(BaseNode):
             return AssistantAgent.init_tools_by_toolid(tool_ids, self._llm, None)
         else:
             return []
+
+    def init_sql_agent_tool(self):
+        if not self._sql_address:
+            return []
+        tool_params = {
+            'sql_agent': {
+                'llm': self._llm,
+                'sql_address': self._sql_address
+            }
+        }
+        return load_tools(tool_params=tool_params, llm=self._llm)
 
     def _init_knowledge_tools(self, knowledge_retriever: dict):
         if not self._knowledge_ids:

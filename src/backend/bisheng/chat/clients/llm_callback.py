@@ -57,15 +57,21 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         """Run when tool starts running."""
         logger.debug(
             f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        if serialized['name'] == 'sql_agent':
+            self.output = False
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+        if kwargs['name'] == 'sql_agent':
+            self.output = True
 
     async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
                             **kwargs: Any) -> Any:
         """Run when tool errors."""
         logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
+        if kwargs['name'] == 'sql_agent':
+            self.output = True
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         # azure偶尔会返回一个None

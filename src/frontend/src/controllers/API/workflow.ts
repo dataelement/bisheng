@@ -408,6 +408,22 @@ const workflowTemplate = [
                 ]
             },
             {
+                "name": "数据库",
+                "params": [
+                    {
+                        "key": "sql_agent",
+                        "type": "sql_config",
+                        "value": {
+                            "open": false,
+                            "db_address": "",
+                            "db_name": "",
+                            "db_username": "",
+                            "db_password": ""
+                        }
+                    }
+                ]
+            },
+            {
                 "name": "工具",
                 "params": [
                     {

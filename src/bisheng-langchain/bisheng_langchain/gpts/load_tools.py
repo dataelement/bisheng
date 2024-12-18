@@ -6,17 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import httpx
 import pandas as pd
 import pymysql
-from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
-from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
-from bisheng_langchain.gpts.tools.calculator.tool import calculator
-from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
-
-# from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
-from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
-    DallEAPIWrapper,
-    DallEImageGenerator,
-)
-from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from dotenv import load_dotenv
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from langchain_community.tools.bearly.tool import BearlyInterpreterTool
@@ -26,6 +15,18 @@ from langchain_core.callbacks import BaseCallbackManager, Callbacks
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool, Tool
 from mypy_extensions import Arg, KwArg
+
+from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
+from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
+from bisheng_langchain.gpts.tools.calculator.tool import calculator
+from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
+# from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
+from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
+    DallEAPIWrapper,
+    DallEImageGenerator,
+)
+from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
+from bisheng_langchain.gpts.tools.sql_agent.tool import SqlAgentTool, SqlAgentAPIWrapper
 from bisheng_langchain.rag import BishengRAGTool
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
 
@@ -80,6 +81,10 @@ def _get_dalle_image_generator(**kwargs: Any) -> Tool:
     )
 
 
+def _get_sql_agent(**kwargs: Any) -> BaseTool:
+    return SqlAgentTool(api_wrapper=SqlAgentAPIWrapper(**kwargs))
+
+
 def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
     return BearlyInterpreterTool(**kwargs).as_tool()
 
@@ -99,6 +104,7 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
     'bisheng_rag': (BishengRAGTool.get_rag_tool, ['name', 'description'],
                     ['vector_store', 'keyword_store', 'llm', 'collection_name', 'max_content',
                      'sort_by_source_and_index']),
+    'sql_agent': (_get_sql_agent, ['llm', 'sql_address'], []),
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore
