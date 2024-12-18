@@ -64,7 +64,7 @@ jobs:
         with:
           # backend 的context目录
           context: "./src/backend/"
-          file: ./base.Dockerfile
+          file: ./src/backend/base.Dockerfile
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
