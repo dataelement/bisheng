@@ -4,22 +4,21 @@ import uuid
 from typing import Optional
 from uuid import UUID
 
-from bisheng.api.services.assistant import AssistantService
-from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.utils import get_request_ip
-from bisheng.api.v1.chat import chat_manager
-from bisheng.api.v1.schemas import OpenAIChatCompletionResp, OpenAIChatCompletionReq, UnifiedResponseModel, \
-    AssistantInfo, OpenAIChoice
-from bisheng.api.v2.utils import get_default_operator
-from bisheng.api.v1.schemas import (AssistantInfo, OpenAIChatCompletionReq,
-                                    OpenAIChatCompletionResp, OpenAIChoice, UnifiedResponseModel)
-from bisheng.chat.types import WorkType
-from bisheng.settings import settings
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
 from fastapi.responses import ORJSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
+
+from bisheng.api.services.assistant import AssistantService
+from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.chat import chat_manager
+from bisheng.api.v1.schemas import (AssistantInfo, OpenAIChatCompletionReq,
+                                    OpenAIChatCompletionResp, OpenAIChoice, UnifiedResponseModel)
+from bisheng.api.v2.utils import get_default_operator
+from bisheng.chat.types import WorkType
+from bisheng.settings import settings
 
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
@@ -130,8 +129,9 @@ def get_assistant_list(request: Request,
     """
     logger.info(f'public_get_list ip: {request.client.host} user_id:{user_id}')
 
-    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
-    login_user = UserPayload(**{'user_id': user_id, 'role': ''})
+    if not settings.get_from_db("default_operator").get("enable_guest_access"):
+        raise HTTPException(status_code=403, detail="无权限访问")
+    login_user = get_default_operator()
     return AssistantService.get_assistant(login_user, name, status, tag_id, page, limit)
 
 
