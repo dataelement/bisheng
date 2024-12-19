@@ -42,6 +42,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             output: bool,
             output_key: str,
             stream: bool = True,
+            tool_list: Optional[List[Any]] = None,
     ):
         self.callback_manager = callback
         self.unique_id = unique_id
@@ -50,6 +51,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.output_len = 0
         self.output_key = output_key
         self.stream = stream
+        self.tool_list = tool_list
         logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
 
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
@@ -57,12 +59,26 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         """Run when tool starts running."""
         logger.debug(
             f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        if self.tool_list is not None:
+            self.tool_list.append({
+                'type': 'start',
+                'run_id': kwargs.get('run_id').hex,
+                'name': serialized['name'],
+                'input': input_str,
+            })
         if serialized['name'] == 'sql_agent':
             self.output = False
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+        if self.tool_list is not None:
+            self.tool_list.append({
+                'type': 'end',
+                'run_id': kwargs.get('run_id').hex,
+                'name': kwargs['name'],
+                'output': output,
+            })
         if kwargs['name'] == 'sql_agent':
             self.output = True
 
@@ -70,6 +86,12 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                             **kwargs: Any) -> Any:
         """Run when tool errors."""
         logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
+        if self.tool_list is not None:
+            self.tool_list.append({
+                'type': 'error',
+                'run_id': kwargs.get('run_id').hex,
+                'error': str(error),
+            })
         if kwargs['name'] == 'sql_agent':
             self.output = True
 
