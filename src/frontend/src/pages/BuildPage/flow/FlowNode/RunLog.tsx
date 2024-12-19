@@ -72,14 +72,13 @@ export default function RunLog({ node, children }) {
             const { nodeId, action, data } = e.detail
             if (nodeId !== node.id && nodeId !== '*') return
 
-            if (Object.keys(data).length) {
+            if (data && Object.keys(data).length) {
                 let result = {};
                 let hasKeys = []
 
-                // 遍历 b 中的 group_params
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
-                        if (data[param.key]) {
+                        if (data[param.key] !== undefined) {
                             result[param.label] = data[param.key];
                             hasKeys.push(param.key)
                         }

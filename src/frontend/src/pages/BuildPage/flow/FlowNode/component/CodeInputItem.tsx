@@ -5,7 +5,7 @@ import { ChevronDown, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import SelectVar from "./SelectVar";
 
-const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem }) => {
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType, label: '', value: '' });
     };
@@ -32,7 +32,7 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
     return (
         <div className="flex gap-1 items-center mb-1">
             {/* key */}
-            <Input value={item.key} onChange={handleKeyChange} className={`${error && 'border-red-500'} h-8`} />
+            <Input value={item.key} placeholder="参数名" onChange={handleKeyChange} className={`${(error || sameKey === item.key) && 'border-red-500'} h-8`} />
             {/* type */}
 
             <Select value={item.type} onValueChange={handleTypeChange}>
@@ -51,12 +51,12 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
                 onUpdateItem(index, { ...item, label: v.label, value: `${E.id}.${v.value}` })
             }}>
                 <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
-                    <span className="flex items-center">
+                    {item.label ? <span className="flex items-center">
                         {item.label}
-                    </span>
+                    </span> : <span className="bisheng-label">值</span>}
                     <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                 </div>
-            </SelectVar> : <Input value={item.value} onChange={handleValueChange} className="h-8" />}
+            </SelectVar> : <Input value={item.value} placeholder="值" onChange={handleValueChange} className="h-8" />}
             <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
     );
@@ -86,6 +86,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
     };
 
     const [error, setError] = useState(false)
+    const [sameKey, setSameKey] = useState('')
     useEffect(() => {
         data.required && onValidate(() => {
             setError(false)
@@ -94,6 +95,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
             }, 100);
 
             let msg = ''
+            const map = {}
             items.some(item => {
                 if (item.key === '') {
                     msg = '变量名称不能为空'
@@ -104,6 +106,13 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
                 } else if (item.key.length > 50) {
                     msg = '变量名称不能超过 50 个字符'
                     return true
+                } else if (map[item.key]) {
+                    msg = '变量名称不能重复'
+                    setSameKey(item.key)
+                    return true
+                } else {
+                    map[item.key] = true
+                    setSameKey('-')
                 }
             })
             return msg || false
@@ -117,6 +126,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
             {items.map((item, index) => (
                 <Item
                     key={index}
+                    sameKey={sameKey}
                     validate={error}
                     nodeId={nodeId}
                     item={item}
@@ -131,4 +141,3 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
         </div>
     );
 }
-
