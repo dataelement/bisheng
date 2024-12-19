@@ -3,6 +3,6 @@ FROM dataelement/bisheng-backend:base.v1
 COPY ./ ./
 
 RUN poetry config virtualenvs.create false
-RUN poetry install --no-interaction --no-ansi --without dev
+RUN poetry update --without dev
 
 CMD ["sh entrypoint.sh"]
