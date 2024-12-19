@@ -1,11 +1,12 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { ArrowLeft } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
 import KnowledgeModle from "./tabs/KnowledgeModel";
-import { useMemo } from "react";
+import WorkflowModel from "./tabs/WorkflowModel";
 
 export default function SystemModelConfig({ data, onBack }) {
     const { t } = useTranslation('model')
@@ -49,6 +50,7 @@ export default function SystemModelConfig({ data, onBack }) {
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
                         <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
+                        <TabsTrigger value="workflow" className="w-[150px]">工作流模型</TabsTrigger>
                     </TabsList>
                     <TabsContent value="knowledge">
                         <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></KnowledgeModle>
@@ -58,6 +60,9 @@ export default function SystemModelConfig({ data, onBack }) {
                     </TabsContent>
                     <TabsContent value="evaluation">
                         <EvaluationModel llmOptions={llmOptions} onBack={onBack}></EvaluationModel>
+                    </TabsContent>
+                    <TabsContent value="workflow">
+                        <WorkflowModel llmOptions={llmOptions} onBack={onBack}></WorkflowModel>
                     </TabsContent>
                 </Tabs>
             </div>

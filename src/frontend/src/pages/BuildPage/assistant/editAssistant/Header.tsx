@@ -3,6 +3,7 @@ import { AssistantIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
+import { OnlineState } from "@/types/flow";
 import { ChevronLeft, SquarePen } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +16,7 @@ export default function Header({ onSave, onLine, onTabChange }) {
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
+    console.log('assistantState :>> ', assistantState);
     {/* 编辑助手 */ }
     const [editShow, setEditShow] = useState(false);
 
@@ -67,7 +69,7 @@ export default function Header({ onSave, onLine, onTabChange }) {
         </div>
         <div className="flex gap-4">
             <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>
-            <Button type="submit" className="px-10" onClick={onLine}>{t('build.online')}</Button>
+            <Button type="submit" className="px-10" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>{assistantState.status === OnlineState.OnLine ? '下线' : t('build.online')}</Button>
         </div>
     </div>
 };

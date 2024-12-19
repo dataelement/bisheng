@@ -16,6 +16,47 @@ import { generateUUID } from "../../utils";
 import HomePage from "./components/ChatHome";
 import ChatPanne from "./components/ChatPanne";
 
+const ChatItem = ({ chat, chatId, location, handleSelectChat, handleDeleteChat }) => {
+
+    return (
+        <div
+            key={chat.chat_id}
+            className={`group item w-full rounded-lg mt-2 p-4 relative hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${location
+                ? 'bg-[#f9f9fc] dark:bg-[#212122]'
+                : (chatId === chat.chat_id
+                    ? 'bg-[#EDEFF6] dark:bg-[#34353A]'
+                    : 'bg-[#f9f9fc] dark:bg-[#212122]')}`}
+            onClick={() => handleSelectChat(chat)}
+        >
+            <div className="flex place-items-center space-x-3">
+                <div className="inline-block bg-purple-500 rounded-md">
+                    <TitleLogo
+                        url={chat.logo}
+                        id={chat.flow_id}
+                    >
+                        {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
+                    </TitleLogo>
+                </div>
+                <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
+            </div>
+            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">
+                {chat.latest_message?.message || ''}
+            </span>
+            <div className="mt-6">
+                <span className="text-gray-400 text-xs absolute bottom-2 left-4">
+                    {formatStrTime(chat.update_time, 'MM 月 dd 日')}
+                </span>
+                <Trash2
+                    size={14}
+                    className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block"
+                    onClick={(e) => handleDeleteChat(e, chat.chat_id)}
+                />
+            </div>
+        </div>
+    );
+};
+
+
 export default function SkillChatPage() {
     const { t } = useTranslation()
     const [selectChat, setSelelctChat] = useState<any>({
@@ -95,30 +136,14 @@ export default function SkillChatPage() {
             <div ref={chatsRef} className="scroll h-full overflow-y-scroll no-scrollbar p-2 pt-14">
                 {
                     chatList.map((chat, i) => (
-                        <div key={chat.chat_id}
-                            className={`group item w-full rounded-lg mt-2 p-4 relative  hover:bg-[#EDEFF6] cursor-pointer dark:hover:bg-[#34353A] ${location
-                                ? 'bg-[#f9f9fc] dark:bg-[#212122]'
-                                : (chatId === chat.chat_id
-                                    ? 'bg-[#EDEFF6] dark:bg-[#34353A]'
-                                    : 'bg-[#f9f9fc] dark:bg-[#212122]')}`}
-                            onClick={() => handleSelectChat(chat)}>
-                            <div className="flex place-items-center space-x-3">
-                                <div className=" inline-block bg-purple-500 rounded-md">
-                                    <TitleLogo
-                                        url={chat.logo}
-                                        id={chat.flow_id}
-                                    >
-                                        {chat.flow_type === 'assistant' ? <AssistantIcon /> : <SkillIcon />}
-                                    </TitleLogo>
-                                </div>
-                                <p className="truncate text-sm font-bold leading-6">{chat.flow_name}</p>
-                            </div>
-                            <span className="block text-xs text-gray-600 dark:text-[#8D8D8E] mt-3 break-words truncate">{chat.latest_message?.message || ''}</span>
-                            <div className="mt-6">
-                                <span className="text-gray-400 text-xs absolute bottom-2 left-4">{formatStrTime(chat.update_time, 'MM 月 dd 日')}</span>
-                                <Trash2 size={14} className="absolute bottom-2 right-2 text-gray-400 hidden group-hover:block" onClick={(e) => handleDeleteChat(e, chat.chat_id)}></Trash2>
-                            </div>
-                        </div>
+                        <ChatItem
+                            key={chat.chat_id}
+                            chat={chat}
+                            chatId={chatId}
+                            location={location}
+                            handleSelectChat={handleSelectChat}
+                            handleDeleteChat={handleDeleteChat}
+                        />
                     ))
                 }
                 <LoadMore onScrollLoad={onScrollLoad} />

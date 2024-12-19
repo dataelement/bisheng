@@ -31,7 +31,11 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             setOptions(llmOptions)
             // return { llmOptions, embeddings }
         })
+
+        // TODO更新默认值
+        // !data.value && onChange(60)
     }, [])
+
 
     const defaultValue = useMemo(() => {
         if (!options.length) return ''

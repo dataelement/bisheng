@@ -457,8 +457,8 @@ export const getChatsApi = (page) => {
         if (isJsonSerializable(message)) {
           const json = JSON.parse(message);
           if (Array.isArray(json)) return message
-          const chatKey = Object.keys(json)[0]
-          return json[chatKey] || message
+          const chatKey = el.flow_type === 'workflow' ? 'msg' : Object.keys(json)[0]
+          return json[chatKey] || ''
         }
         return message;
       }())

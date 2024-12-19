@@ -5,6 +5,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import ActionButton from "@/components/bs-ui/button/actionButton";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import TextInput from "@/components/bs-ui/input/textInput";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
@@ -16,23 +17,25 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
 import { findParallelNodes } from "@/util/flowUtils";
-import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, Shield, ShieldCheck, TicketCheck } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { isEqual } from "lodash-es";
+import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { unstable_useBlocker as useBlocker, useNavigate } from "react-router-dom";
 import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
 
-const Header = ({ flow, onTabChange }) => {
+const Header = ({ flow, onTabChange, preFlow }) => {
     const { message } = useToast()
     const testRef = useRef(null)
     const updateAppModalRef = useRef(null)
     const { uploadFlow } = useFlowStore()
     const { t } = useTranslation()
     const navigate = useNavigate()
-    console.log('flow :>> ', flow);
+    const [modelVersionId, setModelVersionId] = useState(0)
+    // console.log('flow :>> ', flow);
 
     const validateNodes = useNodeEvent(flow)
     const addNotification = useFlowStore((state) => state.addNotification);
@@ -70,22 +73,37 @@ const Header = ({ flow, onTabChange }) => {
         }
 
         // api请求
+        // TODO 指定版本上线
         const res = await captureAndAlertRequestErrorHoc(onlineWorkflow(flow, 2))
         if (res) {
             message({
                 variant: 'success',
-                description: "上线成功"
+                description: `${version?.name} 已上线`
             })
+            window.history.length > 1 ? window.history.back() : navigate('/build/apps')
         }
+    }
+    const handleOfflineClick = () => {
+        message({
+            variant: 'success',
+            description: `${version?.name} 已下线`
+        })
     }
 
     const handleSaveClick = async () => {
 
-        if (isOnlineVersion()) return message({
-            title: '提示',
-            description: '工作流已上线不可编辑，您可以另存为新版本进行保存',
-            variant: 'warning'
-        })
+        if (isOnlineVersionFun()) {
+            hasChanged ? message({
+                title: '提示',
+                description: '当前版本已上线，请先下线或另存为新版本',
+                variant: 'warning'
+            }) : message({
+                title: '提示',
+                description: '工作流已上线不可编辑，您可以另存为新版本进行保存',
+                variant: 'warning'
+            })
+            return !hasChanged
+        }
         // temp
         // localStorage.setItem('flow_tmp', JSON.stringify(flow))
         const res = await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
@@ -99,8 +117,9 @@ const Header = ({ flow, onTabChange }) => {
         }))
         res && message({
             variant: 'success',
-            description: "保存成功"
+            description: "更改已保存"
         })
+        return res
     }
 
     const handleExportClick = () => {
@@ -127,8 +146,8 @@ const Header = ({ flow, onTabChange }) => {
     }
     // versions
     const [loading, setLoading] = useState(false)
-    const { flow: f, setFlow } = useFlowStore()
-    const { versions, version, lastVersionIndexRef, isOnlineVersion, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
+    const { flow: f, setFlow, setFitView } = useFlowStore()
+    const { versions, version, lastVersionIndexRef, isOnlineVersion, isOnlineVersionFun, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
@@ -145,6 +164,7 @@ const Header = ({ flow, onTabChange }) => {
             description: ""
         })
         setLoading(false)
+        setFitView()
     }
     const [saveVersionId, setVersionId] = useState('')
     useEffect(() => {
@@ -172,6 +192,13 @@ const Header = ({ flow, onTabChange }) => {
 
     const [tabType, setTabType] = useState('edit')
     const [open, setOpen] = useState(false)
+
+    const [blocker, hasChanged] = useBeforeUnload(flow, preFlow)
+    // 离开并保存
+    const handleSaveAndClose = async () => {
+        const res = await handleSaveClick()
+        res ? blocker.proceed?.() : blocker.reset?.()
+    }
     return (
         <header className="flex justify-between items-center p-4 py-2 bisheng-bg border-b">
             {
@@ -210,7 +237,7 @@ const Header = ({ flow, onTabChange }) => {
                     </div>
                 </div>
             </div>
-            {/* <div>
+            <div>
                 <Button variant="secondary" className={`${tabType === 'edit' ? 'bg-[#fff] hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => { setTabType('edit'); onTabChange('edit') }}
                 >
@@ -220,7 +247,7 @@ const Header = ({ flow, onTabChange }) => {
                     onClick={() => { setTabType('api'); onTabChange('api') }}>
                     对外发布
                 </Button>
-            </div> */}
+            </div>
             {/* Right Section with Options */}
             <div className="flex items-center gap-3">
                 <Notification />
@@ -232,8 +259,7 @@ const Header = ({ flow, onTabChange }) => {
                     保存
                 </Button>
                 {
-                    // version && <ActionButton
-                    false && <ActionButton
+                    version && <ActionButton
                         size="sm"
                         className="px-6 flex gap-2 bg-[#fff]"
                         iconClassName="bg-[#fff]"
@@ -250,7 +276,13 @@ const Header = ({ flow, onTabChange }) => {
                         dropDown={(
                             <div className=" overflow-y-auto max-h-96 max-h">
                                 <RadioGroup value={version.id + ''} onValueChange={(vid) => {
-                                    updateVersion(version.id, { name: version.name, description: '', data: flow.data })
+                                    if (isOnlineVersionFun() && hasChanged) return setModelVersionId(vid)
+                                    const { edges, nodes, viewport } = flow
+                                    updateVersion(version.id, {
+                                        name: version.name, description: '', data: {
+                                            edges, nodes, viewport
+                                        }
+                                    })
                                     handleChangeVersion(vid)
                                 }} className="gap-0">
                                     {versions.map((vers, index) => (
@@ -284,9 +316,11 @@ const Header = ({ flow, onTabChange }) => {
                         )}
                     >{t('skills.saveVersion')}</ActionButton>
                 }
-                <Button size="sm" className="h-8 px-6" onClick={handleOnlineClick}>
+                {isOnlineVersion ? <Button size="sm" className="h-8 px-6" onClick={handleOfflineClick}>
+                    下线
+                </Button> : <Button size="sm" className="h-8 px-6" onClick={handleOnlineClick}>
                     上线
-                </Button>
+                </Button>}
                 <Popover open={open} onOpenChange={setOpen}>
                     <PopoverTrigger asChild >
                         <Button size="icon" variant="outline" className="bg-[#fff] size-8">
@@ -312,6 +346,45 @@ const Header = ({ flow, onTabChange }) => {
                 setFlow({ ...f, ...base })
                 onlineWorkflow(f)
             }} />
+            {/* 上线不可修改提示 */}
+            <Dialog open={!!modelVersionId}>
+                <DialogContent className="sm:max-w-[425px]" close={false}>
+                    <DialogHeader>
+                        <DialogTitle>提示</DialogTitle>
+                        <DialogDescription>当前版本已上线不可修改，可另存为新版本保存修改的内容</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="mt-4">
+                        <Button className="h-8" onClick={() => {
+                            handleSaveNewVersion()
+                            setModelVersionId(0)
+                        }}>另存为新版本</Button>
+                        <Button className="leave h-8" variant="destructive" onClick={() => {
+                            handleChangeVersion(modelVersionId)
+                            setModelVersionId(0)
+                        }}>不保存,直接切换</Button>
+                        <Button className="h-8" variant="outline" onClick={() => setModelVersionId(0)}>取消</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 离开并保存提示 */}
+            <Dialog open={blocker.state === "blocked"}>
+                <DialogContent className="sm:max-w-[425px]" close={false}>
+                    <DialogHeader>
+                        <DialogTitle>提示</DialogTitle>
+                        <DialogDescription>您有未保存的更改，确定要离开吗？</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button className="leave h-8" onClick={handleSaveAndClose}>保存</Button>
+                        <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>不保存</Button>
+                        <Button className="h-8" variant="outline" onClick={() => {
+                            const dom = document.getElementById("flow-page") as HTMLElement;
+                            blocker.reset?.()
+                            if (dom) dom.className = dom.className.replace('report-hidden', '');
+                        }}>取消</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </header>
     );
 };
@@ -365,7 +438,9 @@ const useNodeEvent = (flow) => {
          */
         const branchLines: { branch: string, nodeIds: { branch: string, nodeId: string }[], end: boolean }[] = []
         const nodeMap = {}
-        const startNodeId = flow.edges.find(node => node.source.indexOf('start') === 0).source
+        const startEdge = flow.edges.find(node => node.source.indexOf('start') === 0)
+        if (!startEdge) return ['请先链接开始节点']
+        const startNodeId = startEdge.source
         const findEdgesByNodeId = (id) => {
             return flow.edges.filter(node => node.source === id)
         }
@@ -428,7 +503,7 @@ const useNodeEvent = (flow) => {
                 []
                 // ...outputParallelNids.length > 1 ? outputParallelNids.map(node => node.nodeId) : []
             ])
-            return ['不支持多个 input 节点（输入型交互）并行执行']
+            return ['不支持多个 input 节点并行执行']
         }
 
         // 开始到结束流程是否完整
@@ -525,7 +600,8 @@ const useVersion = (flow) => {
     return {
         versions,
         version,
-        isOnlineVersion: () => version.id === onlineVid,
+        isOnlineVersion: version?.id === onlineVid,
+        isOnlineVersionFun: () => version.id === onlineVid,
         lastVersionIndexRef,
         setCurrentVersion(versionId) {
             const currentV = versions.find(el => el.id === versionId)
@@ -538,5 +614,33 @@ const useVersion = (flow) => {
     }
 }
 
+
+// 离开页面保存提示
+const useBeforeUnload = (flow, preFlow) => {
+    const { t } = useTranslation()
+
+    // 离开提示保存
+    useEffect(() => {
+        const fun = (e) => {
+            var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
+            return confirmationMessage;
+        }
+        window.addEventListener('beforeunload', fun);
+        return () => { window.removeEventListener('beforeunload', fun) }
+    }, [])
+
+    const hasChanged = useMemo(() => {
+        if (!flow) return false
+        const oldFlowData = JSON.parse(preFlow)
+        if (!oldFlowData) return true
+        // 比较新旧
+        const { edges, nodes } = flow
+        const { edges: oldEdges, nodes: oldNodes } = oldFlowData
+        return !(isEqual(edges, oldEdges) && isEqual(nodes, oldNodes))
+    }, [preFlow, flow.nodes, flow.edges])
+
+    return [useBlocker(hasChanged), hasChanged] as const;
+}
 
 export default Header;

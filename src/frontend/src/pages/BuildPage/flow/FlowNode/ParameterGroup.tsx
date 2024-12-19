@@ -1,9 +1,10 @@
 import { WorkflowNode } from "@/types/flow";
 import Parameter from "./Parameter";
 
-export default function ParameterGroup({ nodeId, cate, tab, onOutPutChange, onStatusChange, onVarEvent }
+export default function ParameterGroup({ nodeId, node, cate, tab, onOutPutChange, onStatusChange, onVarEvent }
     : {
         nodeId: string,
+        node: WorkflowNode,
         cate: WorkflowNode['group_params'][number],
         tab: string,
         onOutPutChange: (key: string, value: any) => void
@@ -17,6 +18,7 @@ export default function ParameterGroup({ nodeId, cate, tab, onOutPutChange, onSt
         {cate.name && <p className='mt-2 mb-3 text-sm font-bold'>{cate.name}</p>}
         {cate.params.map(item => tab === item.tab || !item.tab ? <Parameter
             nodeId={nodeId}
+            node={node}
             key={item.key}
             item={item}
             onOutPutChange={onOutPutChange}

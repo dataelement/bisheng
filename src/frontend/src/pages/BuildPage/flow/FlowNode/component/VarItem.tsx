@@ -4,7 +4,7 @@ import { ChevronUp } from "lucide-react";
 import { useState } from "react";
 
 export default function VarItem({ data }) {
-    const [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(true)
 
     if (Array.isArray(data.value) && data.value.length > 0) return <div className="mb-2">
         <div className="flex justify-between items-center">

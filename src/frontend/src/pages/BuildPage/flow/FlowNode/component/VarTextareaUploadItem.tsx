@@ -20,7 +20,7 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
     const [error, setError] = useState(false)
     useEffect(() => {
         data.required && onValidate(() => {
-            if (!data.value?.msg) {
+            if (!data.value?.msg && data.value?.files.length === 0) {
                 setError(true)
                 return data.label + '不可为空'
             }
@@ -32,7 +32,10 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
 
     return (
         <div className='node-item mb-4 nodrag' data-key={data.key}>
-            <Label className='bisheng-label'>{data.label}</Label>
+            <Label className='bisheng-label'>
+                {data.required && <span className="text-red-500">*</span>}
+                {data.label}
+            </Label>
             <VarInput
                 error={error}
                 placeholder={data.placeholder}
@@ -89,7 +92,7 @@ export const useFileUpload = (_files, onFilesChange) => {
     const handleFileUpload = () => {
         const input = document.createElement("input");
         input.type = "file";
-        input.accept = "image/*"; // Restrict to images
+        input.accept = "image/*,application/pdf"; // Restrict to images
         input.style.display = "none";
         input.multiple = false;
 

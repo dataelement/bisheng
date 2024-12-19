@@ -7,6 +7,7 @@ import { Handle, Position } from "@xyflow/react";
 import { ChevronDown, RefreshCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import SelectVar from "./SelectVar";
+import { CustomHandle } from "..";
 
 interface Item {
     id: string;  // UUID 类型的字符串
@@ -111,7 +112,7 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
     );
 };
 
-export default function ConditionItem({ nodeId, data, onChange, onValidate }) {
+export default function ConditionItem({ nodeId, node, data, onChange, onValidate }) {
     const [value, setValue] = useState([]);
 
     const handleAddCondition = () => {
@@ -235,25 +236,13 @@ export default function ConditionItem({ nodeId, data, onChange, onValidate }) {
                 <Button onClick={() => handleAddItem(val.id)} variant="outline" className="border-primary text-primary mt-2 h-8">
                     + 添加条件
                 </Button>
-                <Handle
-                    id={val.id}
-                    type="source"
-                    position={Position.Right}
-                    className='bisheng-flow-handle group'
-                    style={{ top: 20, right: -30 }}
-                ><span></span></Handle>
+                <CustomHandle id={val.id} node={node} className="top-[20px] -right-[30px]" />
             </div>)
         }
 
         <div className="relative">
             <p className='mt-2 mb-3 text-sm font-bold'>否则</p>
-            <Handle
-                id='right_handle'
-                type="source"
-                position={Position.Right}
-                className='bisheng-flow-handle group'
-                style={{ top: 12, right: -30 }}
-            ><span></span></Handle>
+            <CustomHandle node={node} className="top-[12px] -right-[30px]" />
         </div>
         <Button onClick={handleAddCondition} variant="outline" className="border-primary text-primary mt-2 h-8">
             + 添加分支

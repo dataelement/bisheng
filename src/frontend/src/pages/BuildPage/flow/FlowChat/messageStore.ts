@@ -170,7 +170,6 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         })
     },
     async loadHistoryMsg(flowid, chatId, { lastMsg }) {
-        console.log('1234 :>> ', 1234);
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
         const hisMessages = msgs.reverse()

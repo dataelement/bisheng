@@ -99,7 +99,7 @@ export default function DragOptions({ edges = false, scroll = false, options, on
     };
 
     return (
-        <div className={`${scroll && 'nowheel overflow-y-auto max-h-96'} mt-2`}>
+        <div className={`${scroll && 'nowheel overflow-y-auto max-h-80'} mt-2`}>
             <DragDropContext onDragEnd={handleDragEnd} usePortal>
                 <Droppable droppableId="options-list">
                     {(provided) => (

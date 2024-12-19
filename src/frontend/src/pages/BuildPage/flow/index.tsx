@@ -1,5 +1,6 @@
 import { getFlowApi } from "@/controllers/API/flow";
-import { useEffect } from "react";
+import { cloneDeep } from "lodash-es";
+import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import Panne from "./Panne";
 import useFlowStore from "./flowStore";
@@ -15,16 +16,6 @@ export default function FlowPage() {
     //         getFlowApi(id).then(_flow => setFlow('flow_init', _flow))
     //     }
     // }, [])
-
-    // const [copyFlow, preFlow] = useMemo(() => {
-    //     if (flow?.id === id) {
-    //         const copyFlow = cloneDeep(flow)
-    //         return [copyFlow, JSON.stringify(copyFlow?.data || null)] as const
-    //     }
-    //     return []
-    // }, [flow, id])
-    // const { user } = useContext(userContext);
-
 
     const { flow, setFlow } = useFlowStore()
 
@@ -52,18 +43,20 @@ export default function FlowPage() {
                 version_list: []
             })
         })
-        // const str = localStorage.getItem('flow_tmp')
-        // let f = str ? JSON.parse(str) : flow
-        // if ('workflow_test' === user.user_name) {
-        //     f = test
-        // }
-        // setFlow(f)
-        // return f
         return () => setFlow(null)
     }, [])
+
+    const [copyFlow, preFlow] = useMemo(() => {
+        if (flow?.id === id) {
+            const copyFlow = cloneDeep(flow)
+            return [copyFlow, JSON.stringify(copyFlow || null)] as const
+        }
+        return []
+    }, [flow, id])
+
     return (
         <div className="flow-page-positioning">
-            {flow && <Panne flow={flow} />}
+            {flow && <Panne flow={copyFlow} preFlow={preFlow} />}
         </div>
     );
 }

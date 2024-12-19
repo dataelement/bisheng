@@ -65,20 +65,25 @@ export default function editAssistant() {
     }
 
     // 上线助手
-    const handleOnline = async () => {
+    const handleOnline = async (online) => {
         if (!handleCheck()) return
-        await handleSave()
-        await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
-            if (res === false) return
-            message({
-                title: t('prompt'),
-                variant: 'success',
-                description: t('skills.onlineSuccessful')
+        if (online) {
+            await handleSave()
+            await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
+                if (res === false) return
+                message({
+                    title: t('prompt'),
+                    variant: 'success',
+                    description: t('skills.onlineSuccessful')
+                })
             })
-        })
-        setTimeout(() => {
-            navigate('/build')
-        }, 1200);
+            setTimeout(() => {
+                navigate('/build')
+            }, 1200);
+        } else {
+            // TODO 下线接口
+            // 更新 assistantState.status = 1
+        }
     }
 
     // 校验助手数据

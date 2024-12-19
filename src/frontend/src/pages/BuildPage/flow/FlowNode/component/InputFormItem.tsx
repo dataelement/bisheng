@@ -187,6 +187,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 <div>
                     <Label className="bisheng-label">选项</Label>
                     <DragOptions
+                        scroll
                         options={formData.options}
                         onChange={updateOptions}
                     />

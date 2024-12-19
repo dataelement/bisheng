@@ -107,7 +107,7 @@ ${t('build.exampleTwo')}
                 return '';
             case 'desc':
                 if (AppType.ASSISTANT === appType && value.length < 20) return '为了更好的助手效果，描述需要大于20 个字';
-                if (AppType.FLOW === appType && value.length > 200) return '工作流描述不可超过 200 字';
+                // if (AppType.FLOW === appType && value.length > 200) return '工作流描述不可超过 200 字';
                 return '';
             default:
                 return '';
@@ -223,14 +223,13 @@ ${t('build.exampleTwo')}
                     <div className="mb-6">
                         <label htmlFor="desc" className="bisheng-label">
                             {appType === AppType.ASSISTANT ? '你希望助手的角色是什么，具体完成什么任务？' : '描述'}
-                            <span className="bisheng-tip">*</span>
                         </label>
                         <Textarea
                             id="desc"
                             name="desc"
                             placeholder={appType === AppType.ASSISTANT ? t('build.forExample') : '输入工作流描述'}
                             maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
-                            className="mt-3 min-h-32"
+                            className="mt-3 h-12 min-h-12 pt-3"
                             value={formData.desc}
                             onChange={handleChange}
                         />
@@ -238,7 +237,7 @@ ${t('build.exampleTwo')}
                     </div>
                 </div>
                 {/* 工作流安全审查 */}
-                {false && appConfig.isPro && <Accordion type="multiple" className="w-full">
+                {appConfig.isPro && <Accordion type="multiple" className="w-full">
                     <AssistantSetting id={'xxx'} type={3} />
                 </Accordion>}
                 <DialogFooter>
@@ -247,7 +246,7 @@ ${t('build.exampleTwo')}
                             {t('cancel')}
                         </Button>
                     </DialogClose>
-                    <Button disabled={!formData.name || !formData.desc || loading} type="submit" className="px-11" onClick={handleSubmit}>
+                    <Button disabled={!formData.name || loading} type="submit" className="px-11" onClick={handleSubmit}>
                         {loading && <LoadIcon className="mr-2" />}
                         {t(isEditMode ? '保存' : '创建')}
                     </Button>

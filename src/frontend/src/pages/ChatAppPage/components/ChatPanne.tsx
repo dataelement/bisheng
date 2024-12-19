@@ -31,7 +31,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore() // TODO del
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore() 
     const { loadHistoryMsg: loadFlowHistoryMsg } = useFlowMessageStore()
     
     useEffect(() => {
@@ -72,7 +72,6 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 lastMsg: '本轮会话已结束'
             }).then(res =>
             {
-                console.log('1234 :>> ', 1234);
                 setAutoRun(!res.length)
             }
                 // setAutoRun()

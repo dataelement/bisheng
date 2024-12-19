@@ -1,9 +1,12 @@
 import { LoadingIcon } from '@/components/bs-icons/loading';
+import { Card, CardContent } from '@/components/bs-ui/card';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
+import { cname } from '@/components/bs-ui/utils';
 import { WorkflowNode } from '@/types/flow';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Sidebar from '../Sidebar';
 import EditText from './EditText';
 import NodeLogo from './NodeLogo';
 import NodeTabs from './NodeTabs';
@@ -11,7 +14,92 @@ import NodeToolbarComponent from './NodeToolbarComponent';
 import ParameterGroup from './ParameterGroup';
 import RunLog from './RunLog';
 import { RunTest } from './RunTest';
-import { cname } from '@/components/bs-ui/utils';
+
+export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
+    const [openLeft, setOpenLeft] = useState(false);
+    const [openRight, setOpenRight] = useState(false);
+    const posRef = useRef({ x: 0, y: 0 });
+
+    useEffect(() => {
+        const handleAddLine = () => {
+            setOpenLeft(false);
+            setOpenRight(false);
+        };
+
+        window.addEventListener("closeHandleMenu", handleAddLine);
+        return () => {
+            window.removeEventListener("closeHandleMenu", handleAddLine);
+        };
+    }, []);
+
+    const handleOptionClick = (newNode) => {
+        const addNodeEvent = new CustomEvent("addNodeByHandle", {
+            detail: {
+                id,
+                targetNode: node,
+                newNode: newNode,
+                isLeft: isLeft,
+                position: posRef.current
+            }
+        });
+        window.dispatchEvent(addNodeEvent);
+    };
+
+    if (isLeft) {
+        return <div className={cname('absolute top-[58px] -left-[16px]', className)}>
+            <Handle
+                id={id || "left_handle"}
+                type="target"
+                position={Position.Left}
+                className='bisheng-flow-handle group'
+                onClick={(e) => {
+                    posRef.current = { x: e.clientX, y: e.clientY }
+                    setOpenLeft(true)
+                }}
+            ><span></span></Handle>
+            {
+                openLeft && <Card
+                    className="absolute top-4 translate-x-[-50%] bg-transparent hover:shadow-none hover:border-transparent"
+                    style={{ zIndex: 1001 }}
+                >
+                    <CardContent className="min-w-56 pointer-events-auto px-0">
+                        <Sidebar
+                            dropdown
+                            disabledNodes={['end']}
+                            onClick={handleOptionClick}
+                        ></Sidebar>
+                    </CardContent>
+                </Card>
+            }
+        </div>
+    }
+
+    return <div className={cname('absolute top-[58px] right-[-16px]', className)}>
+        <Handle
+            id={id || "right_handle"}
+            type="source"
+            position={Position.Right}
+            className='bisheng-flow-handle group'
+            onClick={(e) => {
+                posRef.current = { x: e.clientX, y: e.clientY }
+                setOpenRight(true)
+            }}
+        ><span></span></Handle>
+        {
+            openRight && <Card
+                className="absolute top-4 translate-x-[-50%] bg-transparent hover:shadow-none hover:border-transparent"
+                style={{ zIndex: 1001 }}
+            >
+                <CardContent className="min-w-56 pointer-events-auto px-0">
+                    <Sidebar
+                        dropdown
+                        onClick={handleOptionClick}
+                    ></Sidebar>
+                </CardContent>
+            </Card>
+        }
+    </div>
+}
 
 function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNode, selected: boolean, isConnectable: boolean }) {
     const [focusUpdate, setFocusUpdate] = useState(false)
@@ -47,7 +135,6 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             })
         })
         setFocusUpdate(!focusUpdate) // render
-        console.log('node :>> ', key, value, node);
     }
 
     const { paramValidateEntities, varValidateEntities, validateParams } = useEventMaster(node)
@@ -63,7 +150,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         runRef.current.run(node)
     }
 
-    const [expend, setExpend] = useState(false)
+    const [expend, setExpend] = useState(!!node.expand)
     const nodeError = useBorderColor(node)
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
@@ -109,9 +196,12 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                             </EditText>
                         </div>
                         {!['output', 'condition', 'end'].includes(node.type) && <ChevronDown
-                            className={`absolute right-0 bisheng-label cursor-pointer ${expend && 'rotate-180'}`}
+                            className={`absolute right-0 bisheng-label cursor-pointer ${!expend && 'rotate-180'}`}
                             size={14}
-                            onClick={() => setExpend(!expend)}
+                            onClick={() => {
+                                setExpend(!expend)
+                                node.expand = !expend
+                            }}
                         />}
                     </div>
                     <EditText
@@ -129,18 +219,29 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 </div>
                 {/* body */}
                 <div className='-nowheel bg-[#F7F8FB] pb-5 rounded-b-[20px]'>
-                    <div className={expend ? `h-0 overflow-hidden` : ''}>
+                    <div className={expend || ['output', 'condition', 'end'].includes(node.type) ? `` : 'h-0 overflow-hidden'}>
                         {node.tab && <NodeTabs
                             data={node.tab}
                             onChange={(val) => {
                                 setCurrentTab(val)
                                 node.tab.value = val
+                                // 特殊逻辑
+                                handleChangeOutPut('output', [])
+                                node.group_params.some(group => {
+                                    return group.params.some(param => {
+                                        if (param.key === "batch_variable") {
+                                            param.value = []
+                                            return true
+                                        }
+                                    })
+                                })
                             }} />}
                         {node.group_params.map(group =>
                             <ParameterGroup
                                 nodeId={node.id}
                                 key={group.name}
                                 tab={currentTab}
+                                node={node}
                                 cate={group}
                                 onOutPutChange={handleChangeOutPut}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
@@ -150,20 +251,12 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     </div>
                 </div>
                 {/* footer */}
-                {node.type !== 'start' && <Handle
-                    id="left_handle"
-                    type="target"
-                    position={Position.Left}
-                    className='bisheng-flow-handle group'
-                    style={{ top: 58, left: -16 }}
-                ><span></span></Handle>}
-                {!['condition', 'output', 'end'].includes(node.type) && <Handle
-                    id="right_handle"
-                    type="source"
-                    position={Position.Right}
-                    className='bisheng-flow-handle group'
-                    style={{ top: 58, right: -16 }}
-                ><span></span></Handle>}
+                {
+                    node.type !== 'start' && <CustomHandle isLeft node={node} />
+                }
+                {
+                    !['condition', 'output', 'end'].includes(node.type) && <CustomHandle node={node} />
+                }
             </div>
 
             <RunTest ref={runRef} />

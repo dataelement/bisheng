@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function Chat({
     stop = false,
@@ -17,11 +18,13 @@ export default function Chat({
 }) {
     const [loading, setLoading] = useState(autoRun)
 
-    return <div className="relative h-full bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
-        <ChatMessages logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
-        <ChatInput autoRun={autoRun} clear={clear} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onLoad={() => setLoading(false)} ></ChatInput>
+    return <div className="h-full bs-chat-bg px-4" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+        <div className="relative h-full">
+            <ChatMessages logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
+            <ChatInput autoRun={autoRun} clear={clear} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onLoad={() => setLoading(false)} ></ChatInput>
+        </div>
         {loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
-            <img className="w-[138px]" src="/application-start-logo.png" alt="" />
+            <LoadingIcon className="size-24" />
         </div>}
     </div>
 };

@@ -1,4 +1,6 @@
 import { Node } from "@xyflow/react";
+import { cloneDeep } from "lodash-es";
+import { useEffect, useRef, useState } from "react";
 
 // 节点名称自动命名
 export function autoNodeName(nodes: Node[], name: string): string {
@@ -15,7 +17,7 @@ export function autoNodeName(nodes: Node[], name: string): string {
     return newName;
 }
 
-// 节点初始化,node中的变量动态替换id
+// 在节点初始化时，将node中的模板变量替换为界面中对应的变量key
 export function initNode(node) {
     const { id } = node;
 
@@ -104,7 +106,7 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
             })
         ) : false
     )
-    return res ? '' : `${nodeName}节点错误：${varNameCn}不存在`
+    return res ? '' : `${nodeName}节点错误：${varNameCn}已失效，可能是相关节点已被删除或替换，请重新引用变量。`
 }
 
 
@@ -168,3 +170,55 @@ export function findParallelNodes(a, b) {
     return [...new Set(result)];
 }
 
+/**
+ * 复制粘贴节点
+ * @param dom 事件绑定 dom
+ * @param lastSelection 被复制对象
+ * @param paste 粘贴时间回调，参数（克隆的lastSelection，鼠标当前坐标）
+ * @param deps 依赖
+ */
+export function useCopyPasteNode(dom, lastSelection, paste, del, deps) {
+    const position = useRef({ x: 0, y: 0 });
+    const [lastCopiedSelection, setLastCopiedSelection] = useState(null);
+
+    useEffect(() => {
+        if (!dom) return
+        const onKeyDown = (event: KeyboardEvent) => {
+            console.log('event.target :>> ', event.target);
+            if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) return // 排除输入框内复制粘贴
+            if (
+                event.target instanceof HTMLInputElement ||
+                (event.target instanceof HTMLElement && event.target.isContentEditable)
+            ) return
+
+            if (
+                (event.ctrlKey || event.metaKey) &&
+                event.key === "c" &&
+                lastSelection
+            ) {
+                event.preventDefault();
+                setLastCopiedSelection(cloneDeep(lastSelection));
+            } else if (
+                (event.ctrlKey || event.metaKey) &&
+                event.key === "v" &&
+                lastCopiedSelection
+            ) {
+                event.preventDefault();
+                paste(lastCopiedSelection, position.current)
+            } else if (event.key === 'Delete' && lastSelection) {
+                del(lastSelection)
+            }
+        };
+        const handleMouseMove = (event) => {
+            position.current = { x: event.clientX, y: event.clientY };
+        };
+
+        dom.addEventListener("keydown", onKeyDown);
+        dom.addEventListener("mousemove", handleMouseMove);
+
+        return () => {
+            dom?.removeEventListener("keydown", onKeyDown);
+            dom?.removeEventListener("mousemove", handleMouseMove);
+        };
+    }, [dom, lastSelection, lastCopiedSelection, ...deps]);
+}

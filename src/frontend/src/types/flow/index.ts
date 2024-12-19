@@ -1,6 +1,11 @@
 import { Edge, Node, ReactFlowJsonObject, Viewport, XYPosition } from "@xyflow/react";
 import { APIClassType } from "../api/index";
 
+export const enum OnlineState {
+  OffLine = 1,
+  OnLine = 2
+}
+
 /** 流程 */
 export type FlowState = {
   edges: {

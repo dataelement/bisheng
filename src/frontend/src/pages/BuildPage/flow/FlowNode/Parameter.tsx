@@ -1,4 +1,4 @@
-import { WorkflowNodeParam } from "@/types/flow";
+import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
 import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";
 import CodePythonItem from "./component/CodePythonItem";
@@ -23,9 +23,10 @@ import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 
 // 节点表单项
-export default function Parameter({ nodeId, item, onOutPutChange, onStatusChange, onVarEvent }
+export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onVarEvent }
     : {
         nodeId: string,
+        node: WorkflowNode,
         item: WorkflowNodeParam,
         onOutPutChange: (key: string, value: any) => void
         onStatusChange: (key: string, obj: any) => void
@@ -65,7 +66,7 @@ export default function Parameter({ nodeId, item, onOutPutChange, onStatusChange
         case 'var_textarea_file':
             return <VarTextareaUploadItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'output_form':
-            return <OutputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <OutputItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
         case 'bisheng_model':
             return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
         case 'agent_model':
@@ -77,9 +78,20 @@ export default function Parameter({ nodeId, item, onOutPutChange, onStatusChange
         case 'switch':
             return <SwitchItem data={item} onChange={handleOnNewValue} />;
         case 'var_select':
-            return <VarSelectSingleItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <VarSelectSingleItem
+                nodeId={nodeId}
+                data={item}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
+                onVarEvent={bindVarValidate} />;
         case 'user_question':
-            return <VarSelectItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onOutPutChange={onOutPutChange} onValidate={bindValidate} />;
+            return <VarSelectItem
+                nodeId={nodeId}
+                data={item}
+                onChange={handleOnNewValue}
+                onOutPutChange={onOutPutChange}
+                onValidate={bindValidate}
+                onVarEvent={bindVarValidate} />;
         case 'knowledge_select_multi':
             return <KnowledgeSelectItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'qa_select_multi':
@@ -95,7 +107,7 @@ export default function Parameter({ nodeId, item, onOutPutChange, onStatusChange
         case 'add_tool':
             return <ToolItem data={item} onChange={handleOnNewValue} />;
         case 'condition':
-            return <ConditionItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <ConditionItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'report':
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'sql_config':

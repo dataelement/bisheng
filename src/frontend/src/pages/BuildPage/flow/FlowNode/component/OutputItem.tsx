@@ -3,11 +3,11 @@ import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
+import { CustomHandle } from "..";
 import DragOptions from "./DragOptions";
 import VarInput from "./VarInput";
-import { Handle, Position } from "@xyflow/react";
 
-const OutputItem = ({ nodeId, data, onChange, onValidate }) => {
+const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
     const [interactionType, setInteractionType] = useState<string>(data.value.type || "none"); // 交互类型状态
     const options = useMemo(() => {
         return data.options.map(el => ({
@@ -65,7 +65,7 @@ const OutputItem = ({ nodeId, data, onChange, onValidate }) => {
             return false
         })
 
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value, interactionType])
 
     return (
@@ -98,13 +98,7 @@ const OutputItem = ({ nodeId, data, onChange, onValidate }) => {
             <div className="interaction-content mt-4 nodrag">
                 {renderContent()}
                 {error && <div className="text-red-500 text-sm mt-2">选项不可为空</div>}
-                {interactionType !== 'choose' && <Handle
-                    id="right_handle"
-                    type="source"
-                    position={Position.Right}
-                    className='bisheng-flow-handle group'
-                    style={{ top: 58, right: -16 }}
-                ><span></span></Handle>}
+                {interactionType !== 'choose' && <CustomHandle node={node} />}
             </div>
         </div>
     );

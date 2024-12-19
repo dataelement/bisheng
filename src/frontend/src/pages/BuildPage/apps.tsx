@@ -82,7 +82,7 @@ export default function apps() {
             }))
         } else if (data.flow_type === 5) {
             return captureAndAlertRequestErrorHoc(changeAssistantStatusApi(data.id, checked ? 2 : 1)).then(res => {
-                if (res) {
+                if (res === null) {
                     refreshData((item) => item.id === data.id, { status: checked ? 2 : 1 })
                 }
                 return res
@@ -216,7 +216,13 @@ export default function apps() {
                                     user={item.user_name}
                                     currentUser={user}
                                     onClick={() => handleSetting(item)}
-                                    onSwitchClick={() => !item.write && item.status !== 2 && message({ title: t('prompt'), description: t('skills.contactAdmin'), variant: 'warning' })}
+                                    onSwitchClick={() => {
+                                        !item.write && item.status !== 2 && message({
+                                            title: t('prompt'),
+                                            description: `您没有权限上线此${typeCnNames[item.flow_type]}，请联系管理员上线。`,
+                                            variant: 'warning'
+                                        })
+                                    }}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
@@ -237,7 +243,7 @@ export default function apps() {
                                         </LabelShow>
                                     }
                                     footer={
-                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === 1 && 'bg-gray-950'} ${item.flow_type === 5 && 'bg-blue-500'}`}>
+                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === 1 && 'bg-gray-950'} ${item.flow_type === 5 && 'bg-[#fdb136]'}`}>
                                             {typeCnNames[item.flow_type]}
                                         </Badge>
                                     }

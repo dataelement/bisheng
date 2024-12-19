@@ -67,7 +67,6 @@ export default function Templates() {
             desc: `是否确认删除该${labelName}模板？`,
             okTxt: t('delete'),
             onOk(next) {
-                // TODO 三类模板删除
                 captureAndAlertRequestErrorHoc(deleteTempApi(id).then((res) => {
                     onChange(res)
                     setTemps(temps.filter((temp, i) => index !== i));

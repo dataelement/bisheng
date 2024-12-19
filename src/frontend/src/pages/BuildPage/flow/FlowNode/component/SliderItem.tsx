@@ -41,11 +41,11 @@ export const SwitchSliderItem = ({ data, onChange }) => {
                 {data.label}
                 {data.help && <QuestionTooltip content={data.help} />}
             </Label>
-            <Switch checked={value.flag} onCheckedChange={(v) => {
+            {/* <Switch checked={value.flag} onCheckedChange={(v) => {
                 const newValue = { ...value, flag: v }
                 setValue(newValue)
                 onChange(newValue)
-            }} />
+            }} /> */}
         </div>
         <div className="flex gap-4 mt-2">
             <Slider

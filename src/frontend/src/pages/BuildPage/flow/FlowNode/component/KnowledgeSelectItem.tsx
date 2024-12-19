@@ -56,7 +56,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
                     if (param.key === 'form_input') {
                         param.value.forEach(val => {
                             val.type === 'file' && files.push({
-                                label: val.value,
+                                label: val.key,
                                 value: `${node.id}.${val.key}`
                             })
                         })

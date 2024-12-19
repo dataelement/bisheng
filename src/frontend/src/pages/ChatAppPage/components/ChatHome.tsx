@@ -119,7 +119,7 @@ export default function HomePage({ onSelect }) {
                             type="sheet"
                             icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
                             footer={
-                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 'flow' && 'bg-gray-950'} ${flow.flow_type === 'assistant' && 'bg-blue-600'}`}>
+                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 'flow' && 'bg-gray-950'} ${flow.flow_type === 'assistant' && 'bg-[#fdb136]'}`}>
                                     {typeCnNames[flow.flow_type]}
                                 </Badge>
                             }

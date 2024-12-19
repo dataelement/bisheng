@@ -57,6 +57,19 @@ export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     return await axios.patch(`/api/v1/workflow/update/${flow.id}`, data);
 }
 
+/**
+ * 单节点运行
+ * 
+ */
+export const runWorkflowNodeApi = async (node_input, data): Promise<any> => {
+    return await axios.post(`/api/v1/workflow/run_once`, {
+        node_input, node_data: {
+            id: data.id,
+            data,
+        }
+    });
+}
+
 
 /**
  * 工作流节点模板
@@ -385,7 +398,7 @@ const workflowTemplate = [
                         ],
                         "step": 1,
                         "value": {
-                            "flag": false,
+                            "flag": true,
                             "value": 50
                         },
                         "help": "是否携带历史对话记录。"
@@ -442,7 +455,7 @@ const workflowTemplate = [
                         "label": "将输出结果展示在会话中",
                         "type": "switch",
                         "help": "一般在问答等场景开启，文档审核、报告生成等场景可关闭。",
-                        "value": false
+                        "value": true
                     },
                     {
                         "key": "output",
@@ -535,6 +548,7 @@ const workflowTemplate = [
                         "label": "检索范围",
                         "global": "self=system_prompt,user_prompt",
                         "type": "knowledge_select_multi",
+                        "placeholder": "请选择知识库",
                         "value": {
                             "type": "knowledge",
                             "value": []

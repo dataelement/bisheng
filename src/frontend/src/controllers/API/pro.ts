@@ -56,6 +56,7 @@ export const saveGroupApi = async (data: any): Promise<any> => {
         adminUserId: admin_user_id,
         groupName: group_name,
         assistant,
+        workFlows,
         skill } = data;
     // const {resourceId, groupId, resourceLimit} = assistant
 
@@ -66,7 +67,8 @@ export const saveGroupApi = async (data: any): Promise<any> => {
         admin_user_id,
         group_name,
         assistant,
-        skill
+        skill,
+        workFlows
     });
 };
 

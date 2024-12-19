@@ -20,7 +20,7 @@ export default function ToolItem({ data, onChange }) {
                         <TitleIconBg id={tool.id} className="h-6 w-6">
                             <ToolIcon />
                         </TitleIconBg>
-                        <p className="text-sm">{tool.name}</p>
+                        <p className="text-sm truncate w-60">{tool.name}</p>
                     </div>
                     <CircleMinus
                         className="w-4 h-4 hidden text-primary group-hover:block"

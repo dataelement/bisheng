@@ -1,6 +1,6 @@
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
 import { cname } from "@/components/bs-ui/utils";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
@@ -14,12 +14,16 @@ const isMatch = (obj, expression) => {
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
  */
-const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className = '' }, ref) => {
+const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], children, onSelect, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
 
+    const inputOpenRef = useRef(false)
     useImperativeHandle(ref, () => ({
-        open() { setOpen(true) }
+        open(inputOpen) {
+            inputOpenRef.current = !!inputOpen
+            setOpen(true)
+        }
     }));
 
     const getNodeDataByTemp = (temp) => {
@@ -134,7 +138,10 @@ const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className =
     }, [open])
 
     return <Select open={open} onOpenChange={setOpen}>
-        <SelectTrigger showIcon={false} className={cname('group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
+        <SelectTrigger
+            onClick={() => inputOpenRef.current = false}
+            showIcon={false}
+            className={cname('group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
         <SelectContent position="popper" avoidCollisions={false}>
@@ -160,25 +167,27 @@ const SelectVar = forwardRef(({ nodeId, itemKey, children, onSelect, className =
                             className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                             onClick={() => {
                                 if (v.param) return
-                                onSelect(currentMenuRef.current, v)
-                                setOpen(false)
+                                onSelect(currentMenuRef.current, v, inputOpenRef.current)
+                                !multip && setOpen(false)
                             }}
-                            onMouseEnter={() => v.param && handleShowQuestions(v.param)}>
+                            onMouseEnter={() => v.param ? handleShowQuestions(v.param) : setQuestions([])}>
                             <span className="w-28 overflow-hidden text-ellipsis">{v.label}</span>
                             {v.param && <ChevronRight className="size-4" />}
+                            {value.includes(`${currentMenuRef.current.id}.${v.value}`) && <Check size={14} />}
                         </div>
                     )}
                 </div>}
                 {
-                    !!questions.length && <div className="w-36 border-l first:border-none">
+                    !!questions.length && <div className="w-44 border-l first:border-none">
                         {questions.map(q =>
                             <div
                                 className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                                 onClick={() => {
-                                    onSelect(currentMenuRef.current, q)
-                                    setOpen(false)
+                                    onSelect(currentMenuRef.current, q, inputOpenRef.current)
+                                    !multip && setOpen(false)
                                 }}>
-                                <span className="w-28 overflow-hidden text-ellipsis">{q.label}</span>
+                                <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
+                                {value.includes(`${currentMenuRef.current.id}.${q.value}`) && <Check size={14} />}
                             </div>
                         )}
                     </div>

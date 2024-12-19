@@ -11,11 +11,10 @@ import { useMemo, useState } from "react";
 import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
 
-export default function Sidebar({ dropdown = false, onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
+export default function Sidebar({ dropdown = false, disabledNodes = [], onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
     const { data: tempData, refetch } = useQuery({
         queryKey: "QueryWorkFlowTempKey",
-        queryFn: () => getWorkflowNodeTemplate(),
-        cacheTime: 0
+        queryFn: () => getWorkflowNodeTemplate()
     });
 
     const getNodeDataByTemp = (temp) => {
@@ -30,16 +29,19 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
     const nodeTemps = useMemo(() => {
         if (!tempData) return []
         return tempData.reduce((list, temp) => {
+            if (disabledNodes.includes(temp.type)) return list
             const newNode = getNodeDataByTemp(temp)
             temp.type === 'start' ? onInitStartNode(cloneDeep(temp)) : list.push(newNode)
             return list
         }, [])
-    }, [tempData])
+    }, [tempData, disabledNodes])
+
 
     // tool
     const { data: toolTempData } = useQuery({
         queryKey: "QueryToolsKey",
-        queryFn: () => getAssistantToolsApi('all')
+        queryFn: () => getAssistantToolsApi('all'),
+        cacheTime: 0
     });
 
     const toolTemps = useMemo(() => {
@@ -112,7 +114,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                                     )[0]
                                                 );
                                             }}
-                                            onClick={() => dropdown && onClick(item.type)}
+                                            onClick={() => dropdown && onClick({ type: item.type, node: tempData.find(tmp => tmp.type === item.type) })}
                                         >
                                             {item.icon}
                                             <span className="text-sm">{item.name}</span>
@@ -159,7 +161,15 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                                                     )[0]
                                                                 );
                                                             }}
-                                                        // onClick={() => dropdown && onClick(el.type)}
+                                                            onClick={() => {
+                                                                if (!dropdown) return
+                                                                let node = null
+                                                                toolTemps.some((temp) => {
+                                                                    node = temp.children.find(node => node.tool_key === el.tool_key)
+                                                                    return node
+                                                                })
+                                                                onClick({ type: el.type, node })
+                                                            }}
                                                         >
                                                             <NodeLogo type="tool" colorStr={el.name} />
                                                             <span className="text-sm truncate">{el.name}</span>

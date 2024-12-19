@@ -12,7 +12,7 @@ import { DialogClose } from "@/components/bs-ui/dialog"
 export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
     const { t } = useTranslation()
 
-    const { docx, loading, createDocx, importDocx } = useReport(versionKey, onChange)
+    const { docx, loading, pageLoading, createDocx, importDocx } = useReport(versionKey, onChange)
 
     // inset var
     const iframeRef = useRef(null)
@@ -27,6 +27,10 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
             data: value
         }), '*');
     }
+
+    if (pageLoading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-primary/20">
+        <LoadingIcon />
+    </div>
 
     // new
     if (!docx.path) return <div className="relative size-full">
@@ -74,6 +78,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
 
 const useReport = (versionKey, onchange) => {
     const [loading, setLoading] = useState(false)
+    const [pageLoading, setPageLoading] = useState(true)
 
     const [docx, setDocx] = useState({
         key: '',
@@ -82,6 +87,7 @@ const useReport = (versionKey, onchange) => {
 
     useEffect(() => {
         getWorkflowReportTemplate(versionKey).then(res => {
+            setPageLoading(false)
             setDocx({
                 key: res.version_key,
                 path: res.url
@@ -93,7 +99,7 @@ const useReport = (versionKey, onchange) => {
 
     const handleCreate = async () => {
         // setDocx(docx => ({ ...docx, path: 'http://192.168.106.120:3002/empty.docx' }))
-        setDocx(doc => ({...docx, path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx'}))// 文档服务能访问到的文件地址
+        setDocx(doc => ({ ...docx, path: location.origin + __APP_ENV__.BASE_URL + '/empty.docx' }))// 文档服务能访问到的文件地址
     }
 
     const handleImport = () => {
@@ -121,6 +127,7 @@ const useReport = (versionKey, onchange) => {
 
     return {
         loading,
+        pageLoading,
         docx,
         createDocx: handleCreate,
         importDocx: handleImport

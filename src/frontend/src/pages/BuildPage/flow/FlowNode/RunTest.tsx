@@ -4,6 +4,8 @@ import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { runWorkflowNodeApi } from "@/controllers/API/workflow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { WorkflowNode } from "@/types/flow";
 import { copyText } from "@/utils";
 import { Copy, CopyCheck } from "lucide-react";
@@ -27,7 +29,6 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
         } else {
             return value
         }
-        return value
     })
     const handleCopy = (e) => {
         e.stopPropagation()
@@ -44,7 +45,7 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
             <p>{title}</p>
             {copyed ? <CopyCheck size={14} /> : <Copy size={14} className="cursor-pointer" onClick={handleCopy} />}
         </div>
-        <textarea defaultValue={text} disabled className="w-full p-2 block text-muted-foreground " />
+        <textarea defaultValue={text} disabled className="w-full min-h-28 p-2 block text-muted-foreground " />
     </div>
 }
 
@@ -99,24 +100,19 @@ export const RunTest = forwardRef((props, ref) => {
             }
         })
         setLoading(true)
-
-        console.log('给后端什么 :>> ', node, inputs);
-        console.log('结果展示 :>> ');
-        setResults([
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出1', text: '输出1' },
-            { title: '输出2', text: '输出2' }
-        ])
-
-        setTimeout(() => {
-            setLoading(false)
-        }, 2000);
+        captureAndAlertRequestErrorHoc(
+            runWorkflowNodeApi(
+                inputs.reduce((result, input) => {
+                    result[`${node.id}.${input.key}`] = input.value;
+                    return result;
+                }, {}),
+                node
+            ).then(res => {
+                const result = Object.keys(res).map(key => ({ title: key, text: res[key] }))
+                setResults(result)
+                setLoading(false)
+            })
+        );
     }
 
     return (
@@ -156,7 +152,7 @@ export const RunTest = forwardRef((props, ref) => {
 
                     <Button className="w-full mb-2" disabled={loading} onClick={handleRunClick}>运行</Button>
                     {results.length !== 0 && <p className='mt-2 mb-3 text-sm font-bold'>运行结果</p>}
-                    {results.map(res => <ResultText key={res.title} title={res.title} text={res.text} />)}
+                    {results.map(res => <ResultText key={res.text} title={res.title} value={res.text} />)}
                 </div>
                 <SheetFooter>
                     <SheetClose asChild>

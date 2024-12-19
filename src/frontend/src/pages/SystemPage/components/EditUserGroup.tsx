@@ -81,9 +81,12 @@ function FlowRadio({ limit, onChange }) {
 
 function FlowControl({ groupId, type, onChange }) {
     const { t } = useTranslation()
-    const { name, label, placeholder } = type === 3
-        ? { name: t('build.assistantName'), label: t('system.AssistantFlowCtrl'), placeholder: t('system.assistantName') }
-        : { name: t('skills.skillName'), label: t('system.SkillFlowCtrl'), placeholder: t('skills.skillName') }
+    const map = {
+        3: { name: t('build.assistantName'), label: t('system.AssistantFlowCtrl'), placeholder: t('system.assistantName') },
+        2: { name: t('skills.skillName'), label: t('system.SkillFlowCtrl'), placeholder: t('skills.skillName') },
+        5: { name: '工作流名称', label: '工作流流量控制', placeholder: '工作流名称' },
+    }
+    const { name, label, placeholder } = map[type]
     const { page, pageSize, data, total, setPage, search, refreshData } = useTable({ pageSize: 10 }, (params) =>
         getGroupFlowsApi(params.page, params.pageSize, type, groupId, params.keyword)
     )
@@ -167,7 +170,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         adminUser: '',
         groupLimit: 0,
         assistant: [],
-        skill: []
+        skill: [],
+        workFlows: []
     })
     /**
      * 用户
@@ -255,6 +259,13 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
                     groupId={data.id}
                     type={2}
                     onChange={(vals) => setForm({ ...form, skill: vals })}
+                ></FlowControl>
+            </div>
+            <div className="mt-12 mb-20">
+                <FlowControl
+                    groupId={data.id}
+                    type={5}
+                    onChange={(vals) => setForm({ ...form, workFlows: vals })}
                 ></FlowControl>
             </div>
         </>}

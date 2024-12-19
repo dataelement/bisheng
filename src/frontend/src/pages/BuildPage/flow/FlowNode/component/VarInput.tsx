@@ -1,3 +1,4 @@
+import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { isVarInFlow } from "@/util/flowUtils";
@@ -5,23 +6,34 @@ import { UploadCloud, Variable } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
-import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 
+function encodeHTMLEntities(text) {
+    const textarea = document.createElement("textarea");
+    textarea.textContent = text;
+    return textarea.innerHTML;
+}
+
+function decodeHTMLEntities(text) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, "text/html");
+    return doc.documentElement.textContent;
+}
 // 解析富文本内容为保存格式
 function parseToValue(input, flowNode) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = input.replace(
         /<span[^>]*?>(.*?)<\/span>/g, // 匹配所有 <span> 标签
         (match, content) => {
+            const _content = decodeHTMLEntities(content);
             // 在对象中查找匹配的 key
-            const key = Object.keys(flowNode.varZh).find((k) => flowNode.varZh[k] === content);
+            const key = Object.keys(flowNode.varZh).find((k) => flowNode.varZh[k] === _content);
             return key ? `{{#${key}#}}` : content; // 如果找到 key，返回 key，否则保持原内容
         }
     );
 
     // 遍历子节点，将 <br> 转换为 \n，同时处理文本内容
     const traverseNodes = (node) => {
-        let result = '';
+        let result = tempDiv !== node && node.nodeName === 'DIV' ? '\n' : '';
         node.childNodes.forEach((child) => {
             if (child.nodeName === 'BR') {
                 result += '\n'; // 换行符
@@ -54,7 +66,6 @@ export default function VarInput({
     const selectVarRef = useRef(null);
 
     const { flow } = useFlowStore();
-
     // 校验变量是否可用
     const validateVarAvailble = () => {
         const value = valueRef.current;
@@ -77,7 +88,7 @@ export default function VarInput({
 
     function parseToHTML(input, validate = false) {
         let error = '';
-        const html = input
+        const html = encodeHTMLEntities(input)
             .replace(/{{#(.*?)#}}/g, (a, part) => {
                 if (validate) {
                     error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]);
@@ -96,7 +107,7 @@ export default function VarInput({
     }, []);
 
     // 在光标位置插入内容
-    function handleInsertVariable(item, _var) {
+    function handleInsertVariable(item, _var, inputOpen) {
         handleFocus();
 
         const selection = window.getSelection();
@@ -114,16 +125,24 @@ export default function VarInput({
         // 文本框内容
         const key = `${item.id}.${_var.value}`;
         const label = `${item.name}/${_var.label}`;
+
         if (flowNode.varZh) {
+            const existingProp = Object.keys(flowNode.varZh).find(prop => flowNode.varZh[prop] === label);
+            if (existingProp) delete flowNode.varZh[existingProp];
             flowNode.varZh[key] = label;
         } else {
-            flowNode.varZh = {
-                [key]: label,
-            };
+            flowNode.varZh = { [key]: label };
         }
 
         const html = `<span class="textarea-badge" contentEditable="false">${label}</span>`;
         const fragment = range.createContextualFragment(html);
+
+        if (inputOpen) {
+            // 删除光标前一个字符{
+            const r = selection.getRangeAt(0);
+            r.setStart(r.endContainer, r.endOffset - 1);
+            range.deleteContents();
+        }
 
         const lastChild = fragment.lastChild; // 提前保存引用
         if (lastChild) {
@@ -182,11 +201,24 @@ export default function VarInput({
                 onKeyDown={(e) => {
                     // 唤起插入变量
                     if (e.key === '{') {
-                        selectVarRef.current.open();
-                        e.preventDefault();
+                        requestAnimationFrame(() => {
+                            selectVarRef.current.open(true);
+                        });
+                        e.stopPropagation()
+                    }
+                    if (e.key === 'Backspace') {
+                        // del hook
+                        const selection = window.getSelection();
+                        const range = selection.getRangeAt(0);
+                        const node = range.startContainer;
+                        if (textareaRef.current === node) {
+                            range.setStart(range.endContainer, range.endOffset - 1);
+                            range.deleteContents();
+                            e.preventDefault();  // 阻止默认行为
+                        }
                     }
                 }}
-                className="nowheel bisheng-richtext px-3 py-2 whitespace-pre-line min-h-[80px] max-h-64 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className="nowheel bisheng-richtext px-3 py-2 cursor-text whitespace-pre-line min-h-[80px] max-h-64 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             ></div>
             {children}
             <div

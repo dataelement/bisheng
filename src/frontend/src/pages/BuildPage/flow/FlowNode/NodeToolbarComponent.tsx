@@ -22,9 +22,9 @@ export default function NodeToolbarComponent({ nodeId, type, onRun }) {
 
     return <div className="rounded-xl shadow-sm p-1 bg-gradient-to-r from-gray-50 to-[#fff] border">
         {
-            // ["agent", "tool", "llm", "rag", "qa_retriever", "code"].includes(type) && <Tip content="运行此节点" side="top">
-            //     <Button size="icon" variant="ghost" className="size-8" onClick={onRun}><Play size={16} /></Button>
-            // </Tip>
+            ["agent", "tool", "llm", "rag", "qa_retriever", "code"].includes(type) && <Tip content="运行此节点" side="top">
+                <Button size="icon" variant="ghost" className="size-8" onClick={onRun}><Play size={16} /></Button>
+            </Tip>
         }
         <Tip content="复制" side="top">
             <Button

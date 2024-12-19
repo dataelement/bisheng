@@ -1,6 +1,7 @@
+import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
-import { autoNodeName, initNode } from "@/util/flowUtils";
+import { autoNodeName, initNode, useCopyPasteNode } from "@/util/flowUtils";
 import { useUndoRedo } from "@/util/hook";
 import { Background, BackgroundVariant, Connection, Controls, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
@@ -16,7 +17,7 @@ import useFlowStore from "./flowStore";
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
 // 流程编排面板
-export default function Panne({ flow }: { flow: WorkFlow }) {
+export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: string }) {
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     // 导入自适应布局
     const fitView = useFlowStore(state => state.fitView)
@@ -34,15 +35,11 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
         }
     }, [])
 
-    const { reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        setNodes, onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, flow)
+    const { takeSnapshot } = useUndoRedo()
 
-    useUndoRedo(nodes,
-        (data) => {
-            console.log('undo :>> ', data);
-        }, (data) => {
-            console.log('redo :>> ', data);
-        })
+    const { reactFlowWrapper, nodes, edges, keyBoardPanneRef,
+        setNodes, onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, flow, takeSnapshot)
+
     /**
      * 监听节点变化，更新flow数据
      * 用户手动修改节点，或者使用reactFlow实例的setNode、setEdge都会触发
@@ -70,9 +67,26 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
         }
     };
 
+    const onNodeDragStart = useCallback(() => {
+        // 👇 make dragging a node undoable
+        takeSnapshot();
+        // 👉 you can place your event handlers here
+    }, [takeSnapshot]);
+
+    const onSelectionDragStart = useCallback(() => {
+        // 👇 make dragging a selection undoable
+        takeSnapshot();
+    }, [takeSnapshot]);
+
+    const onEdgesDelete = useCallback(() => {
+        // 👇 make deleting edges undoable
+        takeSnapshot();
+    }, [takeSnapshot]);
+
     const [showApiPage, setShowApiPage] = useState(false)
+
     return <div className="flex flex-col h-full overflow-hidden">
-        <Header flow={flow} onTabChange={(type) => setShowApiPage('api' === type)}></Header>
+        <Header flow={flow} onTabChange={(type) => setShowApiPage('api' === type)} preFlow={preFlow}></Header>
         <div className={`flex-1 min-h-0 overflow-hidden ${showApiPage ? 'hidden' : ''} relative`}>
             <Sidebar onInitStartNode={node => {
                 // start node
@@ -95,14 +109,17 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                             onEdgesChange={onEdgesChange} // rebuild?
                             onConnect={onConnect}
                             nodeTypes={nodeTypes}
-                            onPaneClick={() => { setDropdownOpenEdgeId(null) }}
+                            onPaneClick={() => {
+                                setDropdownOpenEdgeId(null);
+                                window.dispatchEvent(new CustomEvent("closeHandleMenu"));
+                            }}
                             edgeTypes={{
                                 customEdge: (edgeProps) => (
                                     <CustomEdge
                                         {...edgeProps}
                                         isDropdownOpen={dropdownOpenEdgeId === edgeProps.id}
                                         onButtonClick={handleButtonClick}
-                                        onOptionSelect={() => { onEdgeSelect(); setDropdownOpenEdgeId(null) }}
+                                        onOptionSelect={(data) => { onEdgeSelect(data); setDropdownOpenEdgeId(null) }}
                                     />
                                 ),
                             }}
@@ -118,17 +135,17 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
                                 // 阻止start节点删除
                                 !e.nodes.some(node => node.data.type === 'start')
                             }
+                            onEdgesDelete={onEdgesDelete}
+                            onNodeDragStart={onNodeDragStart} // 快照
+                            onSelectionDragStart={onSelectionDragStart} // 快照
+                            onNodesDelete={() => takeSnapshot(flow)} // 更新setEdges
                             // 自定义线组件
                             // connectionLineComponent={ConnectionLineComponent} 
                             // 校验连线合法性
                             // onReconnect={onEdgeUpdate} 
                             // onReconnectStart={onEdgeUpdateStart}
                             // onReconnectEnd={onEdgeUpdateEnd}
-                            // onEdgesDelete={onEdgesDelete}
 
-                            // onNodesDelete={onDelete} // 更新setEdges
-                            // onNodeDragStart={onNodeDragStart} // 快照
-                            // onSelectionDragStart={onSelectionDragStart} // 快照
                             // 框选 (group)
                             // onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}
                             // onSelectionEnd={() => setSelectionEnded(true)}
@@ -147,14 +164,13 @@ export default function Panne({ flow }: { flow: WorkFlow }) {
             </main>
         </div>
         <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? '' : 'hidden'}`}>
-            {/* <ApiMainPage type={'flow'} /> */}
-            come sun~
+            <ApiMainPage type={'flow'} />
         </div>
     </div>
 };
 
 
-const useFlow = (_reactFlowInstance, data) => {
+const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
 
     const reactFlowWrapper = useRef(null);
 
@@ -173,7 +189,7 @@ const useFlow = (_reactFlowInstance, data) => {
     }, [data, _reactFlowInstance, setEdges, setNodes, setViewport]);
 
     // 绑定快捷键
-    const { keyBoardPanneRef, setLastSelection } = useKeyBoard(reactFlowWrapper, setNodes)
+    const { keyBoardPanneRef, setLastSelection } = useKeyBoard(_reactFlowInstance, reactFlowWrapper, setNodes, setEdges)
 
     const onNodesChange = useCallback(
         (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
@@ -185,7 +201,7 @@ const useFlow = (_reactFlowInstance, data) => {
     );
     const onConnect = useCallback(
         (params: Connection) => {
-            console.log('conect :>> ', params);
+            takeSnapshot()
             setEdges((eds) => {
                 return addEdge(
                     {
@@ -200,7 +216,7 @@ const useFlow = (_reactFlowInstance, data) => {
             });
             setNodes((x) => cloneDeep(x));
         },
-        [setEdges, setNodes]
+        [setEdges, setNodes, takeSnapshot]
     );
 
     // 拖拽结束样式
@@ -216,8 +232,9 @@ const useFlow = (_reactFlowInstance, data) => {
         (event: React.DragEvent) => {
             event.preventDefault();
             if (event.dataTransfer.types.some((t) => t === "flownodedata")) {
+                takeSnapshot();
                 const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
-                let data: { type: string; node?: WorkflowNode } = JSON.parse(
+                let flowdata: { type: string; node?: WorkflowNode } = JSON.parse(
                     event.dataTransfer.getData("flownodedata")
                 );
 
@@ -225,14 +242,13 @@ const useFlow = (_reactFlowInstance, data) => {
                     x: event.clientX - reactflowBounds.left,
                     y: event.clientY - reactflowBounds.top,
                 });
-                console.log('object :>> ', position, data);
 
-                const nodeId = `${data.node.type}_${generateUUID(5)}`
-                data.node.id = nodeId
+                const nodeId = `${flowdata.node.type}_${generateUUID(5)}`
+                flowdata.node.id = nodeId
                 // 增加节点
                 setNodes((nds) => {
-                    const newName = autoNodeName(nds, data.node.name)
-                    const newNode = initNode(data.node)
+                    const newName = autoNodeName(nds, flowdata.node.name)
+                    const newNode = initNode(flowdata.node)
                     newNode.name = newName
                     return nds.concat({ id: nodeId, type: 'flowNode', position, data: newNode })
                 });
@@ -243,19 +259,38 @@ const useFlow = (_reactFlowInstance, data) => {
             }
         },
         // Specify dependencies for useCallback
-        [setNodes, _reactFlowInstance]
+        [setNodes, _reactFlowInstance, takeSnapshot]
     );
 
-    const onEdgeSelect = useCallback(() => {
-        const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
-        const position = _reactFlowInstance.screenToFlowPosition({
-            x: 1 - reactflowBounds.left,
-            y: 2 - reactflowBounds.top,
+    const onEdgeSelect = (obj) => {
+        takeSnapshot()
+        const { node, edgeId, position } = obj
+        let flowdata: { type: string; node: WorkflowNode } = cloneDeep(node)
+        const nodeId = `${flowdata.node.type}_${generateUUID(5)}`
+        flowdata.node.id = nodeId
+        // 增加节点
+        setNodes((nds) => {
+            const newName = autoNodeName(nds, flowdata.node.name)
+            const newNode = initNode(flowdata.node)
+            newNode.name = newName
+            return nds.concat({
+                id: nodeId, type: 'flowNode', position: {
+                    x: position.x - 160,
+                    y: position.y - 100,
+                }, data: newNode
+            })
         });
-        // setNodes((nds) => nds.concat(
-        //     { id: 'c', type: 'flowNode', position, data: { value: 'Node B' } }
-        // ));
-    }, [setNodes, _reactFlowInstance])
+        // 增加边
+        setEdges((eds) => {
+            const edge = eds.find(el => el.id === edgeId)
+            const leftEdge = { ...edge, selected: false, target: nodeId, id: `xy-edge__${edge.source}${edge.sourceHandle}-${nodeId}${edge.targetHandle}` }
+            const rightEdge = { ...edge, selected: false, source: nodeId, sourceHandle: "right_handle", id: `xy-edge__${nodeId}right_handle-${edge.target}${edge.targetHandle}` }
+
+            return eds
+                .filter(el => el.id !== edgeId)
+                .concat(leftEdge, rightEdge);
+        })
+    }
 
     // 监听来自自定义节点的Chang value
     useEffect(() => {
@@ -271,6 +306,7 @@ const useFlow = (_reactFlowInstance, data) => {
         };
         // del node
         const handleNodeDelete = (event) => {
+            takeSnapshot()
             const nodeId = event.detail;
             setNodes((nodes) => nodes.filter((n) => n.id !== nodeId));
             setEdges((edges) => edges.filter((ns) => ns.source !== nodeId && ns.target !== nodeId));
@@ -308,11 +344,61 @@ const useFlow = (_reactFlowInstance, data) => {
                 return nds.map((e) => ({ ...e, selected: false })).concat(_newNodes)
             });
         }
+        // add node by handle
+        const handleAddNode = (event) => {
+            takeSnapshot()
+            const { id, targetNode, isLeft, position } = event.detail;
+            const newNode = cloneDeep(event.detail.newNode)
+            window.dispatchEvent(new CustomEvent("closeHandleMenu"));
+
+            const nodeId = `${newNode.type}_${generateUUID(5)}`
+            newNode.node.id = nodeId
+            const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
+            const pos = _reactFlowInstance.screenToFlowPosition({
+                x: position.x - reactflowBounds.left + (isLeft ? -300 : 80),
+                y: position.y - reactflowBounds.top,
+            });
+            // 增加节点
+            setNodes((nds) => {
+                const newName = autoNodeName(nds, newNode.node.name)
+                const _newNode = initNode(newNode.node)
+                _newNode.name = newName
+                return nds.concat({
+                    id: nodeId, type: 'flowNode', position: pos, data: _newNode
+                })
+            });
+
+            // let data: { type: string; node: WorkflowNode } = node
+            // data.node.id = nodeId
+            // // 增加边
+            const edge = isLeft ? {
+                animated: true,
+                id: `xy-edge__${nodeId}right_handle-${targetNode.id}left_handle`,
+                source: nodeId,
+                sourceHandle: "right_handle",
+                target: targetNode.id,
+                targetHandle: "left_handle",
+                type: "customEdge"
+            } : {
+                animated: true,
+                id: `xy-edge__${targetNode.id}${id || 'right_handle'}-${nodeId}left_handle`,
+                source: targetNode.id,
+                sourceHandle: id || "right_handle",
+                target: nodeId,
+                targetHandle: "left_handle",
+                type: "customEdge"
+            }
+            setEdges((eds) => [
+                edge,
+                ...eds
+            ]);
+        }
 
         // 监听自定义事件
         window.addEventListener('nodeUpdate', handleNodeUpdate);
         window.addEventListener('nodeDelete', handleNodeDelete);
         window.addEventListener('nodeCopy', handleCopy);
+        window.addEventListener('addNodeByHandle', handleAddNode);
 
 
         // 在组件卸载时移除事件监听
@@ -320,6 +406,7 @@ const useFlow = (_reactFlowInstance, data) => {
             window.removeEventListener('nodeUpdate', handleNodeUpdate);
             window.addEventListener('nodeDelete', handleNodeDelete);
             window.removeEventListener('nodeCopy', handleCopy);
+            window.removeEventListener('addNodeByHandle', handleAddNode);
         };
     }, [_reactFlowInstance]);
 
@@ -334,24 +421,40 @@ const useFlow = (_reactFlowInstance, data) => {
     }
 }
 
-
 // 复制粘贴组件，支持跨技能粘贴
-const useKeyBoard = (reactFlowWrapper, setNodes) => {
+const useKeyBoard = (_reactFlowInstance, reactFlowWrapper) => {
     const keyBoardPanneRef = useRef<HTMLDivElement>(null); // 绑定快捷键
     const [lastSelection, setLastSelection] = useState(null);
-    // useCopyPaste(keyBoardPanneRef.current, lastSelection, (newSelection, position) => {
-    //     let bounds = reactFlowWrapper.current.getBoundingClientRect();
-    //     setNodes((nds) => nds.concat(
-    //         {
-    //             id: 'd', type: 'flowNode', position: {
-    //                 x: position.x - bounds.left,
-    //                 y: position.y - bounds.top,
-    //             }, data: { value: 'Node 2' }
-    //         }
-    //     ))
-    // }, [setNodes])
+    const { setNodes, setEdges } = useReactFlow();
+
+    useCopyPasteNode(keyBoardPanneRef.current, lastSelection, (newSelectNode, position) => {
+        if (newSelectNode.nodes.some(node => node.data.type === 'start')) return
+        let bounds = reactFlowWrapper.current.getBoundingClientRect();
+        setNodes((nds) => {
+            const newNodes = newSelectNode.nodes.map(node => {
+                const newNode = cloneDeep(node)
+                const nodeId = `${newNode.data.type}_${generateUUID(5)}`
+                newNode.id = nodeId
+                newNode.data.id = nodeId
+                const newName = autoNodeName(nds, newNode.data.name)
+                newNode.data.name = newName
+                // newNode.selected = false
+
+                newNode.position = _reactFlowInstance.screenToFlowPosition({
+                    x: position.x - bounds.left,
+                    y: position.y - bounds.top,
+                });
+                return newNode
+            })
+            return [...newNodes, ...nds]
+        })
+    }, (selectNode) => {
+        // takeSnapshot()
+        const targetNodes = selectNode.nodes;
+        if (targetNodes.some(node => node.data.type === 'start')) return
+        setNodes((nodes) => nodes.filter((n) => !targetNodes.some(el => el.id === n.id)));
+        setEdges((edges) => edges.filter((ns) => !targetNodes.some(el => el.id === ns.source) && !targetNodes.some(el => el.id === ns.target)));
+    }, [_reactFlowInstance, setNodes])
 
     return { keyBoardPanneRef, setLastSelection }
 }
-
-// TODO 离开页面保存提示
