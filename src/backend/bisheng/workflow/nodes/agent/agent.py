@@ -37,6 +37,7 @@ class AgentNode(BaseNode):
         self._batch_variable_list = {}
         self._system_prompt_list = []
         self._user_prompt_list = []
+        self._tool_invoke_list = []
 
         # 聊天消息
         self._chat_history_flag = self.node_params['chat_history_flag']['flag']
@@ -213,6 +214,7 @@ class AgentNode(BaseNode):
         self._batch_variable_list = {}
         self._system_prompt_list = []
         self._user_prompt_list = []
+        self._tool_invoke_list = []
 
         for one in self._system_variables:
             variable_map[one] = self.graph_state.get_variable_by_str(one)
@@ -242,6 +244,26 @@ class AgentNode(BaseNode):
             'user_prompt': self._user_prompt_list,
             'output': result
         }
+        tool_invoke_info = {}
+        if self._tool_invoke_list:
+            for one in self._tool_invoke_list:
+                if one['run_id'] not in tool_invoke_info:
+                    tool_invoke_info[one['run_id']] = {}
+                if one['type'] == 'start':
+                    tool_invoke_info[one['run_id']].update({
+                        'name': one['name'],
+                        'input': one['input']
+                    })
+                elif one['type'] == 'end':
+                    tool_invoke_info[one['run_id']].update({
+                        'output': one['output']
+                    })
+                elif one['type'] == 'error':
+                    tool_invoke_info[one['run_id']].update({
+                        'output': f'Error: {one["error"]}'
+                    })
+        if tool_invoke_info:
+            ret['tool_invoke'] = list(tool_invoke_info.values())
         if self._batch_variable_list:
             ret['batch_variable'] = self._batch_variable_list
         return ret
@@ -279,7 +301,8 @@ class AgentNode(BaseNode):
                                               unique_id=unique_id,
                                               node_id=self.id,
                                               output=self._output_user,
-                                              output_key=output_key)
+                                              output_key=output_key,
+                                              tool_list=self._tool_invoke_list)
         config = RunnableConfig(callbacks=[llm_callback])
 
         if self._agent_executor_type == 'ReAct':
