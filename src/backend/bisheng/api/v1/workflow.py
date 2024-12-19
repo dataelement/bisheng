@@ -28,17 +28,6 @@ from bisheng.utils.minio_client import MinioClient
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
-
-@router.get('/template', response_model=UnifiedResponseModel, status_code=200)
-def get_template():
-    """ 获取节点模板的接口 """
-    # todo: 改为template class 管理
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    with open(f"{current_path}/workflow_template.json", 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    return resp_200(data=data)
-
-
 @router.get("/report/file", response_model=UnifiedResponseModel, status_code=200)
 async def get_report_file(
         request: Request,
