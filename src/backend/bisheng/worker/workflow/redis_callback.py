@@ -67,6 +67,10 @@ class RedisCallback(BaseCallback):
         response = self.redis_client.lpop(self.workflow_event_key)
         if response:
             response = json.loads(response)
+            if (response.get('category') == 'node_run' and response.get('type') == 'end'
+                    and response.get('message', {}).get('node_id', '').startswith('end_')):
+                # 如果是结束节点，清空状态缓存
+                self.workflow_cache.clear()
         return response
 
     def set_user_input(self, data: dict):
