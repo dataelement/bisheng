@@ -1,5 +1,7 @@
 FROM dataelement/bisheng-backend:base.v1
 
+WORKDIR /app
+
 COPY ./ ./
 
 RUN poetry config virtualenvs.create false
