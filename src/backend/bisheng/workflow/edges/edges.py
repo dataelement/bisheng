@@ -61,6 +61,8 @@ class EdgeManage:
         """ get all next nodes by node id"""
         # 获取直接的下游节点
         output_nodes = self.get_target_node(node_id)
+        if not output_nodes:
+            return []
         # 排除自己
         if node_id in output_nodes:
             output_nodes.remove(node_id)
