@@ -1,13 +1,18 @@
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Request, Body
+from fastapi import APIRouter, Request, Body, Path, WebSocket, WebSocketException
+from fastapi import status as http_status
+from loguru import logger
 
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.v2.utils import get_default_operator
+from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.worker.workflow.tasks import execute_workflow
+from bisheng.api.v1.chat import chat_manager
 
 router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
 
@@ -43,10 +48,16 @@ async def invoke_workflow(request: Request,
         # 发起异步任务
         execute_workflow.delay(unique_id, workflow_id, chat_id, str(login_user.user_id))
 
+    while True:
+        status_info = workflow.get_workflow_status()
+        if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+
+            break
+
 
 @router.websocket('/chat/{workflow_id}')
 async def workflow_ws(*,
-                      workflow_id: str,
+                      workflow_id: str = Path(..., description='工作流唯一ID'),
                       websocket: WebSocket,
                       chat_id: Optional[str] = None):
     try:
@@ -57,3 +68,6 @@ async def workflow_ws(*,
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
+    except Exception as e:
+        logger.error(f'Websocket handle error: {str(e)}')
+        await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(e))
