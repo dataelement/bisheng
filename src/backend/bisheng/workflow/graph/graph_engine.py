@@ -202,10 +202,10 @@ class GraphEngine:
                                                 interrupt_before=interrupt_nodes)
         self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
 
-        import datetime
-        with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
-                  'wb') as f:
-            f.write(self.graph.get_graph().draw_mermaid_png())
+        # import datetime
+        # with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
+        #           'wb') as f:
+        #     f.write(self.graph.get_graph().draw_mermaid_png())
 
     def _run(self, input_data: Any):
         try:
