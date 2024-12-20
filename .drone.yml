@@ -65,9 +65,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
     - sed  '/apt-get/ s|$| '"$PROXY"'|' Dockerfile
     - sed -i 's/^bisheng_langchain.*/bisheng_langchain = "'$RELEASE_VERSION'"/g' pyproject.toml
-    - sed -i '4i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '5i\RUN poetry source add --priority=supplemental foo http://'$NEXUS_PUBLIC':'$NEXUS_PUBLIC_PASSWORD'@'$REPO2'simple' Dockerfile
-    - sed -i '6i\RUN poetry source add --priority=primary qh https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
+    - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
+    - sed -i '7i\RUN poetry source add --priority=supplemental foo http://'$NEXUS_PUBLIC':'$NEXUS_PUBLIC_PASSWORD'@'$REPO2'simple' Dockerfile
+    - sed -i '8i\RUN poetry source add --priority=primary qh https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
     - cat Dockerfile
 
   - name: build_docker
