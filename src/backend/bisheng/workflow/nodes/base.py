@@ -3,6 +3,7 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
+from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
 from bisheng.workflow.common.node import BaseNodeData
@@ -100,9 +101,9 @@ class BaseNode(ABC):
         :return:
         """
         if self.stop_flag:
-            raise Exception('stop by user')
+            raise IgnoreException('stop by user')
         if self.current_step >= self.max_steps:
-            raise Exception(f'node {self.name} exceeded more than max steps')
+            raise IgnoreException(f'node {self.name} exceeded more than max steps')
 
         exec_id = uuid.uuid4().hex
         self.callback_manager.on_node_start(

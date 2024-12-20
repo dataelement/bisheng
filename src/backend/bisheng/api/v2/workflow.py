@@ -23,6 +23,7 @@ async def invoke_workflow(request: Request,
                           stream: bool = Body(default=False, description='是否流式调用'),
                           user_input: dict = Body(default=None, description='用户输入'),
                           session_id: str = Body(default=None, description='会话ID,一次workflow调用的唯一标识')):
+    # todo 待确定
     workflow_info = FlowDao.get_flow_by_id(workflow_id)
     if not workflow_info:
         raise NotFoundError.http_exception()

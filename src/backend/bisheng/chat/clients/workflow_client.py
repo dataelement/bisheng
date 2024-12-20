@@ -57,11 +57,18 @@ class WorkflowClient(BaseClient):
             db_message.message = message if isinstance(message, str) else json.dumps(message)
             ChatMessageDao.update_message_model(db_message)
 
+    async def handle_message(self, message: Dict[any, any]):
+        """ 处理客户端发过来的信息, 提交到线程池内执行 """
+        trace_id = uuid.uuid4().hex
+        logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
+        with logger.contextualize(trace_id=trace_id):
+            await self._handle_message(message)
+
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
         if message.get('action') == 'init_data':
             # 初始化workflow数据
-            await self.init_workflow(message.get('data'))
+            await self.init_workflow(message)
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
@@ -70,22 +77,24 @@ class WorkflowClient(BaseClient):
         else:
             logger.warning('not support action: %s', message.get('action'))
 
-    async def init_workflow(self, workflow_data: dict):
+    async def init_workflow(self, message: dict):
         if self.workflow is not None:
             return
         try:
+            workflow_data = message.get('data')
+            workflow_id = message.get('flow_id', self.client_id)
             # 查询chat_id对应的异步任务唯一标识
             unique_id = uuid.uuid4().hex
             if self.chat_id:
                 unique_id = f'{self.chat_id}_async_task_id'
-            logger.debug(f'init workflow with unique_id: {unique_id}, client_id: {self.client_id}, chat_id: {self.chat_id}')
-            self.workflow = RedisCallback(unique_id, self.client_id, self.chat_id, str(self.user_id))
+            logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
+            self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
             status_info = self.workflow.get_workflow_status()
             if not status_info:
                 self.workflow.set_workflow_data(workflow_data)
                 self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
                 # 发起异步任务
-                execute_workflow.delay(unique_id, self.client_id, self.chat_id, str(self.user_id))
+                execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
         except Exception as e:
             logger.exception('init_workflow_error')
             self.workflow = None

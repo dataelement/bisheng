@@ -57,3 +57,23 @@ class EdgeManage:
             return None
         return self.source_map[source]
 
+    def get_next_nodes(self, node_id: str, exclude: Optional[List[str]] = None) -> List[str] | None:
+        """ get all next nodes by node id"""
+        # 获取直接的下游节点
+        output_nodes = self.get_target_node(node_id)
+        # 排除自己
+        if node_id in output_nodes:
+            output_nodes.remove(node_id)
+
+        # 排除指定的节点
+        if exclude:
+            for one in exclude:
+                if one in output_nodes:
+                    output_nodes.remove(one)
+
+        for one in output_nodes:
+            next_nodes = self.get_next_nodes(one, exclude=exclude)
+            if next_nodes:
+                output_nodes.extend(next_nodes)
+
+        return output_nodes

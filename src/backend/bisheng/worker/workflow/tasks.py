@@ -3,6 +3,7 @@ import time
 from loguru import logger
 
 from bisheng.settings import settings
+from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -40,9 +41,9 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
                 redis_callback.set_workflow_status(status, reason)
                 time.sleep(1)
                 if time.time() - start_time > workflow.timeout * 60:
-                    raise Exception('workflow wait user input timeout')
+                    raise IgnoreException('workflow wait user input timeout')
                 if redis_callback.get_workflow_stop() == 1:
-                    raise Exception('workflow stop by user')
+                    raise IgnoreException('workflow stop by user')
                 user_input = redis_callback.get_user_input()
                 if not user_input:
                     continue
@@ -50,6 +51,9 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
                 status, reason = workflow.run(user_input)
             else:
                 raise Exception(f'unexpected workflow status error: {status}')
+    except IgnoreException as e:
+        logger.warning(f'execute_workflow ignore error: {e}')
+        redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e))
     except Exception as e:
         logger.exception('execute_workflow error')
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e)[:100])

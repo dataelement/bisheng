@@ -8,6 +8,8 @@ from queue import Queue
 from typing import Any, Dict, List
 from uuid import UUID
 
+from websockets.exceptions import ConnectionClosedError
+
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow_no_yield, get_request_ip
@@ -367,7 +369,7 @@ class ChatManager:
                             await self.send_json(context.get('flow_id'), context.get('chat_id'),
                                                  erro_resp)
         except WebSocketDisconnect as e:
-            logger.info('act=rcv_client_disconnect {}', str(e))
+            logger.info(f'act=rcv_client_disconnect {str(e)}')
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(str(e))
