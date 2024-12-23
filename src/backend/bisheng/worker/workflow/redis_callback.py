@@ -212,6 +212,9 @@ class RedisCallback(BaseCallback):
 
     def on_stream_over(self, data: StreamMsgOverData):
         logger.debug(f'stream over: {data}')
+        # 替换掉minio的share前缀，通过nginx转发  ugly solve
+        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
+        data.msg = data.msg.replace(f"http://{minio_share}", "")
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category='stream_msg',
                                      extra='',
