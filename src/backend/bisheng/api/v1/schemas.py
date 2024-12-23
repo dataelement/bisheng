@@ -422,8 +422,8 @@ class EvaluationLLMConfig(BaseModel):
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='知识库ID')
-    separator: Optional[List[str]] = Field(default=['\n\n'], description='切分文本规则, 不传则为默认')
-    separator_rule: Optional[List[str]] = Field(default=['after'],
+    separator: Optional[List[str]] = Field(default=['\n\n', '\n'], description='切分文本规则, 不传则为默认')
+    separator_rule: Optional[List[str]] = Field(default=['after', 'after'],
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
@@ -431,7 +431,7 @@ class FileProcessBase(BaseModel):
     @root_validator
     def check_separator_rule(cls, values):
         if values['separator'] is None:
-            values['separator'] = ['\n\n']
+            values['separator'] = ['\n\n', '\n']
         if values['separator_rule'] is None:
             values['separator_rule'] = ['after' for _ in values['separator']]
         if values['chunk_size'] is None:
