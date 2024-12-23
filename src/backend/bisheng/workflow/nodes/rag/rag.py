@@ -104,7 +104,7 @@ class RagNode(BaseNode):
         source_documents = []
         for key, val in result.items():
             output_key.append(val)
-            source_documents.append(self._source_documents[key])
+            source_documents.append([one.page_content for one in self._source_documents[key]])
         return {
             'user_question': self.init_user_question(),
             'output_key': output_key,

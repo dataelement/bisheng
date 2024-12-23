@@ -51,11 +51,11 @@ class QARetrieverNode(BaseNode):
         self.graph_state.set_variable(self.id, '$retrieval_result$', result['result'])
 
         return {
-            'retrieval_result': result_str
+            'retrieved_result': result_str
         }
 
     def parse_log(self, unique_id: str, result: dict) -> dict:
         return {
             'user_question': self.graph_state.get_variable_by_str(self._user_question),
-            'retrieval_result': result['retrieval_result']
+            ' retrieved_result': result[' retrieved_result']
         }
