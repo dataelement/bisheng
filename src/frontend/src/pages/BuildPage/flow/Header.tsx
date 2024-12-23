@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { TabsContext } from "@/contexts/tabsContext";
 import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
-import { onlineWorkflow, saveWorkflow } from "@/controllers/API/workflow";
+import { onlineWorkflow, onlineWorkflowApi, saveWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
@@ -26,15 +26,18 @@ import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
+import { darkContext } from "@/contexts/darkContext";
 
 const Header = ({ flow, onTabChange, preFlow }) => {
     const { message } = useToast()
+    const { dark } = useContext(darkContext);
     const testRef = useRef(null)
     const updateAppModalRef = useRef(null)
     const { uploadFlow } = useFlowStore()
     const { t } = useTranslation()
     const navigate = useNavigate()
     const [modelVersionId, setModelVersionId] = useState(0)
+
     // console.log('flow :>> ', flow);
 
     const validateNodes = useNodeEvent(flow)
@@ -73,9 +76,8 @@ const Header = ({ flow, onTabChange, preFlow }) => {
         }
 
         // api请求
-        // TODO 指定版本上线
-        const res = await captureAndAlertRequestErrorHoc(onlineWorkflow(flow, 2))
-        if (res) {
+        const res = await captureAndAlertRequestErrorHoc(onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 }))
+        if (res === null) {
             message({
                 variant: 'success',
                 description: `${version?.name} 已上线`
@@ -83,11 +85,14 @@ const Header = ({ flow, onTabChange, preFlow }) => {
             window.history.length > 1 ? window.history.back() : navigate('/build/apps')
         }
     }
-    const handleOfflineClick = () => {
-        message({
-            variant: 'success',
-            description: `${version?.name} 已下线`
-        })
+    const handleOfflineClick = async () => {
+        const res = await captureAndAlertRequestErrorHoc(onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 1 }))
+        if (res === null) {
+            message({
+                variant: 'success',
+                description: `${version?.name} 已下线`
+            })
+        }
     }
 
     const handleSaveClick = async () => {
@@ -119,6 +124,7 @@ const Header = ({ flow, onTabChange, preFlow }) => {
             variant: 'success',
             description: "更改已保存"
         })
+        setFlow({ ...flow })
         return res
     }
 
@@ -209,7 +215,7 @@ const Header = ({ flow, onTabChange, preFlow }) => {
             }
             {/* Left Section with Back Button and Title */}
             <div className="flex items-center">
-                <Button variant="outline" size="icon" className="bg-[#fff] size-8"
+                <Button variant="outline" size="icon" className={`${!dark && 'bg-[#fff]'} size-8`}
                     onClick={() => {
                         window.history.length > 1 ? window.history.back() : navigate('/build/apps')
                     }}
@@ -232,18 +238,18 @@ const Header = ({ flow, onTabChange, preFlow }) => {
                             </Button>
                         </h1>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            <Badge variant="gray" className="font-light"><ShieldCheck size={14} />当前版本: {version?.name}</Badge>
+                            <Badge variant="gray" className="font-light dark:bg-gray-950 dark:text-gray-400"><ShieldCheck size={14} />当前版本: {version?.name}</Badge>
                         </p>
                     </div>
                 </div>
             </div>
             <div>
-                <Button variant="secondary" className={`${tabType === 'edit' ? 'bg-[#fff] hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
+                <Button variant="secondary" className={`${tabType === 'edit' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => { setTabType('edit'); onTabChange('edit') }}
                 >
                     流程编排
                 </Button>
-                <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
+                <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => { setTabType('api'); onTabChange('api') }}>
                     对外发布
                 </Button>
@@ -251,18 +257,18 @@ const Header = ({ flow, onTabChange, preFlow }) => {
             {/* Right Section with Options */}
             <div className="flex items-center gap-3">
                 <Notification />
-                <Button variant="outline" size="sm" className="bg-[#fff] h-8" onClick={handleRunClick}>
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8`} onClick={handleRunClick}>
                     <Play className="size-3.5 mr-1" />
                     运行
                 </Button>
-                <Button variant="outline" size="sm" className="bg-[#fff] h-8 px-6" onClick={handleSaveClick}>
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleSaveClick}>
                     保存
                 </Button>
                 {
                     version && <ActionButton
                         size="sm"
-                        className="px-6 flex gap-2 bg-[#fff]"
-                        iconClassName="bg-[#fff]"
+                        className={`px-6 flex gap-2 ${!dark && 'bg-[#fff]'}`}
+                        iconClassName={`${!dark && 'bg-[#fff]'}`}
                         align="end"
                         variant="outline"
                         onClick={handleSaveNewVersion}
@@ -316,14 +322,14 @@ const Header = ({ flow, onTabChange, preFlow }) => {
                         )}
                     >{t('skills.saveVersion')}</ActionButton>
                 }
-                {isOnlineVersion ? <Button size="sm" className="h-8 px-6" onClick={handleOfflineClick}>
+                {isOnlineVersion ? <Button size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleOfflineClick}>
                     下线
-                </Button> : <Button size="sm" className="h-8 px-6" onClick={handleOnlineClick}>
+                </Button> : <Button size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleOnlineClick}>
                     上线
                 </Button>}
                 <Popover open={open} onOpenChange={setOpen}>
                     <PopoverTrigger asChild >
-                        <Button size="icon" variant="outline" className="bg-[#fff] size-8">
+                        <Button size="icon" variant="outline" className={`${!dark && 'bg-[#fff]'} size-8`}>
                             <EllipsisVertical size={16} />
                         </Button>
                     </PopoverTrigger>
@@ -444,13 +450,17 @@ const useNodeEvent = (flow) => {
         const findEdgesByNodeId = (id) => {
             return flow.edges.filter(node => node.source === id)
         }
+        const findOutType = (nodeId) => {
+            if (!nodeId.startsWith('output')) return ''
+            return flow.nodes.find(node => node.id === nodeId).data.group_params[0].params[1].value.type
+        }
 
         const traverseTree = (nodeId, branchId, nodeIds) => {
             const edges = findEdgesByNodeId(nodeId)
             edges.forEach((edge, index) => {
                 const [source, target] = [edge.source.split('_')[0], edge.target.split('_')[0]]
                 const _branchId = `${branchId}_${index}`
-                const _nodeIds = [...nodeIds, { branch: _branchId, nodeId: edge.target }]
+                const _nodeIds = [...nodeIds, { branch: _branchId, nodeId: edge.target, type: findOutType(edge.target) }]
 
                 if (target === 'end') {
                     // stop when loop or end 
@@ -469,14 +479,14 @@ const useNodeEvent = (flow) => {
             }
         }
 
-        traverseTree(startNodeId, '0', [{ branch: '0', nodeId: startNodeId }])
+        traverseTree(startNodeId, '0', [{ branch: '0', nodeId: startNodeId, type: '' }])
         // console.log('flow :>> ', flow.edges, branchLines);
 
         // 并行校验
         // input节点s & 分支节点s
         const nodeLMap = {}
-        const [inputNodeLs, branchNodeLs] = branchLines.reduce(
-            ([inputNodeLs, branchNodeLs], line) => {
+        const [inputNodeLs, outputNodeLs, branchNodeLs] = branchLines.reduce(
+            ([inputNodeLs, outputNodeLs, branchNodeLs], line) => {
                 line.nodeIds.forEach(node => {
                     if (node.nodeId.startsWith('input')) {
                         const inputNode = flow.nodes.find(_node => _node.id === node.nodeId && _node.data.tab.value === 'input')
@@ -484,27 +494,37 @@ const useNodeEvent = (flow) => {
                         if (inputNode && !inputNodeLs.some(el => el.branch === inputNode.branch)) {
                             !nodeLMap[node.branch] && inputNodeLs.push(node);
                         }
-                    } else if (node.nodeId.startsWith('output') || node.nodeId.startsWith('condition')) {
+                    } else if (node.nodeId.startsWith('output') && node.type === 'input') {
+                        !nodeLMap[node.branch] && inputNodeLs.push(node);
+                    } else if ((node.nodeId.startsWith('output') && node.type === 'choose') || node.nodeId.startsWith('condition')) {
                         !nodeLMap[node.branch] && branchNodeLs.push(node);
                     }
                     nodeLMap[node.branch] = true;
                 })
-                return [inputNodeLs, branchNodeLs];
+                return [inputNodeLs, outputNodeLs, branchNodeLs];
             },
-            [[], []]
+            [[], [], []]
         );
 
-        const resutlt = findParallelNodes(inputNodeLs, branchNodeLs)
-        console.log('inputParallelNids, outputParallelNids :>> ', resutlt);
+        let resutlt = findParallelNodes(inputNodeLs, branchNodeLs)
         if (resutlt.length) {
-            // if (inputParallelNids.length > 1 || outputParallelNids.length > 1) {
             sendEvent([
                 ...resutlt,
                 []
-                // ...outputParallelNids.length > 1 ? outputParallelNids.map(node => node.nodeId) : []
             ])
-            return ['不支持多个 input 节点并行执行']
+            return ['不支持多个 input 或 output 节点（对话框输入）并行执行']
         }
+        // if (!resutlt.length) {
+        //     resutlt = findParallelNodes(outputNodeLs, branchNodeLs)
+        //     if (resutlt.length) {
+        //         sendEvent([
+        //             ...resutlt,
+        //             []
+        //         ])
+        //         return ['不支持多个 output 节点(输入型交互)并行执行']
+        //     }
+        // }
+        console.log('inputParallelNids, outputParallelNids :>> ', resutlt);
 
         // 开始到结束流程是否完整
         const errorLine = branchLines.find(line => !line.end)

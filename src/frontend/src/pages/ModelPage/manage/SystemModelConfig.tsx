@@ -46,11 +46,11 @@ export default function SystemModelConfig({ data, onBack }) {
             </div>
             <div className="px-4">
                 <Tabs defaultValue="knowledge" className="flex flex-col">
-                    <TabsList className="w-[450px] m-auto">
+                    <TabsList className="w-[550px] m-auto">
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
                         <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
-                        <TabsTrigger value="workflow" className="w-[150px]">工作流模型</TabsTrigger>
+                        <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
                     </TabsList>
                     <TabsContent value="knowledge">
                         <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></KnowledgeModle>

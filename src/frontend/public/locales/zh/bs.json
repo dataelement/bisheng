@@ -410,6 +410,7 @@
   "build": {
     "create": "创建",
     "assistant": "助手",
+    "workflow": "工作流",
     "skill": "技能",
     "tools": "工具",
     "save": "保存",

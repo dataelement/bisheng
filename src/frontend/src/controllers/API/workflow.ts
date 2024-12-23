@@ -58,6 +58,13 @@ export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
 }
 
 /**
+ * 上线指定版本工作流
+ */
+export const onlineWorkflowApi = async (data: {flow_id, version_id, status}) => {
+    return await axios.patch(`/api/v1/workflow/status`, data);
+};
+
+/**
  * 单节点运行
  * 
  */
@@ -512,7 +519,7 @@ const workflowTemplate = [
                 "name": "输出",
                 "params": [
                     {
-                        "key": "retrieval_result",
+                        "key": "retrieved_result",
                         "label": "检索结果",
                         "type": "var",
                         "global": "key",

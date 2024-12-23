@@ -222,7 +222,7 @@ export default function VarInput({
             ></div>
             {children}
             <div
-                className="resize-handle w-4 h-4 bg-transparent absolute cursor-ns-resize right-0 bottom-0 rounded-ee-md overflow-hidden"
+                className="resize-handle w-4 h-4 text-transparent absolute cursor-ns-resize right-0 bottom-0 rounded-ee-md overflow-hidden"
                 onMouseDown={handleMouseDown}
             ><RbDragIcon /></div>
         </div>

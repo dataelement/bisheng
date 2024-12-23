@@ -413,6 +413,7 @@
   "build": {
     "create": "Create",
     "assistant": "Assistant",
+    "workflow": "Workflow",
     "skill": "Skill",
     "tools": "Tools",
     "save": "Save",

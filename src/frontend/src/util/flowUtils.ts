@@ -207,16 +207,6 @@ export function useCopyPasteNode(dom, lastSelection, paste, del, deps) {
                 paste(lastCopiedSelection, position.current)
             } else if (event.key === 'Delete' && lastSelection) {
                 del(lastSelection)
-                console.log('lastSelection :>> ', lastSelection);
-                const backspaceEvent = new KeyboardEvent('keydown', {
-                    key: 'Backspace', // 设置按下的键为 Backspace
-                    code: 'Backspace', // 设置按下的键码为 Backspace
-                    keyCode: 8, // Backspace 的 keyCode
-                    bubbles: true // 让事件冒泡，确保可以触发事件监听器
-                });
-
-                // 触发 Backspace 键的事件
-                document.dispatchEvent(backspaceEvent);
             }
         };
         const handleMouseMove = (event) => {

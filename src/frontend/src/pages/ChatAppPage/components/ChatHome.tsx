@@ -74,7 +74,7 @@ export default function HomePage({ onSelect }) {
     const typeCnNames = {
         'flow': t('build.skill'),
         'assistant': t('build.assistant'),
-        'workflow': '工作流'
+        'workflow': t('build.workflow')
     }
     // const [cardBoxWidth, cardboxRef] = useAutoWidth()
     {/* @ts-ignore */ }

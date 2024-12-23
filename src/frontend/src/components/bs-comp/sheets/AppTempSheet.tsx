@@ -68,7 +68,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
-                            <Flow2Icon />
+                            <Bot />
                             <span>工作流</span>
                         </div>
                         <div
@@ -82,7 +82,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.SKILL)}
                         >
-                            <Skill2Icon />
+                            <Bot />
                             <span>技能</span>
                         </div>
                     </div>

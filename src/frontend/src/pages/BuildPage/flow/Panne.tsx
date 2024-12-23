@@ -151,13 +151,13 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             // onSelectionEnd={() => setSelectionEnded(true)}
                             style={{
                                 backgroundImage: window.ThemeStyle.bg === 'gradient'
-                                    && 'radial-gradient(circle at center bottom, rgba(2, 77, 227, 0.3) 2%, rgba(2, 77, 227, 0.2) 25%, rgba(2, 77, 227, 0.05) 60%, rgba(255, 255, 255, 0) 100%)',
+                                    && 'radial-gradient(circle at center bottom, rgba(2, 77, 227, 0.3) 2%, rgba(2, 77, 227, 0.2) 25%, rgba(2, 77, 227, 0.05) 60%, rgba(0, 0, 0, 0) 100%)',
                                 backgroundRepeat: 'no-repeat',
                                 backgroundSize: 'cover',
                             }}
                         >
-                            <Background color='#999' variant={BackgroundVariant.Dots} />
-                            <Controls></Controls>
+                            <Background className="dark:bg-gray-950" color='#999' variant={BackgroundVariant.Dots} />
+                            <Controls className="bg-muted [&>button]:border-b-border hover:[&>button]:bg-border"></Controls>
                         </ReactFlow>
                     </div>
                 </div>
@@ -400,7 +400,6 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         window.addEventListener('nodeCopy', handleCopy);
         window.addEventListener('addNodeByHandle', handleAddNode);
 
-
         // 在组件卸载时移除事件监听
         return () => {
             window.removeEventListener('nodeUpdate', handleNodeUpdate);
@@ -449,11 +448,14 @@ const useKeyBoard = (_reactFlowInstance, reactFlowWrapper) => {
             return [...newNodes, ...nds]
         })
     }, (selectNode) => {
+        // 删除线和node
         // takeSnapshot()
         const targetNodes = selectNode.nodes;
+        const targetEdges = selectNode.edges;
+
         if (targetNodes.some(node => node.data.type === 'start')) return
         setNodes((nodes) => nodes.filter((n) => !targetNodes.some(el => el.id === n.id)));
-        setEdges((edges) => edges.filter((ns) => !targetNodes.some(el => el.id === ns.source) && !targetNodes.some(el => el.id === ns.target)));
+        setEdges((edges) => edges.filter((ns) => !targetEdges.some(el => el.id === ns.id)));
     }, [_reactFlowInstance, setNodes])
 
     return { keyBoardPanneRef, setLastSelection }

@@ -2,11 +2,13 @@
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
-import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { AssistantIcon } from "@/components/bs-icons";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
+import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
+import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,8 +19,6 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -31,56 +31,74 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { assistantState, loadAssistantState, destroy } = useAssistantStore()
     // console.log('data :>> ', flow);
     const build = useBuild()
-    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore() 
-    const { loadHistoryMsg: loadFlowHistoryMsg } = useFlowMessageStore()
-    
+    const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
+    const { loadHistoryMsg: loadFlowHistoryMsg, changeChatId: changeFlowChatId } = useFlowMessageStore()
+
     useEffect(() => {
         return destroy
     }, [])
 
     const [autoRun, setAutoRun] = useState(false)
-    console.log('autoRun :>> ', autoRun);
+    // console.log('autoRun :>> ', autoRun);
     const init = async () => {
+        const isV1 = version === 'v1';
+
         if (type === 'flow') {
             setAssistant(null)
             setWorkflow(null)
             const _flow = await getFlowApi(id, version)
             await build(_flow, chatId)
-            version === 'v1' ? loadHistoryMsg(_flow.id, chatId, {
-                appendHistory,
-                lastMsg: t('chat.historicalMessages')
-            }) : clearMsgs()
+            if (isV1) {
+                loadHistoryMsg(_flow.id, chatId, {
+                    appendHistory,
+                    lastMsg: t('chat.historicalMessages')
+                });
+            } else {
+                clearMsgs();
+            }
+
             flowRef.current = _flow
             setFlow(_flow)
             changeChatId(chatId) // ws
+
         } else if (type === 'assistant') {
             flowRef.current = null
             setFlow(null)
             setWorkflow(null)
             const _assistant = await loadAssistantState(id, version)
-            version === 'v1' ? loadHistoryMsg(_assistant.id, chatId, {
-                appendHistory,
-                lastMsg: t('chat.historicalMessages')
-            }) : clearMsgs()
+
+            if (isV1) {
+                loadHistoryMsg(_assistant.id, chatId, {
+                    appendHistory,
+                    lastMsg: t('chat.historicalMessages')
+                });
+            } else {
+                clearMsgs();
+            }
+
             setAssistant(_assistant)
             changeChatId(chatId) // ws
         } else {
             setAssistant(null)
             setFlow(null)
             const _flow = await getFlowApi(id, version)
-             version === 'v1' ? await loadFlowHistoryMsg(_flow.id, chatId, {
-                lastMsg: '本轮会话已结束'
-            }).then(res =>
-            {
-                setAutoRun(!res.length)
+
+            if (isV1) {
+                const res = await loadFlowHistoryMsg(_flow.id, chatId, {
+                    lastMsg: '本轮会话已结束'
+                });
+                setAutoRun(!res.length);
+            } else {
+                clearMsgs();
             }
-                // setAutoRun()
-            ) : clearMsgs()
+
             const { data, ...f } = _flow
             const { nodes, edges, viewport } = data
+
             setTimeout(() => { // holding change autorun
                 setWorkflow({ ...f, nodes, edges, viewport })
-                changeChatId(chatId)
+                changeFlowChatId(chatId)
+                version === 'v2' && setAutoRun(true)
             }, 100);
         }
     }

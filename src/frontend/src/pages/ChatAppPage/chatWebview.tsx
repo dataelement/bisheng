@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import ChatPanne from "./components/ChatPanne";
 import { userContext } from "@/contexts/userContext";
 
+// assistant workflow flow
 export default function ChatPro({ type = 'flow' }) {
     const { id: flowId } = useParams()
     const { user } = useContext(userContext);

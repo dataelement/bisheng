@@ -81,7 +81,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                         <TabsTrigger value="base">基础节点</TabsTrigger>
                         <TabsTrigger value="tool">工具节点</TabsTrigger>
                     </TabsList>
-                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
+                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
                         <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />
                     </Button>}
                 </div>
@@ -93,7 +93,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                                 <Tooltip key={item.type}>
                                     <TooltipTrigger className="block w-full">
                                         <div key={item.type}
-                                            className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200`}
+                                            className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200 dark:hover:border-gray-800`}
                                             onMouseEnter={(event) => {
                                                 // 如果正在拖拽，不移除hover样式
                                                 if (!event.currentTarget.classList.contains('border-gray-200')) {

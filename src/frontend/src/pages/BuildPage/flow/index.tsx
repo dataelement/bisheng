@@ -48,8 +48,8 @@ export default function FlowPage() {
 
     const [copyFlow, preFlow] = useMemo(() => {
         if (flow?.id === id) {
-            const copyFlow = cloneDeep(flow)
-            return [copyFlow, JSON.stringify(copyFlow || null)] as const
+            // const copyFlow = cloneDeep(flow)
+            return [flow, JSON.stringify(flow || null)] as const
         }
         return []
     }, [flow, id])

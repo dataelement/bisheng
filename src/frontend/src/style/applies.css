@@ -1017,13 +1017,13 @@
     @apply relative flex w-[332px] flex-col justify-center rounded-[20px] border-4 group-hover:shadow-sm
   }
   .bisheng-node-top{
-    @apply bg-[#EFF1F5] rounded-t-[20px] px-3 py-1.5
+    @apply bg-[#EFF1F5] dark:bg-background rounded-t-[20px] px-3 py-1.5
   }
   .bisheng-node-head{
     overflow: hidden;
     position: relative;
     background: #F9F9FA;
-    @apply p-3 border-t border-[#cad0de]
+    @apply p-3 border-t border-[#cad0de] dark:bg-background dark:border-gray-700
   }
 
   .bisheng-flow-handle {

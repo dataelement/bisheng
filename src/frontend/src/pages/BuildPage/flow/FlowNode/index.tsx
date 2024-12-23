@@ -166,7 +166,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             </NodeToolbar>
 
             <div
-                className={cname(`bisheng-node hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
+                className={cname(`bisheng-node hover:border-primary/10 hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
                 data-id={node.id}
             >
                 {/* top */}
@@ -218,7 +218,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     </EditText>
                 </div>
                 {/* body */}
-                <div className='-nowheel bg-[#F7F8FB] pb-5 rounded-b-[20px]'>
+                <div className='-nowheel bg-[#F7F8FB] dark:bg-background pb-5 rounded-b-[20px]'>
                     <div className={expend || ['output', 'condition', 'end'].includes(node.type) ? `` : 'h-0 overflow-hidden'}>
                         {node.tab && <NodeTabs
                             data={node.tab}

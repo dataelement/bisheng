@@ -42,7 +42,7 @@ export default function WorkflowModel({ llmOptions, onBack }) {
     return (
         <div className="max-w-[520px] mx-auto">
             <div className="mt-10">
-                <Label className="bisheng-label">大模型及RAG节点<span className="text-red-500 text-xs">*</span></Label>
+                <Label className="bisheng-label">{t('model.modelsAndRAGNodes')}<span className="text-red-500 text-xs">*</span></Label>
                 <ModelSelect
                     label={''}
                     value={selectedModel}
