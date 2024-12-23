@@ -3,6 +3,7 @@ from typing import Optional
 from uuid import UUID
 from uuid import uuid4
 
+from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
 from fastapi import status as http_status
 from fastapi_jwt_auth import AuthJWT
@@ -18,12 +19,11 @@ from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
 from bisheng.chat.types import WorkType
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
+from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate, \
+    FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.utils.requests import Requests
-
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -209,8 +209,7 @@ async def update_flow(*,
                       login_user: UserPayload = Depends(get_login_user)):
     """online offline"""
     flow_id = flow_id.hex
-    with session_getter() as session:
-        db_flow = session.get(Flow, flow_id)
+    db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
@@ -221,24 +220,23 @@ async def update_flow(*,
 
     # TODO:  验证工作流是否可以使用
 
-    if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
+    if db_flow.status == FlowStatus.ONLINE.value and ('status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):
         raise FlowOnlineEditError.http_exception()
 
-    # if settings.remove_api_keys:
-    #     flow_data = remove_api_keys(flow_data)
     for key, value in flow_data.items():
         setattr(db_flow, key, value)
-    with session_getter() as session:
-        session.add(db_flow)
-        session.commit()
-        session.refresh(db_flow)
-    # try:
-    #     if not get_L2_param_from_flow(db_flow.data, db_flow.id):
-    #         logger.error(f'flow_id={db_flow.id} extract file_node fail')
-    # except Exception:
-    #     pass
+    db_flow = FlowDao.update_flow(db_flow)
     FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
+
+
+@router.patch('/status', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+async def update_flow_status(request: Request, login_user: UserPayload = Depends(get_login_user),
+                             flow_id: UUID = Body(..., description='技能ID'),
+                             version_id: int = Body(..., description='版本ID'),
+                             status: int = Body(..., description='状态')):
+    WorkFlowService.update_flow_status(login_user, flow_id.hex, version_id, status)
+    return resp_200()
 
 
 @router.get('/list', status_code=200)

@@ -1,27 +1,28 @@
-import json
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
+from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
+from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
+from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.flow import FlowDao, FlowType
+from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
-from fastapi.encoders import jsonable_encoder
 
 
 class WorkFlowService(BaseService):
@@ -69,7 +70,7 @@ class WorkFlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW,AccessType.WORK_FLOW])
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW])
             a_role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
             flow_id_extra = []
             assistant_ids_extra = []
@@ -123,7 +124,7 @@ class WorkFlowService(BaseService):
             flow_group_dict[one.third_id].append(one.group_id)
 
         # 获取技能关联的tag
-        flow_tags = TagDao.get_tags_by_resource_batch([ResourceTypeEnum.FLOW,ResourceTypeEnum.WORK_FLOW], flow_ids)
+        flow_tags = TagDao.get_tags_by_resource_batch([ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW], flow_ids)
 
         # 查询助手所属的分组
         assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
@@ -168,7 +169,7 @@ class WorkFlowService(BaseService):
         })
 
     @classmethod
-    def run_once(cls, login_user: UserPayload,  node_input: Dict[str, any], node_data: Dict[any, any]):
+    def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any]):
 
         node_data = BaseNodeData(**node_data.get('data', {}))
         base_callback = BaseCallback()
@@ -185,7 +186,34 @@ class WorkFlowService(BaseService):
                                          max_steps=233,
                                          callback=base_callback)
 
-
         result = node._run(uuid4().hex)
-        print(result)
         return result
+
+    @classmethod
+    def update_flow_status(cls, login_user: UserPayload, flow_id: str, version_id: int, status: int):
+        """
+        修改工作流状态, 同时修改工作流的当前版本
+        """
+        db_flow = FlowDao.get_flow_by_id(flow_id)
+        if not db_flow:
+            raise NotFoundError.http_exception()
+        if not login_user.access_check(db_flow.user_id, flow_id, AccessType.WORK_FLOW_WRITE):
+            raise UnAuthorizedError.http_exception()
+
+        version_info = FlowVersionDao.get_version_by_id(version_id)
+        if not version_info or version_info.flow_id != flow_id:
+            raise NotFoundError.http_exception()
+        if status == FlowStatus.ONLINE.value:
+            # workflow的初始化校验
+            try:
+                _ = Workflow(flow_id, login_user.user_id, version_info.data, False,
+                             10,
+                             10,
+                             None)
+            except Exception as e:
+                raise WorkFlowInitError.http_exception(f'workflow init error: {str(e)}')
+
+            FlowVersionDao.change_current_version(flow_id, version_info)
+        db_flow.status = status
+        FlowDao.update_flow(db_flow)
+        return

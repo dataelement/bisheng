@@ -26,9 +26,16 @@ class FlowOnlineEditError(BaseErrorCode):
     Code: int = 10521
     Msg: str = '技能已上线，不可编辑'
 
+
 class WorkFlowOnlineEditError(BaseErrorCode):
     Code: int = 10525
     Msg: str = '工作流已上线，不可编辑'
+
+
+class WorkFlowInitError(BaseErrorCode):
+    Code: int = 10526
+    Msg: str = '工作流初始化失败'
+
 
 class FlowTemplateNameError(BaseErrorCode):
     Code: int = 10530

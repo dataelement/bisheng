@@ -305,3 +305,11 @@ class FlowDao(FlowBase):
         with session_getter() as session:
             result = session.exec(statement).mappings().all()
             return [Flow.model_validate(f) for f in result], session.scalar(count_statement)
+
+    @classmethod
+    def update_flow(cls, flow: Flow) -> Flow:
+        with session_getter() as session:
+            session.add(flow)
+            session.commit()
+            session.refresh(flow)
+        return flow
