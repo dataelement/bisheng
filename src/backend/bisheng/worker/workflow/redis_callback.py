@@ -35,7 +35,7 @@ class RedisCallback(BaseCallback):
         self.workflow_event_key = f'workflow:{unique_id}:event'
         self.workflow_input_key = f'workflow:{unique_id}:input'
         self.workflow_stop_key = f'workflow:{unique_id}:stop'
-        self.workflow_expire_time = settings.get_workflow_conf().timeout * 60
+        self.workflow_expire_time = settings.get_workflow_conf().timeout * 60 + 60
 
     def set_workflow_data(self, data: dict):
         self.redis_client.set(self.workflow_data_key, data, expiration=self.workflow_expire_time)
@@ -77,7 +77,10 @@ class RedisCallback(BaseCallback):
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
 
     def get_user_input(self) -> dict | None:
-        return self.redis_client.get(self.workflow_input_key)
+        ret = self.redis_client.get(self.workflow_input_key)
+        if ret:
+            self.redis_client.delete(self.workflow_input_key)
+        return ret
 
     def set_workflow_stop(self):
         self.redis_client.set(self.workflow_stop_key, 1, expiration=self.workflow_expire_time)

@@ -63,16 +63,15 @@ class EdgeManage:
         output_nodes = self.get_target_node(node_id)
         if not output_nodes:
             return []
-        # 排除自己
-        if node_id in output_nodes:
-            output_nodes.remove(node_id)
+        if not exclude:
+            exclude = [node_id]
 
         # 排除指定的节点
-        if exclude:
-            for one in exclude:
-                if one in output_nodes:
-                    output_nodes.remove(one)
+        for one in exclude:
+            if one in output_nodes:
+                output_nodes.remove(one)
 
+        exclude.extend(output_nodes)
         for one in output_nodes:
             next_nodes = self.get_next_nodes(one, exclude=exclude)
             if next_nodes:

@@ -62,9 +62,9 @@ class AgentNode(BaseNode):
         ]
 
         # 是否支持nl2sql
-        self._sql_agent = self.node_params['sql_agent']
+        self._sql_agent = self.node_params.get('sql_agent')
         self._sql_address = ''
-        if self._sql_agent['open']:
+        if self._sql_agent and self._sql_agent['open']:
             self._sql_address = f'mysql+pymysql://{self._sql_agent["db_username"]}:{self._sql_agent["db_password"]}@{self._sql_agent["db_address"]}/{self._sql_agent["db_name"]}?charset=utf8mb4'
 
         # agent

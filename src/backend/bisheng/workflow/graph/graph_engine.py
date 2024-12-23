@@ -115,11 +115,12 @@ class GraphEngine:
                 continue
             wait_nodes, no_wait_nodes = self.parse_fan_in_node(node_id)
             if wait_nodes:
-                self.graph_builder.add_edge([f'{one}_fake' if one.startswith('output_') else one for one in wait_nodes],
-                                            node_id)
+                logger.debug(f'node {node_id} need wait nodes {wait_nodes}')
+                self.graph_builder.add_edge(wait_nodes, node_id)
             if no_wait_nodes:
                 for one in no_wait_nodes:
-                    self.graph_builder.add_edge(f'{one}_fake' if one.startswith('output_') else one, node_id)
+                    logger.debug(f'node {node_id} no need wait nodes {one}')
+                    self.graph_builder.add_edge(one, node_id)
 
     def parse_fan_in_node(self, node_id: str):
         source_ids = self.nodes_fan_in.get(node_id)
@@ -127,6 +128,9 @@ class GraphEngine:
         wait_nodes = []
         no_wait_nodes = []
         for one in source_ids:
+            # output节点有特殊处理逻辑
+            if one.startswith('output_'):
+                continue
             if one in all_next_nodes:
                 no_wait_nodes.append(one)
             else:
@@ -158,9 +162,8 @@ class GraphEngine:
                                                       callback=self.callback)
             self.nodes_map[node_data.id] = node_instance
             self.nodes_fan_in[node_instance.id] = self.edges.get_source_node(node_instance.id)
-            if node_instance.type not in [NodeType.START.value, NodeType.END.value]:
-                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(node_instance.id,
-                                                                                    exclude=[node_instance.id])
+            if node_instance.type not in [NodeType.START.value]:
+                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(node_instance.id)
 
             # add node into langgraph
             if self.async_mode:
@@ -202,10 +205,10 @@ class GraphEngine:
                                                 interrupt_before=interrupt_nodes)
         self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
 
-        # import datetime
-        # with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
-        #           'wb') as f:
-        #     f.write(self.graph.get_graph().draw_mermaid_png())
+        import datetime
+        with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
+                  'wb') as f:
+            f.write(self.graph.get_graph().draw_mermaid_png())
 
     def _run(self, input_data: Any):
         try:

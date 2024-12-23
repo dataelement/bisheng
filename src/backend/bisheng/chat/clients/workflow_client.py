@@ -57,13 +57,6 @@ class WorkflowClient(BaseClient):
             db_message.message = message if isinstance(message, str) else json.dumps(message)
             ChatMessageDao.update_message_model(db_message)
 
-    async def handle_message(self, message: Dict[any, any]):
-        """ 处理客户端发过来的信息, 提交到线程池内执行 """
-        trace_id = uuid.uuid4().hex
-        logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
-        with logger.contextualize(trace_id=trace_id):
-            await self._handle_message(message)
-
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
         if message.get('action') == 'init_data':
@@ -118,7 +111,11 @@ class WorkflowClient(BaseClient):
             if not self.workflow:
                 break
             status_info = self.workflow.get_workflow_status()
-            if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+            if not status_info:
+                await self.send_response('error', 'over', 'workflow status not found')
+                await self.send_response('processing', 'close', '')
+                return
+            elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
                 # 防止有消息未发送，查询下消息队列
                 send_msg = True
                 while send_msg:
