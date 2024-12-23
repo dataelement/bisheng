@@ -25,7 +25,7 @@ class RagNode(BaseNode):
         ]
 
         self._knowledge_auth = self.node_params['user_auth']
-        self._max_chunk_size = self.node_params['max_chunk_size']
+        self._max_chunk_size = int(self.node_params['max_chunk_size'])
         self._sort_chunks = False
 
         # 解析prompt
