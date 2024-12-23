@@ -157,7 +157,7 @@ class RagNode(BaseNode):
                 raise Exception('没有配置默认的embedding模型')
             file_ids = []
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(one)
+                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
                 if not file_metadata:
                     raise Exception(f'未找到对应的临时文件数据：{one}')
                 file_ids.append(file_metadata['file_id'])

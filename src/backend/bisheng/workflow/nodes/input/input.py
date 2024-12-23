@@ -39,7 +39,9 @@ class InputNode(BaseNode):
             key_info = self._node_params_map[key]
             if key_info['type'] == 'file':
                 file_metadata = self.parse_upload_file(key, value)
-                self.node_params[key] = file_metadata
+                self.node_params[key] = key
+                # 特殊逻辑，用到文件源信息的自行处理下
+                self.node_params[f'{key}_file_metadata'] = file_metadata
 
         return self.node_params
 

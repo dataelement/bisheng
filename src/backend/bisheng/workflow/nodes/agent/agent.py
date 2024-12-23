@@ -124,7 +124,7 @@ class AgentNode(BaseNode):
         if not self._knowledge_ids:
             return []
         tools = []
-        for knowledge_id in self._knowledge_ids:
+        for index, knowledge_id in enumerate(self._knowledge_ids):
             if self._knowledge_type == 'knowledge':
                 knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
                 name = f'knowledge_{knowledge_id}'
@@ -132,12 +132,12 @@ class AgentNode(BaseNode):
                 vector_client = self.init_knowledge_milvus(knowledge_info)
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
-                file_metadata = self.graph_state.get_variable_by_str(knowledge_id)
+                file_metadata = self.graph_state.get_variable_by_str(f'{knowledge_id}_file_metadata')
                 if not file_metadata:
                     raise Exception(f'未找到对应的临时文件数据：{knowledge_id}')
 
-                name = f'knowledge_{knowledge_id.replace(".", "").replace("#", "")}'
-                description = f'file name: {file_metadata.get("source")}'
+                name = f'{knowledge_id.replace(".", "").replace("#", "")}_knowledge_{index}'
+                description = f'{file_metadata.get("source")}:{file_metadata.get("title")}'
 
                 vector_client = self.init_file_milvus(file_metadata)
                 es_client = self.init_file_es(file_metadata)
