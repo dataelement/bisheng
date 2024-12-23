@@ -58,7 +58,6 @@ class LLMService:
         if exist_server:
             raise ServerExistError.http_exception()
 
-        # TODO 尝试实例化下对应的模型组件是否可以成功初始化
         model_dict = {}
         for one in server.models:
             if one.model_name not in model_dict:
@@ -325,6 +324,27 @@ class LLMService:
             config = Config(key=ConfigKeyEnum.EVALUATION_LLM.value, value=json.dumps(data.dict()))
         ConfigDao.insert_config(config)
         return data
+
+    @classmethod
+    def update_workflow_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \
+            -> EvaluationLLMConfig:
+        """ 更新workflow的默认模型配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.WORKFLOW_LLM)
+        if config:
+            config.value = json.dumps(data.dict())
+        else:
+            config = Config(key=ConfigKeyEnum.WORKFLOW_LLM.value, value=json.dumps(data.dict()))
+        ConfigDao.insert_config(config)
+        return data
+
+    @classmethod
+    def get_workflow_llm(cls) -> EvaluationLLMConfig:
+        """ 获取评测功能的默认模型配置 """
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.WORKFLOW_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return EvaluationLLMConfig(**ret)
 
     @classmethod
     def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> List[LLMServerInfo]:
