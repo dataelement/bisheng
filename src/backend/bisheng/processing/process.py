@@ -169,7 +169,7 @@ async def process_graph_cached(
                                                  artifacts={},
                                                  process_file=True,
                                                  flow_id=flow_id,
-                                                 chat_id='')
+                                                 chat_id=session_id)
     graph, artifacts = session if session else (None, None)
     if not graph:
         raise ValueError('Graph not found in the session')
