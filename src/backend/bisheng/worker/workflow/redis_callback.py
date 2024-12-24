@@ -159,12 +159,15 @@ class RedisCallback(BaseCallback):
     def on_user_input(self, data: UserInputData):
         """ user input event """
         logger.debug(f'user input: {data}')
-        self.send_chat_response(
-            ChatResponse(message=data.dict(),
-                         category='user_input',
-                         type='over',
-                         flow_id=self.workflow_id,
-                         chat_id=self.chat_id))
+        chat_response = ChatResponse(message=data.dict(),
+                                     category='user_input',
+                                     type='over',
+                                     flow_id=self.workflow_id,
+                                     chat_id=self.chat_id)
+        msg_id = self.save_chat_message(chat_response)
+        if msg_id:
+            chat_response.message_id = msg_id
+        self.send_chat_response(chat_response)
 
     def on_guide_word(self, data: GuideWordData):
         """ guide word event """

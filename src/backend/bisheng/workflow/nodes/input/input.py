@@ -28,7 +28,7 @@ class InputNode(BaseNode):
         self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
-        return self.node_data.group_params
+        return self.node_data.dict()
 
     def _run(self, unique_id: str):
         if self._tab == 'input':

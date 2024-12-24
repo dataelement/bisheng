@@ -17,7 +17,7 @@ class NodeEndData(NodeStartData):
 
 class UserInputData(BaseModel):
     node_id: str = Field(..., description='Node unique id')
-    group_params: Any = Field(..., description='User input data')
+    node_data: Any = Field(..., description='Node data')
 
 
 class GuideWordData(BaseModel):
