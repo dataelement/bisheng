@@ -31,21 +31,25 @@ BISHENG is an open LLM application devops platform, focusing on enterprise scena
 
 
 ## Features 
+1. Unique [BISHENG Workflow](https://dataelem.feishu.cn/wiki/R7HZwH5ZGiJUDrkHZXicA9pInif)
+   - 🧩 **Independent and comprehensive application orchestration framework**: Enables the execution of various tasks within a single framework (while similar products rely on bot invocation or separate chatflow and workflow modules for different tasks).
+   - 🔄 **Human in the loop**: Allows users to intervene and provide feedback during the execution of workflows (including multi-turn conversations), whereas similar products can only execute workflows from start to finish without intervention.
+   - 💥 **Powerful**: Supports loops, parallelism, batch processing, conditional logic, and free combination of all logic components. It also handles complex scenarios such as multi-type input/output, report generation, content review, and more.
+   - 🖐️ **User-friendly and intuitive**: Operations like loops, parallelism, and batch processing, which require specialized components in similar products, can be easily visualized in BISHENG as a "flowchart" (drawing a loop forms a loop, aligning elements creates parallelism, and selecting multiple items enables batch processing).
+   <p align="center"><img src="https://dataelem.com/bs/bisheng_workflow.png" alt="sence0"></p>
 
-1. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more. 
+2. <b>Designed for Enterprise Applications</b>: Document review, fixed-layout report generation, multi-agent collaboration, policy update comparison, support ticket assistance, customer service assistance, meeting minutes generation, resume screening, call record analysis, unstructured data governance, knowledge mining, data analysis, and more. 
 
-The platform supports the construction of <b>highly complex enterprise application scenarios</b> and offers <b>deep optimization</b> with hundreds of components and thousands of parameters.
+​	The platform supports the construction of <b>highly complex enterprise application scenarios</b> and offers <b>deep optimization</b> 	with hundreds of components and thousands of parameters.
 <p align="center"><img src="https://dataelem.com/bs/chat.png" alt="sence1"></p>
 
-2. <b>Enterprise-grade</b> features are the fundamental guarantee for application implementation: security review, RBAC, user group management, traffic control by group, SSO/LDAP, vulnerability scanning and patching, high availability deployment solutions, monitoring, statistics, and more.
+3. <b>Enterprise-grade</b> features are the fundamental guarantee for application implementation: security review, RBAC, user group management, traffic control by group, SSO/LDAP, vulnerability scanning and patching, high availability deployment solutions, monitoring, statistics, and more.
 <p align="center"><img src="https://dataelem.com/bs/pro.png" alt="sence2"></p>
 
-3. <b>High-Precision Document Parsing</b>: Our high-precision document parsing model is trained on a vast amount of high-quality data accumulated over past 5 years. It includes high-precision printed text, handwritten text, and rare character recognition models, table recognition models, layout analysis models, and seal models., table recognition models, layout analysis models, and seal models. You can deploy it privately for free.
+4. <b>High-Precision Document Parsing</b>: Our high-precision document parsing model is trained on a vast amount of high-quality data accumulated over past 5 years. It includes high-precision printed text, handwritten text, and rare character recognition models, table recognition models, layout analysis models, and seal models., table recognition models, layout analysis models, and seal models. You can deploy it privately for free.
 <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="sence3"></p>
 
-4. A community for sharing best practices across various enterprise scenarios: An open repository of application cases and best practices.
-
-
+5. A community for sharing best practices across various enterprise scenarios: An open repository of application cases and best practices.
 ## Quick start 
 
 Please ensure the following conditions are met before installing BISHENG:
