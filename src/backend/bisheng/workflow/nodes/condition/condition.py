@@ -34,7 +34,13 @@ class ConditionNode(BaseNode):
             self._next_node_id = next_node_id
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return self._variable_key_value
+        return [
+            {
+                "key": k,
+                "value": v,
+                "type": "variable"
+            } for k, v in self._variable_key_value.items()
+        ]
 
     def route_node(self, state: dict) -> str:
         return self._next_node_id

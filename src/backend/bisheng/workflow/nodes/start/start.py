@@ -31,7 +31,15 @@ class StartNode(BaseNode):
         }
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return {
-            'current_time': result['current_time'],
-            'preset_question': result['preset_question']
-        }
+        return [
+            {
+                "key": "current_time",
+                "value": result['current_time'],
+                "type": "params"
+            },
+            {
+                "key": "preset_question",
+                "value": result['preset_question'],
+                "type": "params"
+            }
+        ]

@@ -41,9 +41,14 @@ class InputNode(BaseNode):
                 file_metadata = self.parse_upload_file(key, value)
                 self.node_params[key] = key
                 # 特殊逻辑，用到文件源信息的自行处理下
-                self.node_params[f'{key}_file_metadata'] = file_metadata
+                self.graph_state.set_variable(self.id, f'{key}_file_metadata', file_metadata)
 
         return self.node_params
+
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return [
+            {"key": k, "value": v, "type": "params"} for k, v in result.items()
+        ]
 
     def parse_upload_file(self, key: str, value: str) -> dict | None:
         """

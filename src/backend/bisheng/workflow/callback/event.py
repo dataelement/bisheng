@@ -12,7 +12,7 @@ class NodeStartData(BaseModel):
 
 class NodeEndData(NodeStartData):
     reason: Optional[str] = Field(None, description='Reason for node exec error')
-    log_data: Dict = Field(None, description='Log data on node exec success')
+    log_data: Any = Field(None, description='Log data on node exec success')
 
 
 class UserInputData(BaseModel):

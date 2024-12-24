@@ -58,10 +58,20 @@ class OutputNode(BaseNode):
         return res
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return {
-            'output_msg': self._parsed_output_msg,
-            'output_result': self._output_result
-        }
+        ret = [
+            {
+                "key": "output_msg",
+                "value": self._parsed_output_msg,
+                "type": "params"
+            }
+        ]
+        if self._output_type == 'input':
+            ret.append({
+                "key": "output_result",
+                "value": self._output_result,
+                "type": "params"
+            })
+        return ret
 
     def parse_output_msg(self):
         """ 填充msg中的变量，获取文件的share地址 """

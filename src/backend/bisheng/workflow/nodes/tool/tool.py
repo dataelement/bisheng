@@ -27,10 +27,20 @@ class ToolNode(BaseNode):
         }
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return {
-            'input': self.parse_tool_input(),
-            'output': result
-        }
+        tool_input = self.parse_tool_input()
+        ret = [
+            {
+                "key": k,
+                "value": v,
+                "type": "params"
+            } for k, v in tool_input.items()
+        ]
+        ret.append({
+            "key": "output",
+            "value": result,
+            "type": "params"
+        })
+        return ret
 
     def parse_tool_input(self) -> dict:
         ret = {}

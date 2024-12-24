@@ -239,11 +239,14 @@ class AgentNode(BaseNode):
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        ret = {
-            'system_prompt': self._system_prompt_list,
-            'user_prompt': self._user_prompt_list,
-            'output': result
-        }
+        ret = []
+        if self._batch_variable_list:
+            ret.append({"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
+
+        ret.extend([
+            {"key": "system_prompt", "value": self._system_prompt_list, "type": "params"},
+            {"key": "user_prompt", "value": self._user_prompt_list, "type": "params"},
+        ])
         tool_invoke_info = {}
         if self._tool_invoke_list:
             for one in self._tool_invoke_list:
@@ -263,9 +266,13 @@ class AgentNode(BaseNode):
                         'output': f'Error: {one["error"]}'
                     })
         if tool_invoke_info:
-            ret['tool_invoke'] = list(tool_invoke_info.values())
-        if self._batch_variable_list:
-            ret['batch_variable'] = self._batch_variable_list
+            for one in tool_invoke_info.values():
+                ret.append({
+                    "key": one["name"],
+                    "value": f"Tool Input:\n {one['input']}, Tool Output:\n {one['output']}",
+                    "type": "tool"
+                })
+        ret.append({"key": "output", "value": result, "type": "params"})
         return ret
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None):

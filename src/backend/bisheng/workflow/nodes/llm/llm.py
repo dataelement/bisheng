@@ -54,13 +54,13 @@ class LLMNode(BaseNode):
         return result
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        ret = {
-            'system_prompt': self._system_prompt_list,
-            'user_prompt': self._user_prompt_list,
-            'output': result
-        }
+        ret = [
+            {"key": "system_prompt", "value": self._system_prompt_list, "type": "params"},
+            {"key": "user_prompt", "value": self._user_prompt_list, "type": "params"},
+            {"key": "output", "value": result, "type": "params"}
+        ]
         if self._batch_variable_list:
-            ret['batch_variable'] = self._batch_variable_list
+            ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
         return ret
 
     def _run_once(self,

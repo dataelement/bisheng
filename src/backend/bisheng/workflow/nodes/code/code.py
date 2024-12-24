@@ -28,10 +28,10 @@ class CodeNode(BaseNode):
         return main_ret
 
     def parse_log(self, unique_id: str, result: dict):
-        return {
-            'input': self._parse_code_input(),
-            'output': result
-        }
+        return [
+            {"key": "code_input", "value": self._parse_code_input(), "type": "params"},
+            {"key": "code_output", "value": result, "type": "params"}
+        ]
 
     def _parse_code_input(self) -> dict:
         ret = {}

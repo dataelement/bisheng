@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from bisheng.database.models.user import UserDao
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -54,8 +55,16 @@ class QARetrieverNode(BaseNode):
             'retrieved_result': result_str
         }
 
-    def parse_log(self, unique_id: str, result: dict) -> dict:
-        return {
-            'user_question': self.graph_state.get_variable_by_str(self._user_question),
-            ' retrieved_result': result[' retrieved_result']
-        }
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return [
+            {
+                "key": "user_question",
+                "value": self.graph_state.get_variable_by_str(self._user_question),
+                "type": "params"
+            },
+            {
+                "key": "retrieved_result",
+                "value": result['retrieved_result'],
+                "type": "params"
+            }
+        ]
