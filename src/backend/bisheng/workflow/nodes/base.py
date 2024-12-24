@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
-from bisheng.workflow.common.node import BaseNodeData
+from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.graph_state import GraphState
 
@@ -46,6 +46,8 @@ class BaseNode(ABC):
         self.tmp_collection_name = 'tmp_workflow_data'
 
         self.stop_flag = False
+
+        self.exec_unique_id = None
 
         # 简单参数解析
         self.init_data()
@@ -106,6 +108,7 @@ class BaseNode(ABC):
             raise IgnoreException(f'node {self.name} exceeded more than max steps')
 
         exec_id = uuid.uuid4().hex
+        self.exec_unique_id = exec_id
         self.callback_manager.on_node_start(
             data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
@@ -123,8 +126,10 @@ class BaseNode(ABC):
             reason = str(e)
             raise e
         finally:
-            self.callback_manager.on_node_end(data=NodeEndData(
-                unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
+            # 输出节点的结束日志由fake节点输出
+            if reason or self.type != NodeType.OUTPUT.value:
+                self.callback_manager.on_node_end(data=NodeEndData(
+                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
         return state
 
     async def arun(self, state: dict) -> Any:
