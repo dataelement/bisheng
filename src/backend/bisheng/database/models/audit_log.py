@@ -47,7 +47,7 @@ class EventType(Enum):
 class ObjectType(Enum):
     NONE = "none"  # 无
     FLOW = "flow"  # 技能
-    WORK_FLOW= "work_flow"  # 技能
+    WORK_FLOW= "work_flow"  # 工作流
     ASSISTANT = "assistant"  # 助手
     KNOWLEDGE = "knowledge"  # 知识库
     FILE = "file"  # 文件

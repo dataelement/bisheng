@@ -3,6 +3,8 @@ import json
 import uuid
 from typing import Dict, Optional
 
+from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.utils import get_request_ip
 from fastapi import Request, WebSocket
 from loguru import logger
 
@@ -70,6 +72,14 @@ class WorkflowClient(BaseClient):
         else:
             logger.warning('not support action: %s', message.get('action'))
 
+    async def init_history(self):
+        if not self.chat_id:
+            return
+        history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
+        if not history:
+            # 新建会话，记录审计日志
+            AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
+
     async def init_workflow(self, message: dict):
         if self.workflow is not None:
             return
@@ -79,6 +89,7 @@ class WorkflowClient(BaseClient):
             # 查询chat_id对应的异步任务唯一标识
             unique_id = uuid.uuid4().hex
             if self.chat_id:
+                await self.init_history()
                 unique_id = f'{self.chat_id}_async_task_id'
             logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))

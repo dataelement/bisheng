@@ -90,6 +90,16 @@ class AuditLogService:
                       flow_id, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
+    def create_chat_workflow(cls, user: UserPayload, ip_address: str, flow_id: str):
+        """
+        新建工作流会话的审计日志
+        """
+        logger.info(f"act=create_chat_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
+        flow_info = FlowDao.get_flow_by_id(flow_id)
+        cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.WORK_FLOW,
+                      flow_id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+
+    @classmethod
     def delete_chat_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
         """
         删除技能会话的审计日志
@@ -97,6 +107,15 @@ class AuditLogService:
         logger.info(f"act=delete_chat_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.FLOW,
                       flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+
+    @classmethod
+    def delete_chat_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
+        """
+        删除技能会话的审计日志
+        """
+        logger.info(f"act=delete_chat_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
+        cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORK_FLOW,
+                      flow_info.id.hex, flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
     def delete_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_info: Assistant):

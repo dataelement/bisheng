@@ -223,7 +223,10 @@ def del_chat_id(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(message.flow_id.hex)
         if flow_info:
-            AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
+            if flow_info.flow_type == FlowType.FLOW.value:
+                AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
+            else:
+                AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(message.flow_id)
             if assistant_info:
