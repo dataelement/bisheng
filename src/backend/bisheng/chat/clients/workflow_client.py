@@ -27,11 +27,13 @@ class WorkflowClient(BaseClient):
                          websocket, **kwargs)
 
         self.workflow: Optional[RedisCallback] = None
+        self.history = []
 
     async def close(self):
-        if self.workflow:
+        # 非会话模式关闭workflow执行
+        if self.workflow and not self.chat_id:
             self.workflow.set_workflow_stop()
-            self.workflow = None
+        self.workflow = None
 
     async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
         if not self.chat_id:
@@ -75,8 +77,8 @@ class WorkflowClient(BaseClient):
     async def init_history(self):
         if not self.chat_id:
             return
-        history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
-        if not history:
+        self.history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
+        if not self.history:
             # 新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
@@ -95,10 +97,13 @@ class WorkflowClient(BaseClient):
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
             status_info = self.workflow.get_workflow_status()
             if not status_info:
+                if self.history:
+                    await self.send_response('processing', 'close', '')
                 self.workflow.set_workflow_data(workflow_data)
                 self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
                 # 发起异步任务
                 execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
+
         except Exception as e:
             logger.exception('init_workflow_error')
             self.workflow = None
@@ -136,10 +141,11 @@ class WorkflowClient(BaseClient):
                     else:
                         send_msg = False
 
-                self.workflow = None
                 if status_info['status'] == WorkflowStatus.FAILED.value:
                     await self.send_response('error', 'over', status_info['reason'])
                 await self.send_response('processing', 'close', '')
+                self.workflow.clear_workflow_status()
+                self.workflow = None
                 break
             else:
                 chat_response = self.workflow.get_workflow_response()

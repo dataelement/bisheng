@@ -62,16 +62,8 @@ logger_conf:
       # 日志级别
       level: INFO
       # 日志格式化函数，extra内支持trace_id
-      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}|{process.id}|{thread.id}|{message}"
+      format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
       # 每天的几点进行切割
-      rotation: "00:00"
-      retention: "3 Days"
-      enqueue: ture
-    - sink: "/app/data/err-v0-BISHENG-{HOSTNAME}.log"
-      level: ERROR
-      # 和原生不一样，后端会将配置使用eval()执行转为函数用来过滤特定日志级别。推荐lambda
-      filter: "lambda record: record['level'].name == 'ERROR'"
-      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}||{process.id}|{thread.id}|||#EX_ERR:POS={name},line {line},ERR=500,EMSG={message}"
       rotation: "00:00"
       retention: "3 Days"
       enqueue: ture

@@ -48,7 +48,10 @@ class RedisClient:
         try:
             if pickled := pickle.dumps(value):
                 self.cluster_nodes(key)
-                result = self.connection.setex(key, expiration, pickled)
+                if expiration:
+                    result = self.connection.setex(key, expiration, pickled)
+                else:
+                    result = self.connection.set(key, pickled)
                 if not result:
                     raise ValueError('RedisCache could not set the value.')
             else:
