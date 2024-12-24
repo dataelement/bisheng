@@ -127,18 +127,21 @@ class RagNode(BaseNode):
         variable_map = {}
         for one in self._user_variables:
             if one == f'{self.id}.user_question':
-                variable_map[one] = '{question}'
+                variable_map[one] = '$$question$$'
             elif one == f'{self.id}.retrieved_result':
-                variable_map[one] = '{context}'
+                variable_map[one] = '$$context$$'
             else:
                 variable_map[one] = self.graph_state.get_variable_by_str(one)
         user_prompt = self._user_prompt.format(variable_map)
+        user_prompt = (user_prompt.replace('{', '{{').replace('}', '}}')
+                       .replace('$$question$$', '{question}').replace('$$context$$', '{context}'))
         self._log_user_prompt.append(user_prompt)
 
         variable_map = {}
         for one in self._system_variables:
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         system_prompt = self._system_prompt.format(variable_map)
+        system_prompt.replace('{', '{{').replace('}', '}}')
         self._log_system_prompt.append(system_prompt)
 
         messages_general = [
