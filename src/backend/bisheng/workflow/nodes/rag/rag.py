@@ -19,9 +19,9 @@ class RagNode(BaseNode):
         super().__init__(*args, **kwargs)
 
         # 判断是知识库还是临时文件列表
-        self._knowledge_type = self.node_params['retrieved_result']['type']
+        self._knowledge_type = self.node_params['knowledge']['type']
         self._knowledge_value = [
-            one['key'] for one in self.node_params['retrieved_result']['value']
+            one['key'] for one in self.node_params['knowledge']['value']
         ]
 
         self._knowledge_auth = self.node_params['user_auth']
@@ -104,18 +104,19 @@ class RagNode(BaseNode):
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        output_key = []
+        output_keys = []
         source_documents = []
         for key, val in result.items():
-            output_key.append(val)
+            output_keys.append({'key': key, 'value': val, 'type': 'params'})
             source_documents.append([one.page_content for one in self._log_source_documents[key]])
-        return [
+        ret = [
             {'key': 'user_question', 'value': self.init_user_question(), "type": "params"},
-            {'key': 'source_documents', 'value': source_documents, "type": "params"},
+            {'key': 'retrieved_result', 'value': source_documents, "type": "params"},
             {'key': 'system_prompt', 'value': self._log_system_prompt, "type": "params"},
             {'key': 'user_prompt', 'value': self._log_user_prompt, "type": "params"},
-            {'key': 'output_key', 'value': output_key, "type": "params"},
-        ],
+        ]
+        ret.extend(output_keys)
+        return ret
 
     def init_user_question(self) -> List[str]:
         ret = []

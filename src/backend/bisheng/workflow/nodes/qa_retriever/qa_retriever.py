@@ -49,7 +49,7 @@ class QARetrieverNode(BaseNode):
             result_str = ''
 
         # 存检索结果的源文档，key左右加上$作为来源文档key去查询
-        self.graph_state.set_variable(self.id, '$retrieval_result$', result['result'])
+        self.graph_state.set_variable(self.id, '$retrieved_result$', result['result'])
 
         return {
             'retrieved_result': result_str
