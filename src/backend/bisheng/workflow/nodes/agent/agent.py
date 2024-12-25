@@ -272,7 +272,7 @@ class AgentNode(BaseNode):
                     "value": f"Tool Input:\n {one['input']}, Tool Output:\n {one['output']}",
                     "type": "tool"
                 })
-        ret.append({"key": "output", "value": result, "type": "params"})
+        ret.extend([{"key": k, "value": v, "type": "params"} for k, v in result.items()])
         return ret
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None):
