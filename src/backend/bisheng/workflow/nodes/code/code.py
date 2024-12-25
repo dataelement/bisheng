@@ -24,6 +24,7 @@ class CodeNode(BaseNode):
         main_params = self._parse_code_input()
 
         main_ret = self._code_parser.exec_method('main', **main_params)
+        main_ret = self._parse_code_output(main_ret)
 
         return main_ret
 
