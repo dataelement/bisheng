@@ -50,5 +50,5 @@ class CodeNode(BaseNode):
         for one in self._code_output:
             if one["key"] not in result:
                 raise Exception(f"CodeNode {self.name} main function output must have key {one['key']}")
-            ret[one['key']] = result.get([one['key']])
+            ret[one['key']] = result.get(one['key'])
         return ret
