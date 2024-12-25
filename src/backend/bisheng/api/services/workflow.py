@@ -19,7 +19,7 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.workflow.callback.base_callback import BaseCallback
-from bisheng.workflow.common.node import BaseNodeData
+from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
@@ -85,6 +85,8 @@ class WorkFlowService(BaseService):
 
         # 增加额外的信息
         for one in data:
+            if one['flow_type'] != FlowType.ASSISTANT.value:
+                one['id'] = UUID(one['id'])
             one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
             one['write'] = True if user.is_admin() or user.user_id == one['user_id'] else False
             one['version_list'] = flow_versions.get(one['id'], [])
@@ -101,8 +103,6 @@ class WorkFlowService(BaseService):
         base_callback = BaseCallback()
         graph_state = GraphState()
         graph_state.history_memory = ConversationBufferWindowMemory(k=10)
-        for key, val in node_input.items():
-            graph_state.set_variable_by_str(key, val)
         node = NodeFactory.instance_node(node_type=node_data.type,
                                          node_data=node_data,
                                          user_id=login_user.user_id,
@@ -111,9 +111,46 @@ class WorkFlowService(BaseService):
                                          target_edges=None,
                                          max_steps=233,
                                          callback=base_callback)
+        if node_data.type == NodeType.CODE.value:
+            node.handle_input({
+                'code_input': [
+                    {
+                        'key': k.split('.')[1],
+                        'value': v,
+                        'type': 'input'
+                    }for k, v in node_input.items()
+                ]
+            })
+        elif node_data.type ==  NodeType.TOOL.value:
 
-        result = node._run(uuid4().hex)
-        return result
+            pass
+        else:
+            for key, val in node_input.items():
+                graph_state.set_variable_by_str(key, val)
+
+        exec_id = uuid4().hex
+        result = node._run(exec_id)
+        log_data = node.parse_log(exec_id, result)
+        ret = []
+        for one in log_data:
+            if node_data.type == NodeType.QA_RETRIEVER.value and one['key'] != 'retrieved_result':
+                continue
+            if node_data.type == NodeType.RAG.value and (one['key'] != 'retrieved_result' or not one['key'].startswith('output')):
+                continue
+            if node_data.type == NodeType.LLM.value and not one['key'].startswith('output'):
+                continue
+            if node_data.type == NodeType.AGENT.value and (one['type'] != 'tool' or not one['key'].startswith('output')):
+                continue
+            if node_data.type == NodeType.CODE.value and one['key'] != 'code_output':
+                continue
+            if node_data.type == NodeType.TOOL.value and one['key'] != 'output':
+                continue
+            ret.append({
+                'key': one['key'],
+                'value': one['value'],
+                'type': one['type']
+            })
+        return ret
 
     @classmethod
     def update_flow_status(cls, login_user: UserPayload, flow_id: str, version_id: int, status: int):
