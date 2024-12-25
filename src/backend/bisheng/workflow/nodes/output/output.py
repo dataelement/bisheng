@@ -28,7 +28,7 @@ class OutputNode(BaseNode):
         self._source_documents = []
 
         # 非选择型交互，则下个节点就是连线的target。选择型交互，需要根据用户输入来判断
-        self._next_node_id = self.target_edges[0].target
+        self._next_node_id = [one.target for one in self.target_edges]
 
     def handle_input(self, user_input: dict) -> Any:
         # 需要存入state，
@@ -42,7 +42,7 @@ class OutputNode(BaseNode):
         group_params = self.node_data.dict(include={'group_params'})
         return group_params['group_params']
 
-    def route_node(self, state: dict) -> str:
+    def route_node(self, state: dict) -> str | list[str]:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
             return self.get_next_node_id(self._output_result)

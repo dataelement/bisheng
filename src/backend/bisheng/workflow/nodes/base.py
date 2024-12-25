@@ -92,10 +92,12 @@ class BaseNode(ABC):
         """
         raise NotImplementedError
 
-    def get_next_node_id(self, source_handle: str) -> str | None:
+    def get_next_node_id(self, source_handle: str) -> list[str]:
+        next_nodes = []
         for one in self.target_edges:
             if one.sourceHandle == source_handle:
-                return one.target
+                next_nodes.append(one.target)
+        return next_nodes
 
     def run(self, state: dict) -> Any:
         """
