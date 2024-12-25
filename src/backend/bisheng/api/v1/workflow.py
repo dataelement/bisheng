@@ -109,6 +109,8 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
             raise HTTPException(status_code=500, detail='工作流名重复')
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
+    db_flow.create_time = None
+    db_flow.update_time = None
     db_flow.flow_type = FlowType.WORKFLOW.value
     # 创建新的技能
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
