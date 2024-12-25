@@ -108,13 +108,14 @@ class GroupResourceDao(GroupResourceBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_resources_group(cls, resource_type: ResourceTypeEnum, third_ids: List[str]) -> list[GroupResource]:
+    def get_resources_group(cls, resource_type: ResourceTypeEnum | None, third_ids: List[str]) -> list[GroupResource]:
         """
         获取批量资源所属的分组
         """
+        statement = select(GroupResource).where(GroupResource.third_id.in_(third_ids))
+        if resource_type:
+            statement = statement.where(GroupResource.type == resource_type.value)
         with session_getter() as session:
-            statement = select(GroupResource).where(GroupResource.third_id.in_(third_ids),
-                                                    GroupResource.type == resource_type.value)
             return session.exec(statement).all()
 
     @classmethod

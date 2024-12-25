@@ -31,7 +31,7 @@ class ConditionNode(BaseNode):
         if next_node_ids is None:
             self._next_node_id = self.get_next_node_id('right_handle')
         else:
-            self._next_node_id = next_node_id
+            self._next_node_id = next_node_ids
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         return [
