@@ -30,7 +30,7 @@ class WorkFlowService(BaseService):
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
                       page: int = 1,
-                      page_size: int = 10) -> UnifiedResponseModel[List[Dict]]:
+                      page_size: int = 10) -> (list[dict], int):
         """
         获取所有技能
         """
@@ -39,10 +39,7 @@ class WorkFlowService(BaseService):
         if tag_id:
             ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
             if not ret:
-                return resp_200(data={
-                    'data': [],
-                    'total': 0
-                })
+                return [], 0
             flow_ids = [one.resource_id for one in ret]
 
         # 获取用户可见的技能列表
@@ -95,10 +92,7 @@ class WorkFlowService(BaseService):
             one['tags'] = resource_tag_dict.get(one['id'], [])
             one['logo'] = cls.get_logo_share_link(one['logo'])
 
-        return resp_200(data={
-            "data": data,
-            "total": total
-        })
+        return data, total
 
     @classmethod
     def run_once(cls, login_user: UserPayload, node_input: Dict[str, any], node_data: Dict[any, any]):

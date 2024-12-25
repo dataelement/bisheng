@@ -11,6 +11,7 @@ from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
@@ -413,56 +414,8 @@ def get_online_chat(*,
                     page: Optional[int] = 1,
                     limit: Optional[int] = 10,
                     user: UserPayload = Depends(get_login_user)):
-    # 由于是获取助手和技能两个表，需要将page修改下
-    if page and limit:
-        search_page = math.ceil(page / 2)
-    else:
-        search_page = 1
-        limit = 10
-    res = []
-    all_assistant = AssistantService.get_assistant(user,
-                                                   keyword,
-                                                   AssistantStatus.ONLINE.value,
-                                                   tag_id,
-                                                   page=search_page,
-                                                   limit=limit)
-    all_assistant = all_assistant.data.get('data')
-    flows = FlowService.get_all_flows(user,
-                                      keyword,
-                                      FlowStatus.ONLINE.value,
-                                      tag_id=tag_id,
-                                      page=search_page,
-                                      page_size=limit,flow_type=None)
-    flows = flows.data.get('data')
-    for one in all_assistant:
-        msg = ChatMessageDao.get_msg_by_flow(one.id)
-        res.append(
-            FlowGptsOnlineList(id=str(one.id),
-                               name=one.name,
-                               desc=one.desc,
-                               logo=one.logo,
-                               count=len(msg),
-                               create_time=one.create_time,
-                               update_time=one.update_time,
-                               flow_type='assistant'))
-
-    # 获取用户可见的所有已上线的技能
-    for one in flows:
-        msg = ChatMessageDao.get_msg_by_flow(one['id'])
-        flow_type = "flow" if one['flow_type'] == FlowType.FLOW.value else "workflow"
-        res.append(
-            FlowGptsOnlineList(id=one['id'],
-                               name=one['name'],
-                               desc=one['description'],
-                               logo=one['logo'],
-                               count=len(msg),
-                               create_time=one['create_time'],
-                               update_time=one['update_time'],
-                               flow_type=flow_type))
-    res.sort(key=lambda x: x.update_time, reverse=True)
-    if page and limit:
-        res = res[(page - 1) * limit:page * limit]
-    return resp_200(data=res)
+    data, _ = WorkFlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value, tag_id, None, page, limit)
+    return resp_200(data=data)
 
 
 @router.websocket('/chat/{flow_id}')

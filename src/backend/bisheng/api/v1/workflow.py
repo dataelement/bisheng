@@ -251,8 +251,8 @@ def read_flows(*,
                page_num: int = Query(default=1, description='页数'),
                status: int = None):
     """Read all flows."""
-    try:
-        return WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size)
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size)
+    return resp_200(data={
+        'data': data,
+        'total': total
+    })
