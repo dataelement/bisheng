@@ -36,7 +36,7 @@ export default function ToolItem({ data, onChange }) {
         <ToolsSheet select={value} onSelect={(val) => {
             const newValue = [...value, val]
             setValue(newValue)
-            onChange(newValue.map(el => ({ key: el.id, label: el.name })))
+            onChange(newValue.map(el => ({ key: el.id, label: el.name, tool_key: el.tool_key })))
         }}>
             <Button onClick={() => { }} variant='outline' className="border-primary text-primary mt-2">
                 {data.label}

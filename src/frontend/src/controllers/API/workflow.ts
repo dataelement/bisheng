@@ -60,7 +60,7 @@ export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
 /**
  * 上线指定版本工作流
  */
-export const onlineWorkflowApi = async (data: {flow_id, version_id, status}) => {
+export const onlineWorkflowApi = async (data: { flow_id, version_id, status }) => {
     return await axios.patch(`/api/v1/workflow/status`, data);
 };
 
@@ -281,14 +281,14 @@ const workflowTemplate = [
                         "key": "system_prompt",
                         "label": "系统提示词",
                         "type": "var_textarea",
-                        "test": "input",
+                        "test": "var",
                         "value": ""
                     },
                     {
                         "key": "user_prompt",
                         "label": "用户提示词",
                         "type": "var_textarea",
-                        "test": "input",
+                        "test": "var",
                         "value": "",
                         "required": true
                     }
@@ -381,7 +381,7 @@ const workflowTemplate = [
                         "key": "system_prompt",
                         "label": "系统提示词",
                         "type": "var_textarea",
-                        "test": "input",
+                        "test": "var",
                         "value": "",
                         "placeholder": "助手画像",
                         "required": true
@@ -390,7 +390,7 @@ const workflowTemplate = [
                         "key": "user_prompt",
                         "label": "用户提示词",
                         "type": "var_textarea",
-                        "test": "input",
+                        "test": "var",
                         "value": "",
                         "placeholder": "用户消息内容",
                         "required": true
@@ -488,7 +488,7 @@ const workflowTemplate = [
                         "key": "user_question",
                         "label": "输入变量",
                         "type": "var_select",
-                        "test": "input",
+                        "test": "var",
                         "value": "",
                         "required": true,
                         "placeholder": "请选择检索问题"
@@ -541,9 +541,9 @@ const workflowTemplate = [
                     {
                         "key": "user_question",
                         "label": "用户问题",
-                        "global": "self=system_prompt,user_prompt",
+                        "global": "self=user_prompt",
                         "type": "user_question",
-                        "test": "input",
+                        "test": "var",
                         "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。",
                         "linkage": "output_user_input",
                         "value": [],
@@ -551,9 +551,8 @@ const workflowTemplate = [
                         "required": true
                     },
                     {
-                        "key": "retrieved_result",
+                        "key": "knowledge",
                         "label": "检索范围",
-                        "global": "self=system_prompt,user_prompt",
                         "type": "knowledge_select_multi",
                         "placeholder": "请选择知识库",
                         "value": {
@@ -575,6 +574,12 @@ const workflowTemplate = [
                         "type": "number",
                         "value": 15000,
                         "help": "通过此参数控制最终传给模型的知识库检索结果文本长度，超过模型支持的最大上下文长度可能会导致报错。"
+                    },
+                    {
+                        "key": "retrieved_result",
+                        "label": "检索结果",
+                        "type": "var",
+                        "global": "self=user_prompt"
                     }
                 ]
             },
@@ -593,6 +598,7 @@ const workflowTemplate = [
                         "label": "用户提示词",
                         "type": "var_textarea",
                         "value": "用户问题：{{#user_question#}}\n参考文本：{{#retrieved_result#}}\n你的回答：",
+                        "test": "var",
                         "required": true
                     },
                     {

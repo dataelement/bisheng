@@ -44,7 +44,7 @@ const Log = ({ type, name, data }) => {
                 </span>
             </div>
             {open && (
-                <div className="absolute top-0 left-full w-96 rounded-lg shadow-lg p-2 bg-[#F7F8FB] z-10">
+                <div className="absolute top-0 left-full w-96 rounded-lg shadow-lg p-2 bg-[#F7F8FB] dark:bg-[#303134] z-10">
                     <div className="flex justify-between items-center mb-2">
                         <div className="relative z-10 flex gap-2">
                             <NodeLogo type={type} colorStr={name} />
@@ -72,22 +72,40 @@ export default function RunLog({ node, children }) {
             const { nodeId, action, data } = e.detail
             if (nodeId !== node.id && nodeId !== '*') return
 
-            if (data && Object.keys(data).length) {
+            if (data) {
+                const newData = data.reduce((res, item) => {
+                    if (item.type === 'variable') {
+                        const key = item.key.split('.')
+                        res[key[key.length - 1]] = item.value
+                    } else {
+                        res[item.key] = item.value
+                    }
+                    return res
+                }, {})
                 let result = {};
                 let hasKeys = []
 
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
-                        if (data[param.key] !== undefined) {
-                            result[param.label] = data[param.key];
+                        if (newData[param.key] !== undefined) {
+                            result[param.label || param.key] = newData[param.key];
                             hasKeys.push(param.key)
+                        } else if (param.key === 'tool_list') {
+                            // tool
+                            param.value.some(p => {
+                                if (newData[p.tool_key] !== undefined) {
+                                    result[p.label] = newData[p.tool_key];
+                                    hasKeys.push(p.tool_key)
+                                    return true
+                                }
+                            })
                         }
                     });
                 });
 
-                for (let key in data) {
+                for (let key in newData) {
                     if (!hasKeys.includes(key)) {
-                        result[key] = data[key];
+                        result[key] = newData[key];
                     }
                 }
                 setData(result)
@@ -111,7 +129,7 @@ export default function RunLog({ node, children }) {
         <span className='text-sm text-primary'>运行中</span>
     </div>
 
-    if (state === Status.success) return < div className='bisheng-node-top flex justify-between bg-[#E6FBF1] [#FCEAEA]' >
+    if (state === Status.success) return < div className='bisheng-node-top flex justify-between bg-[#E6FBF1] dark:bg-[#303134]' >
         <div className='flex items-center gap-2 text-sm'>
             <div className='rounded-full w-4 h-4 bg-[#00C78C] text-gray-50 flex items-center justify-center'><Check size={14} /></div>
             <span>运行成功</span>
@@ -119,7 +137,7 @@ export default function RunLog({ node, children }) {
         {!noLog && <Log type={node.type} name={node.name} data={data} />}
     </div>
 
-    return <div className='bisheng-node-top flex justify-between bg-[#FCEAEA]'>
+    return <div className='bisheng-node-top flex justify-between bg-[#FCEAEA] dark:bg-[#303134]'>
         <div className='flex items-center gap-2 text-sm'>
             <div className='rounded-full w-4 h-4 bg-[#F04438] text-gray-50 flex items-center justify-center'><X size={14} /></div>
             <span>运行失败</span>

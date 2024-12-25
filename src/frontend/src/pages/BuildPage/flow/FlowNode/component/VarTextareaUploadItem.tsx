@@ -92,7 +92,7 @@ export const useFileUpload = (_files, onFilesChange) => {
     const handleFileUpload = () => {
         const input = document.createElement("input");
         input.type = "file";
-        input.accept = "image/*,application/pdf"; // Restrict to images
+        input.accept = "image/*,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/markdown,text/html,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/msword,application/vnd.ms-powerpoint,.png,.jpg,.jpeg"; // Restrict to images
         input.style.display = "none";
         input.multiple = false;
 

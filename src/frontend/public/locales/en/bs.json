@@ -429,6 +429,7 @@
     "createDescription": "Create your assistant by describing roles and tasks",
     "nextDescription": "Assistant can call multiple skills and tools",
     "searchAssistant": "Search for the assistant you need",
+    "searchApp": "Search for the app you need",
     "manageAssistant": "Manage your assistant on this page, including online and offline activities, editing, and more",
     "establishAssistant": "Create Assistant",
     "assistantName": "Assistant Name",

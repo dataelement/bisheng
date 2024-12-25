@@ -342,3 +342,4 @@ export async function changeCurrentVersion({ flow_id, version_id }: { flow_id: s
 export async function runTestCase(data: { question_list, version_list, node_id, inputs }): Promise<any[]> {
     return await axios.post(`/api/v1/flows/compare`, data);
 }
+

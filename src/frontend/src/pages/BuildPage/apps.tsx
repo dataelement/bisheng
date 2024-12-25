@@ -162,7 +162,7 @@ export default function apps() {
     return <div className="h-full relative">
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <div className="flex gap-4">
-                <SearchInput className="w-64" placeholder="搜索您需要的应用" onChange={(e) => search(e.target.value)}></SearchInput>
+                <SearchInput className="w-64" placeholder={t('build.searchApp')} onChange={(e) => search(e.target.value)}></SearchInput>
                 <SelectType all onChange={(v) => {
                     tempTypeRef.current = v
                     filterData({ type: v })

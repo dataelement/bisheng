@@ -18,7 +18,7 @@ export default function editAssistant() {
     const { id: assisId } = useParams()
     const navigate = useNavigate()
     // assistant data
-    const { assistantState, changed, loadAssistantState, saveAfter, destroy } = useAssistantStore()
+    const { assistantState, changed, loadAssistantState,changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
@@ -81,8 +81,10 @@ export default function editAssistant() {
                 navigate('/build')
             }, 1200);
         } else {
-            // TODO 下线接口
-            // 更新 assistantState.status = 1
+            captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 1)).then(res => {
+                if (res === false) return
+                changeStatus(1)
+            })
         }
     }
 

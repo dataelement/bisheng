@@ -42,7 +42,7 @@ export const ChatTest = forwardRef((props, ref) => {
 
     const host = appConfig.websocketHost || ''
     return <div
-        className={`${small ? 'bottom-2 right-4 w-52' : 'w-1/2 h-full right-0 bottom-0'} transition-all fixed rounded-2xl bg-[#fff] z-10 border shadow-sm overflow-hidden`}
+        className={`${small ? 'bottom-2 right-4 w-52' : 'w-1/2 h-full right-0 bottom-0'} transition-all fixed rounded-2xl bg-[#fff] dark:bg-[#1B1B1B] z-10 border shadow-sm overflow-hidden`}
     >
         <div className="flex justify-between items-center bg-background-main px-4 py-1">
             <span className="text-sm font-bold">工作流预览</span>

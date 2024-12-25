@@ -426,6 +426,7 @@
     "createDescription": "通过描述角色和任务来创建你的助手",
     "nextDescription": "助手可以调用多个技能和工具",
     "searchAssistant": "搜索您需要的助手",
+    "searchApp": "搜索您需要的应用",
     "manageAssistant": "在此页面管理您的助手，对助手上下线、编辑等等",
     "establishAssistant": "创建助手",
     "assistantName": "助手名称",

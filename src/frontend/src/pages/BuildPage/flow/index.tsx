@@ -56,7 +56,7 @@ export default function FlowPage() {
 
     return (
         <div className="flow-page-positioning">
-            {flow && <Panne flow={copyFlow} preFlow={preFlow} />}
+            {copyFlow && <Panne flow={copyFlow} preFlow={preFlow} />}
         </div>
     );
 }

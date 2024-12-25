@@ -1,6 +1,6 @@
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
-import { getAssistantModelList, getModelListApi } from "@/controllers/API/finetune";
+import { getAssistantModelList, getLlmDefaultModel, getModelListApi } from "@/controllers/API/finetune";
 import { useEffect, useMemo, useState } from "react";
 
 export default function ModelItem({ agent = false, data, onChange, onValidate }) {
@@ -32,8 +32,10 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             // return { llmOptions, embeddings }
         })
 
-        // TODO更新默认值
-        // !data.value && onChange(60)
+        // 更新默认值
+        getLlmDefaultModel().then(res => {
+            res && !data.value && onChange(res.model_id)
+        })
     }, [])
 
 

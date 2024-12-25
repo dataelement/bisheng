@@ -1,12 +1,12 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getEvaluationModelConfig, updateEvaluationModelConfig } from "@/controllers/API/finetune";
+import { getLlmDefaultModel, setLlmDefaultModel } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModelSelect } from "./KnowledgeModel";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function WorkflowModel({ llmOptions, onBack }) {
     const { t } = useTranslation('model')
@@ -14,8 +14,7 @@ export default function WorkflowModel({ llmOptions, onBack }) {
     const [loading, setLoading] = useState(true)
     useEffect(() => {
         setLoading(true)
-        // TODO 获取默认值
-        getEvaluationModelConfig().then(res => {
+        getLlmDefaultModel().then(res => {
             setSelectedModel(res.model_id)
             setLoading(false)
         })
@@ -29,8 +28,8 @@ export default function WorkflowModel({ llmOptions, onBack }) {
         const data = {
             model_id: selectedModel
         };
-        // TODO 更新
-        captureAndAlertRequestErrorHoc(updateEvaluationModelConfig(data).then(res => {
+
+        captureAndAlertRequestErrorHoc(setLlmDefaultModel(data).then(res => {
             message({ variant: 'success', description: t('model.saveSuccess') })
         }));
     };

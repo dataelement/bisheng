@@ -56,9 +56,9 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                 </div> : (!Array.isArray(data.message) && <div className="flex justify-between mt-2">
                     <span></span>
                     <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
-                        {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
+                        {/* {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
                         {!running && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
-                        {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
+                        {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />} */}
                     </div>
                 </div>)
             }

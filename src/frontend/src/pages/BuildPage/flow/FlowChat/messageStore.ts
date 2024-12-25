@@ -95,8 +95,12 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         set((state) => {
             let newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id } = data
+            // 删除与历史消息中message_id相同的消息,则删除
+            newChat = newChat.filter((item => !(item.message_id === message_id && item.his)))
             newChat.push({
-                category, flow_id, chat_id, message_id, files, is_bot,
+                category, flow_id, chat_id,
+                message_id: message_id,
+                files, is_bot,
                 message, receiver, source, user_id,
                 liked: !!liked,
                 end: type === 'over',
@@ -172,7 +176,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     async loadHistoryMsg(flowid, chatId, { lastMsg }) {
         const res = await getChatHistory(flowid, chatId, 30, 0)
         const msgs = handleHistoryMsg(res)
-        const hisMessages = msgs.reverse()
+        const hisMessages = msgs.map(el => ({ ...el, his: true })).reverse()
         currentChatId = chatId
         if (msgs.length && lastMsg) {
             hisMessages.push({
@@ -190,6 +194,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         })
         return msgs
     },
+
+
 
     // stream end old
     updateCurrentMessage(data) {

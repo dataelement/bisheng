@@ -92,6 +92,9 @@ const Header = ({ flow, onTabChange, preFlow }) => {
                 variant: 'success',
                 description: `${version?.name} 已下线`
             })
+
+            flow.status = 1
+            refrenshVersions()
         }
     }
 
@@ -154,6 +157,7 @@ const Header = ({ flow, onTabChange, preFlow }) => {
     const [loading, setLoading] = useState(false)
     const { flow: f, setFlow, setFitView } = useFlowStore()
     const { versions, version, lastVersionIndexRef, isOnlineVersion, isOnlineVersionFun, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
+
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
@@ -322,9 +326,9 @@ const Header = ({ flow, onTabChange, preFlow }) => {
                         )}
                     >{t('skills.saveVersion')}</ActionButton>
                 }
-                {isOnlineVersion ? <Button size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleOfflineClick}>
+                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} onClick={handleOfflineClick}>
                     下线
-                </Button> : <Button size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleOnlineClick}>
+                </Button> : <Button size="sm" className={`h-8 px-6`} onClick={handleOnlineClick}>
                     上线
                 </Button>}
                 <Popover open={open} onOpenChange={setOpen}>
@@ -444,6 +448,7 @@ const useNodeEvent = (flow) => {
          */
         const branchLines: { branch: string, nodeIds: { branch: string, nodeId: string }[], end: boolean }[] = []
         const nodeMap = {}
+        const treeNodeIdSet = new Set()
         const startEdge = flow.edges.find(node => node.source.indexOf('start') === 0)
         if (!startEdge) return ['请先链接开始节点']
         const startNodeId = startEdge.source
@@ -461,6 +466,7 @@ const useNodeEvent = (flow) => {
                 const [source, target] = [edge.source.split('_')[0], edge.target.split('_')[0]]
                 const _branchId = `${branchId}_${index}`
                 const _nodeIds = [...nodeIds, { branch: _branchId, nodeId: edge.target, type: findOutType(edge.target) }]
+                treeNodeIdSet.add(edge.target);
 
                 if (target === 'end') {
                     // stop when loop or end 
@@ -480,6 +486,10 @@ const useNodeEvent = (flow) => {
         }
 
         traverseTree(startNodeId, '0', [{ branch: '0', nodeId: startNodeId, type: '' }])
+
+        if (treeNodeIdSet.size !== flow.nodes.length - 1) {
+            return ['存在未连接的节点，请检查连线是否完整。']
+        }
         // console.log('flow :>> ', flow.edges, branchLines);
 
         // 并行校验

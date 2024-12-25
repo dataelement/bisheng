@@ -166,7 +166,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
             </NodeToolbar>
 
             <div
-                className={cname(`bisheng-node hover:border-primary/10 hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
+                className={cname(`bisheng-node hover:border-primary/10 ${node.type === 'condition' ? 'w-auto min-w-80' : ''} ${selected ? 'border-primary/10' : ' border-transparent'}`, nodeError && 'border-red-500')}
                 data-id={node.id}
             >
                 {/* top */}

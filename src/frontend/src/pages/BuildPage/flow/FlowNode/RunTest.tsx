@@ -45,7 +45,7 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
             <p>{title}</p>
             {copyed ? <CopyCheck size={14} /> : <Copy size={14} className="cursor-pointer" onClick={handleCopy} />}
         </div>
-        <textarea defaultValue={text} disabled className="w-full min-h-28 p-2 block text-muted-foreground " />
+        <textarea defaultValue={text} disabled className="w-full min-h-28 p-2 block text-muted-foreground dark:bg-black " />
     </div>
 }
 
@@ -71,17 +71,40 @@ export const RunTest = forwardRef((props, ref) => {
             node.group_params.forEach((group) => {
                 group.params.forEach((param) => {
                     if (param.test === 'input') {
-                        if (param.type === 'code_input') {
-                            // code_input类型特殊处理
-                            return param.value.forEach(val => {
-                                setInputs((prev) => {
-                                    return [...prev, { key: val.key, required: false, label: val.key, value: '' }]
-                                })
+                        if (node.type === "tool") {
+                            return setInputs((prev) => {
+                                return [...prev, { key: node.tool_key, required: false, label: param.label, value: '' }]
                             })
                         }
-                        setInputs((prev) => {
-                            return [...prev, { key: param.key, required: !!param.required, label: param.label || param.key, value: '' }]
+                        // if (param.type === 'code_input') {
+                        // code_input类型特殊处理
+                        return param.value.forEach(val => {
+                            setInputs((prev) => {
+                                return [...prev, { key: val.key, required: false, label: val.key, value: '' }]
+                            })
                         })
+                    } else if (param.test === 'var') {
+                        let allVarInput = []
+                        if (param.type === 'var_textarea') {
+                            const regex = /{{#(.*?)#}}/g;
+                            const parts = param.value.split(regex);
+                            allVarInput = parts.reduce((res, part, index) => {
+                                if (index % 2 === 1) {
+                                    res.push({ key: part, required: false, label: param.varZh?.[part] || part, value: '' })
+                                }
+                                return res
+                            }, [])
+                        } else if (param.type === 'var_select') {
+                            allVarInput = [{ key: param.value, required: false, label: param.varZh?.[param.value] || param.value, value: '' }]
+                        } else if (param.type === 'user_question') {
+                            allVarInput = param.value.map(part =>
+                                ({ key: part, required: false, label: param.varZh?.[part] || part, value: '' })
+                            )
+                        }
+
+                        setInputs(prev => [...prev,
+                        // 非本节点
+                        ...allVarInput.filter(input => !input.key.startsWith(node.id))])
                     }
                 })
             })
@@ -108,7 +131,7 @@ export const RunTest = forwardRef((props, ref) => {
                 }, {}),
                 node
             ).then(res => {
-                const result = Object.keys(res).map(key => ({ title: key, text: res[key] }))
+                const result = res.map(item => ({ title: item.key, text: item.value }))
                 setResults(result)
                 setLoading(false)
             })
@@ -130,7 +153,7 @@ export const RunTest = forwardRef((props, ref) => {
                         单节点运行
                     </SheetTitle>
                 </SheetHeader>
-                <div className="px-2 pt-2 pb-10 h-[calc(100vh-40px)] overflow-y-auto bg-[#fff]">
+                <div className="px-2 pt-2 pb-10 h-[calc(100vh-40px)] overflow-y-auto bg-[#fff] dark:bg-[#303134]">
                     {
                         inputs.map((input) => <div className="mb-2" key={input.key}>
                             <Label className="flex items-center bisheng-label mb-2">

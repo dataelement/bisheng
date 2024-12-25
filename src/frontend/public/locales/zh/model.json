@@ -30,7 +30,7 @@
         "systemModelSettings": "系统模型设置",
         "knowledgeBaseModel": "知识库模型",
         "assistantModel": "助手模型",
-        "large models and RAG nodes": "评测模型",
+        "evaluationModel": "评测模型",
         "workflowModel": "工作流模型",
         "defaultEmbeddingModel": "知识库默认embedding模型",
         "sourceTracingModel": "知识库溯源模型",

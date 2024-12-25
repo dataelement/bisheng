@@ -34,14 +34,14 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="int">int</SelectItem>
+                        {/* <SelectItem value="int">int</SelectItem>
                         <SelectItem value="float">float</SelectItem>
                         <SelectItem value="complex">complex</SelectItem>
                         <SelectItem value="bool">bool</SelectItem>
-                        <SelectItem value="NoneType">NoneType</SelectItem>
+                        <SelectItem value="NoneType">NoneType</SelectItem> */}
                         <SelectItem value="str">str</SelectItem>
                         <SelectItem value="list">list</SelectItem>
-                        <SelectItem value="tuple">tuple</SelectItem>
+                        {/* <SelectItem value="tuple">tuple</SelectItem>
                         <SelectItem value="dict">dict</SelectItem>
                         <SelectItem value="set">set</SelectItem>
                         <SelectItem value="frozenset">frozenset</SelectItem>
@@ -49,7 +49,7 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
                         <SelectItem value="bytes">bytes</SelectItem>
                         <SelectItem value="bytearray">bytearray</SelectItem>
                         <SelectItem value="memoryview">memoryview</SelectItem>
-                        <SelectItem value="function">function</SelectItem>
+                        <SelectItem value="function">function</SelectItem> */}
                     </SelectGroup>
                 </SelectContent>
             </Select>
@@ -89,22 +89,27 @@ export default function CodeOutputItem({ data, onChange, onValidate }) {
             }, 100);
 
             let msg = ''
+            const nameSet = new Set()
             items.some(item => {
                 if (item.key === '') {
                     msg = '变量名称不能为空'
                     return true
-                } else if (!/^[a-zA-Z0-9_]*$/.test(item.key)) {
-                    msg = '变量名称只能包含英文字符、数字和下划线'
-                    return true
+                } else if (nameSet.has(item.key)) {
+                    msg = '变量名已存在';
+                    return true;
+                } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(item.key)) {
+                    msg = '变量名称只能包含英文字符、数字和下划线，且不能以数字开头';
+                    return true;
                 } else if (item.key.length > 50) {
                     msg = '变量名称不能超过 50 个字符'
                     return true
                 }
+                nameSet.add(item.key)
             })
             return msg || false
         })
 
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return (

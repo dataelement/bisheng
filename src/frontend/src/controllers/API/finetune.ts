@@ -180,6 +180,20 @@ export const updateEvaluationModelConfig = async (data: any): Promise<any> => {
     return await axios.post(`/api/v1/llm/evaluation`, data)
 }
 
+/**
+ * llm 助手节点默认模型
+ */
+export async function setLlmDefaultModel(data: { model_id: string }): Promise<any> {
+    return await axios.post(`/api/v1/llm/workflow`, data)
+}
+
+/**
+ * llm 助手节点默认模型
+ */
+export async function getLlmDefaultModel(): Promise<any> {
+    return await axios.get(`/api/v1/llm/workflow`)
+}
+
 // 获取助手模型可选列表
 export const getAssistantModelList = async (): Promise<any> => {
     return await axios.get(`/api/v1/llm/assistant/llm_list`)

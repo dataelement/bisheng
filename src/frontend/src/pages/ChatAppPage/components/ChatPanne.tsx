@@ -85,9 +85,9 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
 
             if (isV1) {
                 const res = await loadFlowHistoryMsg(_flow.id, chatId, {
-                    lastMsg: '本轮会话已结束'
+                    lastMsg: ''
                 });
-                setAutoRun(!res.length);
+                setAutoRun(true);
             } else {
                 clearMsgs();
             }

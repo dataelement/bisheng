@@ -33,7 +33,7 @@ export default function NodeLogo({ type, className = '', colorStr = '' }) {
     if (type === 'tool') {
         const keys = Object.keys(Colors)
         const _colorKey = keys[parseInt(colorStr.charCodeAt(0) + '', 16) % keys.length]
-        return <div className={cname(`${Colors[_colorKey]} p-[5px] rounded-md`, className)}><Hammer size={14} /></div>
+        return <div className={cname(`${Colors[_colorKey]} p-[5px] rounded-md dark:text-gray-600`, className)}><Hammer size={14} /></div>
     }
 
     const IconComp = Icons[type] || Hammer

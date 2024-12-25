@@ -313,7 +313,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         const isError = !!data.message.reason
         const event = new CustomEvent('nodeLogEvent', {
             detail: {
-                nodeId: node_id, action: isError ? '' : data.type === 'start' ? 'loading' : 'success', data: isError ? { 'error': data.message.reason } : data.message.log_data
+                nodeId: node_id,
+                action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
+                data: isError ? { 'error': data.message.reason } : data.message.log_data
             }
         })
         window.dispatchEvent(event)

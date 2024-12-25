@@ -22,7 +22,7 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
 
     useEffect(() => {
         if (!validate) return setError(false);
-        if (item.key === '' || !/^[a-zA-Z0-9_]{1,50}$/.test(item.key)) {
+        if (item.key === '' || !/^[a-zA-Z_][a-zA-Z0-9_]{1,50}$/.test(item.key)) {
             setError(true);
         } else {
             setError(false);
@@ -100,8 +100,8 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
                 if (item.key === '') {
                     msg = '变量名称不能为空'
                     return true
-                } else if (!/^[a-zA-Z0-9_]*$/.test(item.key)) {
-                    msg = '变量名称只能包含英文字符、数字和下划线'
+                } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(item.key)) {
+                    msg = '变量名称只能包含英文字符、数字和下划线，且不能以数字开头'
                     return true
                 } else if (item.key.length > 50) {
                     msg = '变量名称不能超过 50 个字符'
