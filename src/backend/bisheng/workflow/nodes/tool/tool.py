@@ -37,7 +37,7 @@ class ToolNode(BaseNode):
         ]
         ret.append({
             "key": "output",
-            "value": result,
+            "value": result.get("output", ''),
             "type": "params"
         })
         return ret
