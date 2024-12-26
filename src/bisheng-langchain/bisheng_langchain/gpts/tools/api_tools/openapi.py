@@ -9,8 +9,11 @@ from .base import APIToolBase, Field, MultArgsSchemaTool
 
 class OpenApiTools(APIToolBase):
 
-    def get_real_path(self):
-        return self.url + self.params['path']
+    def get_real_path(self, path_params: dict|None):
+        path = self.params['path']
+        if path_params:
+            path = path.format(**path_params)
+        return self.url + path
 
     def get_request_method(self):
         return self.params['method'].lower()
@@ -20,17 +23,20 @@ class OpenApiTools(APIToolBase):
         for one in self.params['parameters']:
             params_define[one['name']] = one
 
+        path_params = {}
         params = {}
         json_data = {}
         for k, v in kwargs.items():
             if params_define.get(k):
                 if params_define[k]['in'] == 'query':
                     params[k] = v
+                elif params_define[k]['in'] == 'path':
+                    path_params[k] = v
                 else:
                     json_data[k] = v
             else:
                 params[k] = v
-        return params, json_data
+        return params, json_data, path_params
 
     def parse_args_schema(self):
         params = self.params['parameters']
@@ -82,10 +88,10 @@ class OpenApiTools(APIToolBase):
         extra = {}
         if 'proxy' in kwargs:
             extra['proxy'] = kwargs.pop('proxy')
-        path = self.get_real_path()
+        params, json_data, path_params = self.get_params_json(**kwargs)
+        path = self.get_real_path(path_params)
         logger.info('api_call url={}', path)
         method = self.get_request_method()
-        params, json_data = self.get_params_json(**kwargs)
 
         if method == 'get':
             resp = self.client.get(path, params=params, **extra)
@@ -108,10 +114,10 @@ class OpenApiTools(APIToolBase):
         if 'proxy' in kwargs:
             extra['proxy'] = kwargs.pop('proxy')
 
-        path = self.get_real_path()
+        params, json_data, path_params = self.get_params_json(**kwargs)
+        path = self.get_real_path(path_params)
         logger.info('api_call url={}', path)
         method = self.get_request_method()
-        params, json_data = self.get_params_json(**kwargs)
 
         if method == 'get':
             resp = await self.async_client.aget(path, params=params, **extra)
