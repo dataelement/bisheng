@@ -396,7 +396,10 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         text = part['text']
         for index, bbox in enumerate(bboxes):
             key = f'{pages[index]}-' + '-'.join([str(int(one)) for one in bbox])
-            val = text[indexes[index][0]:indexes[index][1] + 1]
+            if index == len(bboxes) -1:
+                val = text[indexes[index][0]:]
+            else:
+                val = text[indexes[index][0]:indexes[index][1] + 1]
             res[key] = {'text': val, 'type': part['type'], 'part_id': part_index}
     return res
 
