@@ -18,13 +18,14 @@ class InputNode(BaseNode):
 
         # 记录这个变量是什么类型的
         self._node_params_map = {}
-        self._new_node_params = {}
+        new_node_params = {}
         if self._tab == 'input':
-            self._new_node_params['user_input'] = self.node_params['user_input']
+            new_node_params['user_input'] = self.node_params['user_input']
         else:
             for value_info in self.node_params['form_input']:
-                self._new_node_params[value_info['key']] = value_info['value']
+                new_node_params[value_info['key']] = value_info['value']
                 self._node_params_map[value_info['key']] = value_info
+        self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
         print(self.node_params)
@@ -34,18 +35,18 @@ class InputNode(BaseNode):
 
     def _run(self, unique_id: str):
         if self._tab == 'input':
-            return {'user_input': self._new_node_params['user_input']}
+            return {'user_input': self.node_params['user_input']}
 
         # 表单形式的需要去处理对应的文件上传
-        for key, value in self._new_node_params.items():
-            key_info = self._node_params_map[key]
+        for key, value in self.node_params.items():
+            key_info = self.node_params[key]
             if key_info['type'] == 'file':
                 file_metadata = self.parse_upload_file(key, value)
-                self._new_node_params[key] = key
+                self.node_params[key] = key
                 # 特殊逻辑，用到文件源信息的自行处理下
                 self.graph_state.set_variable(self.id, f'{key}_file_metadata', file_metadata)
 
-        return self._new_node_params
+        return self.node_params
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         return [
