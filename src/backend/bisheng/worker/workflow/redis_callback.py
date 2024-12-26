@@ -112,8 +112,6 @@ class RedisCallback(BaseCallback):
         if source_documents:
             result = {}
             extra = {}
-            if len(source_documents) == 1:
-                result = source_documents[0]
             source, result = sync_judge_source(result, source_documents, self.chat_id, extra)
             chat_response.source = source
             chat_response.extra = json.dumps(extra, ensure_ascii=False)

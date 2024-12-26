@@ -30,6 +30,7 @@ class QARetrieverNode(BaseNode):
         params['search_type'] = 'similarity_score_threshold'
         params['collection_name'] = self._qa_knowledge_id  # [{"key":"", "label":""}]
         params['user_name'] = UserDao.get_user(self.user_id).user_name
+        params['_is_check_auth'] = False
         knowledge_retriever = instantiate_vectorstore(
             node_type='MilvusWithPermissionCheck',
             class_object=MilvusWithPermissionCheck,
@@ -44,12 +45,11 @@ class QARetrieverNode(BaseNode):
         result = self._retriever.invoke({'query': question})
         # qa 结果是document
         if result['result']:
+            # 存检索结果的源文档，key左右加上$作为来源文档key去查询
+            self.graph_state.set_variable(self.id, '$retrieved_result$', result['result'][0])
             result_str = json.loads(result['result'][0].metadata['extra'])['answer']
         else:
             result_str = ''
-
-        # 存检索结果的源文档，key左右加上$作为来源文档key去查询
-        self.graph_state.set_variable(self.id, '$retrieved_result$', result['result'])
 
         return {
             'retrieved_result': result_str
