@@ -6,11 +6,8 @@ from langchain.memory import ConversationBufferWindowMemory
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.flow import WorkFlowInitError
-from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -85,14 +82,14 @@ class WorkFlowService(BaseService):
 
         # 增加额外的信息
         for one in data:
-            if one['flow_type'] != FlowType.ASSISTANT.value:
-                one['id'] = UUID(one['id'])
             one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
             one['write'] = True if user.is_admin() or user.user_id == one['user_id'] else False
             one['version_list'] = flow_versions.get(one['id'], [])
             one['group_ids'] = resource_group_dict.get(one['id'], [])
             one['tags'] = resource_tag_dict.get(one['id'], [])
             one['logo'] = cls.get_logo_share_link(one['logo'])
+            if one['flow_type'] != FlowType.ASSISTANT.value:
+                one['id'] = UUID(one['id'])
 
         return data, total
 
