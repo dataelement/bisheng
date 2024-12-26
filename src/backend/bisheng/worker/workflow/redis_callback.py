@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 
 from cachetools import TTLCache
 from loguru import logger
@@ -101,12 +102,13 @@ class RedisCallback(BaseCallback):
         if self.workflow and self.get_workflow_stop() == 1:
             self.workflow.stop()
 
-    def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | None:
+    def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | str | None:
         """  save chat message to database
         return message id
         """
         if not self.chat_id:
-            return
+            # 生成一个假的消息id防止前端消息渲染重复
+            return uuid.uuid4().hex
 
         # 判断溯源
         if source_documents:

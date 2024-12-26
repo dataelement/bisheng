@@ -298,7 +298,7 @@ class GraphEngine:
                     # 回调需要用户输入的事件
                     self.status = WorkflowStatus.INPUT.value
                     self.callback.on_user_input(
-                        UserInputData(node_id=node_id, node_data=input_schema))
+                        UserInputData(node_id=node_id, input_schema=input_schema))
                     return
             elif node_instance.type == NodeType.FAKE_OUTPUT.value:
                 intput_schema = node_instance.get_input_schema()

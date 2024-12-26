@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import uuid
 from typing import Dict, Optional
 
@@ -27,7 +28,7 @@ class WorkflowClient(BaseClient):
                          websocket, **kwargs)
 
         self.workflow: Optional[RedisCallback] = None
-        self.history = []
+        self.latest_history: Optional[ChatMessage] = None
 
     async def close(self):
         # 非会话模式关闭workflow执行
@@ -77,8 +78,8 @@ class WorkflowClient(BaseClient):
     async def init_history(self):
         if not self.chat_id:
             return
-        self.history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
-        if not self.history:
+        self.latest_history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
+        if not self.latest_history:
             # 新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
@@ -97,12 +98,20 @@ class WorkflowClient(BaseClient):
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
             status_info = self.workflow.get_workflow_status()
             if not status_info:
-                if self.history:
+                if self.latest_history:
+                    # 让前端终止上一次的运行
                     await self.send_response('processing', 'close', '')
+                # 发起新的workflow
                 self.workflow.set_workflow_data(workflow_data)
                 self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
                 # 发起异步任务
                 execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
+            elif status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
+                # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
+                if self.latest_history.category in ['user_input', 'output_choose_msg', 'output_input_msg']:
+                    send_message = self.latest_history.to_dict()
+                    send_message['message'] = json.loads(send_message['message'])
+                    await self.send_json(send_message)
 
         except Exception as e:
             logger.exception('init_workflow_error')
@@ -115,13 +124,6 @@ class WorkflowClient(BaseClient):
         await self.workflow_run()
 
     async def workflow_run(self):
-        status_info = self.workflow.get_workflow_status()
-        if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
-            self.workflow = None
-            if status_info['status'] == WorkflowStatus.FAILED.value:
-                await self.send_response('error', 'over', status_info['reason'])
-            await self.send_response('processing', 'close', '')
-            return status_info
         # 需要不断从redis中获取workflow返回的消息
         while True:
             if not self.workflow:
@@ -145,15 +147,25 @@ class WorkflowClient(BaseClient):
                     await self.send_response('error', 'over', status_info['reason'])
                 await self.send_response('processing', 'close', '')
                 self.workflow.clear_workflow_status()
+                logger.debug('clear workflow status')
                 self.workflow = None
+                break
+            elif time.time() - status_info['time'] > 86400:
+                # 保底措施: 如果状态一天未更新，结束workflow，说明异步任务出现问题
+                self.workflow.set_workflow_stop()
+                await self.send_response('error', 'over', 'workflow status not update over 1 day')
+                await self.send_response('processing', 'close', '')
+                self.workflow.clear_workflow_status()
                 break
             else:
                 chat_response = self.workflow.get_workflow_response()
                 if not chat_response:
                     await asyncio.sleep(1)
                     continue
+                logger.debug(f'send chat response to ws: {chat_response}')
                 await self.send_json(chat_response)
 
+        logger.debug('workflow run over')
 
     async def handle_user_input(self, data: dict):
         logger.info(f'get user input: {data}')

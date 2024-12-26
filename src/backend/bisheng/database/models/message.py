@@ -139,9 +139,9 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_latest_message_by_chatid(cls, chat_id: str):
+        statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(ChatMessage.id.desc()).limit(1)
         with session_getter() as session:
-            res = session.exec(
-                select(ChatMessage).where(ChatMessage.chat_id == chat_id).limit(1)).all()
+            res = session.exec(statement).all()
             if res:
                 return res[0]
             else:
