@@ -318,8 +318,11 @@ class AgentNode(BaseNode):
                 'chat_history': chat_history
             },
                 config=config)
+            output = result['agent_outcome'].return_values['output']
+            if isinstance(output, dict):
+                output = list(output.values())[0]
+            return output
         else:
             chat_history.append(HumanMessage(content=user))
             result = self._agent.invoke(chat_history, config=config)
-
-        return result[-1].content
+            return result[-1].content

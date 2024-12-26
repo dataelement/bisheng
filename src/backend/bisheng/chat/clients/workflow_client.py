@@ -162,7 +162,6 @@ class WorkflowClient(BaseClient):
                 if not chat_response:
                     await asyncio.sleep(1)
                     continue
-                logger.debug(f'send chat response to ws: {chat_response}')
                 await self.send_json(chat_response)
 
         logger.debug('workflow run over')
