@@ -65,12 +65,12 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                 if (param.global.indexOf('code') === 0) {
                     let result = isMatch(param, param.global.replace('code:', ''));
                     // 没值 key补
-                    if (!result.length) {
-                        result = [{
-                            label: param.key,
-                            value: param.key
-                        }]
-                    }
+                    // if (!result.length) {
+                    //     result = [{
+                    //         label: param.key,
+                    //         value: param.key
+                    //     }]
+                    // }
                     _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {

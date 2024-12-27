@@ -72,9 +72,9 @@ export default function HomePage({ onSelect }) {
     }
     
     const typeCnNames = {
-        'flow': t('build.skill'),
-        'assistant': t('build.assistant'),
-        'workflow': t('build.workflow')
+        1: t('build.skill'),
+        5: t('build.assistant'),
+        10: t('build.workflow')
     }
     // const [cardBoxWidth, cardboxRef] = useAutoWidth()
     {/* @ts-ignore */ }
@@ -119,7 +119,7 @@ export default function HomePage({ onSelect }) {
                             type="sheet"
                             icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
                             footer={
-                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 'flow' && 'bg-gray-950'} ${flow.flow_type === 'assistant' && 'bg-[#fdb136]'}`}>
+                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 1 && 'bg-gray-950'} ${flow.flow_type === 5 && 'bg-[#fdb136]'}`}>
                                     {typeCnNames[flow.flow_type]}
                                 </Badge>
                             }

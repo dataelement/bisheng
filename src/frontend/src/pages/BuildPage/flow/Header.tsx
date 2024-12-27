@@ -10,6 +10,7 @@ import TextInput from "@/components/bs-ui/input/textInput";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
 import { onlineWorkflow, onlineWorkflowApi, saveWorkflow } from "@/controllers/API/workflow";
@@ -26,9 +27,8 @@ import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
-import { darkContext } from "@/contexts/darkContext";
 
-const Header = ({ flow, onTabChange, preFlow }) => {
+const Header = ({ flow, onTabChange, preFlow, onChange }) => {
     const { message } = useToast()
     const { dark } = useContext(darkContext);
     const testRef = useRef(null)
@@ -75,6 +75,16 @@ const Header = ({ flow, onTabChange, preFlow }) => {
             })
         }
 
+        await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
+            ...flow,
+            name: version.name,
+            data: {
+                nodes: flow.nodes,
+                edges: flow.edges,
+                viewport: flow.viewport
+            }
+        }))
+        setFlow({ ...flow })
         // api请求
         const res = await captureAndAlertRequestErrorHoc(onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 }))
         if (res === null) {
@@ -101,13 +111,9 @@ const Header = ({ flow, onTabChange, preFlow }) => {
     const handleSaveClick = async () => {
 
         if (isOnlineVersionFun()) {
-            hasChanged ? message({
+            message({
                 title: '提示',
                 description: '当前版本已上线，请先下线或另存为新版本',
-                variant: 'warning'
-            }) : message({
-                title: '提示',
-                description: '工作流已上线不可编辑，您可以另存为新版本进行保存',
                 variant: 'warning'
             })
             return !hasChanged
@@ -162,12 +168,15 @@ const Header = ({ flow, onTabChange, preFlow }) => {
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
         // 切换版本UI
-        setCurrentVersion(Number(versionId))
+        window.flow_version = Number(versionId)
         // 加载选中版本data
         const res = await getVersionDetails(versionId)
-        console.log('res :>> ', res)
+        // console.log('res :>> ', res)
         // 自动触发 page的 clone flow
-        setFlow({ ...f, ...res.data })
+        setFlow(null)
+        setTimeout(() => {
+            setFlow({ ...f, ...res.data })
+        }, 0);
         message({
             variant: "success",
             title: `切换到 ${res.name}`,
@@ -304,7 +313,7 @@ const Header = ({ flow, onTabChange, preFlow }) => {
                                                     type="hover"
                                                     value={vers.name}
                                                     maxLength={30}
-                                                    onSave={val => changeName(vers.id, val)}
+                                                    onSave={val => changeName(vers.id, val || vers.name)}
                                                 ></TextInput>
                                                 <p className="text-sm text-muted-foreground mt-2">{vers.update_time.replace('T', ' ').substring(0, 16)}</p>
                                             </div>
@@ -588,7 +597,8 @@ const useVersion = (flow) => {
         return getFlowVersions(flow.id).then(({ data, total }) => {
             setVersions(data)
             lastVersionIndexRef.current = total - 1
-            const currentV = data.find(el => el.is_current === 1)
+            const currentvId = window.flow_version
+            const currentV = data.find(el => el.id === currentvId || el.is_current === 1)
             setVersion(currentV)
             // 记录上线的版本
             updateOnlineVid(currentV?.id)

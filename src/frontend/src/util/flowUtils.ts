@@ -97,7 +97,7 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
         varNodeId === node.id ? node.data.group_params.some(group =>
             group.params.some(param => {
                 if (param.type === 'input_list' && varName.indexOf('#') !== -1) {
-                    return !!param.value[varName.match(/#(\d+)/)[1]]
+                    return varNameCn.endsWith(param.value[varName.match(/#(\d+)/)[1]] || 'xxx')
                 } else if (param.type === 'form' || (param.type === 'var' && Array.isArray(param.value) && param.value.length) || param.type === 'code_output') {
                     return param.value.some(item => `${node.id}.${item.key}` === varName)
                 } else {

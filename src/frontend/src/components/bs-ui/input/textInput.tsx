@@ -26,6 +26,6 @@ export default function TextInput({
     ></Input>
 
     return <p
-        className="text-sm px-3 py-1 border border-transparent w-full overflow-hidden text-ellipsis"
+        className="text-sm px-3 py-1 border border-transparent w-full overflow-hidden text-ellipsis truncate"
         onDoubleClick={() => setEdit(true)} onMouseOver={() => type === 'hover' && setEdit(true)}>{value}</p>
 };

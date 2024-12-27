@@ -33,7 +33,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
         })
 
         // 更新默认值
-        getLlmDefaultModel().then(res => {
+        !agent && getLlmDefaultModel().then(res => {
             res && !data.value && onChange(res.model_id)
         })
     }, [])

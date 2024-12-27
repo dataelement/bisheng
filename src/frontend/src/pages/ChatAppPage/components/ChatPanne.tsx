@@ -19,6 +19,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
+import { AppNumType } from "@/types/app";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -43,7 +44,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const init = async () => {
         const isV1 = version === 'v1';
 
-        if (type === 'flow') {
+        if (type === AppNumType.SKILL) {
             setAssistant(null)
             setWorkflow(null)
             const _flow = await getFlowApi(id, version)
@@ -61,7 +62,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setFlow(_flow)
             changeChatId(chatId) // ws
 
-        } else if (type === 'assistant') {
+        } else if (type === AppNumType.ASSISTANT) {
             flowRef.current = null
             setFlow(null)
             setWorkflow(null)
@@ -229,7 +230,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >
         {/* 技能会话 */}
         {
-            flow && <div className={`w-full chat-box h-full relative px-6 ${type === 'flow' ? 'block' : 'hidden'}`}>
+            flow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.SKILL ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>
@@ -253,7 +254,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
         {/* 助手会话 */}
         {
-            assistant && <div className={`w-full chat-box h-full relative px-6 ${type === 'assistant' ? 'block' : 'hidden'}`}>
+            assistant && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.ASSISTANT ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
                     <TitleLogo url={assistant.logo} className="" id={assistant.id}><AssistantIcon /></TitleLogo>
@@ -276,7 +277,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
         {/* 工作流会话 */}
         {
-            workflow && <div className={`w-full chat-box h-full relative px-6 ${type === 'workflow' ? 'block' : 'hidden'}`}>
+            workflow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
                 <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
             </div>
         }

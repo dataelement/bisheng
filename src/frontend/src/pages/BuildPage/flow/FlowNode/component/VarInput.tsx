@@ -91,7 +91,7 @@ export default function VarInput({
         const html = encodeHTMLEntities(input)
             .replace(/{{#(.*?)#}}/g, (a, part) => {
                 if (validate) {
-                    error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]);
+                    error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) || error;
                 }
                 const msgZh = flowNode.varZh?.[part] || part;
                 return `<span class=${error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;

@@ -97,6 +97,8 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             messagesList.map((msg, index) => {
                 // output节点特殊msg
                 switch (msg.category) {
+                    case 'user_input':
+                        return null
                     case 'question':
                         return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
                     case 'guide_word':
