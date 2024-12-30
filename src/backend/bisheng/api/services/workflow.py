@@ -119,8 +119,10 @@ class WorkFlowService(BaseService):
                 ]
             })
         elif node_data.type ==  NodeType.TOOL.value:
-
-            pass
+            user_input = {}
+            for k, v in node_input.items():
+                user_input[k] = v
+            node.handle_input(user_input)
         else:
             for key, val in node_input.items():
                 graph_state.set_variable_by_str(key, val)

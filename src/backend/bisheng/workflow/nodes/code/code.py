@@ -1,3 +1,5 @@
+from typing import Any
+
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.code.code_parse import CodeParser
 
@@ -13,6 +15,12 @@ class CodeNode(BaseNode):
         self._code_parser = CodeParser(self._code)
 
         self._parse_code()
+
+    def handle_input(self, user_input: dict) -> Any:
+        self.node_params.update(user_input)
+        self._code_input = self.node_params['code_input']
+        self._code_output = self.node_params['code_output']
+        self._code = self.node_params['code']
 
     def _parse_code(self):
         try:
