@@ -28,6 +28,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
     def __init__(self,
                  embedding_function: Embeddings,
                  collection_name: list[str] = None,
+                 collection_embeddings: list[Embeddings] = None,
                  connection_args: Optional[dict[str, Any]] = None,
                  consistency_level: str = 'Session',
                  index_params: Optional[dict] = None,
@@ -136,6 +137,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         self.alias = self._create_connection_alias(connection_args)
         self.col: Optional[List[Collection]] = []
         self.col_partition_key: Optional[List[str]] = []
+        self.collection_embeddings = collection_embeddings
         # not used
         self.drop_old = drop_old
 
@@ -356,6 +358,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
         res = self.similarity_search_with_score_by_vector(embedding=embedding,
                                                           k=k,
+                                                          query=query,
                                                           param=param,
                                                           expr=expr,
                                                           timeout=timeout,
@@ -367,6 +370,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         embedding: List[float],
         k: int = 4,
         param: Optional[dict] = None,
+        query: Optional[str] = None,
         expr: Optional[str] = None,
         timeout: Optional[int] = None,
         **kwargs: Any,
@@ -378,9 +382,11 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         https://milvus.io/api-reference/pymilvus/v2.2.6/Collection/search().md
 
         Args:
-            embedding (List[float]): The embedding vector being searched.
+            embedding (List[float]): disabled.
             k (int, optional): The amount of results to return. Defaults to 4.
             param (dict): The search params for the specified index.
+                Defaults to None.
+            query (str): The search query, use collection`s embedding calc query embedding.
                 Defaults to None.
             expr (str, optional): Filtering expression. Defaults to None.
             timeout (int, optional): How long to wait before timeout error.
@@ -410,6 +416,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
         for index, one_col in enumerate(self.col):
             search_expr = expr
+            embedding = self.collection_embeddings[index].embed_query(query)
             if self.col_partition_key[index]:
                 # add parttion
                 if expr:
