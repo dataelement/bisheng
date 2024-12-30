@@ -216,57 +216,60 @@ class DocxTemplateRender(object):
                             table.rows[i].cells[j].text = cell.text.replace(k1, v1)
 
             for p in doc.paragraphs:
-                if k1 in p.text:
-                    runs_cnt = len(p.runs)
-                    s, e = 0, 0
-                    for i in range(0, runs_cnt):
-                        for j in range(i + 1, runs_cnt + 1):
-                            part_text = ''.join([r.text for r in p.runs[i:j]])
-                            if k1 in part_text:
-                                s, e = i, j
-                                break
+                # this way not have style
+                p.text = p.text.replace(k1, v1)
 
-                    assert e > 0, [r.text for r in p.runs]
-                    # tgt_text = [r.text for r in p.runs[s:e]]
-                    if e - s == 1:
-                        replace_mapping = [(k1, v1)]
-                    elif e - s == 2:
-                        s_tgt_text = p.runs[s].text
-                        comm_str, max_num = find_lcs(k1, s_tgt_text)
-                        assert k1.startswith(comm_str)
-                        p1 = comm_str
-                        p2 = k1[max_num:]
-                        n = len(v1)
-                        sub_n1 = int(1.0 * p1 / (p1 + p2) * n)
-                        # sub_n2 = n - sub_n1
-                        replace_mapping = [(p1, v1[:sub_n1]), (p2, v1[sub_n1:])]
-                    elif e - s == 3:
-                        m_text = p.runs[s + 1].text
-                        head_tail = k1.split(m_text, 1)
-                        assert len(head_tail) == 2
-                        h_text = head_tail[0]
-                        t_text = head_tail[1]
-                        replace_mapping = [(h_text, ''), (m_text, v1), (t_text, '')]
-                    else:
-                        m_texts = [p.runs[i].text for i in range(s + 1, e - 1)]
-                        m_text = ''.join(m_texts)
-                        head_tail = k1.split(m_text, 1)
-                        assert len(head_tail) == 2
-                        h_text = head_tail[0]
-                        t_text = head_tail[1]
-                        replace_mapping = [(h_text, '')]
-                        replace_mapping.append((m_texts[0], v1))
-                        for text in m_texts[1:]:
-                            replace_mapping.append((text, ''))
-
-                        replace_mapping.append((t_text, ''))
-
-                    for i in range(s, e):
-                        _k, _v = replace_mapping[i - s]
-                        p.runs[i].text = p.runs[i].text.replace(_k, _v)
-
-                    print('new paras:', [p.text])
-                    print('<<<<<<<<<<<<<<<<\n\n')
+                # if k1 in p.text:
+                #     runs_cnt = len(p.runs)
+                #     s, e = 0, 0
+                #     for i in range(0, runs_cnt):
+                #         for j in range(i + 1, runs_cnt + 1):
+                #             part_text = ''.join([r.text for r in p.runs[i:j]])
+                #             if k1 in part_text:
+                #                 s, e = i, j
+                #                 break
+                #
+                #     assert e > 0, [r.text for r in p.runs]
+                #     # tgt_text = [r.text for r in p.runs[s:e]]
+                #     if e - s == 1:
+                #         replace_mapping = [(k1, v1)]
+                #     elif e - s == 2:
+                #         s_tgt_text = p.runs[s].text
+                #         comm_str, max_num = find_lcs(k1, s_tgt_text)
+                #         assert k1.startswith(comm_str)
+                #         p1 = comm_str
+                #         p2 = k1[max_num:]
+                #         n = len(v1)
+                #         sub_n1 = int(1.0 * p1 / (p1 + p2) * n)
+                #         # sub_n2 = n - sub_n1
+                #         replace_mapping = [(p1, v1[:sub_n1]), (p2, v1[sub_n1:])]
+                #     elif e - s == 3:
+                #         m_text = p.runs[s + 1].text
+                #         head_tail = k1.split(m_text, 1)
+                #         assert len(head_tail) == 2
+                #         h_text = head_tail[0]
+                #         t_text = head_tail[1]
+                #         replace_mapping = [(h_text, ''), (m_text, v1), (t_text, '')]
+                #     else:
+                #         m_texts = [p.runs[i].text for i in range(s + 1, e - 1)]
+                #         m_text = ''.join(m_texts)
+                #         head_tail = k1.split(m_text, 1)
+                #         assert len(head_tail) == 2
+                #         h_text = head_tail[0]
+                #         t_text = head_tail[1]
+                #         replace_mapping = [(h_text, '')]
+                #         replace_mapping.append((m_texts[0], v1))
+                #         for text in m_texts[1:]:
+                #             replace_mapping.append((text, ''))
+                #
+                #         replace_mapping.append((t_text, ''))
+                #
+                #     for i in range(s, e):
+                #         _k, _v = replace_mapping[i - s]
+                #         p.runs[i].text = p.runs[i].text.replace(_k, _v)
+                #
+                #     print('new paras:', [p.text])
+                #     print('<<<<<<<<<<<<<<<<\n\n')
 
         return doc
 
