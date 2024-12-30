@@ -107,7 +107,7 @@ class BaseNode(ABC):
         if self.stop_flag:
             raise IgnoreException('stop by user')
         if self.current_step >= self.max_steps:
-            raise IgnoreException(f'node {self.name} exceeded more than max steps')
+            raise IgnoreException(f'{self.name} -- has run more than the maximum number of times.')
 
         exec_id = uuid.uuid4().hex
         self.exec_unique_id = exec_id

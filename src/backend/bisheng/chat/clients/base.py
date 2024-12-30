@@ -100,7 +100,7 @@ class BaseClient(ABC):
         ))
         return msg
 
-    async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
+    async def send_response(self, category: str, msg_type: str, message: str | dict, intermediate_steps: str = '',
                             message_id: int = None):
         """ 给客户端发送响应消息 """
         is_bot = 0 if msg_type == 'human' else 1

@@ -31,6 +31,7 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
         redis_callback.workflow = workflow
         start_time = time.time()
         status, reason = workflow.run()
+        first_input = True
         # run workflow
         while True:
             logger.debug(f'workflow {unique_id} execute status: {workflow.status()}')
@@ -38,6 +39,9 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
                 redis_callback.set_workflow_status(status, reason)
                 break
             elif workflow.status() == WorkflowStatus.INPUT.value:
+                if first_input:
+                    start_time = time.time()
+                    first_input = False
                 redis_callback.set_workflow_status(status, reason)
                 time.sleep(1)
                 if time.time() - start_time > workflow.timeout * 60:
@@ -49,6 +53,7 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
                     continue
                 redis_callback.set_workflow_status(WorkflowStatus.RUNNING.value)
                 status, reason = workflow.run(user_input)
+                first_input = True
             else:
                 raise Exception(f'unexpected workflow status error: {status}')
     except IgnoreException as e:

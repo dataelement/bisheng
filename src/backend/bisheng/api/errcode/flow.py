@@ -37,6 +37,16 @@ class WorkFlowInitError(BaseErrorCode):
     Msg: str = '工作流初始化失败'
 
 
+class WorkFlowWaitUserTimeoutError(BaseErrorCode):
+    Code: int = 10527
+    Msg: str = '工作流等待用户输入超时'
+
+
+class WorkFlowNodeRunMaxTimesError(BaseErrorCode):
+    Code: int = 10528
+    Msg: str = '节点执行超过最大次数'
+
+
 class FlowTemplateNameError(BaseErrorCode):
     Code: int = 10530
     Msg: str = '模板名称已存在'

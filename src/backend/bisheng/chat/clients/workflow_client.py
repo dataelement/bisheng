@@ -4,12 +4,13 @@ import time
 import uuid
 from typing import Dict, Optional
 
-from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.utils import get_request_ip
 from fastapi import Request, WebSocket
 from loguru import logger
 
+from bisheng.api.errcode.flow import WorkFlowWaitUserTimeoutError, WorkFlowNodeRunMaxTimesError
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
@@ -67,6 +68,8 @@ class WorkflowClient(BaseClient):
         if message.get('action') == 'init_data':
             # 初始化workflow数据
             await self.init_workflow(message)
+        elif message.get('action') == 'check_status':
+            await self.check_status(message)
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
@@ -83,18 +86,50 @@ class WorkflowClient(BaseClient):
             # 新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
+    async def check_status(self, message: dict):
+        # chat ws connection first handle
+        if not self.chat_id:
+            return
+        workflow_id = message.get('flow_id', self.client_id)
+        await self.init_history()
+        unique_id = f'{self.chat_id}_async_task_id'
+        logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
+        self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
+        status_info = self.workflow.get_workflow_status()
+        if not status_info:
+            # 说明上一次运行完成了
+            self.workflow = None
+            if self.latest_history:
+                # 让前端终止上一次的运行
+                await self.send_response('processing', 'close', '')
+            return
+        # 说明会话还在运行中
+        if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
+            # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
+            if self.latest_history.category in ['user_input', 'output_choose_msg', 'output_input_msg']:
+                send_message = self.latest_history.to_dict()
+                send_message['message'] = json.loads(send_message['message'])
+                await self.send_json(send_message)
+
+        await self.send_response('processing', 'begin', '')
+        logger.debug('init workflow over')
+        # 运行workflow
+        await self.workflow_run()
+
     async def init_workflow(self, message: dict):
         if self.workflow is not None:
             return
         try:
             workflow_data = message.get('data')
             workflow_id = message.get('flow_id', self.client_id)
+            self.chat_id = message.get('chat_id', '')
             # 查询chat_id对应的异步任务唯一标识
             unique_id = uuid.uuid4().hex
             if self.chat_id:
                 await self.init_history()
                 unique_id = f'{self.chat_id}_async_task_id'
-            logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
+            logger.debug(
+                f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
             status_info = self.workflow.get_workflow_status()
             if not status_info:
@@ -116,7 +151,7 @@ class WorkflowClient(BaseClient):
         except Exception as e:
             logger.exception('init_workflow_error')
             self.workflow = None
-            await self.send_response('error', 'over', str(e))
+            await self.send_response('error', 'over', {'code': 500, 'message': str(e)})
             return
         await self.send_response('processing', 'begin', '')
         logger.debug('init workflow over')
@@ -130,7 +165,7 @@ class WorkflowClient(BaseClient):
                 break
             status_info = self.workflow.get_workflow_status()
             if not status_info:
-                await self.send_response('error', 'over', 'workflow status not found')
+                await self.send_response('error', 'over', {'code': 500, 'message': 'workflow status not found'})
                 await self.send_response('processing', 'close', '')
                 return
             elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
@@ -144,7 +179,13 @@ class WorkflowClient(BaseClient):
                         send_msg = False
 
                 if status_info['status'] == WorkflowStatus.FAILED.value:
-                    await self.send_response('error', 'over', status_info['reason'])
+                    if status_info['reason'].find('has run more than the maximum number of times') != -1:
+                        await self.send_response('error', 'over', {'code': WorkFlowNodeRunMaxTimesError.Code,
+                                                                   'message': status_info['reason'].split('--')[0]})
+                    elif status_info['reason'].find('workflow wait user input timeout') != -1:
+                        await self.send_response('error', 'over', {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
+                    else:
+                        await self.send_response('error', 'over', {'code': 500, 'message': status_info['reason']})
                 await self.send_response('processing', 'close', '')
                 self.workflow.clear_workflow_status()
                 logger.debug('clear workflow status')
@@ -153,7 +194,8 @@ class WorkflowClient(BaseClient):
             elif time.time() - status_info['time'] > 86400:
                 # 保底措施: 如果状态一天未更新，结束workflow，说明异步任务出现问题
                 self.workflow.set_workflow_stop()
-                await self.send_response('error', 'over', 'workflow status not update over 1 day')
+                await self.send_response('error', 'over',
+                                         {'code': 500, 'message': 'workflow status not update over 1 day'})
                 await self.send_response('processing', 'close', '')
                 self.workflow.clear_workflow_status()
                 break
