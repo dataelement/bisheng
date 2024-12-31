@@ -69,7 +69,7 @@ class OutputNode(BaseNode):
             ret.append({
                 "key": "output_result",
                 "value": self._output_result,
-                "type": "params"
+                "type": "key"
             })
         return ret
 

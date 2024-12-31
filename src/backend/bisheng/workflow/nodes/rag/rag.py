@@ -107,7 +107,7 @@ class RagNode(BaseNode):
         output_keys = []
         source_documents = []
         for key, val in result.items():
-            output_keys.append({'key': key, 'value': val, 'type': 'params'})
+            output_keys.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
             source_documents.append([one.page_content for one in self._log_source_documents[key]])
         ret = [
             {'key': 'user_question', 'value': self.init_user_question(), "type": "params"},

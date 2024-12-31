@@ -74,6 +74,14 @@ class BaseNode(ABC):
          返回节点运行日志，默认返回节点的输出内容，有特殊需求自行覆盖此函数
         params:
             result: 节点运行结果
+        return:
+        [
+            {
+                "key": "xxx",
+                "value": "xxx",
+                "type": "tool" # tool: 工具类型的日志, variable：全局变量的日志, params：节点参数类型的日志，key：展示key本身
+            }
+        ]
         """
         return result
 
