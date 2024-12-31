@@ -28,7 +28,6 @@ class InputNode(BaseNode):
         self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
-        print(self.node_params)
         if self._tab == 'input':
             return self.node_data.get_variable_info('user_input')
         return self.node_data.get_variable_info('form_input')
@@ -39,7 +38,7 @@ class InputNode(BaseNode):
 
         # 表单形式的需要去处理对应的文件上传
         for key, value in self.node_params.items():
-            key_info = self.node_params[key]
+            key_info = self._node_params_map[key]
             if key_info['type'] == 'file':
                 file_metadata = self.parse_upload_file(key, value)
                 self.node_params[key] = key
