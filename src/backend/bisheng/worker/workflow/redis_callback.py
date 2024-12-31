@@ -88,9 +88,9 @@ class RedisCallback(BaseCallback):
     def set_workflow_stop(self):
         self.redis_client.set(self.workflow_stop_key, 1, expiration=self.workflow_expire_time)
 
-    def get_workflow_stop(self) -> int | None:
+    def get_workflow_stop(self) -> bool | None:
         """ 为了可以及时停止workflow，不做内存的缓存 """
-        return self.redis_client.get(self.workflow_stop_key)
+        return self.redis_client.get(self.workflow_stop_key) == 1
 
     def send_chat_response(self, chat_response: ChatResponse):
         """ 发送聊天消息 """
@@ -99,7 +99,7 @@ class RedisCallback(BaseCallback):
         # 判断下是否需要停止workflow, 流式输出时不判断，查询太频繁，而且也停不掉workflow
         if chat_response.category == 'stream_msg':
             return
-        if self.workflow and self.get_workflow_stop() == 1:
+        if self.workflow and self.get_workflow_stop():
             self.workflow.stop()
 
     def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | str | None:

@@ -46,7 +46,7 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
                 time.sleep(1)
                 if time.time() - start_time > workflow.timeout * 60:
                     raise IgnoreException('workflow wait user input timeout')
-                if redis_callback.get_workflow_stop() == 1:
+                if redis_callback.get_workflow_stop():
                     raise IgnoreException('workflow stop by user')
                 user_input = redis_callback.get_user_input()
                 if not user_input:
