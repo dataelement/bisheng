@@ -77,7 +77,6 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const { message } = useToast()
   const handleSave = () => {
     if (isOnlineVersion()) return message({
-      title: '提示',
       description: '上线中不可编辑保存',
       variant: 'warning'
     })

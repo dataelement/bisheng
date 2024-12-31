@@ -3,8 +3,11 @@ import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from 'react-i18next';
 
 const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
+    const { t } = useTranslation('flow');
+
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType });
     };
@@ -26,30 +29,16 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
     return (
         <div className="flex gap-1 items-center mb-1">
             {/* key */}
-            <Input value={item.key} onChange={handleKeyChange} className={`${error && 'border-red-500'} h-8`} />
+            <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} className={`${error && 'border-red-500'} h-8`} />
             {/* type */}
             <Select value={item.type} onValueChange={handleTypeChange}>
                 <SelectTrigger className="max-w-32 w-24 h-8">
-                    <SelectValue placeholder="数据类型" />
+                    <SelectValue placeholder={t('dataType')} />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        {/* <SelectItem value="int">int</SelectItem>
-                        <SelectItem value="float">float</SelectItem>
-                        <SelectItem value="complex">complex</SelectItem>
-                        <SelectItem value="bool">bool</SelectItem>
-                        <SelectItem value="NoneType">NoneType</SelectItem> */}
                         <SelectItem value="str">str</SelectItem>
                         <SelectItem value="list">list</SelectItem>
-                        {/* <SelectItem value="tuple">tuple</SelectItem>
-                        <SelectItem value="dict">dict</SelectItem>
-                        <SelectItem value="set">set</SelectItem>
-                        <SelectItem value="frozenset">frozenset</SelectItem>
-                        <SelectItem value="range">range</SelectItem>
-                        <SelectItem value="bytes">bytes</SelectItem>
-                        <SelectItem value="bytearray">bytearray</SelectItem>
-                        <SelectItem value="memoryview">memoryview</SelectItem>
-                        <SelectItem value="function">function</SelectItem> */}
                     </SelectGroup>
                 </SelectContent>
             </Select>
@@ -58,11 +47,12 @@ const Item = ({ item, index, validate, onUpdateItem, onDeleteItem }) => {
     );
 };
 
-
-export default function CodeOutputItem({ data, onChange, onValidate }) {
+export default function CodeOutputItem({ nodeId, data, onValidate, onChange }) {
+    const { t } = useTranslation('flow');
     const [items, setItems] = useState(data.value);
 
     const handleAddItem = () => {
+        setError(false)
         const newItems = [...items, { key: '', type: 'str' }];
         setItems(newItems);
         onChange(newItems);
@@ -81,6 +71,7 @@ export default function CodeOutputItem({ data, onChange, onValidate }) {
     };
 
     const [error, setError] = useState(false)
+    const [sameKey, setSameKey] = useState('')
     useEffect(() => {
         data.required && onValidate(() => {
             setError(false)
@@ -89,22 +80,25 @@ export default function CodeOutputItem({ data, onChange, onValidate }) {
             }, 100);
 
             let msg = ''
-            const nameSet = new Set()
+            const map = {}
             items.some(item => {
                 if (item.key === '') {
-                    msg = '变量名称不能为空'
+                    msg = t('variableNameCannotBeEmpty')
                     return true
-                } else if (nameSet.has(item.key)) {
-                    msg = '变量名已存在';
-                    return true;
-                } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(item.key)) {
-                    msg = '变量名称只能包含英文字符、数字和下划线，且不能以数字开头';
-                    return true;
+                } else if (!/^[a-zA-Z0-9_]{1,50}$/.test(item.key)) {
+                    msg = t('variableNameInvalid')
+                    return true
                 } else if (item.key.length > 50) {
-                    msg = '变量名称不能超过 50 个字符'
+                    msg = t('variableNameTooLong')
                     return true
+                } else if (map[item.key]) {
+                    msg = t('variableNameDuplicate')
+                    setSameKey(item.key)
+                    return true
+                } else {
+                    map[item.key] = true
+                    setSameKey('-')
                 }
-                nameSet.add(item.key)
             })
             return msg || false
         })
@@ -117,15 +111,17 @@ export default function CodeOutputItem({ data, onChange, onValidate }) {
             {items.map((item, index) => (
                 <Item
                     key={index}
-                    item={item}
+                    sameKey={sameKey}
                     validate={error}
+                    nodeId={nodeId}
+                    item={item}
                     index={index}
                     onUpdateItem={handleUpdateItem}
                     onDeleteItem={handleDeleteItem}
                 />
             ))}
             <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
-                +添加新的出参
+                {t('addNewParameter')}
             </Button>
         </div>
     );

@@ -3,9 +3,10 @@ import { useContext, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ChatPanne from "./components/ChatPanne";
 import { userContext } from "@/contexts/userContext";
+import { AppNumType } from "@/types/app";
 
 // assistant workflow flow
-export default function ChatPro({ type = 'flow' }) {
+export default function ChatPro({ type = AppNumType.SKILL }) {
     const { id: flowId } = useParams()
     const { user } = useContext(userContext);
 

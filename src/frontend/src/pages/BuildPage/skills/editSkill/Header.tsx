@@ -1,10 +1,12 @@
 import AlertDropdown from "@/alerts/alertDropDown";
+import TipPng from "@/assets/tip.jpg";
 import { DelIcon } from "@/components/bs-icons/del";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { SaveIcon } from "@/components/bs-icons/save";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import ActionButton from "@/components/bs-ui/button/actionButton";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import TextInput from "@/components/bs-ui/input/textInput";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -19,13 +21,13 @@ import L2ParamsModal from "@/modals/L2ParamsModal";
 import ExportModal from "@/modals/exportModal";
 import { FlowVersionItem } from "@/types/flow";
 import { t } from "i18next";
+import { isEqual } from "lodash-es";
 import { ArrowDown, ArrowUp, Bell, Layers, Layers2, LogOut } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import TipPng from "@/assets/tip.jpg";
+import { unstable_useBlocker as useBlocker, useNavigate } from "react-router-dom";
 
-export default function Header({ flow, onTabChange }) {
+export default function Header({ flow, preFlow, onTabChange }) {
     const navgate = useNavigate()
     const { t } = useTranslation()
     const { message } = useToast()
@@ -71,7 +73,7 @@ export default function Header({ flow, onTabChange }) {
 
     // 版本管理
     const [loading, setLoading] = useState(false)
-    const { versions, version, lastVersionIndexRef, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
+    const { versions, version, isOnlineVersion, lastVersionIndexRef, changeName, deleteVersion, refrenshVersions, setCurrentVersion } = useVersion(flow)
     // 切换版本
     const handleChangeVersion = async (versionId) => {
         setLoading(true)
@@ -103,6 +105,19 @@ export default function Header({ flow, onTabChange }) {
                 description: ""
             })
         }))
+    }
+
+    const blocker = useBeforeUnload(flow, preFlow)
+    // 离开并保存
+    const handleSaveAndClose = async () => {
+        setFlow('leave and save', { ...flow })
+        if (isOnlineVersion) {
+            handleSaveNewVersion()
+            blocker.reset?.()
+        } else {
+            await captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }))
+            blocker.proceed?.()
+        }
     }
 
     const [tabType, setTabType] = useState('edit')
@@ -217,16 +232,43 @@ export default function Header({ flow, onTabChange }) {
 
         {/* 高级配置l2配置 */}
         <L2ParamsModal data={flow} open={open} setOpen={setOpen} onSave={handleSaveVersion}></L2ParamsModal>
+
+        <Dialog open={blocker.state === "blocked"}>
+            <DialogContent className="sm:max-w-[425px]" close={false}>
+                <DialogHeader>
+                    <DialogTitle>{t('prompt')}</DialogTitle>
+                    <DialogDescription>{isOnlineVersion ? '当前版本已上线,不可进行更改' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button className="leave h-8" onClick={handleSaveAndClose}>
+                        {isOnlineVersion ? '另存为新版本' : '离开并保存'}
+                    </Button>
+                    <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
+                        不保存,直接退出
+                    </Button>
+                    <Button className="h-8" variant="outline" onClick={() => {
+                        const dom = document.getElementById("flow-page") as HTMLElement;
+                        blocker.reset?.()
+                        if (dom) dom.className = dom.className.replace('report-hidden', '');
+                    }}>
+                        {t('cancel')}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 };
 
 // 技能版本管理
 const useVersion = (flow) => {
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
-    const { version, setVersion, updateOnlineVid } = useContext(TabsContext)
+    const { version, setVersion } = useContext(TabsContext)
     const lastVersionIndexRef = useRef(0)
     const { toast } = useToast()
-
+    const [onlineVid, setOnlineVid] = useState(0);
+    const updateOnlineVid = (vid: number) => {
+        setOnlineVid(flow.status === 2 ? vid : 0);
+    }
     const refrenshVersions = () => {
         return getFlowVersions(flow.id).then(({ data, total }) => {
             setVersions(data)
@@ -280,6 +322,7 @@ const useVersion = (flow) => {
         versions,
         version,
         lastVersionIndexRef,
+        isOnlineVersion: version?.id === onlineVid,
         setCurrentVersion(versionId) {
             const currentV = versions.find(el => el.id === versionId)
             setVersion(currentV)
@@ -289,4 +332,33 @@ const useVersion = (flow) => {
         deleteVersion: handleDeleteVersion,
         changeName: handleChangName,
     }
+}
+
+
+// 离开页面保存提示
+const useBeforeUnload = (flow, preFlow) => {
+    const { t } = useTranslation()
+
+    // 离开提示保存
+    useEffect(() => {
+        const fun = (e) => {
+            var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
+            return confirmationMessage;
+        }
+        window.addEventListener('beforeunload', fun);
+        return () => { window.removeEventListener('beforeunload', fun) }
+    }, [])
+
+    const hasChange = useMemo(() => {
+        if (!flow.data) return false
+        const oldFlowData = JSON.parse(preFlow)
+        if (!oldFlowData) return true
+        // 比较新旧
+        const { edges, nodes } = flow.data
+        const { edges: oldEdges, nodes: oldNodes } = oldFlowData
+        return !(isEqual(edges, oldEdges) && isEqual(nodes, oldNodes))
+    }, [preFlow, flow.data])
+
+    return useBlocker(hasChange);
 }

@@ -1,3 +1,4 @@
+import MessageButtons from "@/components/bs-comp/chatComponent/MessageButtons";
 import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -33,7 +34,10 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
     const message = useMemo(() => {
-        return typeof data.message === 'string' ? data.message : data.message.msg
+        const msg = typeof data.message === 'string' ? data.message : data.message.msg
+        return msg
+            .replaceAll('$$', '$') // latex
+            .replace(/(?<!\n)\n(?!\n)/g, '\n\n') // 单个换行符
     }, [data.message])
 
     const mkdown = useMemo(
@@ -122,18 +126,18 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                         className="pl-4"
                         onSource={() => onSource?.({
                             chatId,
-                            messageId: data.id,
+                            messageId: data.id || data.message_id,
                             message,
                         })}
                     />
-                    {/* <MessageButtons
+                    <MessageButtons
                         mark={mark}
-                        id={data.id}
+                        id={data.id || data.message_id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                    ></MessageButtons> */}
+                    ></MessageButtons>
                 </div>
             }
         </div>

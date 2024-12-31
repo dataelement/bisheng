@@ -1,6 +1,7 @@
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Check, ChevronsRightIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import NodeLogo from "./NodeLogo";
 import { ResultText } from "./RunTest";
 
@@ -14,6 +15,7 @@ const enum Status {
 const Log = ({ type, name, data }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
+    const { t } = useTranslation('flow')
 
     const handleClickOutside = (event) => {
         if (ref.current && !ref.current.contains(event.target)) {
@@ -38,7 +40,7 @@ const Log = ({ type, name, data }) => {
                 className="flex items-center text-primary text-sm cursor-pointer"
                 onClick={() => setOpen(!open)}
             >
-                <span>查看日志</span>
+                <span><span>{t('viewLogs')}</span></span>
                 <span>
                     <ChevronsRightIcon size={18} />
                 </span>
@@ -65,6 +67,7 @@ const Log = ({ type, name, data }) => {
 export default function RunLog({ node, children }) {
     const [state, setState] = useState<Status>(Status.normal)
     const [data, setData] = useState<any>({})
+    const { t } = useTranslation('flow')
 
     // 订阅日志事件
     useEffect(() => {
@@ -73,6 +76,7 @@ export default function RunLog({ node, children }) {
             if (nodeId !== node.id && nodeId !== '*') return
 
             if (data) {
+                // newData  key: {id: value}
                 const newData = data.reduce((res, item) => {
                     if (item.type === 'variable') {
                         const key = item.key.split('.')
@@ -99,6 +103,11 @@ export default function RunLog({ node, children }) {
                                     return true
                                 }
                             })
+                        } else if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
+                            // 尝试去value中匹配
+                            const value = param.value.find(el => newData[el.key])
+                            result[value.label] = newData[value.key];
+                            hasKeys.push(value.key)
                         }
                     });
                 });
@@ -122,26 +131,32 @@ export default function RunLog({ node, children }) {
         return ['report', 'end'].includes(node.type)
     }, [node])
 
-    if (state === Status.normal) return children
+    if (state === Status.normal) return children;
 
-    if (state === Status.loading) return <div className='bisheng-node-top flex items-center'>
-        <LoadIcon className="text-primary mr-2" />
-        <span className='text-sm text-primary'>运行中</span>
-    </div>
-
-    if (state === Status.success) return < div className='bisheng-node-top flex justify-between bg-[#E6FBF1] dark:bg-[#303134]' >
-        <div className='flex items-center gap-2 text-sm'>
-            <div className='rounded-full w-4 h-4 bg-[#00C78C] text-gray-50 flex items-center justify-center'><Check size={14} /></div>
-            <span>运行成功</span>
+    if (state === Status.loading) return (
+        <div className='bisheng-node-top flex items-center'>
+            <LoadIcon className="text-primary mr-2" />
+            <span className='text-sm text-primary'>{t('running')}</span>
         </div>
-        {!noLog && <Log type={node.type} name={node.name} data={data} />}
-    </div>
+    );
 
-    return <div className='bisheng-node-top flex justify-between bg-[#FCEAEA] dark:bg-[#303134]'>
-        <div className='flex items-center gap-2 text-sm'>
-            <div className='rounded-full w-4 h-4 bg-[#F04438] text-gray-50 flex items-center justify-center'><X size={14} /></div>
-            <span>运行失败</span>
+    if (state === Status.success) return (
+        <div className='bisheng-node-top flex justify-between bg-[#E6FBF1] dark:bg-[#303134]'>
+            <div className='flex items-center gap-2 text-sm'>
+                <div className='rounded-full w-4 h-4 bg-[#00C78C] text-gray-50 flex items-center justify-center'><Check size={14} /></div>
+                <span>{t('runSuccess')}</span>
+            </div>
+            {!noLog && <Log type={node.type} name={node.name} data={data} />}
         </div>
-        {!noLog && <Log type={node.type} name={node.name} data={data} />}
-    </div>
+    );
+
+    return (
+        <div className='bisheng-node-top flex justify-between bg-[#FCEAEA] dark:bg-[#303134]'>
+            <div className='flex items-center gap-2 text-sm'>
+                <div className='rounded-full w-4 h-4 bg-[#F04438] text-gray-50 flex items-center justify-center'><X size={14} /></div>
+                <span>{t('runFailed')}</span>
+            </div>
+            {!noLog && <Log type={node.type} name={node.name} data={data} />}
+        </div>
+    );
 };

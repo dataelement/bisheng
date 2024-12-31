@@ -10,6 +10,7 @@ import { locationContext } from "@/contexts/locationContext";
 import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
 import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
+import { AppNumType } from "@/types/app";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TabsContext } from "../../../contexts/tabsContext";
@@ -19,7 +20,6 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
-import { AppNumType } from "@/types/app";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -120,7 +120,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { tabsState } = useContext(TabsContext);
     // 依赖 chatId更新闭包，不依赖 flow
     const getWsParamData = (action, msg) => {
-        if (type === 'flow') {
+        if (type === AppNumType.SKILL) {
             const _flow = flowRef.current
             let inputs = tabsState[_flow.id].formKeysData.input_keys;
             const input = inputs.find((el: any) => !el.type)
@@ -161,9 +161,9 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
     const host = appConfig.websocketHost || ''
-    let wsUrl = type === 'flow' ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${flowRef.current?.id}?type=L1&t=${token}` :
-        type === 'assistant' ? `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${assistant?.id}?t=${token}` :
-            `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${workflow?.id}?chat_id=${chatId}&t=${token}`
+    let wsUrl = type === AppNumType.SKILL ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${id}?type=L1&t=${token}` :
+        type === AppNumType.ASSISTANT ? `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${id}?t=${token}` :
+            `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${id}?t=${token}&chat_id=${chatId}`
 
     if (customWsHost) {
         wsUrl = `${host}${__APP_ENV__.BASE_URL}${customWsHost}&t=${token}`
@@ -278,6 +278,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         {/* 工作流会话 */}
         {
             workflow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
+                    <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
+                    <span className="text-sm">{workflow.name}</span>
+                </div>
                 <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
             </div>
         }

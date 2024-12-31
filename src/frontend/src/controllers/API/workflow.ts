@@ -1,4 +1,5 @@
 import { WorkFlow } from "@/types/flow";
+import i18next from "i18next";
 import axios from "../request";
 
 /**
@@ -6,7 +7,7 @@ import axios from "../request";
  */
 export const getWorkflowNodeTemplate = async (): Promise<any[]> => {
     return new Promise(res => setTimeout(() => {
-        res(workflowTemplate)
+        res(i18next.language === 'en' ? workflowTemplateEN : workflowTemplate)
     }, 100));
 }
 
@@ -754,3 +755,667 @@ const workflowTemplate = [
         "group_params": []
     },
 ]
+
+const workflowTemplateEN = [
+    {
+        "id": "start_xxx",
+        "name": "Start",
+        "description": "The starting node of the workflow.",
+        "type": "start",
+        "group_params": [
+            {
+                "name": "Opening Guide",
+                "params": [
+                    {
+                        "key": "guide_word",
+                        "label": "Opening Words",
+                        "value": "",
+                        "type": "textarea",
+                        "placeholder": "Send this message to the user each time the workflow starts. Supports Markdown format. Leave blank if not needed."
+                    },
+                    {
+                        "key": "guide_question",
+                        "label": "Guide Questions",
+                        "value": [],
+                        "type": "input_list",
+                        "placeholder": "Enter guide questions",
+                        "help": "Provide recommended questions to guide user input. If there are more than 3, 3 will be selected randomly."
+                    }
+                ]
+            },
+            {
+                "name": "Global Variables",
+                "params": [
+                    {
+                        "key": "current_time",
+                        "global": "key",
+                        "label": "Current Time",
+                        "type": "var",
+                        "value": ""
+                    },
+                    {
+                        "key": "chat_history",
+                        "global": "key",
+                        "type": "chat_history_num",
+                        "value": 10
+                    },
+                    {
+                        "key": "preset_question",
+                        "label": "Preset Question List",
+                        "global": "index",
+                        "type": "input_list",
+                        "value": [],
+                        "placeholder": "Enter batch preset questions",
+                        "help": "Suitable for document review, report generation, etc. Use preset questions for batch RAG Q&A."
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "input_xxx",
+        "name": "Input",
+        "description": "Receive user input on the session page, supports two forms: dialog input, form input.",
+        "type": "input",
+        "tab": {
+            "value": "input",
+            "options": [
+                {
+                    "label": "Dialog Input",
+                    "key": "input",
+                    "help": "Receive content entered by the user from the dialog box."
+                },
+                {
+                    "label": "Form Input",
+                    "key": "form",
+                    "help": "Display a form on the session page to receive content submitted by the user through the form."
+                }
+            ]
+        },
+        "group_params": [
+            {
+                "name": "",
+                "params": [
+                    {
+                        "key": "user_input",
+                        "global": "key",
+                        "label": "User Input Content",
+                        "type": "var",
+                        "tab": "input"
+                    },
+                    {
+                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
+                        "key": "form_input",
+                        "label": "+ Add Form Item",
+                        "type": "form",
+                        "value": [],
+                        "tab": "form"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "output_xxx",
+        "name": "Output",
+        "description": "Send messages to users and support richer interactions, such as requesting user approval for sensitive operations or allowing users to directly modify and submit model-generated content.",
+        "type": "output",
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "output_msg",
+                        "label": "Message Content",
+                        "type": "var_textarea_file",
+                        "required": true,
+                        "placeholder": "Enter the message to send to the user, e.g., 'I will perform XX operation next, please confirm', or 'Here is my draft, feel free to modify it'.",
+                        "value": {
+                            "msg": "",
+                            "files": []
+                        }
+                    },
+                    {
+                        "key": "output_result",
+                        "label": "Interaction Type",
+                        "global": "value.type=input",
+                        "type": "output_form",
+                        "required": true,
+                        "value": {
+                            "type": "",
+                            "value": ""
+                        },
+                        "options": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "llm_xxx",
+        "name": "LLM",
+        "description": "Invoke a large language model to answer user questions or process tasks.",
+        "type": "llm",
+        "tab": {
+            "value": "single",
+            "options": [
+                {
+                    "label": "Single Run",
+                    "key": "single"
+                },
+                {
+                    "label": "Batch Run",
+                    "key": "batch"
+                }
+            ]
+        },
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "batch_variable",
+                        "label": "Batch Variable",
+                        "global": "self",
+                        "type": "user_question",
+                        "value": [],
+                        "required": true,
+                        "linkage": "output",
+                        "placeholder": "Select batch variable",
+                        "help": "Select the variable to batch process. This node will run multiple times, taking one item from the selected variable each time and assigning it to batch_variable for processing.",
+                        "tab": "batch"
+                    }
+                ]
+            },
+            {
+                "name": "Model Settings",
+                "params": [
+                    {
+                        "key": "model_id",
+                        "label": "Model",
+                        "type": "bisheng_model",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "Select a model"
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "Temperature",
+                        "type": "slide",
+                        "scope": [0, 2],
+                        "step": 0.1,
+                        "value": 0.7
+                    }
+                ]
+            },
+            {
+                "name": "Prompts",
+                "params": [
+                    {
+                        "key": "system_prompt",
+                        "label": "System Prompt",
+                        "type": "var_textarea",
+                        "test": "var",
+                        "value": ""
+                    },
+                    {
+                        "key": "user_prompt",
+                        "label": "User Prompt",
+                        "type": "var_textarea",
+                        "test": "var",
+                        "value": "",
+                        "required": true
+                    }
+                ]
+            },
+            {
+                "name": "Output",
+                "params": [
+                    {
+                        "key": "output_user",
+                        "label": "Display output in session",
+                        "type": "switch",
+                        "help": "Typically enabled in Q&A scenarios and disabled in document review or report generation scenarios.",
+                        "value": true
+                    },
+                    {
+                        "key": "output",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "label": "Output Variable",
+                        "type": "var",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "agent_xxx",
+        "name": "Agent",
+        "description": "AI autonomously plans tasks and selects appropriate knowledge bases or tools for invocation.",
+        "type": "agent",
+        "tab": {
+            "value": "single",
+            "options": [
+                {
+                    "label": "Single Run",
+                    "key": "single"
+                },
+                {
+                    "label": "Batch Run",
+                    "key": "batch"
+                }
+            ]
+        },
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "batch_variable",
+                        "label": "Batch Variable",
+                        "required": true,
+                        "global": "self",
+                        "type": "user_question",
+                        "value": [],
+                        "linkage": "output",
+                        "placeholder": "Select batch variable",
+                        "tab": "batch",
+                        "help": "Select the variable to batch process. This node will run multiple times, taking one item from the selected variable each time and assigning it to batch_variable for processing."
+                    }
+                ]
+            },
+            {
+                "name": "Model Settings",
+                "params": [
+                    {
+                        "key": "model_id",
+                        "label": "Model",
+                        "type": "agent_model",
+                        "required": true,
+                        "value": "",
+                        "placeholder": "Select a model"
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "Temperature",
+                        "type": "slide",
+                        "scope": [0, 2],
+                        "step": 0.1,
+                        "value": 0.7
+                    }
+                ]
+            },
+            {
+                "name": "Prompts",
+                "params": [
+                    {
+                        "key": "system_prompt",
+                        "label": "System Prompt",
+                        "type": "var_textarea",
+                        "test": "var",
+                        "value": "",
+                        "placeholder": "Assistant Persona",
+                        "required": true
+                    },
+                    {
+                        "key": "user_prompt",
+                        "label": "User Prompt",
+                        "type": "var_textarea",
+                        "test": "var",
+                        "value": "",
+                        "placeholder": "User Message",
+                        "required": true
+                    },
+                    {
+                        "key": "chat_history_flag",
+                        "label": "Historical Chat Records",
+                        "type": "slide_switch",
+                        "scope": [0, 100],
+                        "step": 1,
+                        "value": {
+                            "flag": true,
+                            "value": 50
+                        },
+                        "help": "Include historical chat records."
+                    }
+                ]
+            },
+            {
+                "name": "Knowledge Base",
+                "params": [
+                    {
+                        "key": "knowledge_id",
+                        "label": "Knowledge Base Scope",
+                        "type": "knowledge_select_multi",
+                        "placeholder": "Select Knowledge Base",
+                        "value": {
+                            "type": "knowledge",
+                            "value": []
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Database",
+                "params": [
+                    {
+                        "key": "sql_agent",
+                        "type": "sql_config",
+                        "value": {
+                            "open": false,
+                            "db_address": "",
+                            "db_name": "",
+                            "db_username": "",
+                            "db_password": ""
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Tools",
+                "params": [
+                    {
+                        "key": "tool_list",
+                        "label": "+ Add Tool",
+                        "type": "add_tool",
+                        "value": []
+                    }
+                ]
+            },
+            {
+                "name": "Output",
+                "params": [
+                    {
+                        "key": "output_user",
+                        "label": "Display output in session",
+                        "type": "switch",
+                        "help": "Typically enabled in Q&A scenarios and disabled in document review or report generation scenarios.",
+                        "value": true
+                    },
+                    {
+                        "key": "output",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "label": "Output Variable",
+                        "type": "var",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "qa_retriever_xxx",
+        "name": "QA Retrieval",
+        "description": "Retrieve questions and corresponding answers from the QA knowledge base.",
+        "type": "qa_retriever",
+        "group_params": [
+            {
+                "name": "Retrieval Settings",
+                "params": [
+                    {
+                        "key": "user_question",
+                        "label": "Input Variable",
+                        "type": "var_select",
+                        "test": "var",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "Select retrieval question"
+                    },
+                    {
+                        "key": "qa_knowledge_id",
+                        "label": "QA Knowledge Base",
+                        "type": "qa_select_multi",
+                        "value": [],
+                        "required": true,
+                        "placeholder": "Select QA knowledge base"
+                    },
+                    {
+                        "key": "score",
+                        "label": "Similarity Threshold",
+                        "type": "slide",
+                        "value": 0.6,
+                        "scope": [
+                            0.01,
+                            0.99
+                        ],
+                        "step": 0.01,
+                        "help": "Results below this threshold will be filtered out."
+                    }
+                ]
+            },
+            {
+                "name": "Output",
+                "params": [
+                    {
+                        "key": "retrieved_result",
+                        "label": "Retrieval Result",
+                        "type": "var",
+                        "global": "key",
+                        "value": ""
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "rag_xxx",
+        "name": "Document Retrieval",
+        "description": "Retrieve relevant content from the knowledge base based on user questions and generate final answers using the retrieved results and a large language model. Supports parallel execution for multiple questions.",
+        "type": "rag",
+        "group_params": [
+            {
+                "name": "Knowledge Base Retrieval Settings",
+                "params": [
+                    {
+                        "key": "user_question",
+                        "label": "User Question",
+                        "global": "self=user_prompt",
+                        "type": "user_question",
+                        "test": "var",
+                        "help": "If multiple questions are selected, this node will run multiple times, taking one question at a time for processing.",
+                        "linkage": "output_user_input",
+                        "value": [],
+                        "placeholder": "Select user question",
+                        "required": true
+                    },
+                    {
+                        "key": "knowledge",
+                        "label": "Retrieval Scope",
+                        "type": "knowledge_select_multi",
+                        "placeholder": "Select knowledge base",
+                        "value": {
+                            "type": "knowledge",
+                            "value": []
+                        },
+                        "required": true
+                    },
+                    {
+                        "key": "user_auth",
+                        "label": "User Knowledge Base Permission Validation",
+                        "type": "switch",
+                        "value": false,
+                        "help": "When enabled, retrieval will only be performed on knowledge bases the user has permission to access."
+                    },
+                    {
+                        "key": "max_chunk_size",
+                        "label": "Retrieval Result Length",
+                        "type": "number",
+                        "value": 15000,
+                        "help": "Controls the length of the retrieved text passed to the model. Exceeding the maximum context length supported by the model may cause errors."
+                    },
+                    {
+                        "key": "retrieved_result",
+                        "label": "Retrieval Result",
+                        "type": "var",
+                        "global": "self=user_prompt"
+                    }
+                ]
+            },
+            {
+                "name": "AI Response Generation Settings",
+                "params": [
+                    {
+                        "key": "system_prompt",
+                        "label": "System Prompt",
+                        "type": "var_textarea",
+                        "value": "You are a knowledge base Q&A assistant: \n1. Answer user questions in Chinese with professional and rigorous responses.\n2. Use the provided [Reference Text] for answers. Only answer if the text clearly relates to the user question, and do not use your own knowledge.\n3. If [Reference Text] contains conflicting or differing answers, list all the answers. If there is no conflict, provide a single final result.\n4. If the [Reference Text] is not relevant, reply with 'No relevant content found.'",
+                        "required": true
+                    },
+                    {
+                        "key": "user_prompt",
+                        "label": "User Prompt",
+                        "type": "var_textarea",
+                        "value": "User Question: {{#user_question#}}\nReference Text: {{#retrieved_result#}}\nYour Answer:",
+                        "test": "var",
+                        "required": true
+                    },
+                    {
+                        "key": "model_id",
+                        "label": "Model",
+                        "type": "bisheng_model",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "Select a model"
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "Temperature",
+                        "type": "slide",
+                        "scope": [0, 2],
+                        "step": 0.1,
+                        "value": 0.7
+                    }
+                ]
+            },
+            {
+                "name": "Output",
+                "params": [
+                    {
+                        "key": "output_user",
+                        "label": "Display output in session",
+                        "type": "switch",
+                        "value": true,
+                        "help": "Typically enabled in Q&A scenarios and disabled in document review or report generation scenarios."
+                    },
+                    {
+                        "key": "output_user_input",
+                        "label": "Output Variable",
+                        "type": "var",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "report_xxx",
+        "name": "Report",
+        "description": "Generate reports based on pre-defined Word templates.",
+        "type": "report",
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "report_info",
+                        "label": "Report Name",
+                        "placeholder": "Enter the name of the report to generate",
+                        "required": true,
+                        "type": "report",
+                        "value": {}
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "condition_xxx",
+        "name": "Condition",
+        "description": "Execute different branches based on conditional expressions.",
+        "type": "condition",
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "condition",
+                        "label": "",
+                        "type": "condition",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "code_xxx",
+        "name": "Code",
+        "description": "Customize and execute specific code.",
+        "type": "code",
+        "group_params": [
+            {
+                "name": "Input Parameters",
+                "params": [
+                    {
+                        "key": "code_input",
+                        "type": "code_input",
+                        "test": "input",
+                        "required": true,
+                        "value": [
+                            {
+                                "key": "arg1",
+                                "type": "input",
+                                "label": "",
+                                "value": ""
+                            },
+                            {
+                                "key": "arg2",
+                                "type": "input",
+                                "label": "",
+                                "value": ""
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "Execute Code",
+                "params": [
+                    {
+                        "key": "code",
+                        "type": "code",
+                        "required": true,
+                        "value": "def main(arg1: str, arg2: str) -> dict: \n    return {'result1': arg1, 'result2': arg2}"
+                    }
+                ]
+            },
+            {
+                "name": "Output Parameters",
+                "params": [
+                    {
+                        "key": "code_output",
+                        "type": "code_output",
+                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
+                        "required": true,
+                        "value": [
+                            {
+                                "key": "result1",
+                                "type": "str"
+                            },
+                            {
+                                "key": "result2",
+                                "type": "str"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "end_xxx",
+        "name": "End",
+        "description": "The workflow ends here.",
+        "type": "end",
+        "group_params": []
+    }
+];
+
+

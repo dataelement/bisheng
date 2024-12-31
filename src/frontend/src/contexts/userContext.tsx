@@ -107,7 +107,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
             })
 
             toast({
-                title: '提示',
                 description: msg.split(`\n`),
                 variant: 'error'
             })

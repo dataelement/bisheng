@@ -126,7 +126,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                 }
             })
         }
-        {/* <ThumbsMessage ref={thumbRef}></ThumbsMessage> */}
+        <ThumbsMessage ref={thumbRef}></ThumbsMessage>
         <ResouceModal ref={sourceRef}></ResouceModal>
     </div>
 };

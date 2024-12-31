@@ -124,6 +124,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             ...currentMsg,
             message: data.type === 'end' ? currentMsg.message : currentMsg.message + data.message.msg,
             update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+            source: data.source,
             end: data.type === 'end'
         }
 
@@ -194,7 +195,25 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         })
         return msgs
     },
-
+    async loadMoreHistoryMsg(flowid, appendHistory) {
+        if (get().running) return // 会话进行中禁止加载more历史
+        if (get().historyEnd) return // 没有更多历史纪录
+        const chatId = get().chatId
+        const prevMsgs = get().messages
+        // 最后一条消息id不存在，忽略 loadmore
+        if (!prevMsgs[0]?.id) return
+        const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
+        // 过滤非同一会话消息
+        if (res[0]?.chat_id !== currentChatId) {
+            return console.warn('loadMoreHistoryMsg chatId not match, ignore')
+        }
+        const msgs = handleHistoryMsg(res)
+        if (msgs.length) {
+            set({ [appendHistory ? 'messages' : 'hisMessages']: [...msgs.reverse(), ...prevMsgs] })
+        } else {
+            set({ historyEnd: true })
+        }
+    },
 
 
     // stream end old
@@ -218,25 +237,6 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     setShowGuideQuestion(bln: boolean) {
         set({ showGuideQuestion: bln })
-    },
-    async loadMoreHistoryMsg(flowid, appendHistory) {
-        if (get().running) return // 会话进行中禁止加载more历史
-        if (get().historyEnd) return // 没有更多历史纪录
-        const chatId = get().chatId
-        const prevMsgs = get().messages
-        // 最后一条消息id不存在，忽略 loadmore
-        if (!prevMsgs[0]?.id) return
-        const res = await getChatHistory(flowid, chatId, 10, prevMsgs[0]?.id || 0)
-        // 过滤非同一会话消息
-        if (res[0]?.chat_id !== currentChatId) {
-            return console.warn('loadMoreHistoryMsg chatId not match, ignore')
-        }
-        const msgs = handleHistoryMsg(res)
-        if (msgs.length) {
-            set({ [appendHistory ? 'messages' : 'hisMessages']: [...msgs.reverse(), ...prevMsgs] })
-        } else {
-            set({ historyEnd: true })
-        }
     },
     clearMsgs() {
         setTimeout(() => {

@@ -31,6 +31,7 @@
     "skills": "构  建",
     "knowledge": "知  识",
     "evaluation": "评  测",
+    "annotation": "标  注",
     "models": "模  型",
     "system": "系  统",
     "log": "审  计",
@@ -415,9 +416,11 @@
     "tools": "工具",
     "save": "保存",
     "online": "上线",
+    "offline": "下线",
     "retry": "重试",
     "use": "使用",
     "useAll": "全部使用",
+    "allAppTypes": "全部应用类型",
     "assistantConfiguration": "助手配置",
     "createAssistant": "新建助手",
     "assistantPortrait": "助手画像",
@@ -540,7 +543,11 @@
     "confirmDeleteAssistant": "确认删除该助手?",
     "maxToken": "聊天历史最大token数",
     "maxTokenTip": "通过此参数对聊天历史记录进行裁剪，控制发送给模型的历史消息数量，避免出现超长错误，因此不可大于模型支持的最大上下文长度",
-    "app": "应用"
+    "app": "应用",
+    "manageAppTemplates": "管理应用模板",
+    "provideSceneTemplates": "我们提供场景模板供您使用和参考",
+    "noPermissionToPublish": "您没有权限上线此{{type}}，请联系管理员上线。",
+    "manageYourApplications": "在此页面管理您的应用，对应用上下线、编辑等等"
   },
   "tools": {
     "addTool": "添加工具",
@@ -848,7 +855,9 @@
     "10606": "用户组和角色不能为空",
     "10610": "用户组内还有用户，不能删除",
     "10920": "未配置QA知识库相似问模型",
-    "10930": "该问题已被标注过"
+    "10930": "该问题已被标注过",
+    "10527": "工作流等待用户输入超时",
+    "10528": "{{type}}节点执行超过最大次数"
   },
   "all": "全部",
   "confirmButton": "确定",

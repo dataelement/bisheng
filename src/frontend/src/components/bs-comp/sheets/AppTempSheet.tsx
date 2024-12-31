@@ -1,41 +1,37 @@
 import { readTempsDatabase } from "@/controllers/API";
 import { AppType } from "@/types/app";
-import { Bot, Boxes, Workflow } from "lucide-react";
+import { Bot } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
 import { SearchInput } from "../../bs-ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
-import { Flow2Icon, Skill2Icon } from "@/components/bs-icons";
 
 /** 应用模板选择 */
 export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
     const [open, setOpen] = useState(false)
     const [type, setType] = useState<AppType>(AppType.FLOW)
+    const { t } = useTranslation('flow')
     const createDesc = useMemo(() => {
         const descs = {
             [AppType.ASSISTANT]: {
-                title: '自定义助手',
+                title: t('customAssistant'),
                 desc: <>
-                    <p>通过描述角色和任务来零代码创建应用</p>
-                    <p>助手可以调用多个技能和工具</p>
+                    <p>{t('createAppWithNoCode')}</p>
+                    <p>{t('assistantCanUseSkillsAndTools')}</p>
                 </>
             },
             [AppType.FLOW]: {
-                title: '自定义工作流',
-                desc: '通过简单的节点编排任务流程，支持并行和成环，支持工作流执行过程中复杂人机交互'
+                title: t('customWorkflow'),
+                desc: t('simpleNodeOrchestration')
             },
             [AppType.SKILL]: {
-                title: '自定义技能',
-                desc: '通过丰富的组件搭建应用，提供更多参数以供效果调优。'
+                title: t('customSkill'),
+                desc: t('richComponentsForBuildingApps')
             }
         }
         return descs[type]
     }, [type])
-
-    const navigate = useNavigate()
-    const { t } = useTranslation()
 
     const [keyword, setKeyword] = useState(' ')
     const allDataRef = useRef([])
@@ -59,9 +55,9 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
         <SheetContent className="sm:min-w-[966px] ">
             <div className="flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit p-6">
-                    <SheetTitle>应用模板</SheetTitle>
-                    <SheetDescription>您可以选择一个模板开始，或者自定义创建一个空白应用</SheetDescription>
-                    <SearchInput value={keyword} placeholder={t('build.search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
+                    <SheetTitle>{t('appTemplate')}</SheetTitle>
+                    <SheetDescription>{t('chooseTemplateOrCreateBlank')}</SheetDescription>
+                    <SearchInput value={keyword} placeholder={t('search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
                     {/* type */}
                     <div className="mt-4">
                         <div
@@ -69,21 +65,21 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             onClick={() => setType(AppType.FLOW)}
                         >
                             <Bot />
-                            <span>工作流</span>
+                            <span>{t('workflow')}</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.ASSISTANT)}
                         >
                             <Bot />
-                            <span>助手</span>
+                            <span>{t('assistant')}</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.SKILL)}
                         >
                             <Bot />
-                            <span>技能</span>
+                            <span>{t('skill')}</span>
                         </div>
                     </div>
                 </div>

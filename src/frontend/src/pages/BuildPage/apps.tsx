@@ -21,7 +21,7 @@ import { AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
 import { useTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
-import { useContext, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useQueryLabels } from "./assistant";
@@ -31,18 +31,22 @@ import CreateTemp from "./skills/CreateTemp";
 
 export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const [value, setValue] = useState<string>(defaultValue)
+    const { t } = useTranslation();
+
     const options = [
-        { label: '工作流', value: 'flow' },
-        { label: '助手', value: 'assistant' },
-        { label: '技能', value: 'skill' },
-    ]
+        { label: t('build.workflow'), value: 'flow' },
+        { label: t('build.assistant'), value: 'assistant' },
+        { label: t('build.skill'), value: 'skill' },
+    ];
+
     if (all) {
-        options.unshift({ label: '全部应用类型', value: 'all' })
+        options.unshift({ label: t('build.allAppTypes'), value: 'all' });
     }
+
 
     return <Select value={value} onValueChange={(v) => { onChange(v); setValue(v) }}>
         <SelectTrigger className="max-w-32">
-            <SelectValue placeholder={'全部应用类型'} />
+            <SelectValue placeholder={t('build.allAppTypes')} />
         </SelectTrigger>
         <SelectContent>
             <SelectGroup>
@@ -60,7 +64,10 @@ const TypeNames = {
     10: AppType.FLOW
 }
 export default function apps() {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
+    useEffect(() => {
+        i18n.loadNamespaces('flow');
+    }, [i18n]);
     const { user } = useContext(userContext);
     const { message } = useToast()
     const navigate = useNavigate()
@@ -100,7 +107,7 @@ export default function apps() {
     const typeCnNames = {
         1: t('build.skill'),
         5: t('build.assistant'),
-        10: '工作流'
+        10: t('build.workflow')
     }
 
     const handleDelete = (data) => {
@@ -181,7 +188,7 @@ export default function apps() {
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
                     onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
-                ><MoveOneIcon className="dark:text-slate-50" />管理应用模板</Button>}
+                ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>}
             </div>
             {/* list */}
             {
@@ -194,9 +201,9 @@ export default function apps() {
                             <CardComponent<FlowType>
                                 data={null}
                                 type='assist'
-                                title={'新建应用'}
+                                title={t('log.createBuild')}
                                 description={(<>
-                                    <p>我们提供场景模板供您使用和参考</p>
+                                    <p><p>{t('build.provideSceneTemplates')}</p></p>
                                 </>)}
                             ></CardComponent>
                         </AppTempSheet>
@@ -218,8 +225,7 @@ export default function apps() {
                                     onClick={() => handleSetting(item)}
                                     onSwitchClick={() => {
                                         !item.write && item.status !== 2 && message({
-                                            title: t('prompt'),
-                                            description: `您没有权限上线此${typeCnNames[item.flow_type]}，请联系管理员上线。`,
+                                            description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
                                             variant: 'warning'
                                         })
                                     }}
@@ -257,7 +263,7 @@ export default function apps() {
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
-            <p className="text-sm text-muted-foreground break-keep">在此页面管理您的应用，对应用上下线、编辑等等</p>
+            <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
         </div>
         {/* 创建应用弹窗 flow&assistant */}

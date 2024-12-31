@@ -4,6 +4,7 @@ import { Input } from "."
 export default function TextInput({
     type = 'doubleclick',
     value,
+    disabled = false,
     onChange = (val) => { },
     onSave = (val) => { },
     ...props }) {
@@ -22,8 +23,11 @@ export default function TextInput({
             onSave(e.target.value)
             setEdit(false)
         }}
+        onMouseLeave={() => setEdit(false)}
         onChange={onChange}
     ></Input>
+
+    if (disabled) return <p className="text-sm px-3 py-1 border border-transparent w-full overflow-hidden text-ellipsis truncate">{value}</p>
 
     return <p
         className="text-sm px-3 py-1 border border-transparent w-full overflow-hidden text-ellipsis truncate"

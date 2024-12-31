@@ -69,7 +69,6 @@ export default function SkillChatPage() {
     const [location, setLocation] = useState(true)
     // select flow(新建会话)
     const handlerSelectFlow = async (card) => {
-        console.log(card)
         if (!location) {
             setLocation(true)
             return

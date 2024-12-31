@@ -35,6 +35,7 @@ import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
 import SystemPage from "./pages/SystemPage";
 import ResoucePage from "./pages/resoucePage";
+import { AppNumType } from "./types/app";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -116,12 +117,12 @@ const privateRouter = [
     element: <ResoucePage />
   },
   // 独立会话页
-  { path: "/chat/assistant/auth/:id/", element: <ChatPro type='assistant' /> },
-  { path: "/chat/flow/auth/:id/", element: <ChatPro type='workflow' /> },
+  { path: "/chat/assistant/auth/:id/", element: <ChatPro type={AppNumType.ASSISTANT} /> },
+  { path: "/chat/flow/auth/:id/", element: <ChatPro type={AppNumType.FLOW} /> },
   { path: "/chat/skill/auth/:id/", element: <ChatPro /> },
   { path: "/chat", element: <SkillChatPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
-  { path: "/chat/flow/:id/", element: <ChatShare type="workflow" /> },
+  { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
@@ -163,7 +164,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage /> },
   { path: "/reset", element: <ResetPwdPage /> },
   { path: "/chat/:id/", element: <ChatShare /> },
-  { path: "/chat/flow/:id/", element: <ChatShare type="workflow" /> },
+  { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage /> },
   { path: "/403", element: <Page403 /> },

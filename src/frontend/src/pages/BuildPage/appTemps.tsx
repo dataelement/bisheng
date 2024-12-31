@@ -1,4 +1,5 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { AppType } from "@/types/app";
 import { useEffect, useState } from "react";
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from "react-i18next";
@@ -15,13 +16,12 @@ import {
 import { deleteTempApi, readTempsDatabase, updateTempApi } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { SelectType } from "./apps";
-import { AppType } from "@/types/app";
 
 export default function Templates() {
     const navigate = useNavigate()
 
     const onChange = () => { }
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
 
     const { type } = useParams()
     const [temps, setTemps] = useState([])
@@ -58,13 +58,13 @@ export default function Templates() {
 
     const handleDelTemp = (index: number, id: number) => {
         const nameMap = {
-            [AppType.FLOW]: '工作流',
-            [AppType.SKILL]: '技能名称',
-            [AppType.ASSISTANT]: '助手',
-        }
+            [AppType.FLOW]: t('workflow'),
+            [AppType.SKILL]: t('skill'),
+            [AppType.ASSISTANT]: t('assistant')
+        };
         const labelName = nameMap[type]
         bsConfirm({
-            desc: `是否确认删除该${labelName}模板？`,
+            desc: t('confirmDeleteTemplate', { type: labelName }),
             okTxt: t('delete'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(deleteTempApi(id).then((res) => {
@@ -80,13 +80,13 @@ export default function Templates() {
         <div className="h-full w-full overflow-y-auto overflow-x-hidden scrollbar-hide">
             <div className="flex justify-between">
                 <SelectType defaultValue={type} onChange={(v) => navigate(`/build/temps/${v}`)} />
-                <Button size="sm" onClick={() => navigate('/build/apps')}>返回应用列表</Button>
+                <Button size="sm" onClick={() => navigate('/build/apps')}>{t('returnToAppList')}</Button>
             </div>
             <Table className="mb-[50px]">
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[400px]">{t('skills.templateName')}</TableHead>
-                        <TableHead>{t('skills.templateDescription')}</TableHead>
+                        <TableHead className="w-[400px]">{t('templateName')}</TableHead>
+                        <TableHead>{t('templateDescription')}</TableHead>
                         <TableHead className="text-right pr-10">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -124,7 +124,7 @@ export default function Templates() {
         </div>
         {/* footer */}
         <div className="flex justify-between items-center absolute bottom-0 right-0 w-full py-4 pl-[16px] h-[60px] bg-background-login">
-            <p className="text-gray-500 text-sm">应用模板管理，模板对所有用户可见，支持拖拽排序、删除操作</p>
+            <p className="text-gray-500 text-sm">{t('templateManagementDescription')}</p>
             <span></span>
         </div>
     </div>

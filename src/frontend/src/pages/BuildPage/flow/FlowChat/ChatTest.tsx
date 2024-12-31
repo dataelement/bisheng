@@ -3,6 +3,7 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { Maximize2, Minus, X } from "lucide-react";
 import { forwardRef, useContext, useImperativeHandle, useState } from "react";
+import { useTranslation } from "react-i18next";
 import ChatPane from "./ChatPane";
 
 // ref
@@ -12,6 +13,7 @@ export const ChatTest = forwardRef((props, ref) => {
     const [flow, setFlow] = useState<any>(null)
     const [small, setSmall] = useState(false)
     const { appConfig } = useContext(locationContext)
+    const { t } = useTranslation('flow')
 
     // Expose a `run` method through the `ref` to control the sheet's state
     useImperativeHandle(ref, () => ({
@@ -22,7 +24,7 @@ export const ChatTest = forwardRef((props, ref) => {
                 setSmall(false)
 
                 setFlow(flow)
-                setChatId(generateUUID(16))
+                setChatId(`test_${generateUUID(16)}`)
             }, 0);
         }
     }));
@@ -45,7 +47,7 @@ export const ChatTest = forwardRef((props, ref) => {
         className={`${small ? 'bottom-2 right-4 w-52' : 'w-1/2 h-full right-0 bottom-0'} transition-all fixed rounded-2xl bg-[#fff] dark:bg-[#1B1B1B] z-10 border shadow-sm overflow-hidden`}
     >
         <div className="flex justify-between items-center bg-background-main px-4 py-1">
-            <span className="text-sm font-bold">工作流预览</span>
+            <span className="text-sm font-bold">{t('workflowPreview')}</span>
             <div className="flex gap-2">
                 <Button
                     size="icon"

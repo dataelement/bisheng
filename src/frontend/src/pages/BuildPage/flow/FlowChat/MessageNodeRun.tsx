@@ -1,6 +1,8 @@
-import { LoadIcon, ToastIcon } from "@/components/bs-icons";
+import { LoadIcon } from "@/components/bs-icons";
+import { useTranslation } from "react-i18next";
 
 export default function MessageNodeRun({ data }) {
+    const { t } = useTranslation('flow')
 
     return <div className="py-1">
         <div className="rounded-sm border">
@@ -9,7 +11,7 @@ export default function MessageNodeRun({ data }) {
                     {
                         <LoadIcon className="text-primary duration-300" />
                     }
-                    <span>正在运行 {data.message.name} 节点</span>
+                    <span>{t('runningNode', { nodeName: data.message.name })}</span>
                 </div>
             </div>
         </div>

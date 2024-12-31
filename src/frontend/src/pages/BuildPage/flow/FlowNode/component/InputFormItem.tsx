@@ -6,6 +6,7 @@ import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next"; // 引入国际化
 import DragOptions from "./DragOptions";
 
 const enum FormType {
@@ -15,11 +16,12 @@ const enum FormType {
 }
 
 function Form({ initialData, onSubmit, onCancel, existingOptions }) {
+    const { t } = useTranslation('flow'); // 使用国际化
     const namePlaceholders = {
-        [FormType.Text]: "例如“姓名”",
-        [FormType.Select]: "例如“保险类别”",
-        [FormType.File]: "例如“请上传去年财报”",
-    }
+        [FormType.Text]: t("nameExample"), // 例如“姓名”
+        [FormType.Select]: t("categoryExample"), // 例如“保险类别”
+        [FormType.File]: t("uploadExample"), // 例如“请上传去年财报”
+    };
 
     const [formData, setFormData] = useState({
         formType: FormType.Text,
@@ -29,10 +31,9 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         allowMultiple: false,  // 允许多选开关
         options: [],  // 选项，适用于下拉框
     });
-    const [errors, setErrors] = useState<any>({}); // 用于存储校验错误
+    const [errors, setErrors] = useState<any>({});
 
-    // 当 initialData 存在时，填充表单数据（用于编辑模式）
-    const oldVarNameRef = useRef(""); // 存储初始的变量名称,用于对比是否修改    
+    const oldVarNameRef = useRef("");
     useEffect(() => {
         if (initialData) {
             const {
@@ -41,14 +42,14 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 key: variableName,
                 required: isRequired,
                 multi: allowMultiple,
-                options = [] } = initialData
+                options = [] } = initialData;
             setFormData({
                 formType,
-                displayName, // 展示名称
-                variableName, // 变量名称
-                isRequired, // 是否必填
-                allowMultiple, // 允许多选
-                options, // 选项，适用于下拉框
+                displayName,
+                variableName,
+                isRequired,
+                allowMultiple,
+                options,
             });
 
             oldVarNameRef.current = variableName;
@@ -78,31 +79,31 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     const validateForm = () => {
         const newErrors: any = {};
 
-        // 校验展示名称
         if (!formData.displayName.trim()) {
-            newErrors.displayName = "展示名称不可为空";
+            newErrors.displayName = t("displayNameRequired");
         } else if (formData.displayName.length > 50) {
-            newErrors.displayName = "展示名称不能超过 50 个字符";
+            newErrors.displayName = t("displayNameTooLong");
         }
 
-        // 校验变量名称
         if (!formData.variableName.trim()) {
-            newErrors.variableName = "变量名称不可为空";
+            newErrors.variableName = t("variableNameRequired");
         } else if (formData.variableName.length > 50) {
-            newErrors.variableName = "变量名称不能超过 50 个字符";
+            newErrors.variableName = t("variableNameTooLong");
         } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.variableName)) {
-            newErrors.variableName = "变量名称只能包含英文字符、数字和下划线，且不能以数字开头";
-        } else if (existingOptions?.some(opt => opt.key === formData.variableName) && formData.variableName !== oldVarNameRef.current) {
-            newErrors.variableName = "变量名称已存在";
+            newErrors.variableName = t("variableNameInvalid");
+        } else if (
+            existingOptions?.some(opt => opt.key === formData.variableName) &&
+            formData.variableName !== oldVarNameRef.current
+        ) {
+            newErrors.variableName = t("variableNameExists");
         }
 
-        // 校验选项长度
         if (formData.formType === FormType.Select && !formData.options.length) {
-            newErrors.options = "至少添加 1 个选项";
+            newErrors.options = t("optionsRequired");
         }
 
         setErrors(newErrors);
-        return Object.keys(newErrors).length === 0; // 如果没有错误，返回 true
+        return Object.keys(newErrors).length === 0;
     };
 
     const handleFormSubmit = (e) => {
@@ -122,7 +123,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     return (
         <form onSubmit={handleFormSubmit} className="space-y-4">
             <div>
-                <Label className="bisheng-label">表单项类型</Label>
+                <Label className="bisheng-label">{t("formType")}</Label>
                 <div className="flex gap-4 justify-between mx-6 mt-2">
                     <Button
                         className={`flex flex-col h-18 w-28 ${formData.formType === FormType.Text ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
@@ -131,7 +132,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         onClick={() => setFormData({ ...formData, formType: FormType.Text })}
                     >
                         <Type size={18} />
-                        文本输入
+                        {t("textInput")}
                     </Button>
                     <Button
                         className={`flex flex-col h-18 w-28 ${formData.formType === FormType.Select ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
@@ -140,7 +141,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         onClick={() => setFormData({ ...formData, formType: FormType.Select })}
                     >
                         <ChevronsDown size={18} />
-                        下拉选项
+                        {t("dropdown")}
                     </Button>
                     <Button
                         className={`flex flex-col h-18 w-28 ${formData.formType === FormType.File ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
@@ -149,14 +150,15 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         onClick={() => setFormData({ ...formData, formType: FormType.File })}
                     >
                         <CloudUpload size={18} />
-                        文件
+                        {t("file")}
                     </Button>
                 </div>
             </div>
+
             <div>
                 <Label className="flex items-center bisheng-label">
-                    展示名称
-                    <QuestionTooltip content={"用户会话页面展示此名称"} />
+                    {t("displayName")}
+                    <QuestionTooltip content={t("displayNameTooltip")} />
                 </Label>
                 <Input
                     className={`mt-2 ${errors.displayName ? "border-red-500" : ""}`}
@@ -170,13 +172,13 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
 
             <div>
                 <Label className="flex items-center bisheng-label">
-                    变量名称
-                    <QuestionTooltip content={formData.formType === FormType.File ? "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量" : "用于存储用户会话页面填写的内容，可在其他节点中引用此变量"} />
+                    {t("variableName")}
+                    <QuestionTooltip content={t("variableNameTooltip")} />
                 </Label>
                 <Input
                     className={`mt-2 ${errors.variableName ? "border-red-500" : ""}`}
                     id="variableName"
-                    placeholder="请输入变量名"
+                    placeholder={t("enterVariableName")}
                     value={formData.variableName}
                     onChange={(e) => setFormData({ ...formData, variableName: e.target.value })}
                 />
@@ -185,12 +187,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
 
             {formData.formType === FormType.Select && (
                 <div>
-                    <Label className="bisheng-label">选项</Label>
-                    <DragOptions
-                        scroll
-                        options={formData.options}
-                        onChange={updateOptions}
-                    />
+                    <Label className="bisheng-label">{t("options")}</Label>
+                    <DragOptions scroll options={formData.options} onChange={updateOptions} />
                     {errors.options && <p className="text-red-500 text-sm">{errors.options}</p>}
                 </div>
             )}
@@ -215,23 +213,25 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
 
             <div className="flex space-x-4 justify-end">
                 <Button className="px-8" type="button" variant="outline" onClick={onCancel}>
-                    取消
+                    {t("cancel")}
                 </Button>
                 <Button className="px-8" type="submit">
-                    确认
+                    {t("confirm")}
                 </Button>
             </div>
         </form>
     );
 }
 export default function InputFormItem({ data, onChange, onValidate }) {
+    const { t } = useTranslation(); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
-    const [editKey, setEditKey] = useState(''); // 控制编辑模式
+    const [editKey, setEditKey] = useState(""); // 控制编辑模式
     const [foucsUpdate, setFoucsUpdate] = useState(false);
+    const [error, setError] = useState(false);
 
     // 打开弹窗并重置状态
     const handleOpen = () => {
-        setEditKey(''); // 新建时不设置为编辑模式
+        setEditKey(""); // 新建时不设置为编辑模式
         setIsOpen(true);
     };
 
@@ -248,28 +248,26 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             formType: type,
             isRequired: required,
             options,
-            variableName: key
-        } = _data
+            variableName: key,
+        } = _data;
+
         if (editKey) {
             // 编辑模式，更新表单项
-            data.value = data.value.map((opt) => (opt.key === editKey ? {
-                key,
-                type,
-                value,
-                required,
-                multi,
-                options
-            } : opt))
+            data.value = data.value.map((opt) =>
+                opt.key === editKey
+                    ? { key, type, value, required, multi, options }
+                    : opt
+            );
         } else {
+            // 新建模式，添加表单项
             data.value.push({
                 key,
                 type,
                 value,
                 required,
                 multi,
-                options
-            })
-            // 新建模式，添加表单项
+                options,
+            });
         }
         onChange(data.value);
         setFoucsUpdate(!foucsUpdate);
@@ -278,60 +276,70 @@ export default function InputFormItem({ data, onChange, onValidate }) {
 
     // 当编辑 DragOptions 中的表单项时打开弹窗
     const handleEditClick = (index, option) => {
-        const item = data.value[index]
+        const item = data.value[index];
         setEditKey(item.key); // 设置为编辑模式
-        // setFormData(option); // 设置要编辑的表单数据
         setIsOpen(true); // 打开弹窗
     };
 
     // 更新 DragOptions 的顺序变化
     const handleOptionsChange = (newOptions) => {
-        data.value = newOptions.map(el => {
-            return data.value.find(op => op.key === el.key)
-        })
+        data.value = newOptions.map((el) => {
+            return data.value.find((op) => op.key === el.key);
+        });
         onChange(data.value);
     };
 
-    const [error, setError] = useState(false)
+    // 校验逻辑
     useEffect(() => {
         onValidate(() => {
             if (!data.value.length) {
-                setError(true)
-                return '至少添加一个表单项'
+                setError(true);
+                return t("atLeastOneFormItem"); // "至少添加一个表单项"
             }
-            setError(false)
-            return false
-        })
-        return () => onValidate(() => { })
-    }, [data.value])
+            setError(false);
+            return false;
+        });
+
+        return () => onValidate(() => { });
+    }, [data.value]);
 
     return (
         <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
                 <DragOptions
                     scroll
-                    options={data.value.map(el => ({
+                    options={data.value.map((el) => ({
                         key: el.key,
                         text: `${el.value}(${el.key})`,
-                        type: el.type
+                        type: el.type,
                     }))}
                     onEditClick={handleEditClick} // 点击编辑时执行的逻辑
                     onChange={handleOptionsChange} // 拖拽排序后的更新
                 />
             )}
-            <Button onClick={handleOpen} variant='outline' className="border-primary text-primary mt-2">
+            <Button
+                onClick={handleOpen}
+                variant="outline"
+                className="border-primary text-primary mt-2"
+            >
                 {data.label}
             </Button>
-            {error && <p className="text-red-500 text-sm">至少添加一个表单项</p>}
+            {error && <p className="text-red-500 text-sm">{t("atLeastOneFormItem")}</p>}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>{editKey ? "修改表单项" : "添加表单项"}</DialogTitle>
+                        <DialogTitle>
+                            {editKey ? t("editFormItem") : t("addFormItem")}
+                        </DialogTitle>
                     </DialogHeader>
 
                     <Form
-                        initialData={editKey ? data.value.find(el => el.key === editKey) : null} // 如果是编辑模式，传入当前表单数据
+                        initialData={
+                            editKey
+                                ? data.value.find((el) => el.key === editKey)
+                                : null
+                        } // 如果是编辑模式，传入当前表单数据
                         onSubmit={handleSubmit} // 表单提交时回传数据给父组件
                         onCancel={handleClose} // 取消关闭弹窗
                         existingOptions={data.value} // 传递当前所有 options 以检查重复

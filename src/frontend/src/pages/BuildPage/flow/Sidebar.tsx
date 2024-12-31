@@ -10,11 +10,14 @@ import { ListVideo } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
+import { useTranslation } from "react-i18next";
 
 export default function Sidebar({ dropdown = false, disabledNodes = [], onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
+    const { t } = useTranslation('flow')
     const { data: tempData, refetch } = useQuery({
         queryKey: "QueryWorkFlowTempKey",
-        queryFn: () => getWorkflowNodeTemplate()
+        queryFn: () => getWorkflowNodeTemplate(),
+        cacheTime: 0
     });
 
     const getNodeDataByTemp = (temp) => {
@@ -78,8 +81,8 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
             <Tabs defaultValue="base" className="h-full">
                 <div className="flex gap-1">
                     <TabsList className="grid flex-1 grid-cols-2">
-                        <TabsTrigger value="base">基础节点</TabsTrigger>
-                        <TabsTrigger value="tool">工具节点</TabsTrigger>
+                        <TabsTrigger value="base">{t('basicNodes')}</TabsTrigger>
+                        <TabsTrigger value="tool">{t('toolNodes')}</TabsTrigger>
                     </TabsList>
                     {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
                         <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />

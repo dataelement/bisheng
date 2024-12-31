@@ -69,7 +69,7 @@ export default function Header({ onSave, onLine, onTabChange }) {
         </div>
         <div className="flex gap-4">
             <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>
-            <Button type="submit" className="px-10" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>{assistantState.status === OnlineState.OnLine ? '下线' : t('build.online')}</Button>
+            <Button type="submit" className="px-10" onClick={() => onLine(assistantState.status === OnlineState.OffLine)}>{assistantState.status === OnlineState.OnLine ? t('build.offline') : t('build.online')}</Button>
         </div>
     </div>
 };

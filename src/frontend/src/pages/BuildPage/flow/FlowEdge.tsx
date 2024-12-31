@@ -11,7 +11,7 @@ function getUpperArcBezierPath(sourceX, sourceY, targetX, targetY) {
 
     // 控制点的偏移量
     const offsetX = dx / 2.8; // 水平控制点偏移
-    const offsetY = Math.max(dy, 180); // 垂直控制点偏移，确保曲线更弯曲
+    const offsetY = Math.max(dy, 180); // 垂直控制点偏移，让曲线更弯曲
 
     // 控制点的坐标（从上方绕弧线）
     const controlX1 = sourceX + offsetX;

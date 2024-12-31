@@ -5,6 +5,7 @@ import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
 import { useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { Handle, Position } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 
 interface Iprops {
     edges?: boolean,
@@ -26,6 +27,7 @@ const itemNames = {
 }
 
 export default function DragOptions({ edges = false, scroll = false, options, onEditClick, onChange }: Iprops) {
+    const { t } = useTranslation(); // 使用国际化
     const [items, setItems] = useState([]); // 初始默认选项
     const [inputValue, setInputValue] = useState("");
     const [error, setError] = useState("");
@@ -46,33 +48,31 @@ export default function DragOptions({ edges = false, scroll = false, options, on
 
     const handleBeforAddItem = () => {
         if (items.length >= 30) {
-            setError("最多添加 30 个选项");
+            setError(t('maxOptionsError')); // 使用国际化文本
             return;
         }
-        setIsAdding(true)
+        setIsAdding(true);
     }
 
     const handleAddItem = () => {
-
         if (!inputValue.trim()) {
-            setError("选项内容不可为空");
+            setError(t('emptyOptionError')); // 使用国际化文本
             return;
         }
 
         // 检查重复内容
         const isDuplicate = items.some(item => item.text === inputValue.trim());
         if (isDuplicate) {
-            setError("选项内容重复");
+            setError(t('duplicateOptionError')); // 使用国际化文本
             return;
         }
 
         if (inputValue.length > 50) {
-            setError("选项内容不能超过 50 个字符");
+            setError(t('lengthOptionError')); // 使用国际化文本
             return;
         }
 
         const newItem = {
-            // key: 'xx',
             id: generateUUID(8),
             text: inputValue.trim(),
             type: ''
@@ -110,7 +110,7 @@ export default function DragOptions({ edges = false, scroll = false, options, on
                         >
                             {items.map((item, index) => (
                                 <Draggable key={item.text} draggableId={item.text} index={index}>
-                                    {(provided, snapshot) => (
+                                    {(provided) => (
                                         <div
                                             ref={provided.innerRef}
                                             {...provided.draggableProps}
@@ -151,7 +151,6 @@ export default function DragOptions({ edges = false, scroll = false, options, on
                                     )}
                                 </Draggable>
                             ))}
-                            {/* {provided.placeholder} */}
                         </div>
                     )}
                 </Droppable>
@@ -160,18 +159,18 @@ export default function DragOptions({ edges = false, scroll = false, options, on
             {!onEditClick && <div className="mt-4">
                 {!isAdding ? (
                     <Button onClick={handleBeforAddItem} type='button' variant='outline' className="border-primary text-primary mt-2">
-                        + 添加选项
+                        + {t('addOption')} {/* 添加选项 */}
                     </Button>
                 ) : (
                     <div className="flex items-center space-x-2">
                         <Input
                             value={inputValue}
-                            placeholder="请输入选项展示文本"
+                            placeholder={t('inputOptionPlaceholder')} // 请输入选项展示文本
                             onChange={(e) => setInputValue(e.target.value)}
                             maxLength={50}
                         />
                         <Button type="button" onClick={handleAddItem} className="flex-none">
-                            确定
+                            {t('confirm')} {/* 确定 */}
                         </Button>
                     </div>
                 )}

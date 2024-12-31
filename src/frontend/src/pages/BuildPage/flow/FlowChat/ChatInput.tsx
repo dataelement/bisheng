@@ -67,7 +67,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         // setFormShow(false)
         createWebSocket().then(() => {
             // 切换会话默认发送一条空消息(action, input)
-            const wsMsg = onBeforSend('init_data', {})
+            const wsMsg = onBeforSend((messages.length === 0 && hisMessages.length === 0) || chatId.startsWith('test') ? 'init_data' : 'check_status', {})
             sendWsMsg(wsMsg)
         })
     }, [chatId])
@@ -186,15 +186,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     if (data.category === 'node_run') {
                         inputNodeIdRef.current = data.message.node_id
                     }
-                    handleWsMessage(data)
-                    data.type === 'begin' && onLoad()
-                    // // 群聊@自己时，开启input
-                    // if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
-                    //     setInputLock({ locked: false, reason: '' })
-                    //     setStop({ show: false, disable: false })
-                    //     setAutogenStop(true)
-                    //     continueRef.current = true
-                    // }
+                    handleWsMessage(data);
+                    ['begin', 'close'].includes(data.type) && onLoad()
                     // if ('close' === data.type) {
                     //     setAutogenStop(false)
                     // }
@@ -242,10 +235,13 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
     // 接受 ws 消息
     const handleWsMessage = (data) => {
-        if (data.category === 'error') return toast({
-            variant: 'error',
-            description: data.message
-        });
+        if (data.category === 'error') {
+            const { code, message } = data.message
+            return toast({
+                variant: 'error',
+                description: code == 500 ? message : t(`errors.${code}`, { type: message })
+            });
+        }
         if (data.category === 'node_run') {
             insetNodeRun(data)
             return sendNodeLogEvent(data)

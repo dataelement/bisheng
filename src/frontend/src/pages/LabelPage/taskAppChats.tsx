@@ -4,14 +4,16 @@ import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import { getMarkPermissionApi, getMarkStatusApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
+import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
 import { ArrowLeft } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import ChatMessages from "../BuildPage/flow/FlowChat/ChatMessages";
 import AddSimilarQuestions from "../LogPage/useAppLog/AddSimilarQuestions";
 import SaveQaLibForm from "../LogPage/useAppLog/SaveQaLibForm";
-import { getMarkPermissionApi, getMarkStatusApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
 
 const PageChange = () => {
     const { id, cid } = useParams()
@@ -61,7 +63,8 @@ const enum LabelStatus {
 }
 
 export default function index() {
-    const { id, fid, cid, type } = useParams()
+    const { id, fid, cid } = useParams()
+    const type = 'workflow'
     // console.log('fid, cid :>> ', fid, cid);
     const { t } = useTranslation()
     const navigator = useNavigate()
@@ -73,15 +76,24 @@ export default function index() {
     const loading = false;
     const { loadAssistantState, destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
+    const { loadHistoryMsg: loadFlowHistoryMsg,
+        loadMoreHistoryMsg: loadMoreFlowHistoryMsg,
+        changeChatId: changeFlowChatId,
+        clearMsgs: clearFlowMsgs
+    } = useFlowMessageStore()
     const qaFormRef = useRef(null)
     const similarFormRef = useRef(null)
     useEffect(() => {
         // type === 'assistant' && loadAssistantState(fid, 'v1') 禁用助手详情,涉及权限403问题
-        loadHistoryMsg(fid, cid, {
+        type === 'workflow' ? loadFlowHistoryMsg(fid, cid, {
+            appendHistory: true,
+            lastMsg: ""
+        }) : loadHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ''
         })
         changeChatId(cid)
+        changeFlowChatId(cid)
 
         // get status
         getMarkStatusApi({ task_id: Number(id), chat_id: cid }).then((res: any) => {
@@ -91,6 +103,7 @@ export default function index() {
 
         return () => {
             clearMsgs()
+            clearFlowMsgs()
             type === 'assistant' && destroy()
         }
     }, [cid])
@@ -145,10 +158,13 @@ export default function index() {
                 <PageChange />
             </div>
             <div className="h-[calc(100vh-132px)]">
-                <MessagePanne mark={mark} logo='' useName='' guideWord=''
-                    loadMore={() => loadMoreHistoryMsg(fid, true)}
-                    onMarkClick={handleMarkClick}
-                ></MessagePanne>
+                {type === 'workflow'
+                    ? <ChatMessages mark={mark} logo='' useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
+                    : <MessagePanne mark={mark} logo='' useName='' guideWord=''
+                        loadMore={() => loadMoreHistoryMsg(fid, true)}
+                        onMarkClick={handleMarkClick}
+                    ></MessagePanne>
+                }
             </div>
         </div>
         {/* 问题 */}

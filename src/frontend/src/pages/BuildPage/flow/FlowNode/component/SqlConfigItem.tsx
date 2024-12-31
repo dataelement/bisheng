@@ -2,8 +2,10 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next"; // 引入国际化
 
 export default function SqlConfigItem({ data, onChange, onValidate }) {
+    const { t } = useTranslation('flow'); // 使用国际化
     const [values, setValues] = useState(data.value);
     const [errors, setErrors] = useState({});
 
@@ -17,17 +19,39 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
         const errorMessages = [];
 
         const validations = [
-            { key: "db_address", value: db_address, max: 200, requiredMsg: "数据库地址不可为空", maxMsg: "数据库地址最多 200 字" },
-            { key: "db_name", value: db_name, max: 100, requiredMsg: "数据库名称不可为空", maxMsg: "数据库名称最多 100 字" },
-            { key: "db_username", value: db_username, max: 100, requiredMsg: "数据库用户名不可为空", maxMsg: "数据库用户名最多 100 字" },
-            { key: "db_password", value: db_password, requiredMsg: "数据库密码不可为空" },
+            {
+                key: "db_address",
+                value: db_address,
+                max: 200,
+                requiredMsg: t("dbAddressRequired"), // 数据库地址不可为空
+                maxMsg: t("dbAddressTooLong"), // 数据库地址最多 200 字
+            },
+            {
+                key: "db_name",
+                value: db_name,
+                max: 100,
+                requiredMsg: t("dbNameRequired"), // 数据库名称不可为空
+                maxMsg: t("dbNameTooLong"), // 数据库名称最多 100 字
+            },
+            {
+                key: "db_username",
+                value: db_username,
+                max: 100,
+                requiredMsg: t("dbUsernameRequired"), // 数据库用户名不可为空
+                maxMsg: t("dbUsernameTooLong"), // 数据库用户名最多 100 字
+            },
+            {
+                key: "db_password",
+                value: db_password,
+                requiredMsg: t("dbPasswordRequired"), // 数据库密码不可为空
+            },
         ];
 
         validations.forEach(({ key, value, max, requiredMsg, maxMsg }) => {
             if (!value) {
                 newErrors[key] = true;
                 errorMessages.push(requiredMsg);
-            } else if (value.length > max) {
+            } else if (max && value.length > max) {
                 newErrors[key] = true;
                 errorMessages.push(maxMsg);
             }
@@ -63,7 +87,7 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
             {open && (
                 <>
                     {/* 数据库地址 */}
-                    <Label className="flex items-center bisheng-label">数据库地址</Label>
+                    <Label className="flex items-center bisheng-label">{t("dbAddress")}</Label> {/* 数据库地址 */}
                     <Input
                         className={`mt-2 nodrag ${errors.db_address ? "border-red-500" : ""}`}
                         value={db_address}
@@ -72,7 +96,7 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
                     />
 
                     {/* 数据库名称 */}
-                    <Label className="flex items-center bisheng-label mt-4">数据库名称</Label>
+                    <Label className="flex items-center bisheng-label mt-4">{t("dbName")}</Label> {/* 数据库名称 */}
                     <Input
                         className={`mt-2 nodrag ${errors.db_name ? "border-red-500" : ""}`}
                         value={db_name}
@@ -81,7 +105,7 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
                     />
 
                     {/* 数据库用户名 */}
-                    <Label className="flex items-center bisheng-label mt-4">数据库用户名</Label>
+                    <Label className="flex items-center bisheng-label mt-4">{t("dbUsername")}</Label> {/* 数据库用户名 */}
                     <Input
                         className={`mt-2 nodrag ${errors.db_username ? "border-red-500" : ""}`}
                         value={db_username}
@@ -90,7 +114,7 @@ export default function SqlConfigItem({ data, onChange, onValidate }) {
                     />
 
                     {/* 数据库密码 */}
-                    <Label className="flex items-center bisheng-label mt-4">数据库密码</Label>
+                    <Label className="flex items-center bisheng-label mt-4">{t("dbPassword")}</Label> {/* 数据库密码 */}
                     <Input
                         className={`mt-2 nodrag ${errors.db_password ? "border-red-500" : ""}`}
                         value={db_password}
