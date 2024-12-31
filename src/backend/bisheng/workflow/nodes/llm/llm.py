@@ -57,10 +57,11 @@ class LLMNode(BaseNode):
         ret = [
             {"key": "system_prompt", "value": self._system_prompt_list, "type": "params"},
             {"key": "user_prompt", "value": self._user_prompt_list, "type": "params"},
-            {"key": "output", "value": result, "type": "params"}
         ]
         if self._batch_variable_list:
             ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
+        for k, v in result.items():
+            ret.append({"key": k, "value": v, "type": "params"})
         return ret
 
     def _run_once(self,
