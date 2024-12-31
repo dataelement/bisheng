@@ -440,7 +440,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
                 doc = Document(page_content=meta.pop(self._text_field), metadata=meta)
                 pair = (doc, result.score)
                 ret.append(pair)
-            logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} results: {res[0]}')
+            logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} query: {query} results: {res[0]}')
         ret.sort(key=lambda x: x[1])
         logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)}')
         # milvus是分数越小越好，所以直接取前几位就行

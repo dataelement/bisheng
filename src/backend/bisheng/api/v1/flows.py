@@ -181,16 +181,13 @@ async def update_flow(*,
     if settings.remove_api_keys:
         flow_data = remove_api_keys(flow_data)
     for key, value in flow_data.items():
+        if key in ['data', 'create_time', 'update_time']:
+            continue
         setattr(db_flow, key, value)
     with session_getter() as session:
         session.add(db_flow)
         session.commit()
         session.refresh(db_flow)
-    try:
-        if not get_L2_param_from_flow(db_flow.data, db_flow.id):
-            logger.error(f'flow_id={db_flow.id} extract file_node fail')
-    except Exception:
-        pass
     FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
 

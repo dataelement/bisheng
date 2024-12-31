@@ -226,6 +226,8 @@ async def update_flow(*,
         raise FlowOnlineEditError.http_exception()
 
     for key, value in flow_data.items():
+        if key in ['data', 'create_time', 'update_time']:
+            continue
         setattr(db_flow, key, value)
     db_flow = FlowDao.update_flow(db_flow)
     FlowService.update_flow_hook(request, login_user, db_flow)

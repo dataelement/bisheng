@@ -174,8 +174,8 @@ class FlowService(BaseService):
         if not user.access_check(flow_info.user_id, flow_info.id.hex, atype):
             return UnAuthorizedError.return_resp()
 
-        # 版本是当前版本, 且技能处于上线状态则不可编辑
-        if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value:
+        # 版本是当前版本, 且技能处于上线状态则不可编辑data数据，名称和描述可以编辑
+        if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:
             if flow_info.flow_type == FlowType.WORKFLOW.value:
                 return WorkFlowOnlineEditError.return_resp()
             else:
