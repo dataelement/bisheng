@@ -149,14 +149,14 @@ def get_app_chat_list(*,
     flow_list = FlowDao.get_flow_by_ids(flow_ids)
     assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
     user_map = {user.user_id: user.user_name for user in user_list}
-    flow_map = {flow.id: flow.name for flow in flow_list}
-    assistant_map = {assistant.id: assistant.name for assistant in assistant_list}
+    flow_map = {flow.id: flow for flow in flow_list}
+    assistant_map = {assistant.id: assistant for assistant in assistant_list}
 
     flow_map.update(assistant_map)
     res_obj = PageList(list=[
         AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
-                    flow_name=flow_map.get(one['flow_id'], one['flow_id']),
-                    flow_type='assistant' if assistant_map.get(one['flow_id'], None) else 'flow',
+                    flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one['flow_id'],
+                    flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else flow_map.get(one['flow_id']).flow_type,
                     **one) for one in res
     ],
                        total=count)
