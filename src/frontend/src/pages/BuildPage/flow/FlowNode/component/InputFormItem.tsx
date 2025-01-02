@@ -223,7 +223,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     );
 }
 export default function InputFormItem({ data, onChange, onValidate }) {
-    const { t } = useTranslation(); // 使用国际化
+    const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(""); // 控制编辑模式
     const [foucsUpdate, setFoucsUpdate] = useState(false);

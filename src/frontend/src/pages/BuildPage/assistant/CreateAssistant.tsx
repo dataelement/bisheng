@@ -117,7 +117,7 @@ ${t('build.exampleTwo')}
                 <Textarea
                     id="roleAndTasks"
                     name="roleAndTasks"
-                    placeholder={t('build.forExample')}
+                    placeholder={t('build_forExample')}
                     maxLength={1000}
                     className="mt-2 min-h-32"
                     value={formData.roleAndTasks}

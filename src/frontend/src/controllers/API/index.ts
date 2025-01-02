@@ -1,4 +1,4 @@
-import { AppType } from "@/types/app";
+import { AppNumType, AppType } from "@/types/app";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
@@ -457,7 +457,7 @@ export const getChatsApi = (page) => {
         if (isJsonSerializable(message)) {
           const json = JSON.parse(message);
           if (Array.isArray(json)) return message
-          const chatKey = el.flow_type === 'workflow' ? 'msg' : Object.keys(json)[0]
+          const chatKey = el.flow_type === AppNumType.FLOW ? 'msg' : Object.keys(json)[0]
           return json[chatKey] || ''
         }
         return message;

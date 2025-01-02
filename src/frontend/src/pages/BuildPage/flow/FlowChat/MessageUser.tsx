@@ -3,7 +3,6 @@ import { Button } from "@/components/bs-ui/button";
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
@@ -38,7 +37,7 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
             </div>
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
-                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{data.message}</div>
+                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{typeof data.message === 'string' ? data.message : data.message[data.chatKey]}</div>
                     <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/user.png'} alt="" /></div>
                 </div>
             </div>

@@ -207,7 +207,7 @@ ${t('build.exampleTwo')}
                     </div>
                     <div className="mb-6">
                         <label htmlFor="name" className="bisheng-label">
-                            {appType === AppType.ASSISTANT ? t('build.assistantName') : t('name')}
+                            {appType === AppType.ASSISTANT ? t('build_assistantName') : t('name')}
                             <span className="bisheng-tip">*</span>
                         </label>
                         <Input
@@ -223,12 +223,12 @@ ${t('build.exampleTwo')}
                     </div>
                     <div className="mb-6">
                         <label htmlFor="desc" className="bisheng-label">
-                            {appType === AppType.ASSISTANT ? t('build.roleAndTasks') : t('description')}
+                            {appType === AppType.ASSISTANT ? t('build_roleAndTasks') : t('description')}
                         </label>
                         <Textarea
                             id="desc"
                             name="desc"
-                            placeholder={appType === AppType.ASSISTANT ? t('build.forExample') : t('enterWorkflowDescription')}
+                            placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
                             maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
                             className="mt-3 h-12 min-h-12 pt-3"
                             value={formData.desc}

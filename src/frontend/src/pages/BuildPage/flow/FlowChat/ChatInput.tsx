@@ -198,19 +198,18 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })
 
-                    // if ([1005, 1008, 1009].includes(event.code)) {
-                    //     console.warn('即将废弃 :>> ');
-                    //     setInputLock({ locked: true, reason: event.reason })
-                    // } else {
-                    //     if (event.reason) {
-                    //         toast({
-                    //             title: t('prompt'),
-                    //             variant: 'error',
-                    //             description: event.reason
-                    //         });
-                    //     }
-                    //     setInputLock({ locked: false, reason: '' })
-                    // }
+                    if ([1005, 1008, 1009].includes(event.code)) {
+                        setInputLock({ locked: true, reason: event.reason })
+                    } else {
+                        if (event.reason) {
+                            toast({
+                                title: t('prompt'),
+                                variant: 'error',
+                                description: event.reason
+                            });
+                        }
+                        setInputLock({ locked: false, reason: '' })
+                    }
                 };
                 ws.onerror = (ev) => {
                     wsRef.current = null

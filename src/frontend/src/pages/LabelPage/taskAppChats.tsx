@@ -7,6 +7,7 @@ import ShadTooltip from "@/components/ShadTooltipComponent";
 import { getMarkPermissionApi, getMarkStatusApi, getNextMarkChatApi, updateMarkStatusApi } from "@/controllers/API/log";
 import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
+import { AppNumType } from "@/types/app";
 import { ArrowLeft } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -63,8 +64,8 @@ const enum LabelStatus {
 }
 
 export default function index() {
-    const { id, fid, cid } = useParams()
-    const type = 'workflow'
+    const { id, fid, cid, type: typeStr } = useParams()
+    const type = Number(typeStr)
     // console.log('fid, cid :>> ', fid, cid);
     const { t } = useTranslation()
     const navigator = useNavigate()
@@ -85,7 +86,7 @@ export default function index() {
     const similarFormRef = useRef(null)
     useEffect(() => {
         // type === 'assistant' && loadAssistantState(fid, 'v1') 禁用助手详情,涉及权限403问题
-        type === 'workflow' ? loadFlowHistoryMsg(fid, cid, {
+        type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ""
         }) : loadHistoryMsg(fid, cid, {
@@ -104,7 +105,7 @@ export default function index() {
         return () => {
             clearMsgs()
             clearFlowMsgs()
-            type === 'assistant' && destroy()
+            type === AppNumType.ASSISTANT && destroy()
         }
     }, [cid])
 
@@ -158,7 +159,7 @@ export default function index() {
                 <PageChange />
             </div>
             <div className="h-[calc(100vh-132px)]">
-                {type === 'workflow'
+                {type === AppNumType.FLOW
                     ? <ChatMessages mark={mark} logo='' useName='' guideWord='' loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={handleMarkClick}></ChatMessages>
                     : <MessagePanne mark={mark} logo='' useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}

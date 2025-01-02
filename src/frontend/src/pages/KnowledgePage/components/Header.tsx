@@ -62,7 +62,7 @@ export default function Header() {
                     }
                 </Dialog>
             </div>
-            <p className="pl-4 text-muted-foreground text-sm">{libInfo.desc}</p>
+            <p className="max-w-96 pl-4 text-muted-foreground text-sm truncate">{libInfo.desc}</p>
         </div>
     </div>
 };

@@ -91,7 +91,14 @@ export default function RunLog({ node, children }) {
 
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
-                        if (newData[param.key] !== undefined) {
+                        if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
+                            // 尝试去value中匹配
+                            param.value.forEach(value => {
+                                if (!newData[value.key]) return
+                                result[value.label] = newData[value.key];
+                                hasKeys.push(value.key)
+                            })
+                        } else if (newData[param.key] !== undefined) {
                             result[param.label || param.key] = newData[param.key];
                             hasKeys.push(param.key)
                         } else if (param.key === 'tool_list') {
@@ -103,11 +110,6 @@ export default function RunLog({ node, children }) {
                                     return true
                                 }
                             })
-                        } else if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
-                            // 尝试去value中匹配
-                            const value = param.value.find(el => newData[el.key])
-                            result[value.label] = newData[value.key];
-                            hasKeys.push(value.key)
                         }
                     });
                 });

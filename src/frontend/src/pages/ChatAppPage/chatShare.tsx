@@ -25,7 +25,7 @@ export default function chatShare({ type = AppNumType.SKILL }) {
         return `/api/v2/chat/ws/${flowId}?type=L1&${paramStr}`
     }, [libId, tweak, type])
 
-    const [data] = useState<any>({ id: flowId, chatId: `test_${generateUUID(32)}`, type })
+    const [data] = useState<any>({ id: flowId, chatId: generateUUID(32), type })
 
     if (!flowId) return <div>请选择会话</div>
 

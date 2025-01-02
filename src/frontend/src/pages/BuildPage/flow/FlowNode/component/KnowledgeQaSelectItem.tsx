@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 
 export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
     const [value, setValue] = useState<any>(() => data.value.map(el => {
         return { label: el.label, value: el.key }
     }))

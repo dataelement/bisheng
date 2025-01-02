@@ -10,7 +10,7 @@ import SelectVar from "./SelectVar"
 import { DialogClose } from "@/components/bs-ui/dialog"
 // save(fe) -> office(onlyofc) -> upload(be)
 export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
 
     const { docx, loading, pageLoading, createDocx, importDocx } = useReport(versionKey, onChange)
 

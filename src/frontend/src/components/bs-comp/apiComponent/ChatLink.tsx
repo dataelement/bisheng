@@ -75,7 +75,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
   const [embed, setEmbed] = useState(false)
   const url = useMemo(() => {
     const loginUrl = `${location.origin}/chat/${type}/auth/${id}`
-    const noLoginUrl = `${location.origin}/chat/${type === API_TYPE.ASSISTANT ? '' : type+'/'}${id}`
+    const noLoginUrl = `${location.origin}/chat/${type === API_TYPE.SKILL ? '' : type+'/'}${id}`
     return noLogin ? noLoginUrl : loginUrl;
   }, [type, noLogin])
 

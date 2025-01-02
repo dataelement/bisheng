@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
 
 export default function HistoryNumItem({ data, onChange }) {
-    const { t } = useTranslation(); // 使用国际化
+    const { t } = useTranslation('flow'); // 使用国际化
     const [value, setValue] = useState(data.value);
 
     return (

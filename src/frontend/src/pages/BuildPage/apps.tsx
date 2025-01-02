@@ -17,7 +17,7 @@ import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/
 import { deleteFlowFromDatabase, getAppsApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
 import { onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { AppType } from "@/types/app";
+import { AppNumType, AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
 import { useTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
@@ -235,7 +235,7 @@ export default function apps() {
                                     onSetting={(item) => handleSetting(item)}
                                     headSelecter={(
                                         // 技能版本
-                                        item.type !== AppType.SKILL ? <CardSelectVersion
+                                        item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
                                             showPop={item.status !== 2}
                                             data={item}
                                         ></CardSelectVersion> : null)}
@@ -249,7 +249,7 @@ export default function apps() {
                                         </LabelShow>
                                     }
                                     footer={
-                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === 1 && 'bg-gray-950'} ${item.flow_type === 5 && 'bg-[#fdb136]'}`}>
+                                        <Badge className={`absolute py-0 px-1 right-0 bottom-0 rounded-none rounded-br-md  ${item.flow_type === AppNumType.SKILL && 'bg-gray-950'} ${item.flow_type === AppNumType.ASSISTANT && 'bg-[#fdb136]'}`}>
                                             {typeCnNames[item.flow_type]}
                                         </Badge>
                                     }

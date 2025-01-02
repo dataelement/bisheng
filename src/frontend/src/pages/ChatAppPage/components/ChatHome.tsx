@@ -127,7 +127,7 @@ export default function HomePage({ onSelect }) {
                         />
                     )) : <div className="absolute top-1/2 left-1/2 transform text-center -translate-x-1/2 -translate-y-1/2">
                         <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
-                        <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
+                        <Button className="w-[200px]" onClick={() => navigate('/build/apps')}>{t('build.onlineSA')}</Button>
                     </div>
                 }
                 {flag && <LoadMore onScrollLoad={handleLoadMore} />}

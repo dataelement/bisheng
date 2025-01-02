@@ -175,11 +175,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         setTimeout(() => {
             setFlow({ ...f, ...res.data })
         }, 0);
-        // message({
-        //     variant: "success",
-        //     title: t('switchToVersion', { versionName: res.name }),
-        //     description: ""
-        // })
+        message({
+            variant: "success",
+            title: t('switchToVersion', { versionName: res.name }),
+            description: ""
+        })
         setLoading(false)
         setFitView()
     }
@@ -197,7 +197,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         )
         message({
             variant: "success",
-            title: `${t('skills.version', {ns: 'bs'})} v${maxNo} ${t('skills.saveSuccessful', {ns: 'bs'})}`,
+            title: `${t('skills.version', { ns: 'bs' })} v${maxNo} ${t('skills.saveSuccessful', { ns: 'bs' })}`,
             description: ""
         })
         // 更新版本列表
@@ -606,10 +606,12 @@ const useVersion = (flow) => {
             setVersions(data)
             lastVersionIndexRef.current = total - 1
             const currentvId = window.flow_version
+            delete window.flow_version
             const currentV = data.find(el => currentvId ? el.id === currentvId : el.is_current === 1)
             setVersion(currentV)
             // 记录上线的版本
-            updateOnlineVid(currentV?.id)
+            const onlineVersion = data.find(el => el.is_current === 1)
+            updateOnlineVid(onlineVersion?.id)
         })
     }
 

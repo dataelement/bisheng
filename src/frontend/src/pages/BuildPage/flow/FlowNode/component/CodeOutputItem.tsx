@@ -85,7 +85,7 @@ export default function CodeOutputItem({ nodeId, data, onValidate, onChange }) {
                 if (item.key === '') {
                     msg = t('variableNameCannotBeEmpty')
                     return true
-                } else if (!/^[a-zA-Z0-9_]{1,50}$/.test(item.key)) {
+                } else if (!/^[a-zA-Z_][a-zA-Z0-9_]{1,50}$/.test(item.key)) {
                     msg = t('variableNameInvalid')
                     return true
                 } else if (item.key.length > 50) {
