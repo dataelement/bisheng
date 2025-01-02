@@ -108,6 +108,7 @@ class WorkflowClient(BaseClient):
                 logger.warning('websocket is closed')
                 pass
             self.workflow = None
+            logger.debug('workflow is offline not support with chat')
             return False, unique_id
 
         status_info = self.workflow.get_workflow_status()
@@ -127,7 +128,7 @@ class WorkflowClient(BaseClient):
                 await self.send_json(send_message)
 
         await self.send_response('processing', 'begin', '')
-        logger.debug('init workflow over')
+        logger.debug('init workflow over, continue run workflow')
         await self.workflow_run()
         return False, unique_id
 
@@ -141,7 +142,8 @@ class WorkflowClient(BaseClient):
             # 说明workflow在运行中或者已下线
             if not flag:
                 return
-                # 发起新的workflow
+
+            # 发起新的workflow
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
             self.workflow.set_workflow_data(workflow_data)
             self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)

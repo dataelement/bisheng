@@ -101,12 +101,15 @@ class KnowledgeDao(KnowledgeBase):
                                 knowledge_type: KnowledgeTypeEnum = None,
                                 name: str = None,
                                 page: int = 0,
-                                limit: int = 0) -> Union[Select, SelectOfScalar]:
+                                limit: int = 0,
+                                filter_knowledge: List[int] = None) -> Union[Select, SelectOfScalar]:
         if knowledge_id_extra:
             statement = statement.where(
                 or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
         else:
             statement = statement.where(Knowledge.user_id == user_id)
+        if filter_knowledge:
+            statement = statement.where(Knowledge.id.in_(filter_knowledge))
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
@@ -122,11 +125,12 @@ class KnowledgeDao(KnowledgeBase):
                            knowledge_type: KnowledgeTypeEnum = None,
                            name: str = None,
                            page: int = 0,
-                           limit: int = 10) -> List[Knowledge]:
+                           limit: int = 10,
+                           filter_knowledge: List[int] = None) -> List[Knowledge]:
         statement = select(Knowledge).where(Knowledge.state > 0)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name, page, limit)
+                                                knowledge_type, name, page, limit, filter_knowledge)
 
         statement = statement.order_by(Knowledge.update_time.desc())
         with session_getter() as session:
@@ -183,10 +187,12 @@ class KnowledgeDao(KnowledgeBase):
                                                           AccessType.KNOWLEDGE)
 
         # 查询是否包含了用户自己创建的知识库
-        user_knowledge_list = KnowledgeDao.get_user_knowledge(user_info.user_id, knowledge_ids)
+        user_knowledge_list = cls.get_user_knowledge(user_info.user_id, filter_knowledge=knowledge_ids)
         if not role_access_list and not user_knowledge_list:
             return []
-        finally_knowledge_list = [access.third_id for access in role_access_list].extend([str(one.id) for one in user_knowledge_list])
+
+        finally_knowledge_list = [access.third_id for access in role_access_list]
+        finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
         statement = select(Knowledge).where(
             Knowledge.id.in_(finally_knowledge_list))
 
