@@ -4,7 +4,8 @@ import time
 import uuid
 from typing import Dict, Optional
 
-from fastapi import Request, WebSocket
+from bisheng.database.models.flow import FlowDao, FlowStatus
+from fastapi import Request, WebSocket, status
 from loguru import logger
 
 from bisheng.api.errcode.flow import WorkFlowWaitUserTimeoutError, WorkFlowNodeRunMaxTimesError
@@ -86,15 +87,29 @@ class WorkflowClient(BaseClient):
             # 新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
-    async def check_status(self, message: dict):
+    async def check_status(self, message: dict) -> (bool, str):
         # chat ws connection first handle
-        if not self.chat_id:
-            return
         workflow_id = message.get('flow_id', self.client_id)
-        await self.init_history()
-        unique_id = f'{self.chat_id}_async_task_id'
+        self.chat_id = message.get('chat_id', '')
+        unique_id = uuid.uuid4().hex
+        if self.chat_id:
+            await self.init_history()
+            unique_id = f'{self.chat_id}_async_task_id'
         logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
         self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
+        # 判断workflow是否已上线，未上线的话关闭当前websocket链接
+        workflow_db = FlowDao.get_flow_by_id(workflow_id)
+        if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
+            self.workflow.set_workflow_stop()
+            try:
+                await self.send_response('processing', 'close', '')
+                await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason='workflow is offline')
+            except:
+                logger.warning('websocket is closed')
+                pass
+            self.workflow = None
+            return False, unique_id
+
         status_info = self.workflow.get_workflow_status()
         if not status_info:
             # 说明上一次运行完成了
@@ -102,7 +117,7 @@ class WorkflowClient(BaseClient):
             if self.latest_history:
                 # 让前端终止上一次的运行
                 await self.send_response('processing', 'close', '')
-            return
+            return True, unique_id
         # 说明会话还在运行中
         if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
             # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
@@ -113,8 +128,8 @@ class WorkflowClient(BaseClient):
 
         await self.send_response('processing', 'begin', '')
         logger.debug('init workflow over')
-        # 运行workflow
         await self.workflow_run()
+        return False, unique_id
 
     async def init_workflow(self, message: dict):
         if self.workflow is not None:
@@ -122,41 +137,24 @@ class WorkflowClient(BaseClient):
         try:
             workflow_data = message.get('data')
             workflow_id = message.get('flow_id', self.client_id)
-            self.chat_id = message.get('chat_id', '')
-            # 查询chat_id对应的异步任务唯一标识
-            unique_id = uuid.uuid4().hex
-            if self.chat_id:
-                await self.init_history()
-                unique_id = f'{self.chat_id}_async_task_id'
-            logger.debug(
-                f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
-            self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
-            status_info = self.workflow.get_workflow_status()
-            if not status_info:
-                if self.latest_history:
-                    # 让前端终止上一次的运行
-                    await self.send_response('processing', 'close', '')
+            flag, unique_id = await self.check_status(message)
+            # 说明workflow在运行中或者已下线
+            if not flag:
+                return
                 # 发起新的workflow
-                self.workflow.set_workflow_data(workflow_data)
-                self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
-                # 发起异步任务
-                execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
-            elif status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
-                # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
-                if self.latest_history.category in ['user_input', 'output_choose_msg', 'output_input_msg']:
-                    send_message = self.latest_history.to_dict()
-                    send_message['message'] = json.loads(send_message['message'])
-                    await self.send_json(send_message)
-
+            self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
+            self.workflow.set_workflow_data(workflow_data)
+            self.workflow.set_workflow_status(WorkflowStatus.WAITING.value)
+            # 发起异步任务
+            execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
+            await self.send_response('processing', 'begin', '')
+            await self.workflow_run()
         except Exception as e:
             logger.exception('init_workflow_error')
             self.workflow = None
             await self.send_response('error', 'over', {'code': 500, 'message': str(e)})
             return
-        await self.send_response('processing', 'begin', '')
-        logger.debug('init workflow over')
-        # 运行workflow
-        await self.workflow_run()
+
 
     async def workflow_run(self):
         # 需要不断从redis中获取workflow返回的消息

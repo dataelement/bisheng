@@ -89,7 +89,7 @@ class BishengLLM(BaseChatModel):
             self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
         except Exception as e:
             logger.exception('init bisheng llm error')
-            raise Exception(f'初始化llm组件失败，请检查配置或联系管理员。错误信息：{e}')
+            raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
 
     def _get_llm_class(self, server_type: str) -> BaseLanguageModel:
         node_type = self.llm_node_type[server_type]
