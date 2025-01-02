@@ -103,6 +103,7 @@ def comment(*, data: ChatInput):
 @router.post('/sync/messages', status_code=200)
 def sync_message(*,
                  flow_id: UUID = Body(embed=True),
+                 chat_id: str = Body(embed=True),
                  message_list: List[SyncMessage] = Body(embed=True),
                  user_id: int = Body(default=None, embed=True)):
 
@@ -117,7 +118,8 @@ def sync_message(*,
                     category='answer',
                     flow_id=flow_id,
                     user_id=user_id,
-                    chat_id=flow_id.hex) for message in message_list
+                    chat_id=chat_id,
+                    create_time=message.create_time) for message in message_list
     ]
     ChatMessageDao.insert_batch(batch_message)
     return resp_200()
