@@ -321,10 +321,10 @@ class FlowDao(FlowBase):
     def get_all_apps(cls, name: str | None, status: int | None, id_list: list, flow_type: int | None, user_id: int | None, id_extra: list | None,
                      page: int = 0, limit: int = 0) -> (List[Dict], int):
         """ 获取所有的应用 包含技能、助手、工作流 """
-        sub_query = select(Flow.id, Flow.name, Flow.flow_type, Flow.logo, Flow.user_id, Flow.status, Flow.create_time, Flow.update_time).union_all(
-            select(Assistant.id, Assistant.name, FlowType.ASSISTANT.value, Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time, Assistant.update_time)).subquery()
+        sub_query = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id, Flow.status, Flow.create_time, Flow.update_time).union_all(
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value, Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time, Assistant.update_time)).subquery()
 
-        statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id, sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
+        statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description, sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id, sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
         count_statement = select(func.count(sub_query.c.id))
         if name:
             statement = statement.where(sub_query.c.name.like(f'%{name}%'))
@@ -356,11 +356,12 @@ class FlowDao(FlowBase):
             data.append({
                 'id': one[0],
                 'name': one[1],
-                'flow_type': one[2],
-                'logo': one[3],
-                'user_id': one[4],
-                'status': one[5],
-                'create_time': one[6],
-                'update_time': one[7]
+                'description': one[2],
+                'flow_type': one[3],
+                'logo': one[4],
+                'user_id': one[5],
+                'status': one[6],
+                'create_time': one[7],
+                'update_time': one[8]
             })
         return data, total
