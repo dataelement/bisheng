@@ -87,7 +87,7 @@ class WorkflowClient(BaseClient):
             # 新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
-    async def check_status(self, message: dict) -> (bool, str):
+    async def check_status(self, message: dict, is_init: bool = False) -> (bool, str):
         # chat ws connection first handle
         workflow_id = message.get('flow_id', self.client_id)
         self.chat_id = message.get('chat_id', '')
@@ -115,7 +115,7 @@ class WorkflowClient(BaseClient):
         if not status_info:
             # 说明上一次运行完成了
             self.workflow = None
-            if self.latest_history:
+            if self.latest_history and not is_init:
                 # 让前端终止上一次的运行
                 await self.send_response('processing', 'close', '')
             return True, unique_id
@@ -138,7 +138,7 @@ class WorkflowClient(BaseClient):
         try:
             workflow_data = message.get('data')
             workflow_id = message.get('flow_id', self.client_id)
-            flag, unique_id = await self.check_status(message)
+            flag, unique_id = await self.check_status(message, is_init=True)
             # 说明workflow在运行中或者已下线
             if not flag:
                 return
