@@ -214,12 +214,12 @@ export function useCopyPasteNode(dom, lastSelection, paste, del, deps) {
             position.current = { x: event.clientX, y: event.clientY };
         };
 
-        dom.addEventListener("keydown", onKeyDown);
-        dom.addEventListener("mousemove", handleMouseMove);
+        document.addEventListener("keydown", onKeyDown);
+        document.addEventListener("mousemove", handleMouseMove);
 
         return () => {
-            dom?.removeEventListener("keydown", onKeyDown);
-            dom?.removeEventListener("mousemove", handleMouseMove);
+            document?.removeEventListener("keydown", onKeyDown);
+            document?.removeEventListener("mousemove", handleMouseMove);
         };
     }, [dom, lastSelection, lastCopiedSelection, ...deps]);
 }

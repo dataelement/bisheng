@@ -72,13 +72,13 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             let q = ''
             while (index > -1) {
                 const qItem = msgs[--index]
-                if (['question', 'user_input'].includes(qItem.category)) {
+                if (['question', 'user_input'].includes(qItem?.category)) {
                     q = qItem.message[qItem.chatKey] || qItem.message
                     break
                 }
             }
             return { q, a }
-        } else if (['question', 'user_input'].includes(item.category)) {
+        } else if (['question', 'user_input'].includes(item?.category)) {
             const q = item.message[item.chatKey] || item.message
             let a = ''
             while (msgs[++index]) {

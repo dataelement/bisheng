@@ -145,10 +145,6 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             // onReconnect={onEdgeUpdate} 
                             // onReconnectStart={onEdgeUpdateStart}
                             // onReconnectEnd={onEdgeUpdateEnd}
-
-                            // 框选 (group)
-                            // onSelectionStart={(e) => { e.preventDefault(); setSelectionEnded(false) }}
-                            // onSelectionEnd={() => setSelectionEnded(true)}
                             style={{
                                 backgroundImage: window.ThemeStyle.bg === 'gradient'
                                     && 'radial-gradient(circle at center bottom, rgba(2, 77, 227, 0.3) 2%, rgba(2, 77, 227, 0.2) 25%, rgba(2, 77, 227, 0.05) 60%, rgba(0, 0, 0, 0) 100%)',
