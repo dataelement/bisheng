@@ -2,6 +2,7 @@ from typing import List, Any
 
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMRagNodeCallbackHandler
+from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -133,6 +134,8 @@ class RagNode(BaseNode):
                 variable_map[one] = '$$context$$'
             else:
                 variable_map[one] = self.graph_state.get_variable_by_str(one)
+        if variable_map.get(f'{self.id}.retrieved_result') is None:
+            raise IgnoreException('用户提示词必须包含 retrieved_result 变量')
         user_prompt = self._user_prompt.format(variable_map)
         user_prompt = (user_prompt.replace('{', '{{').replace('}', '}}')
                        .replace('$$question$$', '{question}').replace('$$context$$', '{context}'))
