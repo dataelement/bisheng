@@ -8,12 +8,12 @@ import { useTranslation } from "react-i18next";
 // import MessageUser from "./MessageUser";
 // import RunLog from "./RunLog";
 // import Separator from "./Separator";
-import { useMessageStore } from "./messageStore";
-import MessageBs from "./MessageBs";
-import MessageUser from "./MessageUser";
 import Separator from "@/components/bs-comp/chatComponent/Separator";
+import MessageBs from "./MessageBs";
 import MessageBsChoose from "./MessageBsChoose";
 import MessageNodeRun from "./MessageNodeRun";
+import { useMessageStore } from "./messageStore";
+import MessageUser from "./MessageUser";
 
 export default function ChatMessages({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
@@ -67,24 +67,24 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
     // 成对的qa msg
     const findQa = (msgs, index) => {
         const item = msgs[index]
-        if (item.category === 'answer') {
-            const a = item.message[item.chatKey] || item.message
+        if (['stream_msg', 'answer'].includes(item.category)) {
+            const a = item.message.msg || item.message
             let q = ''
             while (index > -1) {
                 const qItem = msgs[--index]
-                if (qItem.category === 'question') {
+                if (['question', 'user_input'].includes(qItem.category)) {
                     q = qItem.message[qItem.chatKey] || qItem.message
                     break
                 }
             }
             return { q, a }
-        } else if (item.category === 'question') {
+        } else if (['question', 'user_input'].includes(item.category)) {
             const q = item.message[item.chatKey] || item.message
             let a = ''
             while (msgs[++index]) {
                 const aItem = msgs[index]
-                if (aItem.category === 'answer') {
-                    a = aItem.message[aItem.chatKey] || aItem.message
+                if (['stream_msg', 'answer'].includes(aItem.category)) {
+                    a = aItem.message.msg || aItem.message
                     break
                 }
             }
@@ -92,7 +92,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
         }
     }
 
-    return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
+    return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60 px-4">
         {
             messagesList.map((msg, index) => {
                 // output节点特殊msg
@@ -100,7 +100,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                     case 'user_input':
                         return null
                     case 'question':
-                        return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => {onMarkClick('question', msg.id, findQa(messagesList, index))}} />;
+                        return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />;
                     case 'guide_word':
                     case 'output_msg':
                     case 'stream_msg':

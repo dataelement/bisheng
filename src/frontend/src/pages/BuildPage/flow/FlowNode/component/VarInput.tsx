@@ -214,6 +214,7 @@ export default function VarInput({
                         if (textareaRef.current === node) {
                             range.setStart(range.endContainer, range.endOffset - 1);
                             range.deleteContents();
+                            handleInput()
                             e.preventDefault();  // 阻止默认行为
                         }
                     }

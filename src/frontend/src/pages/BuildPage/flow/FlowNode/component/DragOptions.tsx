@@ -27,7 +27,7 @@ const itemNames = {
 }
 
 export default function DragOptions({ edges = false, scroll = false, options, onEditClick, onChange }: Iprops) {
-    const { t } = useTranslation(); // 使用国际化
+    const { t } = useTranslation('flow'); // 使用国际化
     const [items, setItems] = useState([]); // 初始默认选项
     const [inputValue, setInputValue] = useState("");
     const [error, setError] = useState("");

@@ -115,7 +115,7 @@ export default function HomePage({ onSelect }) {
                             data={flow}
                             logo={flow.logo}
                             title={flow.name}
-                            description={flow.desc}
+                            description={flow.description}
                             type="sheet"
                             icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
                             footer={

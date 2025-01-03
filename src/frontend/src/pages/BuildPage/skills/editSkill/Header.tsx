@@ -237,7 +237,7 @@ export default function Header({ flow, preFlow, onTabChange }) {
             <DialogContent className="sm:max-w-[425px]" close={false}>
                 <DialogHeader>
                     <DialogTitle>{t('prompt')}</DialogTitle>
-                    <DialogDescription>{isOnlineVersion ? '当前版本已上线,不可进行更改' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                    <DialogDescription>{isOnlineVersion ? '当前版本已上线不可修改，可另存为新版本保存修改内容' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
                     <Button className="leave h-8" onClick={handleSaveAndClose}>

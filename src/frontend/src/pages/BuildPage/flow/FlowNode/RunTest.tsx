@@ -70,7 +70,7 @@ export const RunTest = forwardRef((props, ref) => {
         run: (node: WorkflowNode) => {
             setOpen(true)
             setNode(node)
-            node.group_params.forEach((group) => {  
+            node.group_params.forEach((group) => {
                 group.params.forEach((param) => {
                     if (param.test === 'input') {
                         if (node.type === "tool") {
@@ -137,11 +137,52 @@ export const RunTest = forwardRef((props, ref) => {
                 }, {}),
                 node
             ).then(res => {
-                const result = res.map(item => ({ title: item.key, text: item.value }))
+                const result = TranslationName(res) // .map(item => ({ title: item.key, text: item.value }))
                 setResults(result)
             })
         );
         setLoading(false)
+    }
+
+    // 翻译变量名
+    const TranslationName = (data) => {
+        const newData = data.reduce((res, item) => {
+            if (item.type === 'variable') {
+                const key = item.key.split('.')
+                res[key[key.length - 1]] = item.value
+            } else {
+                res[item.key] = item.value
+            }
+            return res
+        }, {})
+        let result = [];
+        let hasKeys = []
+
+        node.group_params.forEach(group => {
+            group.params.forEach(param => {
+                if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
+                    // 尝试去value中匹配
+                    param.value.forEach(value => {
+                        if (!newData[value.key]) return
+                        result.push({ title: value.label, text: newData[value.key] })
+                        hasKeys.push(value.key)
+                    })
+                } else if (newData[param.key] !== undefined) {
+                    result.push({ title: param.label || param.key, text: newData[param.key] })
+                    hasKeys.push(param.key)
+                } else if (param.key === 'tool_list') {
+                    // tool
+                    param.value.some(p => {
+                        if (newData[p.tool_key] !== undefined) {
+                            result.push({ title: p.label, text: newData[p.tool_key] })
+                            hasKeys.push(p.tool_key)
+                            return true
+                        }
+                    })
+                }
+            });
+        });
+        return result
     }
 
     return (

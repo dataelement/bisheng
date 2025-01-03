@@ -40,7 +40,7 @@
         "qaSimilarModel": "QA知识库相似问模型",
         "qaSimilarModelTooltip": "用于生成 QA 知识库中的相似问题。",
         "saveSuccess": "保存成功",
-        "modelsAndRAGNodes": "大模型及RAG节点",
+        "modelsAndRAGNodes": "工作流默认模型",
         "assistantInferenceModel": "助手推理模型",
         "assistantInferenceModelRepetition": "助手推理模型重复",
         "assistantExecutionMode": "助手执行模式",

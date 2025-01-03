@@ -409,7 +409,7 @@ const workflowTemplate = [
                             "flag": true,
                             "value": 50
                         },
-                        "help": "是否携带历史对话记录。"
+                        "help": "带入模型上下文的历史消息条数，为 0 时代表不包含上下文信息。"
                     }
                 ]
             },

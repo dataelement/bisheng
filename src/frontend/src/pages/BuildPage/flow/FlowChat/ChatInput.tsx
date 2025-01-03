@@ -382,7 +382,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
-        <div className={`relative ${clear && 'pl-9'}`}>
+        <div className={`relative pr-4 ${clear && 'pl-9'}`}>
             {/* form */}
             {
                 inputForm && <div className="relative">
@@ -411,7 +411,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 }
             </div>
             {/* send */}
-            <div className="flex gap-2 absolute right-3 top-4 z-10">
+            <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
                     id="bs-send-btn"
                     className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"

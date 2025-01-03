@@ -115,13 +115,14 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     // stream
     streamWsMsg(data) {
         let messages = cloneDeep(get().messages);
-        const { unique_id, output_key } = data.message;
+        const { unique_id, output_key, type } = data.message;
         const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
         const currentMsg = messages[currentMessageIndex]
         if (!currentMsg) return get().createWsMsg({ ...data, message: data.message.msg, message_id: unique_id + output_key })
         // append
         const newCurrentMessage = {
             ...currentMsg,
+            message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
             message: data.type === 'end' ? currentMsg.message : currentMsg.message + data.message.msg,
             update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,

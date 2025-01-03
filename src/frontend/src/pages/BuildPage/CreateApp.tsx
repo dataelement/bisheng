@@ -51,9 +51,9 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
             setFormData({
                 url: '',
                 name: '',
-                desc: AppType.ASSISTANT === type ? `${t('build.example')}：
-${t('build.exampleOne')}
-${t('build.exampleTwo')}
+                desc: AppType.ASSISTANT === type ? `${t('build.example', { ns: 'bs' })}：
+${t('build.exampleOne', { ns: 'bs' })}
+${t('build.exampleTwo', { ns: 'bs' })}
 1. XX
 2. XX
 3. …` : '',
@@ -230,7 +230,7 @@ ${t('build.exampleTwo')}
                             name="desc"
                             placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
                             maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
-                            className="mt-3 h-12 min-h-12 pt-3"
+                            className="mt-3 min-h-32 pt-3"
                             value={formData.desc}
                             onChange={handleChange}
                         />

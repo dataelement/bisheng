@@ -65,6 +65,7 @@ export default function editAssistant() {
                 description: t('skills.saveSuccessful')
             })
         })
+        saveAfter()
     }
 
     // 上线助手
@@ -147,7 +148,7 @@ export default function editAssistant() {
                         <Setting></Setting>
                     </div>
                 </div>
-                <div className="w-[40%] h-full bg-[#fff] relative">
+                <div className="w-[40%] h-full bg-[#fff] dark:bg-background-main relative">
                     {openChat && <TestChat guideQuestion={guideQuestion} assisId={assisId} onClear={() => handleStartChat(false)}></TestChat>}
                     {/* 变更触发保存的蒙版按钮 */}
                     {changed && <div className="absolute w-full bottom-0 h-60" onClick={() => handleStartChat(true)}></div>}

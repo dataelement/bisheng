@@ -211,10 +211,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         {chatId && <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
+        {/* <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
             {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
-        </p>
+        </p> */}
         {
             !customWsHost && <div
                 className="relative z-50 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
@@ -277,8 +277,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         }
         {/* 工作流会话 */}
         {
-            workflow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
-                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
+            workflow && <div className={`w-full chat-box h-full relative ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
+                <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-6 py-1 dark:bg-[#1B1B1B]">
                     <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
                     <span className="text-sm">{workflow.name}</span>
                 </div>

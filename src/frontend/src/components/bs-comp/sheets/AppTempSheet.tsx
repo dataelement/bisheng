@@ -64,21 +64,21 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
-                            <Bot />
+                            {/* <Bot /> */}
                             <span>{t('workflow')}</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.ASSISTANT)}
                         >
-                            <Bot />
+                            {/* <Bot /> */}
                             <span>{t('assistant')}</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.SKILL)}
                         >
-                            <Bot />
+                            {/* <Bot /> */}
                             <span>{t('skill')}</span>
                         </div>
                     </div>
