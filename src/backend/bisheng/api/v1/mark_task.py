@@ -4,7 +4,7 @@ import json
 from typing import Optional
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
-from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
@@ -130,9 +130,9 @@ async def mark(data: MarkData,
 
     flow = FlowDao.get_flow_by_idstr(msg[0].flow_id)
     if flow:
-        data.flow_type = "flow"
+        data.flow_type = flow.flow_type
     else:
-        data.flow_type = "assistant"
+        data.flow_type = FlowType.ASSISTANT.value
 
     db_r = MarkRecordDao.get_record(data.task_id,data.session_id)
     if db_r:
@@ -229,9 +229,9 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
                 cur = k_list[cur.next.data]
             flow = FlowDao.get_flow_by_idstr(cur.flow_id)
             if flow:
-                result['flow_type'] = 'flow'
+                result['flow_type'] = flow.flow_type
             else:
-                result['flow_type'] = 'assistant'
+                result['flow_type'] = FlowType.ASSISTANT.value
 
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
@@ -240,9 +240,9 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
             cur = k_list[linked.head().data]
             flow = FlowDao.get_flow_by_idstr(cur.flow_id)
             if flow:
-                result['flow_type'] = 'flow'
+                result['flow_type'] = FlowType.FLOW.value
             else:
-                result['flow_type'] = 'assistant'
+                result['flow_type'] = FlowType.ASSISTANT.value
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
             return resp_200(data=result)
