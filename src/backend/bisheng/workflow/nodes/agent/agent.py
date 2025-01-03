@@ -7,6 +7,7 @@ from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
@@ -224,10 +225,18 @@ class AgentNode(BaseNode):
 
         if self._tab == 'single':
             ret['output'] = self._run_once(None, unique_id, 'output')
+            self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                   msg=ret['output'],
+                                                                   unique_id=unique_id,
+                                                                   output_key='output'))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
                 output_key = self.node_params['output'][index]['key']
                 ret[output_key] = self._run_once(one, unique_id, output_key)
+                self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                       msg=ret[output_key],
+                                                                       unique_id=unique_id,
+                                                                       output_key=output_key))
 
         logger.debug('agent_over result={}', ret)
         if self._output_user:
@@ -309,7 +318,8 @@ class AgentNode(BaseNode):
                                               node_id=self.id,
                                               output=self._output_user,
                                               output_key=output_key,
-                                              tool_list=self._tool_invoke_list)
+                                              tool_list=self._tool_invoke_list,
+                                              cancel_llm_end=True)
         config = RunnableConfig(callbacks=[llm_callback])
 
         if self._agent_executor_type == 'ReAct':
