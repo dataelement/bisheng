@@ -321,9 +321,9 @@ class DocumentLoaderFrontNode(FrontendNode):
                     field_type='code',
                     required=True,
                     show=True,
-                    name='request_kwargs',
+                    name='requests_kwargs',
                     value='{"timeout": 30}',
-                    display_name='RequestKwargs',
+                    display_name='RequestsKwargs',
                     multiline=False,
                 ))
         if name:
