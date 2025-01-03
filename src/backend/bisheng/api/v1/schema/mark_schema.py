@@ -1,13 +1,12 @@
-
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class MarkTaskCreate(BaseModel):
-    app_list: List[str]
+    app_list: List[str] = Field(max_items=30)
     user_list: List[str]
 
 class MarkData(BaseModel):

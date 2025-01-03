@@ -3,9 +3,10 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
+from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
-from bisheng.workflow.common.node import BaseNodeData
+from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.graph_state import GraphState
 
@@ -46,6 +47,8 @@ class BaseNode(ABC):
 
         self.stop_flag = False
 
+        self.exec_unique_id = None
+
         # 简单参数解析
         self.init_data()
 
@@ -71,6 +74,14 @@ class BaseNode(ABC):
          返回节点运行日志，默认返回节点的输出内容，有特殊需求自行覆盖此函数
         params:
             result: 节点运行结果
+        return:
+        [
+            {
+                "key": "xxx",
+                "value": "xxx",
+                "type": "tool" # tool: 工具类型的日志, variable：全局变量的日志, params：节点参数类型的日志，key：展示key本身
+            }
+        ]
         """
         return result
 
@@ -89,10 +100,12 @@ class BaseNode(ABC):
         """
         raise NotImplementedError
 
-    def get_next_node_id(self, source_handle: str) -> str | None:
+    def get_next_node_id(self, source_handle: str) -> list[str]:
+        next_nodes = []
         for one in self.target_edges:
             if one.sourceHandle == source_handle:
-                return one.target
+                next_nodes.append(one.target)
+        return next_nodes
 
     def run(self, state: dict) -> Any:
         """
@@ -100,11 +113,12 @@ class BaseNode(ABC):
         :return:
         """
         if self.stop_flag:
-            raise Exception('stop by user')
+            raise IgnoreException('stop by user')
         if self.current_step >= self.max_steps:
-            raise Exception(f'node {self.name} exceeded more than max steps')
+            raise IgnoreException(f'{self.name} -- has run more than the maximum number of times.')
 
         exec_id = uuid.uuid4().hex
+        self.exec_unique_id = exec_id
         self.callback_manager.on_node_start(
             data=NodeStartData(unique_id=exec_id, node_id=self.id, name=self.name))
 
@@ -122,8 +136,10 @@ class BaseNode(ABC):
             reason = str(e)
             raise e
         finally:
-            self.callback_manager.on_node_end(data=NodeEndData(
-                unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
+            # 输出节点的结束日志由fake节点输出
+            if reason or self.type != NodeType.OUTPUT.value:
+                self.callback_manager.on_node_end(data=NodeEndData(
+                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
         return state
 
     async def arun(self, state: dict) -> Any:

@@ -1,5 +1,6 @@
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import InputComponent from "@/components/inputComponent";
 import InputFileComponent from "@/components/inputFileComponent";
 import { WorkflowNodeParam } from "@/types/flow";
@@ -28,16 +29,28 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
         formDataRef.current[item.key].fileName = fileName
     }
 
+    const { message } = useToast()
     const submit = () => {
         const valuesObject = {}
         let stringObject = ""
+        const errors = []
 
         Object.keys(formDataRef.current).forEach((key: string) => {
-            const item = formDataRef.current[key]
-            valuesObject[key] = item.value
-            stringObject += `${item.label}:${item.type === FormItemType.File ? item.fileName : item.value}\n`
+            const fieldData = formDataRef.current[key]
+            const required = data.value.find(item => item.key === key).required
+            if (required && !fieldData.value) {
+                errors.push(`${fieldData.label} 为必填项，不能为空。`)
+            }
+            valuesObject[key] = fieldData.value
+            stringObject += `${fieldData.label}:${fieldData.type === FormItemType.File ? fieldData.fileName : fieldData.value}\n`
         })
 
+        if (errors.length) {
+            return message({
+                description: errors,
+                variant: 'warning'
+            })
+        }
         onSubmit([valuesObject, stringObject])
     }
 
@@ -45,10 +58,11 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
         <div className="max-h-[520px] overflow-y-auto">
             {
                 data.value.map((item, i) => (
-                    <div key={item.id} className="w-full text-sm">
+                    <div key={item.id} className="w-full text-sm bisheng-label">
+                        {item.required && <span className="text-red-500">*</span>}
                         {item.value}
                         {/* <span className="text-status-red">{item.required ? " *" : ""}</span> */}
-                        <div className="mt-2">
+                        <div className="mb-2">
                             {(() => {
                                 switch (item.type) {
                                     case FormItemType.Text:

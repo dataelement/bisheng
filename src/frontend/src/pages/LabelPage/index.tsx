@@ -77,6 +77,12 @@ function CreateModal({ open, setOpen, onSuccess }) {
 
     const { message } = useToast()
     const handleCreate = () => {
+        if (apps.length > 30) {
+            return message({
+                variant: "error",
+                description: "最多选择30个应用"
+            })
+        }
         captureAndAlertRequestErrorHoc(createMarkApi({
             app_list: apps.map(el => el.value),
             user_list: users.map(el => el.value)

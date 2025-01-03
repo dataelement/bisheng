@@ -1,7 +1,8 @@
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Sequence, Tuple, Union
 
 from bisheng.interface.base import CustomAgentExecutor
-from langchain.agents import AgentExecutor, AgentType, Tool, ZeroShotAgent, initialize_agent
+from langchain.agents import (AgentExecutor, AgentType, BaseSingleActionAgent, Tool, ZeroShotAgent,
+                              initialize_agent)
 from langchain.agents.agent_toolkits.vectorstore.prompt import PREFIX as VECTORSTORE_PREFIX
 from langchain.agents.agent_toolkits.vectorstore.prompt import \
     ROUTER_PREFIX as VECTORSTORE_ROUTER_PREFIX
@@ -9,8 +10,11 @@ from langchain.agents.agent_toolkits.vectorstore.toolkit import (VectorStoreInfo
                                                                  VectorStoreRouterToolkit,
                                                                  VectorStoreToolkit)
 from langchain.agents.mrkl.prompt import FORMAT_INSTRUCTIONS
+from langchain.agents.openai_functions_agent.base import OpenAIFunctionsAgent
+from langchain.agents.openai_tools.base import create_openai_tools_agent
 from langchain.base_language import BaseLanguageModel
 from langchain.chains import LLMChain
+from langchain.memory.buffer import ConversationBufferMemory
 from langchain.memory.chat_memory import BaseChatMemory
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.json.prompt import JSON_PREFIX, JSON_SUFFIX
@@ -18,10 +22,23 @@ from langchain_community.agent_toolkits.json.toolkit import JsonToolkit
 from langchain_community.agent_toolkits.sql.prompt import SQL_PREFIX, SQL_SUFFIX
 from langchain_community.tools.sql_database.prompt import QUERY_CHECKER
 from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.callbacks import BaseCallbackManager, Callbacks
+from langchain_core.memory import BaseMemory
+from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.prompts.chat import (BaseMessagePromptTemplate, ChatPromptTemplate,
+                                         HumanMessagePromptTemplate, MessagesPlaceholder)
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 from langchain_experimental.agents.agent_toolkits.pandas.prompt import PREFIX as PANDAS_PREFIX
 from langchain_experimental.agents.agent_toolkits.pandas.prompt import \
     SUFFIX_WITH_DF as PANDAS_SUFFIX
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
+from pydantic import Field
+
+history_prompt = """Below is a transcript of your chats:
+{history}
+"""
 
 
 class JsonAgent(CustomAgentExecutor):
@@ -284,6 +301,146 @@ class VectorStoreRouterAgent(CustomAgentExecutor):
         return super().run(*args, **kwargs)
 
 
+class OpenAIToolsAgent(OpenAIFunctionsAgent):
+    """OpenAI Tools Agent"""
+
+    memory: BaseMemory = Field(default_factory=ConversationBufferMemory)
+    agent: Any
+
+    @property
+    def input_keys(self) -> List[str]:
+        """Get input keys. Input refers to user input here."""
+        return ['input', 'history']
+
+    def plan(
+        self,
+        intermediate_steps: List[Tuple[AgentAction, str]],
+        callbacks: Callbacks = None,
+        with_functions: bool = True,
+        **kwargs: Any,
+    ) -> Union[AgentAction, AgentFinish]:
+        input_dict = {'intermediate_steps': intermediate_steps}
+        selected_inputs = {
+            k: kwargs[k]
+            for k in self.prompt.input_variables if k != 'agent_scratchpad'
+        }
+        input_dict.update(selected_inputs)
+        return self.agent.invoke(input_dict, config=RunnableConfig(callbacks=callbacks))
+
+    async def aplan(
+        self,
+        intermediate_steps: List[Tuple[AgentAction, str]],
+        callbacks: Callbacks = None,
+        **kwargs: Any,
+    ) -> Union[AgentAction, AgentFinish]:
+        input_dict = {'intermediate_steps': intermediate_steps}
+        selected_inputs = {
+            k: kwargs[k]
+            for k in self.prompt.input_variables if k != 'agent_scratchpad'
+        }
+        input_dict.update(selected_inputs)
+        return await self.agent.ainvoke(input_dict, config=RunnableConfig(callbacks=callbacks))
+
+    @classmethod
+    def create_prompt(
+        cls,
+        system_message: Optional[SystemMessage] = SystemMessage(
+            content='You are a helpful AI assistant.'),
+        extra_prompt_messages: Optional[List[BaseMessagePromptTemplate]] = None,
+    ) -> ChatPromptTemplate:
+        """Create prompt for this agent.
+
+        Args:
+            system_message: Message to use as the system message that will be the
+                first in the prompt.
+            extra_prompt_messages: Prompt messages that will be placed between the
+                system message and the new human input.
+
+        Returns:
+            A prompt template to pass into this agent.
+        """
+        _prompts = extra_prompt_messages or []
+        messages: List[Union[BaseMessagePromptTemplate, BaseMessage]]
+        if system_message:
+            messages = [system_message]
+        else:
+            messages = []
+
+        messages.extend([
+            *_prompts,
+            MessagesPlaceholder(variable_name='agent_scratchpad'),
+        ])
+        return ChatPromptTemplate(messages=messages)  # type: ignore[arg-type, call-arg]
+
+    @classmethod
+    def from_llm_and_tools(
+        cls,
+        llm: BaseLanguageModel,
+        tools: Sequence[BaseTool],
+        callback_manager: Optional[BaseCallbackManager] = None,
+        extra_prompt: str = history_prompt,
+        human_prompt: str = '{input}',
+        system_message: str = 'You are a helpful AI assistant.',
+        **kwargs: Any,
+    ) -> BaseSingleActionAgent:
+        """Construct an agent from an LLM and tools.
+
+        Args:
+            llm: The LLM to use as the agent.
+            tools: The tools to use.
+            callback_manager: The callback manager to use. Defaults to None.
+            extra_prompt_messages: Extra prompt messages to use. Defaults to None.
+            system_message: The system message to use.
+                Defaults to a default system message.
+            kwargs: Additional parameters to pass to the agent.
+        """
+        system_message_prompt = SystemMessage(content=system_message)
+        extra_prompt_messages = [HumanMessagePromptTemplate.from_template(extra_prompt)]
+        extra_prompt_messages.extend([HumanMessagePromptTemplate.from_template(human_prompt)])
+        prompt = cls.create_prompt(system_message=system_message_prompt,
+                                   extra_prompt_messages=extra_prompt_messages)
+        agent = create_openai_tools_agent(llm, tools, prompt)
+        return cls(  # type: ignore[call-arg]
+            llm=llm,
+            agent=agent,
+            prompt=prompt,
+            tools=tools,
+            callback_manager=callback_manager,
+            **kwargs,
+        )
+
+    @classmethod
+    def initialize(
+        cls,
+        llm: BaseLanguageModel,
+        tools: Sequence[BaseTool],
+        callback_manager: Optional[BaseCallbackManager] = None,
+        extra_prompt: str = history_prompt,
+        human_prompt: str = '{input}',
+        system_message: str = 'You are a helpful AI assistant.',
+        memory: Optional[BaseChatMemory] = None,
+        **kwargs: Any,
+    ):
+        agent = cls.from_llm_and_tools(
+            llm,
+            tools,
+            callback_manager,
+            extra_prompt,
+            human_prompt,
+            system_message,
+            memory=memory,
+            **kwargs,
+        )
+        return AgentExecutor.from_agent_and_tools(
+            agent=agent,
+            tools=tools,
+            verbose=True,
+            memory=memory,
+            return_intermediate_steps=True,
+            handle_parsing_errors=True,
+        )
+
+
 class InitializeAgent(CustomAgentExecutor):
     """Implementation of AgentInitializer function"""
 
@@ -301,6 +458,21 @@ class InitializeAgent(CustomAgentExecutor):
     ):
         # Find which value in the AgentType enum corresponds to the string
         # passed in as agent
+        if agent == 'openai-tools':
+            agent = OpenAIToolsAgent.from_llm_and_tools(
+                llm,
+                tools,
+                memory=memory,
+                return_intermediate_steps=True,
+                handle_parsing_errors=True,
+            )
+            return AgentExecutor.from_agent_and_tools(
+                agent=agent,
+                tools=tools,
+                memory=memory,
+                return_intermediate_steps=True,
+                handle_parsing_errors=True,
+            )
         agent = AgentType(agent)
         return initialize_agent(
             tools=tools,
@@ -319,6 +491,7 @@ class InitializeAgent(CustomAgentExecutor):
         return super().run(*args, **kwargs)
 
 
+# custom agents must initialize with initialize method
 CUSTOM_AGENTS = {
     'JsonAgent': JsonAgent,
     'CSVAgent': CSVAgent,
@@ -326,4 +499,5 @@ CUSTOM_AGENTS = {
     'VectorStoreAgent': VectorStoreAgent,
     'VectorStoreRouterAgent': VectorStoreRouterAgent,
     'SQLAgent': SQLAgent,
+    'OpenAIToolsAgent': OpenAIToolsAgent,
 }

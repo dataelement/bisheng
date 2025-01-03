@@ -28,7 +28,7 @@ class OutputNode(BaseNode):
         self._source_documents = []
 
         # 非选择型交互，则下个节点就是连线的target。选择型交互，需要根据用户输入来判断
-        self._next_node_id = self.target_edges[0].target
+        self._next_node_id = [one.target for one in self.target_edges]
 
     def handle_input(self, user_input: dict) -> Any:
         # 需要存入state，
@@ -42,7 +42,7 @@ class OutputNode(BaseNode):
         group_params = self.node_data.dict(include={'group_params'})
         return group_params['group_params']
 
-    def route_node(self, state: dict) -> str:
+    def route_node(self, state: dict) -> str | list[str]:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
             return self.get_next_node_id(self._output_result)
@@ -58,10 +58,20 @@ class OutputNode(BaseNode):
         return res
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return {
-            'output_msg': self._parsed_output_msg,
-            'output_result': self._output_result
-        }
+        ret = [
+            {
+                "key": "output_msg",
+                "value": self._parsed_output_msg,
+                "type": "params"
+            }
+        ]
+        if self._output_type == 'input':
+            ret.append({
+                "key": "output_result",
+                "value": self._output_result,
+                "type": "key"
+            })
+        return ret
 
     def parse_output_msg(self):
         """ 填充msg中的变量，获取文件的share地址 """
@@ -107,7 +117,7 @@ class OutputNode(BaseNode):
                 node_id = one.split('.')[0]
                 # 引用qa知识库节点时，展示溯源情况
                 if node_id.startswith('qa_retriever'):
-                    self._source_documents = self.graph_state.get_variable(node_id, '$retrieval_result$')
+                    self._source_documents = self.graph_state.get_variable(node_id, 'retrieved_result')
                 var_map[one] = self.graph_state.get_variable_by_str(one)
             msg = msg_template.format(var_map)
         return msg

@@ -62,7 +62,10 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         for tool_call in last_message.additional_kwargs['tool_calls']:
             function = tool_call['function']
             function_name = function['name']
-            _tool_input = json.loads(function['arguments'] or '{}')
+            try:
+                _tool_input = json.loads(function['arguments'] or '{}')
+            except Exception as e:
+                raise Exception(f"Error parsing arguments for function: {function_name}. arguments: {function['arguments']}. error: {str(e)}")
             # We construct an ToolInvocation from the function_call
             actions.append(ToolInvocation(
                 tool=function_name,
@@ -89,7 +92,10 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         for tool_call in last_message.additional_kwargs['tool_calls']:
             function = tool_call['function']
             function_name = function['name']
-            _tool_input = json.loads(function['arguments'] or '{}')
+            try:
+                _tool_input = json.loads(function['arguments'] or '{}')
+            except Exception as e:
+                raise Exception(f"Error parsing arguments for function: {function_name}. arguments: {function['arguments']}. error: {str(e)}")
             # We construct an ToolInvocation from the function_call
             actions.append(ToolInvocation(
                 tool=function_name,
@@ -200,7 +206,11 @@ def get_qwen_local_functions_agent_executor(
         # only one function
         function = last_message.additional_kwargs['function_call']
         function_name = function['name']
-        _tool_input = json.loads(function['arguments'] or '{}')
+        try:
+            _tool_input = json.loads(function['arguments'] or '{}')
+        except Exception as e:
+            raise Exception(
+                f"Error parsing arguments for function: {function_name}. arguments: {function['arguments']}. error: {str(e)}")
         # We construct an ToolInvocation from the function_call
         actions.append(ToolInvocation(
             tool=function_name,

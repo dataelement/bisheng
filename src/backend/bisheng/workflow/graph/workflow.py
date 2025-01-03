@@ -73,3 +73,6 @@ class Workflow:
 
     def stop(self):
         self.graph_engine.stop()
+
+    def status(self):
+        return self.graph_engine.status

@@ -27,7 +27,7 @@ class LLMNode(BaseNode):
         self._user_variables = self._user_prompt.extract()
         self._user_prompt_list = []
 
-        self._batch_variable_list = []
+        self._batch_variable_list = {}
 
         # 初始化llm对象
         self._stream = True
@@ -38,7 +38,7 @@ class LLMNode(BaseNode):
     def _run(self, unique_id: str):
         self._system_prompt_list = []
         self._user_prompt_list = []
-        self._batch_variable_list = []
+        self._batch_variable_list = {}
         result = {}
         if self._tab == 'single':
             result['output'] = self._run_once(None, unique_id, 'output')
@@ -54,13 +54,14 @@ class LLMNode(BaseNode):
         return result
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        ret = {
-            'system_prompt': self._system_prompt_list,
-            'user_prompt': self._user_prompt_list,
-            'output': result
-        }
+        ret = [
+            {"key": "system_prompt", "value": self._system_prompt_list, "type": "params"},
+            {"key": "user_prompt", "value": self._user_prompt_list, "type": "params"},
+        ]
         if self._batch_variable_list:
-            ret['batch_variable'] = self._batch_variable_list
+            ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
+        for k, v in result.items():
+            ret.append({"key": k, "value": v, "type": "variable"})
         return ret
 
     def _run_once(self,
@@ -73,7 +74,7 @@ class LLMNode(BaseNode):
         for one in self._system_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
-                self._batch_variable_list.append(variable_map[one])
+                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         system = self._system_prompt.format(variable_map)
@@ -83,6 +84,7 @@ class LLMNode(BaseNode):
         for one in self._user_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)

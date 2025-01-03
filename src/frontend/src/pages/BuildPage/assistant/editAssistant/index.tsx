@@ -1,13 +1,16 @@
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { changeAssistantStatusApi, saveAssistanttApi } from "@/controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
+import { OnlineState } from "@/types/flow";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
-import { useNavigate } from "react-router-dom";
+import { unstable_useBlocker as useBlocker, useNavigate } from "react-router-dom";
 import Header from "./Header";
 import Prompt from "./Prompt";
 import Setting from "./Setting";
@@ -18,7 +21,7 @@ export default function editAssistant() {
     const { id: assisId } = useParams()
     const navigate = useNavigate()
     // assistant data
-    const { assistantState, changed, loadAssistantState, saveAfter, destroy } = useAssistantStore()
+    const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
 
     useEffect(() => {
@@ -62,23 +65,31 @@ export default function editAssistant() {
                 description: t('skills.saveSuccessful')
             })
         })
+        saveAfter()
     }
 
     // 上线助手
-    const handleOnline = async () => {
+    const handleOnline = async (online) => {
         if (!handleCheck()) return
-        await handleSave()
-        await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
-            if (res === false) return
-            message({
-                title: t('prompt'),
-                variant: 'success',
-                description: t('skills.onlineSuccessful')
+        if (online) {
+            await handleSave()
+            await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
+                if (res === false) return
+                message({
+                    title: t('prompt'),
+                    variant: 'success',
+                    description: t('skills.onlineSuccessful')
+                })
             })
-        })
-        setTimeout(() => {
-            navigate('/build')
-        }, 1200);
+            setTimeout(() => {
+                navigate('/build')
+            }, 1200);
+        } else {
+            captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 1)).then(res => {
+                if (res === false) return
+                changeStatus(1)
+            })
+        }
     }
 
     // 校验助手数据
@@ -119,6 +130,12 @@ export default function editAssistant() {
     }, [])
 
     const [showApiPage, setShowApiPage] = useState(false)
+    // 离开保存
+    const blocker = useBeforeUnload(changed)
+    const handleSaveAndClose = async () => {
+        await handleSave(true)
+        blocker.proceed?.()
+    }
 
     return <div className="bg-background-main">
         <Header onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
@@ -131,7 +148,7 @@ export default function editAssistant() {
                         <Setting></Setting>
                     </div>
                 </div>
-                <div className="w-[40%] h-full bg-[#fff] relative">
+                <div className="w-[40%] h-full bg-[#fff] dark:bg-background-main relative">
                     {openChat && <TestChat guideQuestion={guideQuestion} assisId={assisId} onClear={() => handleStartChat(false)}></TestChat>}
                     {/* 变更触发保存的蒙版按钮 */}
                     {changed && <div className="absolute w-full bottom-0 h-60" onClick={() => handleStartChat(true)}></div>}
@@ -141,5 +158,47 @@ export default function editAssistant() {
                 <ApiMainPage />
             </div>
         </div>
+        <Dialog open={blocker.state === "blocked"}>
+            <DialogContent className="sm:max-w-[425px]" close={false}>
+                <DialogHeader>
+                    <DialogTitle>{t('prompt')}</DialogTitle>
+                    <DialogDescription>{assistantState.status === OnlineState.OnLine ? '助手已上线,不可进行更改' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    {
+                        assistantState.status !== OnlineState.OnLine && <Button className="leave h-8" onClick={handleSaveAndClose}>
+                            离开并保存
+                        </Button>
+                    }
+                    <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
+                        不保存,直接退出
+                    </Button>
+                    <Button className="h-8" variant="outline" onClick={() => {
+                        blocker.reset?.()
+                    }}>
+                        {t('cancel')}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 };
+
+
+// 离开页面保存提示
+const useBeforeUnload = (changed) => {
+    const { t } = useTranslation()
+
+    // 离开提示保存
+    useEffect(() => {
+        const fun = (e) => {
+            var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
+            return confirmationMessage;
+        }
+        window.addEventListener('beforeunload', fun);
+        return () => { window.removeEventListener('beforeunload', fun) }
+    }, [])
+
+    return useBlocker(changed);
+}

@@ -3,7 +3,6 @@ import { Button } from "@/components/bs-ui/button";
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
-import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
@@ -38,7 +37,7 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
             </div>
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
-                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{data.message}</div>
+                    <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{typeof data.message === 'string' ? data.message : data.message[data.chatKey]}</div>
                     <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/user.png'} alt="" /></div>
                 </div>
             </div>
@@ -56,9 +55,9 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                 </div> : (!Array.isArray(data.message) && <div className="flex justify-between mt-2">
                     <span></span>
                     <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
-                        {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
+                        {/* {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
                         {!running && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
-                        {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
+                        {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />} */}
                     </div>
                 </div>)
             }

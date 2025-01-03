@@ -3,8 +3,9 @@ import { useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { generateUUID } from "../../utils";
 import ChatPanne from "./components/ChatPanne";
+import { AppNumType } from "@/types/app";
 
-export default function chatShare() {
+export default function chatShare({ type = AppNumType.SKILL }) {
     const { id: flowId } = useParams()
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
@@ -12,6 +13,8 @@ export default function chatShare() {
     const tweak = searchParams.get('tweak')
 
     const wsUrl = useMemo(() => {
+        if (type === AppNumType.FLOW) return `/api/v2/workflow/chat/${flowId}?`
+
         const params = [];
 
         if (libId) params.push(`knowledge_id=${libId}`);
@@ -20,9 +23,9 @@ export default function chatShare() {
         const paramStr = params.length > 0 ? `${params.join('&')}` : '';
 
         return `/api/v2/chat/ws/${flowId}?type=L1&${paramStr}`
-    }, [libId, tweak])
+    }, [libId, tweak, type])
 
-    const [data] = useState<any>({ id: flowId, chatId: generateUUID(32), type: 'flow' })
+    const [data] = useState<any>({ id: flowId, chatId: generateUUID(32), type })
 
     if (!flowId) return <div>请选择会话</div>
 

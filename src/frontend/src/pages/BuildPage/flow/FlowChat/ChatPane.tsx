@@ -55,6 +55,8 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '' }: 
 
         return {
             action,
+            chat_id: chatId.startsWith('test') ? undefined : chatId,
+            flow_id: flow.id,
             data: flow
         }
     }

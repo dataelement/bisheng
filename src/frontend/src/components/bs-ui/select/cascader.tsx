@@ -72,7 +72,7 @@ const Col = (props: {
     onClick: (o: Option, isLeaf: boolean) => void
 }) => {
     const { options, ...opros } = props
-    return <div className="w-36 border-l first:border-none">
+    return <div className="w-36 border-l first:border-none max-h-80 overflow-y-auto">
         {
             options.map(option => <Item {...opros} option={option} key={option.value} />)
         }

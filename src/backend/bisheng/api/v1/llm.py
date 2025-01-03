@@ -132,6 +132,27 @@ def update_evaluation_llm(
     return resp_200(data=ret)
 
 
+@router.get('/workflow', response_model=UnifiedResponseModel[EvaluationLLMConfig])
+def get_workflow_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[EvaluationLLMConfig]:
+    """ 获取评价相关的模型配置 """
+    ret = LLMService.get_workflow_llm()
+    return resp_200(data=ret)
+
+
+@router.post('/workflow', response_model=UnifiedResponseModel[EvaluationLLMConfig])
+def update_workflow_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        data: EvaluationLLMConfig = Body(..., description="工作流默认模型配置"),
+) -> UnifiedResponseModel[EvaluationLLMConfig]:
+    """ 更新评价相关的模型配置 """
+    ret = LLMService.update_workflow_llm(request, login_user, data)
+    return resp_200(data=ret)
+
+
 @router.get('/assistant/llm_list', response_model=UnifiedResponseModel[List[LLMServerInfo]])
 async def get_assistant_llm_list(
         request: Request,

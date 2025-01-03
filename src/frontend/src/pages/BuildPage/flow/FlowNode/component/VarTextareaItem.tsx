@@ -7,14 +7,14 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
 
     useEffect(() => {
         data.required && onValidate(() => {
-            if (!data.value) {
+            if (!data.value.trim()) {
                 setError(true)
                 return data.label + '不可为空'
             }
             setError(false)
             return false
         })
-        return () => onValidate(() => {})
+        return () => onValidate(() => { })
     }, [data.value])
 
     return (

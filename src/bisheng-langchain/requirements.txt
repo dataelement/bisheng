@@ -14,4 +14,4 @@ langgraph==0.2.*
 openai==1.51.*
 langchain_openai>=0.1.25
 llama-index==0.9.48
-bisheng-ragas==1.0.0
+bisheng-ragas==1.*

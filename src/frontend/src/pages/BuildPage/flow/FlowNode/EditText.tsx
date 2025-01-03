@@ -22,7 +22,7 @@ export default function EditText({ type = 'input', reDefaultValue = false, child
             })
         }
         setEdit(false)
-        if (reDefaultValue && !value) {
+        if (reDefaultValue && !value.trim()) {
             // Restore default if empty
             setValue(defaultValue)
             return onChange(defaultValue)

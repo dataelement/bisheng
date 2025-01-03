@@ -30,6 +30,7 @@
     "skills": "Build",
     "knowledge": "Knowledge",
     "evaluation": "Evaluation",
+    "annotation": "Annotation",
     "models": "Models",
     "system": "System",
     "log": "Logs",
@@ -413,13 +414,16 @@
   "build": {
     "create": "Create",
     "assistant": "Assistant",
+    "workflow": "Workflow",
     "skill": "Skill",
     "tools": "Tools",
     "save": "Save",
     "online": "Online",
+    "offline": "Offline",
     "retry": "Retry",
     "use": "Use",
     "useAll": "Use All",
+    "allAppTypes": "All Application Types",
     "assistantConfiguration": "Assistant Configuration",
     "createAssistant": "Create a New Assistant",
     "assistantPortrait": "Assistant Portrait",
@@ -428,6 +432,7 @@
     "createDescription": "Create your assistant by describing roles and tasks",
     "nextDescription": "Assistant can call multiple skills and tools",
     "searchAssistant": "Search for the assistant you need",
+    "searchApp": "Search for the app you need",
     "manageAssistant": "Manage your assistant on this page, including online and offline activities, editing, and more",
     "establishAssistant": "Create Assistant",
     "assistantName": "Assistant Name",
@@ -541,7 +546,11 @@
     "confirmDeleteAssistant": "Confirm delete assistant?",
     "maxToken": "Max Token",
     "maxTokenTip": "The maximum number of tokens to generate in the completion. The token length of the input text is automatically calculated and cannot exceed the model's context length. Increasing the value will increase the cost",
-    "app": "app"
+    "app": "app",
+    "manageAppTemplates": "Manage Application Templates",
+    "provideSceneTemplates": "We provide scene templates for you to use and reference",
+    "noPermissionToPublish": "You do not have permission to publish this {{type}}, please contact the administrator to publish.",
+    "manageYourApplications": "Manage your applications on this page, including publishing, editing, etc."
   },
   "tools": {
     "addTool": "Add Tool",
@@ -849,7 +858,9 @@
     "10606": "User group and role cannot be empty",
     "10610": "User group still contains users, cannot delete",
     "10920": "QA Knowledge Base similarity question model not configured",
-    "10930": "This issue has been annotated"
+    "10930": "This issue has been annotated",
+    "10527": "Workflow waits for user input timeout",
+    "10528": "{{type}}node execution exceeds maximum number of times"
   },
   "all": "All",
   "confirmButton": "Confirm",

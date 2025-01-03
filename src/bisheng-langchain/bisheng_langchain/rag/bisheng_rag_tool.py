@@ -142,6 +142,7 @@ class BishengRAGTool:
                 prompt = import_class(f'bisheng_langchain.rag.prompts.{prompt_type}')
             else:
                 prompt = None
+        self.prompt_inputs = prompt.input_variables
         self.qa_chain = create_stuff_documents_chain(llm=self.llm, prompt=prompt)
 
     def _post_init_retriever(self, retriever_type, **kwargs):
@@ -238,12 +239,12 @@ class BishengRAGTool:
             kwargs = {}
             if run_manager:
                 kwargs['config'] = RunnableConfig(callbacks=[run_manager])
-            ans = self.qa_chain.invoke(
-                {
-                    'context': docs,
-                    'question': query
-                }, **kwargs
-            )
+            tmp_input = {
+                'context': docs,
+            }
+            if 'question' in self.prompt_inputs:
+                tmp_input['question'] = query
+            ans = self.qa_chain.invoke(tmp_input, **kwargs)
         except Exception as e:
             logger.exception(f'question: {query}\nerror: {e}')
             ans = str(e)

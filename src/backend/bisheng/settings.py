@@ -115,6 +115,7 @@ class Settings(BaseModel):
     environment: Union[dict, str] = 'dev'
     database_url: Optional[str] = None
     redis_url: Optional[Union[str, Dict]] = None
+    celery_redis_url: Optional[Union[str, Dict]] = None
     redis: Optional[dict] = None
     admin: dict = {}
     cache: str = 'InMemoryCache'
@@ -171,6 +172,25 @@ class Settings(BaseModel):
                     new_password = decrypt_token(password)
                     new_redis_url = re.sub(pattern, f'{new_password}', values['redis_url'])
                     values['redis_url'] = new_redis_url
+        return values
+
+    @root_validator()
+    def set_celery_redis_url(cls, values):
+        if 'celery_redis_url' in values:
+            if isinstance(values['celery_redis_url'], dict):
+                for k, v in values['celery_redis_url'].items():
+                    if isinstance(v, str) and v.startswith('encrypt(') and v.endswith(')'):
+                        v = v[8:-1]
+                        values['celery_redis_url'][k] = decrypt_token(v)
+            else:
+                import re
+                pattern = r'(?<=:)[^:]+(?=@)'  # 匹配冒号后面到@符号前面的任意字符
+                match = re.search(pattern, values['celery_redis_url'])
+                if match:
+                    password = match.group(0)
+                    new_password = decrypt_token(password)
+                    new_redis_url = re.sub(pattern, f'{new_password}', values['celery_redis_url'])
+                    values['celery_redis_url'] = new_redis_url
         return values
 
     @root_validator()

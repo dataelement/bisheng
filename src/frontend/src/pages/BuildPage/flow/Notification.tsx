@@ -2,13 +2,15 @@ import { ToastIcon } from "@/components/bs-icons";
 import { Alert, AlertDescription, AlertTitle } from "@/components/bs-ui/alert";
 import { Button } from "@/components/bs-ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { darkContext } from "@/contexts/darkContext";
 import { Bell, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "./flowStore";
 
 export default function Notification() {
     const { t } = useTranslation();
+    const { dark } = useContext(darkContext);
     const [open, setOpen] = useState(false);
 
     const notifications = useFlowStore((state) => state.notifications);
@@ -17,7 +19,7 @@ export default function Notification() {
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button size="icon" variant="outline" className="bg-[#fff] h-8">
+                <Button size="icon" variant="outline" className={`${!dark && 'bg-[#fff]'} size-8`}>
                     <Bell size={16} />
                 </Button>
             </PopoverTrigger>

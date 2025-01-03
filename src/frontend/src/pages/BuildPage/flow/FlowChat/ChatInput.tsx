@@ -8,7 +8,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
-import { CirclePause, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
@@ -67,7 +67,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         // setFormShow(false)
         createWebSocket().then(() => {
             // 切换会话默认发送一条空消息(action, input)
-            const wsMsg = onBeforSend('init_data', {})
+            const wsMsg = onBeforSend((messages.length === 0 && hisMessages.length === 0) || chatId.startsWith('test') ? 'init_data' : 'check_status', {})
             sendWsMsg(wsMsg)
         })
     }, [chatId])
@@ -186,15 +186,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     if (data.category === 'node_run') {
                         inputNodeIdRef.current = data.message.node_id
                     }
-                    handleWsMessage(data)
-                    data.type === 'begin' && onLoad()
-                    // // 群聊@自己时，开启input
-                    // if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
-                    //     setInputLock({ locked: false, reason: '' })
-                    //     setStop({ show: false, disable: false })
-                    //     setAutogenStop(true)
-                    //     continueRef.current = true
-                    // }
+                    handleWsMessage(data);
+                    ['begin', 'close'].includes(data.type) && onLoad()
                     // if ('close' === data.type) {
                     //     setAutogenStop(false)
                     // }
@@ -205,19 +198,18 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })
 
-                    // if ([1005, 1008, 1009].includes(event.code)) {
-                    //     console.warn('即将废弃 :>> ');
-                    //     setInputLock({ locked: true, reason: event.reason })
-                    // } else {
-                    //     if (event.reason) {
-                    //         toast({
-                    //             title: t('prompt'),
-                    //             variant: 'error',
-                    //             description: event.reason
-                    //         });
-                    //     }
-                    //     setInputLock({ locked: false, reason: '' })
-                    // }
+                    if ([1005, 1008, 1009].includes(event.code)) {
+                        setInputLock({ locked: true, reason: event.reason })
+                    } else {
+                        if (event.reason) {
+                            toast({
+                                title: t('prompt'),
+                                variant: 'error',
+                                description: event.reason
+                            });
+                        }
+                        setInputLock({ locked: false, reason: '' })
+                    }
                 };
                 ws.onerror = (ev) => {
                     wsRef.current = null
@@ -242,22 +234,22 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
     // 接受 ws 消息
     const handleWsMessage = (data) => {
-        if (data.category === 'error') return toast({
-            variant: 'error',
-            description: data.message
-        });
+        if (data.category === 'error') {
+            const { code, message } = data.message
+            return toast({
+                variant: 'error',
+                description: code == 500 ? message : t(`errors.${code}`, { type: message })
+            });
+        }
         if (data.category === 'node_run') {
             insetNodeRun(data)
             return sendNodeLogEvent(data)
         }
         if (data.category === 'user_input') {
-            inputNodeIdRef.current = data.message.node_id
+            const { node_id, input_schema } = data.message
+            inputNodeIdRef.current = node_id
             // 待用户输入
-            const form = onBeforSend('getInputForm', {
-                nodeId: data.message.node_id,
-                msg: ''
-            })
-            form ? setInputForm(form) : setInputLock({ locked: false, reason: '' })
+            input_schema.tab === 'form' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.filter(q => q))
@@ -313,7 +305,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         const isError = !!data.message.reason
         const event = new CustomEvent('nodeLogEvent', {
             detail: {
-                nodeId: node_id, action: isError ? '' : data.type === 'start' ? 'loading' : 'success', data: isError ? { 'error': data.message.reason } : data.message.log_data
+                nodeId: node_id,
+                action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
+                data: isError ? { 'error': data.message.reason } : data.message.log_data
             }
         })
         window.dispatchEvent(event)
@@ -388,7 +382,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
-        <div className={`relative ${clear && 'pl-9'}`}>
+        <div className={`relative pr-4 ${clear && 'pl-9'}`}>
             {/* form */}
             {
                 inputForm && <div className="relative">
@@ -417,7 +411,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 }
             </div>
             {/* send */}
-            <div className="flex gap-2 absolute right-3 top-4 z-10">
+            <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
                     id="bs-send-btn"
                     className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"

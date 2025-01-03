@@ -1,28 +1,17 @@
 import GenericNode from "@/CustomNodes/GenericNode";
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import Chat from "@/components/chatComponent";
 import { alertContext } from "@/contexts/alertContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { typesContext } from "@/contexts/typesContext";
 import { undoRedoContext } from "@/contexts/undoRedoContext";
-import { updateVersion } from "@/controllers/API/flow";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { APIClassType } from "@/types/api";
 import { FlowType, NodeType } from "@/types/flow";
 import { generateFlow, generateNodeFromFlow, reconnectEdges, validateSelection } from "@/util/reactflowUtils";
 import { intersectArrays } from "@/util/utils";
 import { isValidConnection } from "@/utils";
-import cloneDeep from "lodash-es/cloneDeep";
-import isEqual from "lodash-es/isEqual";
-import { Layers } from "lucide-react";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { unstable_useBlocker as useBlocker } from "react-router-dom";
 import {
-  ReactFlow,
   Background,
   BackgroundVariant,
   Connection,
@@ -32,6 +21,7 @@ import {
   NodeChange,
   OnEdgesDelete,
   OnSelectionChangeParams,
+  ReactFlow,
   SelectionDragHandler,
   addEdge,
   reconnectEdge,
@@ -39,6 +29,10 @@ import {
   useNodesState,
   useReactFlow,
 } from "@xyflow/react";
+import cloneDeep from "lodash-es/cloneDeep";
+import { Layers } from "lucide-react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import ConnectionLineComponent from "../ConnectionLineComponent";
 import Header from "../Header";
 import SelectionMenu from "../SelectionMenuComponent";
@@ -306,15 +300,6 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   }, []);
 
   const { t } = useTranslation()
-  const blocker = useBeforeUnload(flow, preFlow)
-
-  // 离开并保存
-  const handleSaveAndClose = async () => {
-    setFlow('leave and save', { ...flow })
-
-    await captureAndAlertRequestErrorHoc(updateVersion(version.id, { name: version.name, description: '', data: flow.data }))
-    blocker.proceed?.()
-  }
 
   // 修改组件id
   useEffect(() => {
@@ -341,7 +326,7 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
   const [showApiPage, setShowApiPage] = useState(false)
   return (
     <div id="flow-page" className="flex flex-col h-full overflow-hidden">
-      <Header flow={flow} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
+      <Header flow={flow} preFlow={preFlow} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
       <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? 'hidden' : ''}`}>
         {Object.keys(data).length ? <ExtraSidebar flow={flow} /> : <></>}
         {/* Main area */}
@@ -459,24 +444,6 @@ export default function Page({ flow, preFlow }: { flow: FlowType, preFlow: strin
       <div className={`flex flex-1 min-h-0 overflow-hidden ${showApiPage ? '' : 'hidden'}`}>
         <ApiMainPage type={'skill'} />
       </div>
-      {/* 删除确认 */}
-      <Dialog open={blocker.state === "blocked"}>
-        <DialogContent className="sm:max-w-[425px]" close={false}>
-          <DialogHeader>
-            <DialogTitle>{t('prompt')}</DialogTitle>
-            <DialogDescription>{t('flow.unsavedChangesConfirmation')}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button className="h-8" variant="outline" onClick={() => {
-              const dom = document.getElementById("flow-page") as HTMLElement;
-              blocker.reset?.()
-              if (dom) dom.className = dom.className.replace('report-hidden', '');
-            }}>{t('cancel')}</Button>
-            <Button className="leave h-8" variant="destructive" onClick={() => blocker.proceed?.()}>{t('flow.leave')}</Button>
-            <Button className="h-8" onClick={handleSaveAndClose}>{t('flow.leaveAndSave')}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -548,30 +515,3 @@ const useKeyBoard = (reactFlowWrapper) => {
   return { lastSelection, keyBoardPanneRef, setLastSelection }
 }
 
-// 离开页面保存提示
-const useBeforeUnload = (flow, preFlow) => {
-  const { t } = useTranslation()
-
-  // 离开提示保存
-  useEffect(() => {
-    const fun = (e) => {
-      var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
-      (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
-      return confirmationMessage;
-    }
-    window.addEventListener('beforeunload', fun);
-    return () => { window.removeEventListener('beforeunload', fun) }
-  }, [])
-
-  const hasChange = useMemo(() => {
-    if (!flow.data) return false
-    const oldFlowData = JSON.parse(preFlow)
-    if (!oldFlowData) return true
-    // 比较新旧
-    const { edges, nodes } = flow.data
-    const { edges: oldEdges, nodes: oldNodes } = oldFlowData
-    return !(isEqual(edges, oldEdges) && isEqual(nodes, oldNodes))
-  }, [preFlow, flow.data])
-
-  return useBlocker(hasChange);
-}

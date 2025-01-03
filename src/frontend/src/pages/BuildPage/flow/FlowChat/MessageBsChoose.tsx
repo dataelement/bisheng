@@ -165,7 +165,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                 : <div>
                                     {data.message.options.map(opt => <div
                                         key={opt.id}
-                                        className="min-w-56 bg-[#fff] rounded-xl p-4 mt-2 hover:bg-gray-200 cursor-pointer flex justify-between"
+                                        className="min-w-56 bg-[#fff] dark:bg-background rounded-xl p-4 mt-2 hover:bg-gray-200 cursor-pointer flex justify-between"
                                         onClick={() => handleSelect(opt)}
                                     >
                                         {opt.label}

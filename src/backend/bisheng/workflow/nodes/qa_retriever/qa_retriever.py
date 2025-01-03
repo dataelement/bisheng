@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from bisheng.database.models.user import UserDao
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -29,6 +30,7 @@ class QARetrieverNode(BaseNode):
         params['search_type'] = 'similarity_score_threshold'
         params['collection_name'] = self._qa_knowledge_id  # [{"key":"", "label":""}]
         params['user_name'] = UserDao.get_user(self.user_id).user_name
+        params['_is_check_auth'] = False
         knowledge_retriever = instantiate_vectorstore(
             node_type='MilvusWithPermissionCheck',
             class_object=MilvusWithPermissionCheck,
@@ -43,19 +45,26 @@ class QARetrieverNode(BaseNode):
         result = self._retriever.invoke({'query': question})
         # qa 结果是document
         if result['result']:
+            # 存检索结果的源文档，key左右加上$作为来源文档key去查询
+            self.graph_state.set_variable(self.id, '$retrieved_result$', result['result'][0])
             result_str = json.loads(result['result'][0].metadata['extra'])['answer']
         else:
             result_str = ''
 
-        # 存检索结果的源文档，key左右加上$作为来源文档key去查询
-        self.graph_state.set_variable(self.id, '$retrieval_result$', result['result'])
-
         return {
-            'retrieval_result': result_str
+            'retrieved_result': result_str
         }
 
-    def parse_log(self, unique_id: str, result: dict) -> dict:
-        return {
-            'user_question': self.graph_state.get_variable_by_str(self._user_question),
-            'retrieval_result': result['retrieval_result']
-        }
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return [
+            {
+                "key": "user_question",
+                "value": self.graph_state.get_variable_by_str(self._user_question),
+                "type": "params"
+            },
+            {
+                "key": "retrieved_result",
+                "value": result['retrieved_result'],
+                "type": "params"
+            }
+        ]

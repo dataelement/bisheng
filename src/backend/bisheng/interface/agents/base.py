@@ -21,6 +21,7 @@ class AgentCreator(LangChainTypeCreator):
         'SQLAgent': 'from_toolkit_and_llm',
         'ChatglmFunctionsAgent': 'from_llm_and_tools',
         'LLMFunctionsAgent': 'from_llm_and_tools',
+        'OpenAIToolsAgent': 'from_llm_and_tools',
     }
 
     @property

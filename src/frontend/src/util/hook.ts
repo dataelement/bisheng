@@ -3,6 +3,7 @@ import { copyText } from "../utils";
 import { alertContext } from "../contexts/alertContext";
 import { useTranslation } from "react-i18next";
 import cloneDeep from "lodash-es/cloneDeep";
+import { useReactFlow } from "@xyflow/react";
 
 // 防抖
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
@@ -197,27 +198,29 @@ export function useCopyPaste(dom, lastSelection, paste, deps) {
 }
 
 // undo redo
-export function useUndoRedo<T>(data, undoCall, redoCall, maxHistorySize = 100) {
+export function useUndoRedo<T>(maxHistorySize = 100) {
     const [past, setPast] = useState<T[]>([]); // 过去的历史记录（past）
     const [future, setFuture] = useState<T[]>([]); // 和未来的历史记录（future)
+    const { setNodes, setEdges, getNodes, getEdges } = useReactFlow();
+
     /**
      * 快照功能
      * 将上一次的状态保存到 past 中，并清空 future
      * if max = 2: [1,x,x] -> [x, x]
      * [x,x,new]
      */
-    const takeSnapshot = useCallback((data: T) => {
+    const takeSnapshot = useCallback(() => {
         setPast((old) => {
-            // let newPast = cloneDeep(old);
             const newPast = old.slice(
                 old.length - maxHistorySize + 1,
                 old.length
             );
-            newPast.push(data);
+            newPast.push({ nodes: cloneDeep(getNodes()), edges: cloneDeep(getEdges()) });
             return newPast;
         });
         setFuture([]);
-    }, [setPast, setFuture]);
+    }, [setPast, setFuture, getNodes, getEdges]);
+
     /**
      * 撤销
      * 将状态恢复到 past 中的上一个状态，并将当前状态保存到 future 中
@@ -237,12 +240,13 @@ export function useUndoRedo<T>(data, undoCall, redoCall, maxHistorySize = 100) {
             setFuture((old) => {
                 // let newFuture = cloneDeep(old);
                 let newFuture = old;
-                newFuture.push(data);
+                newFuture.push({ nodes: cloneDeep(getNodes()), edges: cloneDeep(getEdges()) });
                 return newFuture;
             });
-            undoCall(pastState)
+            setNodes(pastState.nodes);
+            setEdges(pastState.edges);
         }
-    }, [data, past, setFuture, setPast, undoCall]);
+    }, [past, setFuture, setPast]);
     /**
      * 重做
      * 将状态恢复到 future 中的下一个状态，并将当前状态保存到 past 中
@@ -262,12 +266,13 @@ export function useUndoRedo<T>(data, undoCall, redoCall, maxHistorySize = 100) {
             setPast((old) => {
                 // let newPast = cloneDeep(old);
                 let newPast = old
-                newPast.push(data);
+                newPast.push({ nodes: cloneDeep(getNodes()), edges: cloneDeep(getEdges()) });;
                 return newPast;
             });
-            redoCall(futureState)
+            setNodes(futureState.nodes);
+            setEdges(futureState.edges);
         }
-    }, [data, future, setFuture, setPast, redoCall]);
+    }, [future, setFuture, setPast]);
 
     // 快捷键
     useEffect(() => {

@@ -1,16 +1,6 @@
 import json
-import os
 from typing import Optional
 from uuid import UUID
-
-from sqlmodel import select
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError
-from bisheng.api.services.workflow import WorkFlowService
-from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate
-from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.role_access import AccessType
 from uuid import uuid4
 
 from bisheng_langchain.utils.requests import Requests
@@ -18,25 +8,24 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, W
 from fastapi import status as http_status
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
+from sqlmodel import select
 
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.flow import FlowOnlineEditError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, UnifiedResponseModel, resp_200
 from bisheng.chat.types import WorkType
+from bisheng.database.base import session_getter
+from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate, \
+    FlowStatus
+from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.role_access import AccessType
 from bisheng.utils.minio_client import MinioClient
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
-
-
-@router.get('/template', response_model=UnifiedResponseModel, status_code=200)
-def get_template():
-    """ 获取节点模板的接口 """
-    # todo: 改为template class 管理
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    with open(f"{current_path}/workflow_template.json", 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    return resp_200(data=data)
 
 
 @router.get("/report/file", response_model=UnifiedResponseModel, status_code=200)
@@ -120,6 +109,8 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
             raise HTTPException(status_code=500, detail='工作流名重复')
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
+    db_flow.create_time = None
+    db_flow.update_time = None
     db_flow.flow_type = FlowType.WORKFLOW.value
     # 创建新的技能
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
@@ -220,8 +211,7 @@ async def update_flow(*,
                       login_user: UserPayload = Depends(get_login_user)):
     """online offline"""
     flow_id = flow_id.hex
-    with session_getter() as session:
-        db_flow = session.get(Flow, flow_id)
+    db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
 
@@ -232,24 +222,25 @@ async def update_flow(*,
 
     # TODO:  验证工作流是否可以使用
 
-    if db_flow.status == 2 and ('status' not in flow_data or flow_data['status'] != 1):
+    if db_flow.status == FlowStatus.ONLINE.value and ('status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):
         raise FlowOnlineEditError.http_exception()
 
-    # if settings.remove_api_keys:
-    #     flow_data = remove_api_keys(flow_data)
     for key, value in flow_data.items():
+        if key in ['data', 'create_time', 'update_time']:
+            continue
         setattr(db_flow, key, value)
-    with session_getter() as session:
-        session.add(db_flow)
-        session.commit()
-        session.refresh(db_flow)
-    # try:
-    #     if not get_L2_param_from_flow(db_flow.data, db_flow.id):
-    #         logger.error(f'flow_id={db_flow.id} extract file_node fail')
-    # except Exception:
-    #     pass
+    db_flow = FlowDao.update_flow(db_flow)
     FlowService.update_flow_hook(request, login_user, db_flow)
     return resp_200(db_flow)
+
+
+@router.patch('/status', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+async def update_flow_status(request: Request, login_user: UserPayload = Depends(get_login_user),
+                             flow_id: UUID = Body(..., description='技能ID'),
+                             version_id: int = Body(..., description='版本ID'),
+                             status: int = Body(..., description='状态')):
+    WorkFlowService.update_flow_status(login_user, flow_id.hex, version_id, status)
+    return resp_200()
 
 
 @router.get('/list', status_code=200)
@@ -262,8 +253,8 @@ def read_flows(*,
                page_num: int = Query(default=1, description='页数'),
                status: int = None):
     """Read all flows."""
-    try:
-        return WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size)
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size)
+    return resp_200(data={
+        'data': data,
+        'total': total
+    })

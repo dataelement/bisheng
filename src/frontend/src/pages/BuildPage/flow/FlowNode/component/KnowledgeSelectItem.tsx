@@ -32,7 +32,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
         return { label: el.label, value: el.key }
     }))
 
-    const { t } = useTranslation()
+    const { t } = useTranslation('flow')
     const [options, setOptions] = useState<any>([]);
     const [fileOptions, setFileOptions] = useState<any>([])
     const originOptionsRef = useRef([])
@@ -56,7 +56,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
                     if (param.key === 'form_input') {
                         param.value.forEach(val => {
                             val.type === 'file' && files.push({
-                                label: val.value,
+                                label: val.key,
                                 value: `${node.id}.${val.key}`
                             })
                         })

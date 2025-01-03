@@ -5,11 +5,12 @@ import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const TabsHead = memo(({ onChange }) => {
+    const { t } = useTranslation()
 
     return <Tabs defaultValue="file" className="mb-2" onValueChange={onChange}>
         <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
-            <TabsTrigger value="file" className="text-xs">文档知识库</TabsTrigger>
-            <TabsTrigger value="qa" className="text-xs">QA知识库</TabsTrigger>
+            <TabsTrigger value="file" className="text-xs">{t('lib.fileData')}</TabsTrigger>
+            <TabsTrigger value="qa" className="text-xs">{t('lib.qaData')}</TabsTrigger>
         </TabsList>
     </Tabs>
 })

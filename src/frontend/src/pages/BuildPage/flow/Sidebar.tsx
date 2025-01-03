@@ -10,8 +10,10 @@ import { ListVideo } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
+import { useTranslation } from "react-i18next";
 
-export default function Sidebar({ dropdown = false, onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
+export default function Sidebar({ dropdown = false, disabledNodes = [], onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
+    const { t } = useTranslation('flow')
     const { data: tempData, refetch } = useQuery({
         queryKey: "QueryWorkFlowTempKey",
         queryFn: () => getWorkflowNodeTemplate(),
@@ -30,16 +32,19 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
     const nodeTemps = useMemo(() => {
         if (!tempData) return []
         return tempData.reduce((list, temp) => {
+            if (disabledNodes.includes(temp.type)) return list
             const newNode = getNodeDataByTemp(temp)
             temp.type === 'start' ? onInitStartNode(cloneDeep(temp)) : list.push(newNode)
             return list
         }, [])
-    }, [tempData])
+    }, [tempData, disabledNodes])
+
 
     // tool
     const { data: toolTempData } = useQuery({
         queryKey: "QueryToolsKey",
-        queryFn: () => getAssistantToolsApi('all')
+        queryFn: () => getAssistantToolsApi('all'),
+        cacheTime: 0
     });
 
     const toolTemps = useMemo(() => {
@@ -76,10 +81,10 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
             <Tabs defaultValue="base" className="h-full">
                 <div className="flex gap-1">
                     <TabsList className="grid flex-1 grid-cols-2">
-                        <TabsTrigger value="base">基础节点</TabsTrigger>
-                        <TabsTrigger value="tool">工具节点</TabsTrigger>
+                        <TabsTrigger value="base">{t('basicNodes')}</TabsTrigger>
+                        <TabsTrigger value="tool">{t('toolNodes')}</TabsTrigger>
                     </TabsList>
-                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
+                    {!dropdown && <Button size="icon" variant="secondary" className={`${expand ? ' right-[-30px]' : 'right-[-46px]'} absolute bg-[#fff] dark:bg-gray-950 top-2 rounded-full size-8`} onClick={() => setExpand(!expand)}>
                         <ListVideo className={`size-4 ${expand ? 'rotate-180' : ''}`} />
                     </Button>}
                 </div>
@@ -91,7 +96,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                 <Tooltip key={item.type}>
                                     <TooltipTrigger className="block w-full">
                                         <div key={item.type}
-                                            className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200`}
+                                            className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200 dark:hover:border-gray-800`}
                                             onMouseEnter={(event) => {
                                                 // 如果正在拖拽，不移除hover样式
                                                 if (!event.currentTarget.classList.contains('border-gray-200')) {
@@ -112,7 +117,7 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                                     )[0]
                                                 );
                                             }}
-                                            onClick={() => dropdown && onClick(item.type)}
+                                            onClick={() => dropdown && onClick({ type: item.type, node: tempData.find(tmp => tmp.type === item.type) })}
                                         >
                                             {item.icon}
                                             <span className="text-sm">{item.name}</span>
@@ -159,7 +164,15 @@ export default function Sidebar({ dropdown = false, onInitStartNode = (node: any
                                                                     )[0]
                                                                 );
                                                             }}
-                                                        // onClick={() => dropdown && onClick(el.type)}
+                                                            onClick={() => {
+                                                                if (!dropdown) return
+                                                                let node = null
+                                                                toolTemps.some((temp) => {
+                                                                    node = temp.children.find(node => node.tool_key === el.tool_key)
+                                                                    return node
+                                                                })
+                                                                onClick({ type: el.type, node })
+                                                            }}
                                                         >
                                                             <NodeLogo type="tool" colorStr={el.name} />
                                                             <span className="text-sm truncate">{el.name}</span>

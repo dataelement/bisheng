@@ -93,3 +93,8 @@ export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom'): 
 export const updateAssistantToolApi = async (tool_id, extra) => {
     return await axios.post(`/api/v1/assistant/tool/config`, { tool_id, extra })
 }
+
+// 获取自动优化任务taskid
+export const getAssistantOptimizeTaskApi = async (assistant_id, prompt) => {
+    return await axios.post(`/api/v1/assistant/auto/task`, { assistant_id, prompt })
+}

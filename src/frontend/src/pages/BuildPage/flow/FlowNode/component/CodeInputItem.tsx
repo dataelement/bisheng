@@ -3,9 +3,12 @@ import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from 'react-i18next';
 import SelectVar from "./SelectVar";
 
-const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem }) => {
+    const { t } = useTranslation('flow');
+
     const handleTypeChange = (newType) => {
         onUpdateItem(index, { ...item, type: newType, label: '', value: '' });
     };
@@ -22,7 +25,7 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
 
     useEffect(() => {
         if (!validate) return setError(false);
-        if (item.key === '' || !/^[a-zA-Z0-9_]{1,50}$/.test(item.key)) {
+        if (item.key === '' || !/^[a-zA-Z_][a-zA-Z0-9_]{1,50}$/.test(item.key)) {
             setError(true);
         } else {
             setError(false);
@@ -32,17 +35,17 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
     return (
         <div className="flex gap-1 items-center mb-1">
             {/* key */}
-            <Input value={item.key} onChange={handleKeyChange} className={`${error && 'border-red-500'} h-8`} />
+            <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} className={`${(error || sameKey === item.key) && 'border-red-500'} h-8`} />
             {/* type */}
 
             <Select value={item.type} onValueChange={handleTypeChange}>
                 <SelectTrigger className="max-w-32 w-24 h-8">
-                    <SelectValue placeholder="类型" />
+                    <SelectValue placeholder={t('type')} />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="ref">引用</SelectItem>
-                        <SelectItem value="input">输入</SelectItem>
+                        <SelectItem value="ref">{t('reference')}</SelectItem>
+                        <SelectItem value="input">{t('input')}</SelectItem>
                     </SelectGroup>
                 </SelectContent>
             </Select>
@@ -51,12 +54,12 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
                 onUpdateItem(index, { ...item, label: v.label, value: `${E.id}.${v.value}` })
             }}>
                 <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
-                    <span className="flex items-center">
+                    {item.label ? <span className="flex items-center">
                         {item.label}
-                    </span>
+                    </span> : <span className="bisheng-label">{t('value')}</span>}
                     <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                 </div>
-            </SelectVar> : <Input value={item.value} onChange={handleValueChange} className="h-8" />}
+            </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className="h-8" />}
             <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
     );
@@ -64,6 +67,7 @@ const Item = ({ nodeId, validate, item, index, onUpdateItem, onDeleteItem }) => 
 
 
 export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
+    const { t } = useTranslation('flow');
     const [items, setItems] = useState(data.value);
 
     const handleAddItem = () => {
@@ -86,6 +90,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
     };
 
     const [error, setError] = useState(false)
+    const [sameKey, setSameKey] = useState('')
     useEffect(() => {
         data.required && onValidate(() => {
             setError(false)
@@ -94,16 +99,24 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
             }, 100);
 
             let msg = ''
+            const map = {}
             items.some(item => {
                 if (item.key === '') {
-                    msg = '变量名称不能为空'
+                    msg = t('variableNameCannotBeEmpty')
                     return true
-                } else if (!/^[a-zA-Z0-9_]*$/.test(item.key)) {
-                    msg = '变量名称只能包含英文字符、数字和下划线'
+                } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(item.key)) {
+                    msg = t('variableNameInvalid')
                     return true
                 } else if (item.key.length > 50) {
-                    msg = '变量名称不能超过 50 个字符'
+                    msg = t('variableNameTooLong')
                     return true
+                } else if (map[item.key]) {
+                    msg = t('variableNameDuplicate')
+                    setSameKey(item.key)
+                    return true
+                } else {
+                    map[item.key] = true
+                    setSameKey('-')
                 }
             })
             return msg || false
@@ -117,6 +130,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
             {items.map((item, index) => (
                 <Item
                     key={index}
+                    sameKey={sameKey}
                     validate={error}
                     nodeId={nodeId}
                     item={item}
@@ -126,9 +140,8 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
                 />
             ))}
             <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
-                +添加新的入参
+                {t('addNewParameter')}
             </Button>
         </div>
     );
 }
-

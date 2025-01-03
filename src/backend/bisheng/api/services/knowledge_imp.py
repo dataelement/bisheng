@@ -396,7 +396,10 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         text = part['text']
         for index, bbox in enumerate(bboxes):
             key = f'{pages[index]}-' + '-'.join([str(int(one)) for one in bbox])
-            val = text[indexes[index][0]:indexes[index][1] + 1]
+            if index == len(bboxes) -1:
+                val = text[indexes[index][0]:]
+            else:
+                val = text[indexes[index][0]:indexes[index][1] + 1]
             res[key] = {'text': val, 'type': part['type'], 'part_id': part_index}
     return res
 
@@ -414,7 +417,7 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         llm = decide_knowledge_llm()
     except Exception as e:
         logger.exception('knowledge_llm_error:')
-        raise Exception(f'知识库总结所需模型配置有误，初始化失败， {str(e)}')
+        raise Exception(f'文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}')
     text_splitter = ElemCharacterTextSplitter(separators=separator,
                                               separator_rule=separator_rule,
                                               chunk_size=chunk_size,

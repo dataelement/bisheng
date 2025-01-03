@@ -315,6 +315,17 @@ class DocumentLoaderFrontNode(FrontendNode):
         }:
             name = 'path'
             display_name = 'Local directory'
+        if self.template.type_name == 'WebBaseLoader':
+            self.template.add_field(
+                TemplateField(
+                    field_type='code',
+                    required=True,
+                    show=True,
+                    name='requests_kwargs',
+                    value='{"timeout": 30}',
+                    display_name='RequestsKwargs',
+                    multiline=False,
+                ))
         if name:
             if self.template.type_name in {'DirectoryLoader'}:
                 for field in build_directory_loader_fields():

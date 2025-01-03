@@ -13,7 +13,7 @@ i18n.use(Backend)
     .use(initReactI18next)
     .init({
         partialBundledLanguages: true,
-        ns: ['bs'],
+        ns: ['bs', 'flow'],
         lng: 'zh', // userLanguage === 'zh' ? userLanguage : 'en', // 除中文即英文
         backend: {
             loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + json.version

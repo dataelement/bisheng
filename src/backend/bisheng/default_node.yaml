@@ -28,6 +28,8 @@ agents:
     documentation: ""
   ChatglmFunctionsAgent:
     documentation: ""
+  OpenAIToolsAgent:
+    documentation: ""
 chains:
   RetrievalChain:
     documentation: ""

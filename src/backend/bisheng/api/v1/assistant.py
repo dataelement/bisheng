@@ -1,9 +1,16 @@
 import hashlib
 import json
 from typing import Dict, List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import yaml
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket,
+                     WebSocketException)
+from fastapi import status as http_status
+from fastapi.responses import StreamingResponse
+from fastapi_jwt_auth import AuthJWT
+
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
@@ -11,17 +18,12 @@ from bisheng.api.utils import get_url_content
 from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
                                     DeleteToolTypeReq, StreamData, TestToolReq,
                                     UnifiedResponseModel, resp_200, resp_500)
+from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsTypeRead
 from bisheng.utils.logger import logger
-from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
-from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket,
-                     WebSocketException)
-from fastapi import status as http_status
-from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
 
 router = APIRouter(prefix='/assistant', tags=['Assistant'])
 chat_manager = ChatManager()
@@ -86,11 +88,29 @@ async def update_status(*,
     return await AssistantService.update_status(request, login_user, assistant_id, status)
 
 
+@router.post('/auto/task')
+async def auto_update_assistant_task(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                                     assistant_id: UUID = Body(description='助手唯一ID'),
+                                     prompt: str = Body(description='用户填写的提示词')):
+    # 存入缓存
+    task_id = uuid4().hex
+    redis_client.set(f'auto_update_task:{task_id}', {
+        'assistant_id': assistant_id,
+        'prompt': prompt,
+    })
+    return resp_200(data={
+        'task_id': task_id
+    })
+
+
 # 自动优化prompt和工具选择
 @router.get('/auto', response_class=StreamingResponse)
-async def auto_update_assistant(*,
-                                assistant_id: UUID = Query(description='助手唯一ID'),
-                                prompt: str = Query(description='用户填写的提示词')):
+async def auto_update_assistant(*, task_id: str = Query(description='优化任务唯一ID')):
+    task = redis_client.get(f'auto_update_task:{task_id}')
+    if not task:
+        raise HTTPException(status_code=404, detail='task info not found')
+    assistant_id = task['assistant_id']
+    prompt = task['prompt']
 
     async def event_stream():
         try:

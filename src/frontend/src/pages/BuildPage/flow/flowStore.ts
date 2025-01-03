@@ -9,6 +9,7 @@ type State = {
 type Actions = {
     setFlow: (flowid: WorkFlow) => void;
     uploadFlow: (file?: File) => void;
+    setFitView: () => void;
     // updateNode: (id: string, data: any) => void;
 }
 
@@ -17,6 +18,7 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
     fitView: false,
     notifications: [], // 消息队列
     setFlow: (newFlow) => set({ flow: newFlow }),
+    setFitView: () => set((state) => ({ fitView: !state.fitView })),
     uploadFlow(file?: File) {
         const input = document.createElement("input");
         input.type = "file";

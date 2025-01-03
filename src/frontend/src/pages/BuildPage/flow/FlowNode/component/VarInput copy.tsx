@@ -112,7 +112,6 @@ export default function VarInput({ nodeId, itemKey, placeholder = '', flowNode, 
 
     // // 在光标位置插入内容
     const handleInsertVariable = (item, _var) => {
-        console.log('1234 :>> ', 1234);
         const msg = textMsgRef.current
         // console.log('positon :>> ', cursorPositionRef.current, msg);
         const beforeCursor = msg.slice(0, cursorPositionRef.current);

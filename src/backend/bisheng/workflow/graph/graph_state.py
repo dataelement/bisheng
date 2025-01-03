@@ -81,6 +81,13 @@ class GraphState(BaseModel):
         var_key = tmp_list[1]
         if var_key.find('#') != -1:
             var_key, variable_val_index = var_key.split('#')
+            old_value = self.get_variable(node_id, var_key)
+            if not old_value:
+                old_value = ['' for i in variable_val_index]
+            if len(old_value) <= int(variable_val_index):
+                old_value.extend(['' for i in range(int(variable_val_index) - len(old_value) + 1)])
+            old_value[int(variable_val_index)] = value
+            value = old_value
         self.set_variable(node_id, var_key, value)
 
     def get_all_variables(self) -> Dict[str, Any]:

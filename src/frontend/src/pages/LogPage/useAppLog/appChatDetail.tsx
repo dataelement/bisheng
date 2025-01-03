@@ -1,16 +1,20 @@
 import MessagePanne from "@/components/bs-comp/chatComponent/MessagePanne";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import ShadTooltip from "@/components/ShadTooltipComponent";
+import ChatMessages from "@/pages/BuildPage/flow/FlowChat/ChatMessages";
+import { useMessageStore as useFlowMessageStore } from "@/pages/BuildPage/flow/FlowChat/messageStore";
 import { useAssistantStore } from "@/store/assistantStore";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { AppNumType } from "@/types/app";
 import { ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
 export default function AppChatDetail() {
-    const { fid, cid, type } = useParams()
+    const { fid, cid, type: typeStr } = useParams()
+    const type = Number(typeStr)
     // console.log('fid, cid :>> ', fid, cid);
     const { t } = useTranslation()
 
@@ -18,16 +22,28 @@ export default function AppChatDetail() {
     const title = t('log.detailedSession');
     const { loadAssistantState, destroy } = useAssistantStore()
     const { loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
+    const {
+        loadHistoryMsg: loadFlowHistoryMsg,
+        loadMoreHistoryMsg: loadMoreFlowHistoryMsg,
+        changeChatId: changeFlowChatId,
+        clearMsgs: clearFlowMsgs } = useFlowMessageStore()
+
     useEffect(() => {
-        type === 'assistant' && loadAssistantState(fid, 'v1')
-        loadHistoryMsg(fid, cid, {
+        type === AppNumType.ASSISTANT && loadAssistantState(fid, 'v1')
+
+        type === AppNumType.FLOW ? loadFlowHistoryMsg(fid, cid, {
+            appendHistory: true,
+            lastMsg: ""
+        }) : loadHistoryMsg(fid, cid, {
             appendHistory: true,
             lastMsg: ''
         })
         changeChatId(cid)
+        changeFlowChatId(cid)
         return () => {
             clearMsgs()
-            type === 'assistant' && destroy()
+            clearFlowMsgs()
+            type === AppNumType.ASSISTANT && destroy()
         }
     }, [])
 
@@ -49,10 +65,13 @@ export default function AppChatDetail() {
                 </div>
             </div>
             <div className="h-[calc(100vh-132px)]">
-                <MessagePanne logo='' useName='' guideWord=''
-                    loadMore={() => loadMoreHistoryMsg(fid, true)}
-                ></MessagePanne>
+                {type === AppNumType.FLOW
+                    ? <ChatMessages logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
+                    : <MessagePanne logo='' useName='' guideWord=''
+                        loadMore={() => loadMoreHistoryMsg(fid, true)}
+                    ></MessagePanne>
+                }
             </div>
         </div>
-    </div>
+    </div >
 };

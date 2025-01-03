@@ -73,6 +73,14 @@ export const useAssistantStore = create<State & Actions>((set) => ({
   saveAfter() {
     set({ changed: false })
   },
+  changeStatus(status) {
+    set((state) => ({
+      assistantState: {
+        ...state.assistantState,
+        status: status
+      }
+    }));
+  },
   destroy: () => {
     set({ assistantState: { ...assistantTemp } })
   }

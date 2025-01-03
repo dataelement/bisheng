@@ -1,4 +1,7 @@
+from typing import Any
+
 from bisheng.workflow.nodes.base import BaseNode
+from bisheng.workflow.nodes.code.code_parse import CodeParser
 
 
 class CodeNode(BaseNode):
@@ -9,29 +12,35 @@ class CodeNode(BaseNode):
         self._code = self.node_params['code']
         self._code_output = self.node_params['code_output']
 
-        self._exec_globals = globals().copy()
-        self._exec_locals = {}
+        self._code_parser = CodeParser(self._code)
 
         self._parse_code()
 
+    def handle_input(self, user_input: dict) -> Any:
+        self.node_params.update(user_input)
+        self._code_input = self.node_params['code_input']
+        self._code_output = self.node_params['code_output']
+        self._code = self.node_params['code']
+
     def _parse_code(self):
         try:
-            exec(self._code, self._exec_globals, self._exec_locals)
+            self._code_parser.parse_code()
         except Exception as e:
             raise Exception(f"CodeNode {self.name} exec code error: " + str(e))
 
     def _run(self, unique_id: str):
         main_params = self._parse_code_input()
 
-        main_ret = self._exec_locals['main'](**main_params)
+        main_ret = self._code_parser.exec_method('main', **main_params)
+        main_ret = self._parse_code_output(main_ret)
 
         return main_ret
 
     def parse_log(self, unique_id: str, result: dict):
-        return {
-            'input': self._parse_code_input(),
-            'output': result
-        }
+        return [
+            {"key": "code_input", "value": self._parse_code_input(), "type": "params"},
+            {"key": "code_output", "value": result, "type": "params"}
+        ]
 
     def _parse_code_input(self) -> dict:
         ret = {}
@@ -49,5 +58,5 @@ class CodeNode(BaseNode):
         for one in self._code_output:
             if one["key"] not in result:
                 raise Exception(f"CodeNode {self.name} main function output must have key {one['key']}")
-            ret[one['key']] = result.get([one['key']])
+            ret[one['key']] = result.get(one['key'])
         return ret

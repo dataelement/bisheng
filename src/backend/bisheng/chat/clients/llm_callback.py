@@ -22,7 +22,6 @@ class LLMNodeAsyncCallbackHandler(AsyncCallbackHandler):
         if token is None:
             return
 
-        # 将流式输出内容放入到队列内，以方便中断流式输出后，可以将内容记录到数据库
         self.callback_manager.on_stream_msg(
             StreamMsgData(
                 node_id=self.node_id,
@@ -42,6 +41,8 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             output: bool,
             output_key: str,
             stream: bool = True,
+            tool_list: Optional[List[Any]] = None,
+            cancel_llm_end: bool = False,
     ):
         self.callback_manager = callback
         self.unique_id = unique_id
@@ -50,6 +51,8 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.output_len = 0
         self.output_key = output_key
         self.stream = stream
+        self.tool_list = tool_list
+        self.cancel_llm_end = cancel_llm_end
         logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
 
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
@@ -57,15 +60,41 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         """Run when tool starts running."""
         logger.debug(
             f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        if self.tool_list is not None:
+            self.tool_list.append({
+                'type': 'start',
+                'run_id': kwargs.get('run_id').hex,
+                'name': serialized['name'],
+                'input': input_str,
+            })
+        if serialized['name'] == 'sql_agent':
+            self.output = False
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+        if self.tool_list is not None:
+            self.tool_list.append({
+                'type': 'end',
+                'run_id': kwargs.get('run_id').hex,
+                'name': kwargs['name'],
+                'output': output,
+            })
+        if kwargs['name'] == 'sql_agent':
+            self.output = True
 
     async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
                             **kwargs: Any) -> Any:
         """Run when tool errors."""
         logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
+        if self.tool_list is not None:
+            self.tool_list.append({
+                'type': 'error',
+                'run_id': kwargs.get('run_id').hex,
+                'error': str(error),
+            })
+        if kwargs['name'] == 'sql_agent':
+            self.output = True
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         # azure偶尔会返回一个None
@@ -82,6 +111,8 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                           output_key=self.output_key))
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        if self.cancel_llm_end:
+            return
         if not self.output:
             return
         msg = response.generations[0][0].text

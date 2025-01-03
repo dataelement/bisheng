@@ -72,9 +72,9 @@ export default function HomePage({ onSelect }) {
     }
     
     const typeCnNames = {
-        'flow': t('build.skill'),
-        'assistant': t('build.assistant'),
-        'workflow': '工作流'
+        1: t('build.skill'),
+        5: t('build.assistant'),
+        10: t('build.workflow')
     }
     // const [cardBoxWidth, cardboxRef] = useAutoWidth()
     {/* @ts-ignore */ }
@@ -115,11 +115,11 @@ export default function HomePage({ onSelect }) {
                             data={flow}
                             logo={flow.logo}
                             title={flow.name}
-                            description={flow.desc}
+                            description={flow.description}
                             type="sheet"
                             icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
                             footer={
-                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 'flow' && 'bg-gray-950'} ${flow.flow_type === 'assistant' && 'bg-blue-600'}`}>
+                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 1 && 'bg-gray-950'} ${flow.flow_type === 5 && 'bg-[#fdb136]'}`}>
                                     {typeCnNames[flow.flow_type]}
                                 </Badge>
                             }
@@ -127,7 +127,7 @@ export default function HomePage({ onSelect }) {
                         />
                     )) : <div className="absolute top-1/2 left-1/2 transform text-center -translate-x-1/2 -translate-y-1/2">
                         <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
-                        <Button className="w-[200px]" onClick={() => navigate('/build/assist')}>{t('build.onlineSA')}</Button>
+                        <Button className="w-[200px]" onClick={() => navigate('/build/apps')}>{t('build.onlineSA')}</Button>
                     </div>
                 }
                 {flag && <LoadMore onScrollLoad={handleLoadMore} />}

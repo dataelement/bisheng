@@ -126,7 +126,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>取消</Button>
+                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>{t('cancel')}</Button>
                 </DialogClose>
                 <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleCreate}>{t('create')}</LoadButton>
             </DialogFooter>

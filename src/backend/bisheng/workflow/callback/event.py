@@ -12,12 +12,12 @@ class NodeStartData(BaseModel):
 
 class NodeEndData(NodeStartData):
     reason: Optional[str] = Field(None, description='Reason for node exec error')
-    log_data: Dict = Field(None, description='Log data on node exec success')
+    log_data: Any = Field(None, description='Log data on node exec success')
 
 
 class UserInputData(BaseModel):
     node_id: str = Field(..., description='Node unique id')
-    group_params: Any = Field(..., description='User input data')
+    input_schema: Any = Field(..., description='Input schema')
 
 
 class GuideWordData(BaseModel):
@@ -36,7 +36,7 @@ class OutputMsgData(BaseModel):
     msg: str = Field('', description='Output msg')
     files: List[dict] = Field([], description='Output files', exclude=True)
     output_key: str = Field(..., description='Whether the message is stream')
-    source_documents: Optional[List[Any]] = Field([], description='Source documents')
+    source_documents: Optional[Any] = Field(None, description='Source documents')
 
 
 class OutputMsgInputData(OutputMsgData):

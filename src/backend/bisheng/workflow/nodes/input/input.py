@@ -28,7 +28,9 @@ class InputNode(BaseNode):
         self.node_params = new_node_params
 
     def get_input_schema(self) -> Any:
-        return self.node_data.group_params
+        if self._tab == 'input':
+            return self.node_data.get_variable_info('user_input')
+        return self.node_data.get_variable_info('form_input')
 
     def _run(self, unique_id: str):
         if self._tab == 'input':
@@ -39,9 +41,16 @@ class InputNode(BaseNode):
             key_info = self._node_params_map[key]
             if key_info['type'] == 'file':
                 file_metadata = self.parse_upload_file(key, value)
-                self.node_params[key] = file_metadata
+                self.node_params[key] = key
+                # 特殊逻辑，用到文件源信息的自行处理下
+                self.graph_state.set_variable(self.id, f'{key}_file_metadata', file_metadata)
 
         return self.node_params
+
+    def parse_log(self, unique_id: str, result: dict) -> Any:
+        return [
+            {"key": k, "value": v, "type": "variable"} for k, v in result.items()
+        ]
 
     def parse_upload_file(self, key: str, value: str) -> dict | None:
         """
@@ -49,6 +58,7 @@ class InputNode(BaseNode):
          记录文件的metadata数据
         """
         if not value:
+            logger.warning(f"{self.id}.{key} value is None")
             return None
 
         # 1、获取默认的embedding模型

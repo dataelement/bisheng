@@ -5,3 +5,10 @@ export enum AppType {
     ASSISTANT = 'assistant',
     SKILL = 'skill',
 }
+
+
+export enum AppNumType {
+    FLOW = 10,
+    ASSISTANT = 5,
+    SKILL = 1,
+}

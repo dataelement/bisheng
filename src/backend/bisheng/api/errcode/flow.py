@@ -26,9 +26,26 @@ class FlowOnlineEditError(BaseErrorCode):
     Code: int = 10521
     Msg: str = '技能已上线，不可编辑'
 
+
 class WorkFlowOnlineEditError(BaseErrorCode):
     Code: int = 10525
     Msg: str = '工作流已上线，不可编辑'
+
+
+class WorkFlowInitError(BaseErrorCode):
+    Code: int = 10526
+    Msg: str = '工作流初始化失败'
+
+
+class WorkFlowWaitUserTimeoutError(BaseErrorCode):
+    Code: int = 10527
+    Msg: str = '工作流等待用户输入超时'
+
+
+class WorkFlowNodeRunMaxTimesError(BaseErrorCode):
+    Code: int = 10528
+    Msg: str = '节点执行超过最大次数'
+
 
 class FlowTemplateNameError(BaseErrorCode):
     Code: int = 10530

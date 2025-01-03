@@ -1,14 +1,16 @@
 import datetime
 import functools
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 import inspect
 
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import Field
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
-from langchain_core.language_models import BaseLanguageModel, BaseChatModel
+from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
@@ -87,7 +89,7 @@ class BishengLLM(BaseChatModel):
             self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
         except Exception as e:
             logger.exception('init bisheng llm error')
-            raise Exception(f'初始化llm组件失败，请检查配置或联系管理员。错误信息：{e}')
+            raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
 
     def _get_llm_class(self, server_type: str) -> BaseLanguageModel:
         node_type = self.llm_node_type[server_type]
@@ -164,3 +166,10 @@ class BishengLLM(BaseChatModel):
         """更新模型状态"""
         # todo 接入到异步任务模块
         LLMDao.update_model_status(self.model_id, status, remark)
+
+    def bind_tools(
+        self,
+        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        return self.llm.bind_tools(tools, **kwargs)

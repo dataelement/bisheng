@@ -20,7 +20,7 @@ export default function ToolItem({ data, onChange }) {
                         <TitleIconBg id={tool.id} className="h-6 w-6">
                             <ToolIcon />
                         </TitleIconBg>
-                        <p className="text-sm">{tool.name}</p>
+                        <p className="text-sm truncate w-60">{tool.name}</p>
                     </div>
                     <CircleMinus
                         className="w-4 h-4 hidden text-primary group-hover:block"
@@ -36,7 +36,7 @@ export default function ToolItem({ data, onChange }) {
         <ToolsSheet select={value} onSelect={(val) => {
             const newValue = [...value, val]
             setValue(newValue)
-            onChange(newValue.map(el => ({ key: el.id, label: el.name })))
+            onChange(newValue.map(el => ({ key: el.id, label: el.name, tool_key: el.tool_key })))
         }}>
             <Button onClick={() => { }} variant='outline' className="border-primary text-primary mt-2">
                 {data.label}

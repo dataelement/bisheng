@@ -139,9 +139,9 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_latest_message_by_chatid(cls, chat_id: str):
+        statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(ChatMessage.id.desc()).limit(1)
         with session_getter() as session:
-            res = session.exec(
-                select(ChatMessage).where(ChatMessage.chat_id == chat_id).limit(1)).all()
+            res = session.exec(statement).all()
             if res:
                 return res[0]
             else:
@@ -177,8 +177,7 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id).order_by(
-                ChatMessage.create_time)
+            statement = select(ChatMessage.chat_id,ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id,ChatMessage.flow_id)
             return session.exec(statement).all()
 
     @classmethod

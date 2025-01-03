@@ -33,6 +33,11 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
 
+    const message = useMemo(() => {
+        const msg = data.message[data.chatKey] || data.message
+        return msg.replaceAll('$$', '$')
+    }, [data.message])
+
     const mkdown = useMemo(
         () => (
             <ReactMarkdown
@@ -65,7 +70,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                     },
                 }}
             >
-                {data.message[data.chatKey] || data.message}
+                {message}
             </ReactMarkdown>
         ),
         [data.message]

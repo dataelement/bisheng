@@ -1,9 +1,5 @@
 from typing import Any, Dict
 
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
-from loguru import logger
-
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
@@ -11,10 +7,14 @@ from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from loguru import logger
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -35,12 +35,13 @@ class AgentNode(BaseNode):
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
 
-        self.batch_variable_list = []
+        self._batch_variable_list = {}
         self._system_prompt_list = []
         self._user_prompt_list = []
+        self._tool_invoke_list = []
 
         # 聊天消息
-        self._chat_history_flag = self.node_params['chat_history_flag']['flag']
+        self._chat_history_flag = self.node_params['chat_history_flag']['value'] != 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
@@ -60,6 +61,12 @@ class AgentNode(BaseNode):
         self._knowledge_ids = [
             one['key'] for one in self.node_params['knowledge_id']['value']
         ]
+
+        # 是否支持nl2sql
+        self._sql_agent = self.node_params.get('sql_agent')
+        self._sql_address = ''
+        if self._sql_agent and self._sql_agent['open']:
+            self._sql_address = f'mysql+pymysql://{self._sql_agent["db_username"]}:{self._sql_agent["db_password"]}@{self._sql_agent["db_address"]}/{self._sql_agent["db_name"]}?charset=utf8mb4'
 
         # agent
         self._agent_executor_type = 'get_react_agent_executor'
@@ -86,7 +93,9 @@ class AgentNode(BaseNode):
 
         func_tools = self._init_tools()
         knowledge_tools = self._init_knowledge_tools(knowledge_retriever)
+        sql_agent_tools = self.init_sql_agent_tool()
         func_tools.extend(knowledge_tools)
+        func_tools.extend(sql_agent_tools)
         self._agent = ConfigurableAssistant(
             agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
             tools=func_tools,
@@ -101,11 +110,22 @@ class AgentNode(BaseNode):
         else:
             return []
 
+    def init_sql_agent_tool(self):
+        if not self._sql_address:
+            return []
+        tool_params = {
+            'sql_agent': {
+                'llm': self._llm,
+                'sql_address': self._sql_address
+            }
+        }
+        return load_tools(tool_params=tool_params, llm=self._llm)
+
     def _init_knowledge_tools(self, knowledge_retriever: dict):
         if not self._knowledge_ids:
             return []
         tools = []
-        for knowledge_id in self._knowledge_ids:
+        for index, knowledge_id in enumerate(self._knowledge_ids):
             if self._knowledge_type == 'knowledge':
                 knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
                 name = f'knowledge_{knowledge_id}'
@@ -113,9 +133,12 @@ class AgentNode(BaseNode):
                 vector_client = self.init_knowledge_milvus(knowledge_info)
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
-                file_metadata = self.graph_state.get_variable_by_str(knowledge_id)
-                name = f'knowledge_{knowledge_id.replace(".", "").replace("#", "")}'
-                description = f'file name: {file_metadata.get("source")}'
+                file_metadata = self.graph_state.get_variable_by_str(f'{knowledge_id}_file_metadata')
+                if not file_metadata:
+                    raise Exception(f'未找到对应的临时文件数据：{knowledge_id}')
+
+                name = f'{knowledge_id.replace(".", "").replace("#", "")}_knowledge_{index}'
+                description = f'{file_metadata.get("source")}:{file_metadata.get("title")}'
 
                 vector_client = self.init_file_milvus(file_metadata)
                 es_client = self.init_file_es(file_metadata)
@@ -189,9 +212,10 @@ class AgentNode(BaseNode):
         ret = {}
         variable_map = {}
 
-        self._batch_variable_list = []
+        self._batch_variable_list = {}
         self._system_prompt_list = []
         self._user_prompt_list = []
+        self._tool_invoke_list = []
 
         for one in self._system_variables:
             variable_map[one] = self.graph_state.get_variable_by_str(one)
@@ -201,10 +225,18 @@ class AgentNode(BaseNode):
 
         if self._tab == 'single':
             ret['output'] = self._run_once(None, unique_id, 'output')
+            self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                   msg=ret['output'],
+                                                                   unique_id=unique_id,
+                                                                   output_key='output'))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
                 output_key = self.node_params['output'][index]['key']
                 ret[output_key] = self._run_once(one, unique_id, output_key)
+                self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                       msg=ret[output_key],
+                                                                       unique_id=unique_id,
+                                                                       output_key=output_key))
 
         logger.debug('agent_over result={}', ret)
         if self._output_user:
@@ -216,13 +248,40 @@ class AgentNode(BaseNode):
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        ret = {
-            'system_prompt': self._system_prompt_list,
-            'user_prompt': self._user_prompt_list,
-            'output': result
-        }
+        ret = []
         if self._batch_variable_list:
-            ret['batch_variable'] = self._batch_variable_list
+            ret.append({"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
+
+        ret.extend([
+            {"key": "system_prompt", "value": self._system_prompt_list, "type": "params"},
+            {"key": "user_prompt", "value": self._user_prompt_list, "type": "params"},
+        ])
+        tool_invoke_info = {}
+        if self._tool_invoke_list:
+            for one in self._tool_invoke_list:
+                if one['run_id'] not in tool_invoke_info:
+                    tool_invoke_info[one['run_id']] = {}
+                if one['type'] == 'start':
+                    tool_invoke_info[one['run_id']].update({
+                        'name': one['name'],
+                        'input': one['input']
+                    })
+                elif one['type'] == 'end':
+                    tool_invoke_info[one['run_id']].update({
+                        'output': one['output']
+                    })
+                elif one['type'] == 'error':
+                    tool_invoke_info[one['run_id']].update({
+                        'output': f'Error: {one["error"]}'
+                    })
+        if tool_invoke_info:
+            for one in tool_invoke_info.values():
+                ret.append({
+                    "key": one["name"],
+                    "value": f"Tool Input:\n {one['input']}, Tool Output:\n {one['output']}",
+                    "type": "tool"
+                })
+        ret.extend([{"key": f'{self.id}.{k}', "value": v, "type": "variable"} for k, v in result.items()])
         return ret
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None):
@@ -235,7 +294,7 @@ class AgentNode(BaseNode):
         for one in self._system_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
-                self._batch_variable_list.append(variable_map[one])
+                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         # system = self._system_prompt.format(variable_map)
@@ -244,6 +303,7 @@ class AgentNode(BaseNode):
         for one in self._user_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)
@@ -257,7 +317,9 @@ class AgentNode(BaseNode):
                                               unique_id=unique_id,
                                               node_id=self.id,
                                               output=self._output_user,
-                                              output_key=output_key)
+                                              output_key=output_key,
+                                              tool_list=self._tool_invoke_list,
+                                              cancel_llm_end=True)
         config = RunnableConfig(callbacks=[llm_callback])
 
         if self._agent_executor_type == 'ReAct':
@@ -266,8 +328,11 @@ class AgentNode(BaseNode):
                 'chat_history': chat_history
             },
                 config=config)
+            output = result['agent_outcome'].return_values['output']
+            if isinstance(output, dict):
+                output = list(output.values())[0]
+            return output
         else:
             chat_history.append(HumanMessage(content=user))
             result = self._agent.invoke(chat_history, config=config)
-
-        return result[-1].content
+            return result[-1].content

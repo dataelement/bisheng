@@ -4,6 +4,7 @@ import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { getAssistantOptimizeTaskApi } from "@/controllers/API/assistant";
 import { useAssistantStore } from "@/store/assistantStore";
 import { AssistantTool } from "@/types/assistant";
 import { FlowType } from "@/types/flow";
@@ -25,9 +26,10 @@ export default function AutoPromptDialog({ onOpenChange }) {
     const { id } = useParams()
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
-    const init = () => {
+    const init = async () => {
         const prompt = areaRef.current?.value || assistantState.prompt
-        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?assistant_id=${id}&prompt=${encodeURIComponent(prompt)}`;
+        const res = await getAssistantOptimizeTaskApi(id, prompt)
+        const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?task_id=${res.task_id}`;
         const eventSource = new EventSource(apiUrl);
         if (areaRef.current) areaRef.current.value = ''
         let queue = LoadType.Prompt
@@ -74,12 +76,6 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 setLoading(0);
                 toast({
                     title: parsedData.error,
-                    variant: 'error',
-                    description: ''
-                });
-            } else {
-                toast({
-                    title: '提示词过长,请缩减内容',
                     variant: 'error',
                     description: ''
                 });
@@ -178,7 +174,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
             <div className="w-[50%] relative pr-6">
                 <div className="flex items-center justify-between">
                     <span className="text-lg font-semibold leading-none tracking-tight flex">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
-                    <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><RefreshCw className="mr-2" />{t('build.retry')}</Button>
+                    <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><RefreshCw size={14} className="mr-2" />{t('build.retry')}</Button>
                 </div>
                 <div className="group flex justify-end mt-2 h-[600px] relative">
                     <Textarea ref={areaRef} className="h-full"

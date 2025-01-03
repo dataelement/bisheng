@@ -1,11 +1,6 @@
 import json
 from typing import List, Optional
 
-from fastapi import Request
-from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseChatModel
-from loguru import logger
-
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
@@ -15,6 +10,10 @@ from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
+from fastapi import Request
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseChatModel
+from loguru import logger
 
 
 class LLMService:
@@ -58,7 +57,6 @@ class LLMService:
         if exist_server:
             raise ServerExistError.http_exception()
 
-        # TODO 尝试实例化下对应的模型组件是否可以成功初始化
         model_dict = {}
         for one in server.models:
             if one.model_name not in model_dict:
@@ -327,6 +325,27 @@ class LLMService:
         return data
 
     @classmethod
+    def update_workflow_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \
+            -> EvaluationLLMConfig:
+        """ 更新workflow的默认模型配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.WORKFLOW_LLM)
+        if config:
+            config.value = json.dumps(data.dict())
+        else:
+            config = Config(key=ConfigKeyEnum.WORKFLOW_LLM.value, value=json.dumps(data.dict()))
+        ConfigDao.insert_config(config)
+        return data
+
+    @classmethod
+    def get_workflow_llm(cls) -> EvaluationLLMConfig:
+        """ 获取评测功能的默认模型配置 """
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.WORKFLOW_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return EvaluationLLMConfig(**ret)
+
+    @classmethod
     def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> List[LLMServerInfo]:
         """ 获取助手可选的模型列表 """
         assistant_llm = cls.get_assistant_llm()
@@ -336,15 +355,26 @@ class LLMService:
         if not model_list:
             return []
 
+        default_llm = next(filter(lambda x: x.default, assistant_llm.llm_list), None)
+        if not default_llm:
+            default_llm = assistant_llm.llm_list[0]
         model_dict = {}
+        default_server = None
         for one in model_list:
             if one.server_id not in model_dict:
                 model_dict[one.server_id] = []
+            if one.id == default_llm.model_id:
+                default_server = one.server_id
+                model_dict[one.server_id].insert(0, LLMModelInfo(**one.dict(exclude={'config'})))
+                continue
             model_dict[one.server_id].append(LLMModelInfo(**one.dict(exclude={'config'})))
         server_list = LLMDao.get_server_by_ids(list(model_dict.keys()))
 
         ret = []
         for one in server_list:
+            if one.id == default_server:
+                ret.insert(0, LLMServerInfo(**one.dict(exclude={'config'}), models=model_dict[one.id]))
+                continue
             ret.append(LLMServerInfo(**one.dict(exclude={'config'}), models=model_dict[one.id]))
 
         return ret

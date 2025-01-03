@@ -310,7 +310,7 @@ export default function QasPage() {
                                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
                             </button>
                         </ShadTooltip>
-                        <span className="text-gray-700 text-sm font-black pl-4">{title}</span>
+                        <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{title}</span>
                     </div>
                 </div>
                 <div className="flex justify-between items-center mb-4">

@@ -27,6 +27,18 @@ class AgentFrontendNode(FrontendNode):
             field.value = ''
             field.suffixes = ['.csv']
             field.fileTypes = ['csv']
+        if name == 'OpenAIToolsAgent' and field.name in ['human_prompt', 'system_message']:
+            field.show = True
+
+    def add_extra_fields(self) -> None:
+        self.template.fields.append(
+            TemplateField(
+                field_type='BaseChatMemory',
+                required=False,
+                show=True,
+                name='memory',
+                advanced=False,
+            ))
 
 
 class SQLAgentNode(FrontendNode):
@@ -182,7 +194,7 @@ class InitializeAgentNode(FrontendNode):
         ],
     )
     description: str = """Construct a zero shot agent from an LLM and tools."""
-    base_classes: list[str] = ['AgentExecutor', 'function']
+    base_classes: list[str] = ['AgentExecutor', 'function', 'Chain']
 
     def to_dict(self):
         return super().to_dict()

@@ -41,7 +41,7 @@ customAxios.interceptors.response.use(function (response) {
         const infoStr = localStorage.getItem(UUR_INFO)
         localStorage.removeItem(UUR_INFO)
         infoStr && location.reload()
-        return Promise.reject(error);
+        return Promise.reject('登录过期,请重新登录');
     }
     // app 弹窗
     toast({

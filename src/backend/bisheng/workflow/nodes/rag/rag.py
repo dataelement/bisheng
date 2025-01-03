@@ -2,6 +2,7 @@ from typing import List, Any
 
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMRagNodeCallbackHandler
+from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -19,13 +20,13 @@ class RagNode(BaseNode):
         super().__init__(*args, **kwargs)
 
         # 判断是知识库还是临时文件列表
-        self._knowledge_type = self.node_params['retrieved_result']['type']
+        self._knowledge_type = self.node_params['knowledge']['type']
         self._knowledge_value = [
-            one['key'] for one in self.node_params['retrieved_result']['value']
+            one['key'] for one in self.node_params['knowledge']['value']
         ]
 
         self._knowledge_auth = self.node_params['user_auth']
-        self._max_chunk_size = self.node_params['max_chunk_size']
+        self._max_chunk_size = int(self.node_params['max_chunk_size'])
         self._sort_chunks = False
 
         # 解析prompt
@@ -44,7 +45,11 @@ class RagNode(BaseNode):
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
-        self._source_documents = {}
+
+        # 运行日志数据
+        self._log_source_documents = {}
+        self._log_system_prompt = []
+        self._log_user_prompt = []
 
         self._milvus = None
         self._es = None
@@ -53,7 +58,7 @@ class RagNode(BaseNode):
         self.init_qa_prompt()
         self.init_milvus()
         self.init_es()
-        self._source_documents = {}
+        self._log_source_documents = {}
 
         retriever = BishengRetrievalQA.from_llm(
             llm=self._llm,
@@ -96,20 +101,23 @@ class RagNode(BaseNode):
                         output_key=output_key,
                     ))
             ret[output_key] = result[retriever.output_key]
-            self._source_documents[output_key] = result['source_documents']
+            self._log_source_documents[output_key] = result['source_documents']
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        output_key = []
+        output_keys = []
         source_documents = []
         for key, val in result.items():
-            output_key.append(val)
-            source_documents.append(self._source_documents[key])
-        return {
-            'user_question': self.init_user_question(),
-            'output_key': output_key,
-            'source_documents': source_documents
-        }
+            output_keys.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
+            source_documents.append([one.page_content for one in self._log_source_documents[key]])
+        ret = [
+            {'key': 'user_question', 'value': self.init_user_question(), "type": "params"},
+            {'key': 'retrieved_result', 'value': source_documents, "type": "params"},
+            {'key': 'system_prompt', 'value': self._log_system_prompt, "type": "params"},
+            {'key': 'user_prompt', 'value': self._log_user_prompt, "type": "params"},
+        ]
+        ret.extend(output_keys)
+        return ret
 
     def init_user_question(self) -> List[str]:
         ret = []
@@ -121,17 +129,24 @@ class RagNode(BaseNode):
         variable_map = {}
         for one in self._user_variables:
             if one == f'{self.id}.user_question':
-                variable_map[one] = '{question}'
+                variable_map[one] = '$$question$$'
             elif one == f'{self.id}.retrieved_result':
-                variable_map[one] = '{context}'
+                variable_map[one] = '$$context$$'
             else:
                 variable_map[one] = self.graph_state.get_variable_by_str(one)
+        if variable_map.get(f'{self.id}.retrieved_result') is None:
+            raise IgnoreException('用户提示词必须包含 retrieved_result 变量')
         user_prompt = self._user_prompt.format(variable_map)
+        user_prompt = (user_prompt.replace('{', '{{').replace('}', '}}')
+                       .replace('$$question$$', '{question}').replace('$$context$$', '{context}'))
+        self._log_user_prompt.append(user_prompt)
 
         variable_map = {}
         for one in self._system_variables:
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         system_prompt = self._system_prompt.format(variable_map)
+        system_prompt.replace('{', '{{').replace('}', '}}')
+        self._log_system_prompt.append(system_prompt)
 
         messages_general = [
             SystemMessagePromptTemplate.from_template(system_prompt),
@@ -157,7 +172,9 @@ class RagNode(BaseNode):
                 raise Exception('没有配置默认的embedding模型')
             file_ids = []
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(one)
+                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
+                if not file_metadata:
+                    raise Exception(f'未找到对应的临时文件数据：{one}')
                 file_ids.append(file_metadata['file_id'])
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'

@@ -22,7 +22,7 @@ class MarkRecordStatus(Enum):
 
 class MarkRecordBase(SQLModelSerializable):
     create_user: str = Field(index=True)
-    flow_type: str = Field(index=True)
+    flow_type: int = Field(index=True)
     create_id: int = Field(index=True)
     app_id: int = Field(index=True, nullable=True)
     task_id: int = Field(index=True)

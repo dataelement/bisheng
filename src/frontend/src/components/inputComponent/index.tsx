@@ -9,7 +9,7 @@ export default function InputComponent({
   disabled,
   password,
   type = 'input',
-  maxLength = 100,
+  maxLength = 150,
   editNode = false,
 }: InputComponentType) {
   const [myValue, setMyValue] = useState(value ?? "");

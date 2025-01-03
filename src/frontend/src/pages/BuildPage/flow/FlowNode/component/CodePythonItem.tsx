@@ -33,7 +33,7 @@ export default function CodePythonItem({ data, onChange }) {
             <DialogContent className="h-[600px] lg:max-w-[800px] ">
                 <DialogHeader>
                     <DialogTitle className="flex items-center">
-                        代码
+                        Code
                     </DialogTitle>
                 </DialogHeader>
                 <AceEditor

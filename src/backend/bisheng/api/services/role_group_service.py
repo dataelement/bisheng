@@ -131,8 +131,7 @@ class RoleGroupService():
         UserGroupDao.delete_group_all_admin(group_info.id)
         # 将删除事件发到redis队列中
         delete_message = json.dumps({"id": group_info.id})
-        redis_client.rpush('delete_group', delete_message)
-        redis_client.expire_key('delete_group', 86400)
+        redis_client.rpush('delete_group', delete_message, expiration=86400)
         redis_client.publish('delete_group', delete_message)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:

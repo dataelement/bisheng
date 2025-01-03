@@ -35,7 +35,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
     const [appType, setType] = useState<AppType>(AppType.ASSISTANT); // 判断是助手还是工作流
     const [isEditMode, setIsEditMode] = useState(false); // 区分编辑模式
     const [loading, setLoading] = useState(false);
-    const { t } = useTranslation();
+    const { t } = useTranslation('flow');
     const { appConfig } = useContext(locationContext)
 
     // 应用id (edit)
@@ -51,9 +51,9 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
             setFormData({
                 url: '',
                 name: '',
-                desc: AppType.ASSISTANT === type ? `${t('build.example')}：
-${t('build.exampleOne')}
-${t('build.exampleTwo')}
+                desc: AppType.ASSISTANT === type ? `${t('build.example', { ns: 'bs' })}：
+${t('build.exampleOne', { ns: 'bs' })}
+${t('build.exampleTwo', { ns: 'bs' })}
 1. XX
 2. XX
 3. …` : '',
@@ -103,11 +103,10 @@ ${t('build.exampleTwo')}
     const validateField = (name: string, value: string) => {
         switch (name) {
             case 'name':
-                if (value.length > 50) return AppType.ASSISTANT === appType ? '名称最多50个字符' : '工作流名称不可超过 50 字';
+                if (value.length > 50) return AppType.ASSISTANT === appType ? t('maxNameLengthAssistant') : t('maxNameLengthWorkflow');
                 return '';
             case 'desc':
-                if (AppType.ASSISTANT === appType && value.length < 20) return '为了更好的助手效果，描述需要大于20 个字';
-                if (AppType.FLOW === appType && value.length > 200) return '工作流描述不可超过 200 字';
+                if (AppType.ASSISTANT === appType && value.length < 20) return t('minDescLengthAssistant');
                 return '';
             default:
                 return '';
@@ -195,25 +194,27 @@ ${t('build.exampleTwo')}
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="sm:max-w-[625px] bg-background-login">
                 <DialogHeader>
-                    <DialogTitle>{isEditMode ? '编辑' : '创建'}{appType === AppType.ASSISTANT ? '助手' : '工作流'}</DialogTitle>
+                    <DialogTitle>{isEditMode ? t('edit') : t('create')}{appType === AppType.ASSISTANT ? t('assistant') : t('workflow')}</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col mt-2">
                     <div className="mb-6">
-                        <label htmlFor="name" className="bisheng-label">{appType === AppType.ASSISTANT ? '助手头像' : '工作流头像'}</label>
+                        <label htmlFor="name" className="bisheng-label">
+                            {appType === AppType.ASSISTANT ? t('assistantAvatar') : t('workflowAvatar')}
+                        </label>
                         <Avator value={formData.url} className="mt-3" onChange={uploadAvator}>
                             <AssistantIcon className="bg-primary w-8 h-8 rounded-sm" />
                         </Avator>
                     </div>
                     <div className="mb-6">
                         <label htmlFor="name" className="bisheng-label">
-                            {appType === AppType.ASSISTANT ? t('build.assistantName') : '名称'}
+                            {appType === AppType.ASSISTANT ? t('build_assistantName') : t('name')}
                             <span className="bisheng-tip">*</span>
                         </label>
                         <Input
                             id="name"
                             name="name"
                             maxLength={50}
-                            placeholder={appType === AppType.ASSISTANT ? '给助手起个名字' : '给工作流起个名字'}
+                            placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')}
                             className="mt-3"
                             value={formData.name}
                             onChange={handleChange}
@@ -222,15 +223,14 @@ ${t('build.exampleTwo')}
                     </div>
                     <div className="mb-6">
                         <label htmlFor="desc" className="bisheng-label">
-                            {appType === AppType.ASSISTANT ? '你希望助手的角色是什么，具体完成什么任务？' : '描述'}
-                            <span className="bisheng-tip">*</span>
+                            {appType === AppType.ASSISTANT ? t('build_roleAndTasks') : t('description')}
                         </label>
                         <Textarea
                             id="desc"
                             name="desc"
-                            placeholder={appType === AppType.ASSISTANT ? t('build.forExample') : '输入工作流描述'}
+                            placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
                             maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
-                            className="mt-3 min-h-32"
+                            className="mt-3 min-h-32 pt-3"
                             value={formData.desc}
                             onChange={handleChange}
                         />
@@ -238,7 +238,7 @@ ${t('build.exampleTwo')}
                     </div>
                 </div>
                 {/* 工作流安全审查 */}
-                {false && appConfig.isPro && <Accordion type="multiple" className="w-full">
+                {appConfig.isPro && <Accordion type="multiple" className="w-full">
                     <AssistantSetting id={'xxx'} type={3} />
                 </Accordion>}
                 <DialogFooter>
@@ -247,9 +247,9 @@ ${t('build.exampleTwo')}
                             {t('cancel')}
                         </Button>
                     </DialogClose>
-                    <Button disabled={!formData.name || !formData.desc || loading} type="submit" className="px-11" onClick={handleSubmit}>
+                    <Button disabled={!formData.name || loading} type="submit" className="px-11" onClick={handleSubmit}>
                         {loading && <LoadIcon className="mr-2" />}
-                        {t(isEditMode ? '保存' : '创建')}
+                        {t(isEditMode ? 'save' : 'create')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

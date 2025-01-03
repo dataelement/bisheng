@@ -14,8 +14,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../
 import { useTranslation } from "react-i18next";
 import { Input } from "../../../components/bs-ui/input";
 import { Label } from "../../../components/bs-ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
 import { RadioGroup, RadioGroupItem } from "../../../components/bs-ui/radio-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
 import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
 import { createTaskApi } from "../../../controllers/API/finetune";

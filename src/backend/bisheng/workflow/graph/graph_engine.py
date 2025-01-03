@@ -1,7 +1,13 @@
-import datetime
 import operator
 from typing import Annotated, Any, Dict
 
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.constants import END, START
+from langgraph.graph import StateGraph
+from loguru import logger
+from typing_extensions import TypedDict
+
+from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
 from bisheng.workflow.common.node import BaseNodeData, NodeType
@@ -11,11 +17,6 @@ from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from bisheng.workflow.nodes.output.output_fake import OutputFakeNode
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import END, START
-from langgraph.graph import StateGraph
-from loguru import logger
-from typing_extensions import TypedDict
 
 
 class TempState(TypedDict):
@@ -42,6 +43,11 @@ class GraphEngine:
 
         # node_id: NodeInstance
         self.nodes_map = {}
+        # record how many nodes fan in this node
+        self.nodes_fan_in = {}  # node_id: [node_ids]
+        # record how many nodes next to this node
+        self.nodes_next_nodes = {}  # node_id: {node_ids}
+
         self.edges = None
         self.graph_state = GraphState()
 
@@ -98,7 +104,38 @@ class GraphEngine:
         for node_id in target_node_ids:
             if node_id not in self.nodes_map:
                 raise Exception(f'target node {node_id} not found')
+            if self.nodes_fan_in.get(node_id) and len(self.nodes_fan_in.get(node_id)) > 1:
+                # need wait all fan in node exec over
+                continue
             self.graph_builder.add_edge(node_instance.id, node_id)
+
+    def build_more_fan_in_node(self):
+        for node_id, source_ids in self.nodes_fan_in.items():
+            if not source_ids or len(source_ids) <= 1:
+                continue
+            wait_nodes, no_wait_nodes = self.parse_fan_in_node(node_id)
+            if wait_nodes:
+                logger.debug(f'node {node_id} need wait nodes {wait_nodes}')
+                self.graph_builder.add_edge(wait_nodes, node_id)
+            if no_wait_nodes:
+                for one in no_wait_nodes:
+                    logger.debug(f'node {node_id} no need wait nodes {one}')
+                    self.graph_builder.add_edge(one, node_id)
+
+    def parse_fan_in_node(self, node_id: str):
+        source_ids = self.nodes_fan_in.get(node_id)
+        all_next_nodes = self.nodes_next_nodes.get(node_id)
+        wait_nodes = []
+        no_wait_nodes = []
+        for one in source_ids:
+            # output节点有特殊处理逻辑
+            if one.startswith('output_'):
+                continue
+            if one in all_next_nodes:
+                no_wait_nodes.append(one)
+            else:
+                wait_nodes.append(one)
+        return wait_nodes, no_wait_nodes
 
     def build_nodes(self):
         nodes = self.workflow_data.get('nodes', [])
@@ -124,6 +161,9 @@ class GraphEngine:
                                                       max_steps=self.max_steps,
                                                       callback=self.callback)
             self.nodes_map[node_data.id] = node_instance
+            self.nodes_fan_in[node_instance.id] = self.edges.get_source_node(node_instance.id)
+            if node_instance.type not in [NodeType.START.value]:
+                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(node_instance.id)
 
             # add node into langgraph
             if self.async_mode:
@@ -158,12 +198,15 @@ class GraphEngine:
         for node_id, node_instance in self.nodes_map.items():
             self.add_node_edge(node_instance)
 
+        self.build_more_fan_in_node()
+
         # compile langgraph
         self.graph = self.graph_builder.compile(checkpointer=MemorySaver(),
                                                 interrupt_before=interrupt_nodes)
         self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
 
-        # with open(f"./data/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
+        # import datetime
+        # with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
         #           'wb') as f:
         #     f.write(self.graph.get_graph().draw_mermaid_png())
 
@@ -173,6 +216,10 @@ class GraphEngine:
             for _ in self.graph.stream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
+        except IgnoreException as e:
+            logger.warning(f'graph ignore error: {e}')
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = str(e)
         except Exception as e:
             logger.exception('graph run error')
             self.status = WorkflowStatus.FAILED.value
@@ -184,8 +231,12 @@ class GraphEngine:
             async for _ in self.graph.astream(input_data, config=self.graph_config):
                 pass
             self.judge_status()
+        except IgnoreException as e:
+            logger.warning(f'graph ignore error: {e}')
+            self.status = WorkflowStatus.FAILED.value
+            self.reason = str(e)
         except Exception as e:
-            logger.exception('graph run error')
+            logger.exception('graph arun error')
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
 
@@ -247,7 +298,7 @@ class GraphEngine:
                     # 回调需要用户输入的事件
                     self.status = WorkflowStatus.INPUT.value
                     self.callback.on_user_input(
-                        UserInputData(node_id=node_id, group_params=input_schema))
+                        UserInputData(node_id=node_id, input_schema=input_schema))
                     return
             elif node_instance.type == NodeType.FAKE_OUTPUT.value:
                 intput_schema = node_instance.get_input_schema()

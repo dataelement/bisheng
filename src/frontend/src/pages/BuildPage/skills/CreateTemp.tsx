@@ -20,7 +20,7 @@ export default function CreateTemp({ flow, open, type, setOpen, onCreated }: { f
     useEffect(() => {
         open && setData({
             name: flow.name,
-            description: flow.description
+            description: flow.description || ''
         })
     }, [open])
 
@@ -37,7 +37,7 @@ export default function CreateTemp({ flow, open, type, setOpen, onCreated }: { f
         const { name, description } = data
         if (!name) errorlist.push(`请填写${labelName}名称`)
         if (name.length > 30) errorlist.push(`${labelName}名称过长，不要超过50字`)
-        if (!description) errorlist.push(`加些描述能够快速让别人理解您创造的${labelName}`)
+        if (!description && type === AppType.ASSISTANT) errorlist.push(`加些描述能够快速让别人理解您创造的${labelName}`)
         if (description.length > 200) errorlist.push(`${labelName}描述不可超过 200 字`)
         if (errorlist.length) message({
             variant: 'error',

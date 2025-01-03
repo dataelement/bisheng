@@ -42,7 +42,10 @@ class BaseClient(ABC):
     async def send_message(self, message: str):
         await self.websocket.send_text(message)
 
-    async def send_json(self, message: ChatMessage):
+    async def send_json(self, message: ChatMessage | dict):
+        if isinstance(message, dict):
+            await self.websocket.send_json(message)
+            return
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
@@ -97,7 +100,7 @@ class BaseClient(ABC):
         ))
         return msg
 
-    async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
+    async def send_response(self, category: str, msg_type: str, message: str | dict, intermediate_steps: str = '',
                             message_id: int = None):
         """ 给客户端发送响应消息 """
         is_bot = 0 if msg_type == 'human' else 1
