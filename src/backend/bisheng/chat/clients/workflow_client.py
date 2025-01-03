@@ -107,6 +107,7 @@ class WorkflowClient(BaseClient):
             except:
                 logger.warning('websocket is closed')
                 pass
+            self.workflow.clear_workflow_status()
             self.workflow = None
             logger.debug('workflow is offline not support with chat')
             return False, unique_id
