@@ -134,11 +134,11 @@ class WorkFlowService(BaseService):
         for one in log_data:
             if node_data.type == NodeType.QA_RETRIEVER.value and one['key'] != 'retrieved_result':
                 continue
-            if node_data.type == NodeType.RAG.value and one['key'] != 'retrieved_result' and not one['key'].startswith('output'):
+            if node_data.type == NodeType.RAG.value and one['key'] != 'retrieved_result' and one['type'] != 'variable':
                 continue
             if node_data.type == NodeType.LLM.value and not one['key'].startswith('output'):
                 continue
-            if node_data.type == NodeType.AGENT.value and one['type'] != 'tool' and not one['key'].startswith('output'):
+            if node_data.type == NodeType.AGENT.value and one['type'] not in ['tool', 'variable']:
                 continue
             if node_data.type == NodeType.CODE.value and one['key'] != 'code_output':
                 continue
