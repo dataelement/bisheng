@@ -32,7 +32,6 @@ class OutputNode(BaseNode):
 
     def handle_input(self, user_input: dict) -> Any:
         # 需要存入state，
-        self._output_result = user_input['output_result']
         self.graph_state.set_variable(self.id, 'output_result', user_input['output_result'])
 
     def get_input_schema(self) -> Any:
