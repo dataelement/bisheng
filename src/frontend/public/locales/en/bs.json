@@ -234,7 +234,10 @@
     "selected": "Selected",
     "pleaseSelectAnApp": "Please select an app",
     "allLabels": "All labels",
-    "searchLabels": "Search labels"
+    "searchLabels": "Search labels",
+    "confirmed": "Confirmed",
+    "confirm": "Confirm",
+    "runNewWorkflow": "Run New Workflow"
   },
   "model": {
     "modelManagement": "Model Management",
@@ -329,7 +332,9 @@
     "libraryCollection": "Knowledge Base Collection",
     "createUser": "Create User",
     "details": "Details",
-    "confirmDeleteLibrary": "Confirm deletion of this Knowledge Base?"
+    "confirmDeleteLibrary": "Confirm deletion of this Knowledge Base?",
+    "copy": "Copy",
+    "copying": "Copying"
   },
   "evaluation": {
     "id": "Task ID",

@@ -433,7 +433,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                         variant="outline"
                         onClick={handleRestartClick}>
                         <RefreshCw className="mr-1" size={16} />
-                        运行新工作流
+                        {t('chat.runNewWorkflow')}
                     </Button>
                 }
             </div>

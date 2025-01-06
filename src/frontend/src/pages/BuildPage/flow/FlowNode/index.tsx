@@ -196,7 +196,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                             </EditText>
                         </div>
                         {!['output', 'condition', 'end'].includes(node.type) && <ChevronDown
-                            className={`absolute right-0 bisheng-label cursor-pointer ${!expend && 'rotate-180'}`}
+                            className={`absolute right-0 bisheng-label cursor-pointer ${expend && 'rotate-180'}`}
                             size={14}
                             onClick={() => {
                                 setExpend(!expend)
