@@ -11,7 +11,7 @@ from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError
+from bisheng.api.errcode.flow import FlowOnlineEditError, WorkflowNameExistsError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
@@ -106,7 +106,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
         if session.exec(
                 select(Flow).where(Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value,
                                    Flow.user_id == login_user.user_id)).first():
-            raise HTTPException(status_code=500, detail='工作流名重复')
+            raise WorkflowNameExistsError.http_exception()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     db_flow.create_time = None

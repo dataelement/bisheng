@@ -2,8 +2,13 @@ import json
 from typing import Any
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi_jwt_auth import AuthJWT
+from sqlmodel import select
+from starlette.responses import StreamingResponse
+
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError
+from bisheng.api.errcode.flow import FlowOnlineEditError, FlowNameExistsError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.utils import build_flow_no_yield, get_L2_param_from_flow, remove_api_keys
@@ -16,10 +21,7 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi_jwt_auth import AuthJWT
-from sqlmodel import select
-from starlette.responses import StreamingResponse
+
 
 # build router
 router = APIRouter(prefix='/flows', tags=['Flows'], dependencies=[Depends(get_login_user)])
@@ -33,7 +35,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
         if session.exec(
                 select(Flow).where(Flow.name == flow.name,
                                    Flow.user_id == login_user.user_id)).first():
-            raise HTTPException(status_code=500, detail='技能名重复')
+            raise FlowNameExistsError.http_exception()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     # 创建新的技能
