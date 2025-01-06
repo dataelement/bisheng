@@ -147,5 +147,11 @@
     "dbNameTooLong": "Database name cannot exceed 100 characters",
     "dbUsernameRequired": "Database username cannot be empty",
     "dbUsernameTooLong": "Database username cannot exceed 100 characters",
-    "dbPasswordRequired": "Database password cannot be empty"
+    "dbPasswordRequired": "Database password cannot be empty",
+    "variableInput": "Variable Input",
+    "leaveAndSave": "Leave and Save",
+    "onlineVersionMessage": "The current version is online and cannot be modified. You can save the changes as a new version.",
+    "unsavedChangesMessage": "You have unsaved changes. Are you sure you want to leave?",
+    "runNode": "Run this node",
+    "copy": "Copy"
 }

@@ -400,11 +400,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                 <DialogContent className="sm:max-w-[425px]" close={false}>
                     <DialogHeader>
                         <DialogTitle>{t('prompt')}</DialogTitle>
-                        <DialogDescription>{isOnlineVersion ? '当前版本已上线不可修改，可另存为新版本保存修改内容' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                        {isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}
                     </DialogHeader>
                     <DialogFooter>
                         <Button className="leave h-8" onClick={handleSaveAndClose}>
-                            {isOnlineVersion ? '另存为新版本' : '离开并保存'}
+                            {isOnlineVersion ? t('saveAsNewVersion') : t('leaveAndSave')}
                         </Button>
                         <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
                             {t('dontSave')}
@@ -589,9 +589,9 @@ const useNodeEvent = (flow) => {
 };
 
 
-// 技能版本管理
+// 版本管理
 const useVersion = (flow) => {
-    const { t } = useTranslation('flow')
+    const { t } = useTranslation()
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
     const { version, setVersion } = useContext(TabsContext)
     // 上线版本的版本 id

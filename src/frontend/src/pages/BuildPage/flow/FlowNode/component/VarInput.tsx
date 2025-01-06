@@ -6,6 +6,7 @@ import { UploadCloud, Variable } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
+import { useTranslation } from "react-i18next";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -64,6 +65,7 @@ export default function VarInput({
     const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
     const valueRef = useRef(value || '');
     const selectVarRef = useRef(null);
+    const { t } = useTranslation('flow')
 
     const { flow } = useFlowStore();
     // 校验变量是否可用
@@ -177,7 +179,7 @@ export default function VarInput({
         >
             <div className="flex justify-between gap-1 border-b px-2 py-1" onClick={() => textareaRef.current.focus()}>
                 <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>
-                    变量输入
+                    {t('variableInput')}
                 </Label>
                 <div className="flex gap-2">
                     <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>

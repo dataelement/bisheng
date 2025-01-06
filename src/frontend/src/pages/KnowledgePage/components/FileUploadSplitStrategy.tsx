@@ -3,6 +3,7 @@ import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/bs-ui/radio';
 import { generateUUID } from '@/components/bs-ui/utils';
+import i18next from 'i18next';
 import { useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
@@ -82,8 +83,10 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
             <div className="flex flex-wrap mt-4 gap-2">
                 <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after')}>\n✂️</Button>
                 <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after')}>\n\n✂️</Button>
-                <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before')}>{'✂️第.{1, 3}章'}</Button>
-                <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before')}>{'✂️第.{1, 3}条'}</Button>
+                {i18next.language === 'zh' && <>
+                    <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before')}>{'✂️第.{1, 3}章'}</Button>
+                    <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before')}>{'✂️第.{1, 3}条'}</Button>
+                </>}
                 <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after')}>。✂️</Button>
                 <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after')}>\.✂️</Button>
             </div>

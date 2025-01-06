@@ -39,7 +39,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
             const fieldData = formDataRef.current[key]
             const required = data.value.find(item => item.key === key).required
             if (required && !fieldData.value) {
-                errors.push(`${fieldData.label} 为必填项，不能为空。`)
+                errors.push(t('report.requiredField', { label: fieldData.label }));
             }
             valuesObject[key] = fieldData.value
             stringObject += `${fieldData.label}:${fieldData.type === FormItemType.File ? fieldData.fileName : fieldData.value}\n`

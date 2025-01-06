@@ -193,7 +193,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 </div>
             )}
 
-            {formData.formType === FormType.Select && (
+            {/* {formData.formType === FormType.Select && (
                 <div className="flex items-center space-x-2">
                     <Label className="bisheng-label">允许多选</Label>
                     <Switch
@@ -201,7 +201,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         onCheckedChange={(checked) => setFormData({ ...formData, allowMultiple: checked })}
                     />
                 </div>
-            )}
+            )} */}
 
             <div className="flex items-center space-x-2">
                 <Label className="bisheng-label">是否必填</Label>

@@ -31,6 +31,7 @@ interface BaseProps<T> {
     id?: string;
     multiple?: boolean;
     error?: boolean;
+    errorKeys?: string[];
     /** 高度不变，内部滚动 */
     scroll?: boolean;
     disabled?: boolean;
@@ -68,6 +69,7 @@ type IProps = ScrollLoadProps | NonScrollLoadProps;
 const MultiSelect = ({
     id = `${Date.now()}`,
     error = false,
+    errorKeys = [],
     multiple = false,
     className,
     contentClassName,
@@ -201,7 +203,7 @@ const MultiSelect = ({
         required
         onOpenChange={(e) => {
             creatInput(e);
-            if (!e) {
+            if (e) {
                 onLoad?.();
                 setOptionFilter(options);
             }
@@ -216,7 +218,8 @@ const MultiSelect = ({
                     onScrollLoad ? <div className="flex flex-wrap w-full">
                         {
                             values.map(item =>
-                                <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px]">
+                                <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value}
+                                    className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] ${errorKeys.includes(item.value) && 'bg-red-100 border-red-600'}`}>
                                     {item.label}
                                     {lockedValues.includes(item.value) || <X className="h-3 w-3" onClick={() => handleDelete(item.value)}></X>}
                                 </Badge>

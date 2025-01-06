@@ -404,7 +404,8 @@
     "isRequired": "is Required",
     "fileRequired": "The current file is empty",
     "selectComponent": "Select a component",
-    "varLength": "Length cannot exceed"
+    "varLength": "Length cannot exceed",
+    "requiredField": "{{label}} is a required field and cannot be empty."
   },
   "status": {
     "1004": "This skill has been deleted",
@@ -836,9 +837,11 @@
     "10500": "Skill version information not found",
     "10501": "Current version in use cannot be deleted",
     "10502": "Version name already exists",
+    "10503": "Skill name already exists",
     "10520": "Skill does not exist",
     "10521": "Skill is online, cannot edit",
     "10525": "Workflow is online and cannot be edited",
+    "10529": "Workflow name already exists",
     "10530": "Template name already exists",
     "10900": "Knowledge base name already exists",
     "10901": "Knowledge base must select an embedding model",

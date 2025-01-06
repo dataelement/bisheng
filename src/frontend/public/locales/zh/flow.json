@@ -147,5 +147,11 @@
     "dbNameTooLong": "数据库名称最多 100 字",
     "dbUsernameRequired": "数据库用户名不可为空",
     "dbUsernameTooLong": "数据库用户名最多 100 字",
-    "dbPasswordRequired": "数据库密码不可为空"
+    "dbPasswordRequired": "数据库密码不可为空",
+    "variableInput": "变量输入",
+    "leaveAndSave": "离开并保存",
+    "onlineVersionMessage": "当前版本已上线不可修改，可另存为新版本保存修改内容",
+    "unsavedChangesMessage": "您有未保存的更改,确定要离开吗?",
+    "runNode": "运行此节点",
+    "copy": "复制"
 }
