@@ -30,10 +30,10 @@ jobs:
         run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
 
       # 构建 bisheng_langchain
-      - name: Set python version 3.8
+      - name: Set python version 3.10
         uses: actions/setup-python@v1
         with:
-          python-version: 3.8
+          python-version: 3.10
 
       - name: Build PyPi bisheng-langchain and push
         id: pypi_build_bisheng_langchain
