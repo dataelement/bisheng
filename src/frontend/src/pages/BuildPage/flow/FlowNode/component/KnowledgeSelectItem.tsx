@@ -6,6 +6,7 @@ import { readFileLibDatabase } from "@/controllers/API";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
+import { isVarInFlow } from "@/util/flowUtils";
 
 const TabsHead = memo(({ tab, onChange }) => {
 
@@ -23,7 +24,7 @@ const enum KnowledgeType {
 }
 type KnowledgeTypeValues = `${KnowledgeType}`;
 
-export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
+export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate }) {
     const { flow } = useFlowStore()
 
     const currentTabRef = useRef(data.value.type)
@@ -32,7 +33,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
         return { label: el.label, value: el.key }
     }))
 
-    const { t } = useTranslation('flow')
+    const { t } = useTranslation()
     const [options, setOptions] = useState<any>([]);
     const [fileOptions, setFileOptions] = useState<any>([])
     const originOptionsRef = useRef([])
@@ -120,6 +121,24 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
         return () => onValidate(() => { })
     }, [data.value])
 
+    // 校验变量是否可用
+    const [errorKeys, setErrorKeys] = useState<string[]>([])
+    const validateVarAvailble = () => {
+        let error = ''
+        const _errorKeys = []
+        value.map(el => {
+            error = isVarInFlow(nodeId, flow.nodes, el.value, '');
+            error && _errorKeys.push(el.value)
+        })
+        setErrorKeys(_errorKeys)
+        // _errorKeys.length && setError(true)
+        return error;
+    };
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data, value]);
+
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">
             {data.required && <span className="text-red-500">*</span>}
@@ -128,6 +147,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
         <MultiSelect
             id="knowledge-select-item"
             error={error}
+            errorKeys={errorKeys}
             tabs={<TabsHead tab={tabType} onChange={handleTabChange} />}
             multiple
             className={''}
@@ -137,7 +157,7 @@ export default function KnowledgeSelectItem({ data, onChange, onValidate }) {
             placeholder={data.placeholder || ''}
             searchPlaceholder={t('build.searchBaseName')}
             onChange={handleSelect}
-            onLoad={() => reload(1, '')}
+            onLoad={() => { reload(1, ''); loadFiles() }}
             onSearch={(val) => reload(1, val)}
             onScrollLoad={(val) => loadMore(val)}
         >

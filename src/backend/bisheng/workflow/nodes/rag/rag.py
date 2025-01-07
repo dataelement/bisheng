@@ -203,7 +203,7 @@ class RagNode(BaseNode):
         else:
             file_ids = []
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(one)
+                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
                 file_ids.append(file_metadata['file_id'])
             node_type = 'ElasticKeywordsSearch'
             params = {

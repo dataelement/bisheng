@@ -103,7 +103,7 @@ class WorkflowClient(BaseClient):
             self.workflow.set_workflow_stop()
             try:
                 await self.send_response('processing', 'close', '')
-                await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason='workflow is offline')
+                await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason='当前工作流未上线，无法直接对话')
             except:
                 logger.warning('websocket is closed')
                 pass

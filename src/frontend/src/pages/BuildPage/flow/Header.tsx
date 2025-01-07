@@ -18,7 +18,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
 import { findParallelNodes } from "@/util/flowUtils";
-import { isEqual } from "lodash-es";
+import { cloneDeep, isEqual } from "lodash-es";
 import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -138,8 +138,15 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
 
     const handleExportClick = () => {
         setOpen(false)
+        const nFlow = cloneDeep(flow)
+        // 删除report节点文档key
+        nFlow.nodes.forEach(node => {
+            if (node.data.type === 'report') {
+                node.data.group_params[0].params[0].value.version_key = ''
+            }
+        })
         const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
-            JSON.stringify({ ...flow })
+            JSON.stringify(nFlow)
         )}`;
         const link = document.createElement("a");
         link.href = jsonString;
@@ -400,11 +407,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                 <DialogContent className="sm:max-w-[425px]" close={false}>
                     <DialogHeader>
                         <DialogTitle>{t('prompt')}</DialogTitle>
-                        <DialogDescription>{isOnlineVersion ? '当前版本已上线不可修改，可另存为新版本保存修改内容' : '您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                        {isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}
                     </DialogHeader>
                     <DialogFooter>
                         <Button className="leave h-8" onClick={handleSaveAndClose}>
-                            {isOnlineVersion ? '另存为新版本' : '离开并保存'}
+                            {isOnlineVersion ? t('saveAsNewVersion') : t('leaveAndSave')}
                         </Button>
                         <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
                             {t('dontSave')}
@@ -589,9 +596,9 @@ const useNodeEvent = (flow) => {
 };
 
 
-// 技能版本管理
+// 版本管理
 const useVersion = (flow) => {
-    const { t } = useTranslation('flow')
+    const { t } = useTranslation()
     const [versions, setVersions] = useState<FlowVersionItem[]>([])
     const { version, setVersion } = useContext(TabsContext)
     // 上线版本的版本 id

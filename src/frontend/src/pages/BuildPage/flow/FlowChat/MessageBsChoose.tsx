@@ -159,7 +159,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                             className="h-8"
                                             disabled={inputSended}
                                             onClick={handleSend}
-                                        >{inputSended ? '已确认' : '确认'}</Button>
+                                        >{inputSended ? t('chat.confirmed') : t('chat.confirm')}</Button>
                                     </div>
                                 </div>
                                 : <div>

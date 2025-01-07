@@ -241,7 +241,7 @@ export default function Header({ flow, preFlow, onTabChange }) {
                 </DialogHeader>
                 <DialogFooter>
                     <Button className="leave h-8" onClick={handleSaveAndClose}>
-                        {isOnlineVersion ? '另存为新版本' : '离开并保存'}
+                        {isOnlineVersion ? '另存为新版本' : t('flow.leaveAndSave')}
                     </Button>
                     <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
                         不保存,直接退出

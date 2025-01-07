@@ -17,6 +17,9 @@ class OutputNode(BaseNode):
         self._output_type = self.node_params['output_result']['type']
         self._output_result = self.node_params['output_result']['value']
 
+        # 用户处理的结果
+        self._handled_output_result = self._output_result
+
         # user input msg
         self._output_msg = self.node_params['output_msg']['msg']
         self._output_files = self.node_params['output_msg']['files']
@@ -32,7 +35,7 @@ class OutputNode(BaseNode):
 
     def handle_input(self, user_input: dict) -> Any:
         # 需要存入state，
-        self._output_result = user_input['output_result']
+        self._handled_output_result = user_input['output_result']
         self.graph_state.set_variable(self.id, 'output_result', user_input['output_result'])
 
     def get_input_schema(self) -> Any:
@@ -45,7 +48,7 @@ class OutputNode(BaseNode):
     def route_node(self, state: dict) -> str | list[str]:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
-            return self.get_next_node_id(self._output_result)
+            return self.get_next_node_id(self._handled_output_result)
         return self._next_node_id
 
     def _run(self, unique_id: str):
@@ -53,7 +56,7 @@ class OutputNode(BaseNode):
         self.parse_output_msg()
         self.send_output_msg(unique_id)
         res = {
-            'output_result': self._output_result
+            'output_result': self._handled_output_result
         }
         return res
 
@@ -68,7 +71,7 @@ class OutputNode(BaseNode):
         if self._output_type == 'input':
             ret.append({
                 "key": "output_result",
-                "value": self._output_result,
+                "value": self._handled_output_result,
                 "type": "key"
             })
         return ret

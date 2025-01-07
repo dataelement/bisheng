@@ -230,7 +230,10 @@
     "selected": "已选",
     "pleaseSelectAnApp": "请选择一个应用",
     "allLabels": "全部标签",
-    "searchLabels": "搜索标签"
+    "searchLabels": "搜索标签",
+    "confirmed": "已确认",
+    "confirm": "确认",
+    "runNewWorkflow": "运行新工作流"
   },
   "model": {
     "modelManagement": "模型管理",
@@ -326,7 +329,9 @@
     "libraryCollection": "知识库集合",
     "createUser": "创建用户",
     "details": "详情",
-    "confirmDeleteLibrary": "确认删除该知识库?"
+    "confirmDeleteLibrary": "确认删除该知识库?",
+    "copy": "复制",
+    "copying": "复制中"
   },
   "evaluation": {
     "id": "任务ID",
@@ -401,7 +406,8 @@
     "isRequired": "是必填项",
     "fileRequired": "当前文件为空",
     "selectComponent": "选择一个组件",
-    "varLength": "长度不能超过"
+    "varLength": "长度不能超过",
+    "requiredField": "{{label}} 为必填项，不能为空。"
   },
   "status": {
     "1004": "该技能已被删除",
@@ -833,9 +839,11 @@
     "10500": "未找到技能版本信息",
     "10501": "当前正在使用版本无法删除",
     "10502": "版本名已存在",
+    "10503": "技能名称重复",
     "10520": "技能不存在",
     "10521": "技能已上线，不可编辑",
     "10525": "工作流已上线，不可编辑",
+    "10529": "工作流名称重复",
     "10530": "模板名称已存在",
     "10900": "知识库名称不可重复",
     "10901": "知识库必须选择一个embedding模型",

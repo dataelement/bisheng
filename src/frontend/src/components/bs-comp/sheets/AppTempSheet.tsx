@@ -1,6 +1,6 @@
+import { AbilitiesIcon, FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
 import { AppType } from "@/types/app";
-import { Bot } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../bs-ui/input";
@@ -64,21 +64,21 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
-                            {/* <Bot /> */}
+                            <FlowIcon />
                             <span>{t('workflow')}</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.ASSISTANT && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.ASSISTANT)}
                         >
-                            {/* <Bot /> */}
+                            <HelperIcon />
                             <span>{t('assistant')}</span>
                         </div>
                         <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.SKILL)}
                         >
-                            {/* <Bot /> */}
+                            <AbilitiesIcon />
                             <span>{t('skill')}</span>
                         </div>
                     </div>

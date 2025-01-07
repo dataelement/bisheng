@@ -17,6 +17,11 @@ class VersionNameExistsError(BaseErrorCode):
     Msg: str = '版本名已存在'
 
 
+class FlowNameExistsError(BaseErrorCode):
+    Code: int = 10503
+    Msg: str = '技能名重复'
+
+
 class NotFoundFlowError(BaseErrorCode):
     Code: int = 10520
     Msg: str = '技能不存在'
@@ -45,6 +50,11 @@ class WorkFlowWaitUserTimeoutError(BaseErrorCode):
 class WorkFlowNodeRunMaxTimesError(BaseErrorCode):
     Code: int = 10528
     Msg: str = '节点执行超过最大次数'
+
+
+class WorkflowNameExistsError(BaseErrorCode):
+    Code: int = 10529
+    Msg: str = '工作流名称重复'
 
 
 class FlowTemplateNameError(BaseErrorCode):
