@@ -60,3 +60,8 @@ class WorkflowNameExistsError(BaseErrorCode):
 class FlowTemplateNameError(BaseErrorCode):
     Code: int = 10530
     Msg: str = '模板名称已存在'
+
+
+class WorkFlowNodeUpdateError(BaseErrorCode):
+    Code: int = 10531
+    Msg: str = '<节点名称>功能已升级，需删除后重新拖入。'

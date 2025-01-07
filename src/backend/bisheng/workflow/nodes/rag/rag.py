@@ -25,6 +25,8 @@ class RagNode(BaseNode):
         super().__init__(*args, **kwargs)
 
         # 判断是知识库还是临时文件列表
+        if 'knowledge' not in self.node_params:
+            raise IgnoreException(f'{self.name} -- node params is error')
         self._knowledge_type = self.node_params['knowledge']['type']
         self._knowledge_value = [
             one['key'] for one in self.node_params['knowledge']['value']
