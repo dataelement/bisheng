@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import NodeLogo from "./NodeLogo";
 import { ResultText } from "./RunTest";
+import { Button } from "@/components/bs-ui/button";
+import { downloadFile } from "@/util/utils";
+import useFlowStore from "../flowStore";
 
 const enum Status {
     normal = 'normal',
@@ -55,7 +58,9 @@ const Log = ({ type, name, data }) => {
                         <X size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
                     </div>
                     <div className="">
-                        {Object.keys(data).map(key => <ResultText title={key} value={data[key]} key={key} />)}
+                        {Object.keys(data).map(key => data[key].type === 'file' ?
+                            <ResultFile title={key} name={name} fileUrl={data[key].value} key={key} />
+                            : <ResultText title={key} value={data[key]} key={key} />)}
                     </div>
                 </div>
             )}
@@ -68,7 +73,6 @@ export default function RunLog({ node, children }) {
     const [state, setState] = useState<Status>(Status.normal)
     const [data, setData] = useState<any>({})
     const { t } = useTranslation('flow')
-
     // 订阅日志事件
     useEffect(() => {
         const onNodeLogEvent = (e) => {
@@ -80,9 +84,9 @@ export default function RunLog({ node, children }) {
                 const newData = data.reduce((res, item) => {
                     if (item.type === 'variable') {
                         const key = item.key.split('.')
-                        res[key[key.length - 1]] = item.value
+                        res[key[key.length - 1]] = { type: item.type, value: item.value }
                     } else {
-                        res[item.key] = item.value
+                        res[item.key] = { type: item.type, value: item.value }
                     }
                     return res
                 }, {})
@@ -162,3 +166,21 @@ export default function RunLog({ node, children }) {
         </div>
     );
 };
+
+
+// 下载文件
+export const ResultFile = ({ title, name, fileUrl }: { title: string, name: string, fileUrl: string }) => {
+    const { flow } = useFlowStore();
+
+    const handleDownload = (e) => {
+        downloadFile(fileUrl, `${flow.name}_${name}_检索结果`)
+    }
+
+    return <div className="mb-2 rounded-md border bg-search-input text-sm shadow-sm">
+        <div className="border-b px-2 flex justify-between items-center">
+            <p>{title}</p>
+        </div>
+        <textarea defaultValue={'检索结果过长,请下载后查看'} disabled className="w-full h-12 p-2 block text-muted-foreground dark:bg-black " />
+        <Button onClick={handleDownload} className="h-6 mt-2">下载完整内容</Button>
+    </div>
+}
