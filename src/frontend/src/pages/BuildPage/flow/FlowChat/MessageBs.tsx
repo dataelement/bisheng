@@ -35,9 +35,10 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
     ]
     const message = useMemo(() => {
         const msg = typeof data.message === 'string' ? data.message : data.message.msg
+
         return msg
             .replaceAll('$$', '$') // latex
-            .replace(/(?<!\n)\n(?!\n)/g, '\n\n') // 单个换行符
+            .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
     }, [data.message])
 
     const mkdown = useMemo(
