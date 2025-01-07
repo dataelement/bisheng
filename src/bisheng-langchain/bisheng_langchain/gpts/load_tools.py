@@ -72,7 +72,8 @@ def _get_dalle_image_generator(**kwargs: Any) -> Tool:
         return DallEImageGenerator(
             api_wrapper=AzureDallEWrapper(**kwargs)
         )
-
+    kwargs['api_key'] = kwargs.pop('openai_api_key')
+    kwargs['base_url'] = kwargs.pop('openai_api_base', None)
     return DallEImageGenerator(
         api_wrapper=DallEAPIWrapper(
             model='dall-e-3',

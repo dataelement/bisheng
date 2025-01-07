@@ -10,7 +10,6 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { createMarkApi, deleteMarkApi, getMarksApi } from "@/controllers/API/log";
-import { getUsersApi } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -80,7 +79,7 @@ function CreateModal({ open, setOpen, onSuccess }) {
         if (apps.length > 30) {
             return message({
                 variant: "error",
-                description: "最多选择30个应用"
+                description: t('label.maxAppsError')
             })
         }
         captureAndAlertRequestErrorHoc(createMarkApi({
@@ -90,7 +89,7 @@ function CreateModal({ open, setOpen, onSuccess }) {
             if (!res) return
             message({
                 variant: "success",
-                description: "创建成功"
+                description: t('label.createSuccess')
             })
             setOpen(false)
             onSuccess()
@@ -100,27 +99,27 @@ function CreateModal({ open, setOpen, onSuccess }) {
     return <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
-                <DialogTitle>创建标注任务</DialogTitle>
+                <DialogTitle>{t('label.createTask')}</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">选择要标注的应用</label>
+                    <label htmlFor="name" className="bisheng-label">{t('label.selectAppsToLabel')}</label>
                     <MultiSelect
                         contentClassName=" max-w-[630px]"
                         multiple
                         value={apps}
                         options={options}
-                        placeholder="请选择"
-                        searchPlaceholder="搜索应用名称"
+                        placeholder={t('label.selectPlaceholder')}
+                        searchPlaceholder={t('label.searchAppsPlaceholder')}
                         onChange={setApps}
                         onLoad={reload}
                         onSearch={search}
                         onScrollLoad={loadMore}
                     ></MultiSelect>
                 </div>
-                {count ? <p className="text-sm text-gray-500">当前未标注会话数：{count}</p> : null}
+                {count ? <p className="text-sm text-gray-500">{t('label.unmarkedConversationCount')}: {count}</p> : null}
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">标注人</label>
+                    <label htmlFor="name" className="bisheng-label">{t('label.selectLabelers')}</label>
                     <UsersSelect
                         multiple
                         value={users}
@@ -135,36 +134,35 @@ function CreateModal({ open, setOpen, onSuccess }) {
                         className="px-11"
                         type="button"
                         onClick={() => setOpen(false)}
-                    >{t('cancel')}</Button>
+                    >{t('label.cancel')}</Button>
                 </DialogClose>
                 <Button
                     type="submit"
                     className="px-11"
                     disabled={apps.length === 0 || users.length === 0}
                     onClick={handleCreate}
-                >{t('create')}</Button>
+                >{t('label.create')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>
 }
 
 export default function Tasks() {
+    const { t } = useTranslation()
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
 
-    // 获取任务数据
     const { page, pageSize, data: tasks, total, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
         getMarksApi({
             ...param
         })
     )
 
-    // 删除任务
     const handleDelete = (taskId) => {
         bsConfirm({
-            title: "确认删除",
-            desc: "您确定要删除此任务吗？",
-            okTxt: "删除",
+            title: t('label.confirmDelete'),
+            desc: t('label.deleteConfirmation'),
+            okTxt: t('label.delete'),
             onOk: async (next) => {
                 await deleteMarkApi(taskId);
                 reload();
@@ -178,44 +176,43 @@ export default function Tasks() {
             <div className="h-full overflow-y-auto pb-20">
                 <div className="flex justify-end gap-6">
                     {['admin', 'group_admin'].includes(user.role) && <Button onClick={() => setOpen(true)}>
-                        创建标注任务
+                        {t('label.createTask')}
                     </Button>}
                 </div>
                 <Table className="mb-[50px]">
                     <TableHeader>
                         <TableRow>
-                            <TableHead>任务 ID</TableHead>
+                            <TableHead>{t('label.taskId')}</TableHead>
                             <TableHead>
                                 <div className="flex items-center w-[144px]">
-                                    任务状态
+                                    {t('label.taskStatus')}
                                     <TableHeadEnumFilter options={[
-                                        { label: '全部', value: '0' },
-                                        { label: '未开始', value: '1' },
-                                        { label: '已完成', value: '2' },
-                                        { label: '进行中', value: '3' },
+                                        { label: t('label.all'), value: '0' },
+                                        { label: t('label.notStarted'), value: '1' },
+                                        { label: t('label.completed'), value: '2' },
+                                        { label: t('label.inProgress'), value: '3' },
                                     ]}
                                         onChange={(v) => filterData({ status: Number(v) })} />
                                 </div>
                             </TableHead>
-                            <TableHead>创建时间</TableHead>
-                            <TableHead>创建人</TableHead>
-                            <TableHead className="w-[144px]">标注进度</TableHead>
-                            <TableHead className="text-right w-[164px]">操作</TableHead>
+                            <TableHead>{t('label.creationTime')}</TableHead>
+                            <TableHead>{t('label.createdBy')}</TableHead>
+                            <TableHead className="w-[144px]">{t('label.labelingProgress')}</TableHead>
+                            <TableHead className="text-right w-[164px]">{t('label.actions')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {tasks.map((task) => (
                             <TableRow key={task.id}>
                                 <TableCell>{task.id}</TableCell>
-                                <TableCell>{['', '未开始', '已完成', '进行中'][task.status]}</TableCell>
+                                <TableCell>{['', t('label.notStarted'), t('label.completed'), t('label.inProgress')][task.status]}</TableCell>
                                 <TableCell>{task.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{task.create_user}</TableCell>
                                 <TableCell className="break-all">{
                                     (task.mark_process || []).map(name => <p>{name}</p>)
                                 }</TableCell>
                                 <TableCell className="text-right">
-                                    <Link to={`/label/${task.id}`}><Button variant="link" className="px-0 pl-4" >查看</Button></Link>
-                                    {/* <Button variant="link" onClick={() => handleDelete(task.id)} className="text-red-500 px-0 pl-4">删除</Button> */}
+                                    <Link to={`/label/${task.id}`}><Button variant="link" className="px-0 pl-4" >{t('label.view')}</Button></Link>
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -223,14 +220,13 @@ export default function Tasks() {
                     <TableFooter>
                         {!tasks.length && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center text-gray-400">暂无数据</TableCell>
+                                <TableCell colSpan={6} className="text-center text-gray-400">{t('label.noData')}</TableCell>
                             </TableRow>
                         )}
                     </TableFooter>
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">
-                {/* <p className="desc">xxxx</p> */}
                 <AutoPagination
                     className="float-right justify-end w-full mr-6"
                     page={page}

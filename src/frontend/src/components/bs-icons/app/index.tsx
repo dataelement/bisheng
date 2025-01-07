@@ -1,7 +1,7 @@
 import React, { forwardRef } from "react";
 import Helper from "./helper.svg?react";
 import Flow from "./flow.svg?react";
-import Abilities from "./Abilities.svg?react";
+import Abilities from "./abilities.svg?react";
 
 export const HelperIcon = forwardRef<
     SVGSVGElement & { className: any },

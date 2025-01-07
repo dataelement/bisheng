@@ -91,7 +91,7 @@ export function getToolTree(temp) {
 // input_dee6e.text_input2    type: form   变量名 -> value[0].key
 // llm_b12e5.output_start_d377c.chat_history   type:var && value是数组时  变量名 -> value[0].key
 export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
-    if (!varName) return ''
+    if (!varName || typeof varName !== 'string') return ''
     const nodeName = nodes.find(node => node.id === nodeId).data.name
     const varNodeId = varName.match(/^([^.]+)/)[1]
     const res = nodes.some(node =>

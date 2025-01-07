@@ -8,7 +8,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus
 from fastapi import Request, WebSocket, status
 from loguru import logger
 
-from bisheng.api.errcode.flow import WorkFlowWaitUserTimeoutError, WorkFlowNodeRunMaxTimesError
+from bisheng.api.errcode.flow import WorkFlowWaitUserTimeoutError, WorkFlowNodeRunMaxTimesError, WorkFlowNodeUpdateError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
@@ -180,11 +180,14 @@ class WorkflowClient(BaseClient):
                         send_msg = False
 
                 if status_info['status'] == WorkflowStatus.FAILED.value:
-                    if status_info['reason'].find('has run more than the maximum number of times') != -1:
+                    if status_info['reason'].find('-- has run more than the maximum number of times') != -1:
                         await self.send_response('error', 'over', {'code': WorkFlowNodeRunMaxTimesError.Code,
                                                                    'message': status_info['reason'].split('--')[0]})
                     elif status_info['reason'].find('workflow wait user input timeout') != -1:
                         await self.send_response('error', 'over', {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
+                    elif status_info['reason'].find('-- node params is error') != -1:
+                        await self.send_response('error', 'over',
+                                                 {'code': WorkFlowNodeUpdateError.Code, 'message': status_info['reason'].split('--')[0]})
                     else:
                         await self.send_response('error', 'over', {'code': 500, 'message': status_info['reason']})
                 await self.send_response('processing', 'close', '')

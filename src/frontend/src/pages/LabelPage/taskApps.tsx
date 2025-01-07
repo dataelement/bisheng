@@ -5,14 +5,16 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { getChatLabelsApi, getMarkChatsApi } from "@/controllers/API/log";
+import { getMarkChatsApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { ArrowLeft } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 export default function taskApps() {
     const { id } = useParams()
     const navigator = useNavigate()
+    const { t } = useTranslation()
 
     const { page, pageSize, total, data: datalist, loading, setPage, filterData } = useTable({}, (param) =>
         getMarkChatsApi({
@@ -28,7 +30,7 @@ export default function taskApps() {
         <div className="bg-background-login px-4 overflow-y-auto h-full pb-20">
             <div className="flex justify-between items-center py-4">
                 <div className="flex items-center">
-                    <ShadTooltip content="back" side="top">
+                    <ShadTooltip content={t('label.back')} side="top">
                         <Button
                             className="w-[36px] px-2 rounded-full"
                             variant="outline"
@@ -42,28 +44,28 @@ export default function taskApps() {
                 <Table className="">
                     <TableHeader>
                         <TableRow>
-                            <TableHead>应用名称</TableHead>
-                            <TableHead>会话创建时间</TableHead>
-                            <TableHead>用户反馈</TableHead>
+                            <TableHead>{t('label.appName')}</TableHead>
+                            <TableHead>{t('label.sessionCreationTime')}</TableHead>
+                            <TableHead>{t('label.userFeedback')}</TableHead>
                             <TableHead className="w-[120px]">
                                 <div className="flex items-center">
-                                    标注状态
+                                    {t('label.annotationStatus')}
                                     <TableHeadEnumFilter options={[
-                                        { label: '全部', value: '0' },
-                                        { label: '未标注', value: '1' },
-                                        { label: '已标注', value: '2' },
-                                        { label: '无需标注', value: '3' }
+                                        { label: t('label.all'), value: '0' },
+                                        { label: t('label.unannotated'), value: '1' },
+                                        { label: t('label.annotated'), value: '2' },
+                                        { label: t('label.noAnnotationRequired'), value: '3' }
                                     ]}
                                         onChange={(v) => filterData({ mark_status: v })} />
                                 </div>
                             </TableHead>
                             <TableHead className="w-[140px]">
                                 <div className="flex items-center">
-                                    标注人
+                                    {t('label.annotator')}
                                     <ColFilterUser label={id} onFilter={(ids) => filterData({ mark_user: ids })}></ColFilterUser>
                                 </div>
                             </TableHead>
-                            <TableHead className="w-[80px] text-right">操作</TableHead>
+                            <TableHead className="w-[80px] text-right">{t('label.actions')}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -94,19 +96,17 @@ export default function taskApps() {
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell>{['', '未标注', '已标注', '无需标注'][el.mark_status || 1]}</TableCell>
+                                <TableCell>{['', t('label.unannotated'), t('label.annotated'), t('label.noAnnotationRequired')][el.mark_status || 1]}</TableCell>
                                 <TableCell>{el.mark_user || '-'}</TableCell>
                                 <TableCell className="text-right" onClick={() => {
                                     // @ts-ignore
                                     // window.libname = el.name;
                                 }}>
-                                    {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
                                     {
                                         el.chat_id && <Link
                                             to={`/label/chat/${id}/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                             className="no-underline hover:underline text-primary"
-                                        // onClick={handleCachePage}
-                                        >查看</Link>
+                                        >{t('label.view')}</Link>
                                     }
                                 </TableCell>
                             </TableRow>
@@ -115,14 +115,13 @@ export default function taskApps() {
                     <TableFooter>
                         {!datalist.length && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center text-gray-400">暂无数据</TableCell>
+                                <TableCell colSpan={6} className="text-center text-gray-400">{t('label.noData')}</TableCell>
                             </TableRow>
                         )}
                     </TableFooter>
                 </Table>
             </div>
             <div className="bisheng-table-footer bg-background-login px-2">
-                {/* <p className="desc">xxxx</p> */}
                 <AutoPagination
                     className="float-right justify-end w-full mr-6"
                     page={page}

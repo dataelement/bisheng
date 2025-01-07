@@ -22,6 +22,7 @@ const PageChange = () => {
     const [hasNext, setHasNext] = useState(false)
     const prevInfoRef = useRef<any>(null)
     const nextInfoRef = useRef<any>(null)
+    const { t } = useTranslation()
     useEffect(() => {
         getNextMarkChatApi({ action: 'prev', chat_id: cid, task_id: id }).then(res => {
             setHasPrev(!!res)
@@ -46,13 +47,13 @@ const PageChange = () => {
             disabled={!hasPrev}
             className="border-primary text-primary text-xs h-8"
             onClick={() => jumpToNext(-1)}
-        >上一条会话</Button>
+        >{t('label.previousChat')}</Button>
         <Button
             variant="outline"
             disabled={!hasNext}
             className="border-primary text-primary text-xs h-8"
             onClick={() => jumpToNext(1)}
-        >下一条会话</Button>
+        >{t('label.nextChat')}</Button>
     </div>
 }
 
@@ -142,18 +143,18 @@ export default function index() {
                             onClick={() => navigator('/label/' + id)}
                         ><ArrowLeft className="side-bar-button-size" /></Button>
                     </ShadTooltip>
-                    <span className=" text-gray-700 text-sm font-black pl-4">返回列表</span>
+                    <span className=" text-gray-700 text-sm font-black pl-4">{t('label.returnToList')}</span>
                 </div>
                 <RadioGroup className="flex space-x-2 h-[20px] items-center" value={status}
                     onValueChange={(value: LabelStatus) => changeMarkStatus(value)} disabled={!isSelf && status !== LabelStatus.Unlabeled}>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unlabeled} />未标注
+                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unlabeled} />{t('label.unlabeled')}
                     </Label>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Labeled} />已标注
+                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Labeled} />{t('label.labeled')}
                     </Label>
                     <Label className="flex justify-center">
-                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unnecessary} />无需标注
+                        <RadioGroupItem className="mr-2" disabled={!mark} value={LabelStatus.Unnecessary} />{t('label.unnecessary')}
                     </Label>
                 </RadioGroup>
                 <PageChange />
