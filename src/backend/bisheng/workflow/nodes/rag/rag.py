@@ -1,4 +1,10 @@
+import json
+import time
 from typing import List, Any
+
+
+from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
+                                    SystemMessagePromptTemplate)
 
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.clients.llm_callback import LLMRagNodeCallbackHandler
@@ -6,12 +12,11 @@ from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.utils.minio_client import MinioClient
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
-from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
-                                    SystemMessagePromptTemplate)
 
 
 class RagNode(BaseNode):
@@ -24,6 +29,8 @@ class RagNode(BaseNode):
         self._knowledge_value = [
             one['key'] for one in self.node_params['knowledge']['value']
         ]
+
+        self._minio_client = MinioClient()
 
         self._knowledge_auth = self.node_params['user_auth']
         self._max_chunk_size = int(self.node_params['max_chunk_size'])
@@ -110,9 +117,19 @@ class RagNode(BaseNode):
         for key, val in result.items():
             output_keys.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
             source_documents.append([one.page_content for one in self._log_source_documents[key]])
+
+        tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
+        tmp_retrieved_type = 'params'
+        if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
+            tmp_retrieved_type = 'file'
+            tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
+            self._minio_client.upload_tmp(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
+            share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
+            tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
+
         ret = [
             {'key': 'user_question', 'value': self.init_user_question(), "type": "params"},
-            {'key': 'retrieved_result', 'value': source_documents, "type": "params"},
+            {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
             {'key': 'system_prompt', 'value': self._log_system_prompt, "type": "params"},
             {'key': 'user_prompt', 'value': self._log_user_prompt, "type": "params"},
         ]
@@ -137,9 +154,10 @@ class RagNode(BaseNode):
         if variable_map.get(f'{self.id}.retrieved_result') is None:
             raise IgnoreException('用户提示词必须包含 retrieved_result 变量')
         user_prompt = self._user_prompt.format(variable_map)
+        log_user_prompt = user_prompt.replace('$$question$$', '{user_question}').replace('$$context$$', '{retrieved_result}')
         user_prompt = (user_prompt.replace('{', '{{').replace('}', '}}')
                        .replace('$$question$$', '{question}').replace('$$context$$', '{context}'))
-        self._log_user_prompt.append(user_prompt)
+        self._log_user_prompt.append(log_user_prompt)
 
         variable_map = {}
         for one in self._system_variables:
