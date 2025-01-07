@@ -145,7 +145,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
         <SelectTrigger
             onClick={() => inputOpenRef.current = false}
             showIcon={false}
-            className={cname('group p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
+            className={cname('group shrink min-w-0 p-0 h-auto data-[placeholder]:text-inherit border-none bg-transparent shadow-none outline-none focus:shadow-none focus:outline-none focus:ring-0', className)}>
             {children}
         </SelectTrigger>
         <SelectContent position="popper" avoidCollisions={false}>
