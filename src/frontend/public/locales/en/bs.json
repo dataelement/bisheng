@@ -944,5 +944,6 @@
   "required": "cannot be empty",
   "addSimilarQuestion": "Add Similar Question",
   "addQa": "Add QA",
+  "inserVar": "Insert variable",
   "chatTips": "1. Please comply with the Cybersecurity Law of the People's Republic of China, the Data Security Law of the People's Republic of China, the Personal Information Protection Law of the People's Republic of China, and the Basic Requirements for the Security of Generative Artificial Intelligence Services;\n2. It is forbidden to upload confidential data that falls within the scope of the company's confidentiality management regulations;\n3. It is forbidden to upload data containing personal privacy information;\n4. It is forbidden to upload files containing malicious programs or viruses;\n5. It is forbidden to use AI to generate offensive code;\n6. It is forbidden to ask AI questions involving but not limited to explosives, terrorism, pornography, and information that endangers national and public security;\n7. AI-generated content is subject to the company's confidentiality management regulations. Users should judge the reasonableness of the generated content based on the actual situation to avoid risks caused by AI hallucinations."
 }

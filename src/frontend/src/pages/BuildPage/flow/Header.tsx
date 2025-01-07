@@ -489,7 +489,7 @@ const useNodeEvent = (flow) => {
         };
         const findOutType = (nodeId) => {
             if (!nodeId.startsWith('output')) return '';
-            return flow.nodes.find(node => node.id === nodeId).data.group_params[0].params[1].value.type;
+            return flow.nodes.find(node => node.id === nodeId)?.data.group_params[0].params[1].value.type || '';
         };
 
         const traverseTree = (nodeId, branchId, nodeIds) => {

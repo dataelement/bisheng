@@ -65,7 +65,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                         <Button variant="outline" size="icon" className="bg-[#fff] size-8"><ChevronLeft /></Button>
                     </DialogClose>
                     <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => handleInset(`${E.id}.${v.value}`)}>
-                        <Button className="h-8">插入变量 <ChevronDown size={14} /></Button>
+                        <Button className="h-8">{t('inserVar')}<ChevronDown size={14} /></Button>
                     </SelectVar>
                 </div>
                 <Word data={docx} workflow></Word>
