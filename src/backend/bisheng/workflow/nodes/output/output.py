@@ -120,7 +120,7 @@ class OutputNode(BaseNode):
                 node_id = one.split('.')[0]
                 # 引用qa知识库节点时，展示溯源情况
                 if node_id.startswith('qa_retriever'):
-                    self._source_documents = self.graph_state.get_variable(node_id, 'retrieved_result')
+                    self._source_documents = self.graph_state.get_variable(node_id, '$retrieved_result$')
                 var_map[one] = self.graph_state.get_variable_by_str(one)
             msg = msg_template.format(var_map)
         return msg
