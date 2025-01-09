@@ -114,6 +114,7 @@
     "textInput": "文本输入",
     "dropdown": "下拉选项",
     "file": "文件",
+    "text": "文本",
     "displayName": "展示名称",
     "variableName": "变量名称",
     "options": "选项",
@@ -153,5 +154,13 @@
     "onlineVersionMessage": "当前版本已上线不可修改，可另存为新版本保存修改内容",
     "unsavedChangesMessage": "您有未保存的更改,确定要离开吗?",
     "runNode": "运行此节点",
-    "copy": "复制"
+    "copy": "复制",
+    "cannotBeEmpty": "{{label}}不可为空",
+    "editReportTemplate": "编辑报告模板",
+    "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效，可能是相关节点已被删除或替换，请重新引用变量。",
+    "required": "不可为空",
+    "isRequired": "是否必填",
+    "documentKnowledgeBase": "文档知识库",
+    "temporarySessionFiles": "临时会话文件",
+    "storeFilesSentInCurrentSession": "存储当前会话中发送的文件"
 }

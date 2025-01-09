@@ -3,6 +3,7 @@ import { Label } from "@/components/bs-ui/label";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { File, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import VarInput from "./VarInput";
 
@@ -18,11 +19,12 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
     const { files, handleFileUpload, handleFileRemove } = useFileUpload(data.value?.files || [], handleFilesChange);
 
     const [error, setError] = useState(false)
+    const { t } = useTranslation()
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value?.msg && data.value?.files.length === 0) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + ' ' + t('required')
             }
             setError(false)
             return false

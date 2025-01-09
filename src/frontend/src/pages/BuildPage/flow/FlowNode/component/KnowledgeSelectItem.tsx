@@ -8,15 +8,25 @@ import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import { isVarInFlow } from "@/util/flowUtils";
 
-const TabsHead = memo(({ tab, onChange }) => {
 
-    return <Tabs defaultValue={tab} className="mb-2" onValueChange={onChange}>
-        <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
-            <TabsTrigger value="knowledge" className="text-xs">文档知识库</TabsTrigger>
-            <TabsTrigger value="tmp" className="text-xs">临时会话文件<QuestionTooltip content={'存储用户在当前会话中发送的文件，需要与输入节点（表单输入模式）搭配使用。'} /></TabsTrigger>
-        </TabsList>
-    </Tabs>
-})
+const TabsHead = memo(({ tab, onChange }) => {
+    const { t } = useTranslation('flow');
+
+    return (
+        <Tabs defaultValue={tab} className="mb-2" onValueChange={onChange}>
+            <TabsList className="grid w-full grid-cols-2 py-1 max-w-80">
+                <TabsTrigger value="knowledge" className="text-xs">
+                    {t('documentKnowledgeBase')}
+                </TabsTrigger>
+                <TabsTrigger value="tmp" className="text-xs">
+                    {t('temporarySessionFiles')}
+                    <QuestionTooltip content={t('storeFilesSentInCurrentSession')} />
+                </TabsTrigger>
+            </TabsList>
+        </Tabs>
+    );
+});
+
 
 const enum KnowledgeType {
     Knowledge = 'knowledge',
@@ -112,7 +122,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         data.required && onValidate(() => {
             if (!data.value.value.length) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + ' ' + t('required')
             }
             setError(false)
             return false

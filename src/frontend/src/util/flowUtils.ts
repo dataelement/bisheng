@@ -1,4 +1,5 @@
 import { Node } from "@xyflow/react";
+import i18next from "i18next";
 import { cloneDeep } from "lodash-es";
 import { useEffect, useRef, useState } from "react";
 
@@ -107,9 +108,8 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
             })
         ) : false
     )
-    return res ? '' : `${nodeName}节点错误：${varNameCn}已失效，可能是相关节点已被删除或替换，请重新引用变量。`
+    return res ? '' : i18next.t('nodeErrorMessage', { ns: 'flow', nodeName, varNameCn })
 }
-
 
 /**
  * 并行节点判断
@@ -222,4 +222,14 @@ export function useCopyPasteNode(dom, lastSelection, paste, del, deps) {
             document?.removeEventListener("mousemove", handleMouseMove);
         };
     }, [dom, lastSelection, lastCopiedSelection, ...deps]);
+}
+
+
+// 过滤无用连线
+export function filterUselessFlow(nodes, edges) {
+    return edges.filter(edge => {
+        const sourceNode = nodes.find(node => node.id === edge.source);
+        const targetNode = nodes.find(node => node.id === edge.target);
+        return sourceNode && targetNode;
+    })
 }

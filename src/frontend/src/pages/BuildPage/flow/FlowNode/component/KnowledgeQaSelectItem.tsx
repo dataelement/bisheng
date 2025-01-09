@@ -47,13 +47,13 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
         data.required && onValidate(() => {
             if (!data.value.length) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + ' ' + t('required')
             }
             setError(false)
             return false
         })
-        
-        return () => onValidate(() => {})
+
+        return () => onValidate(() => { })
     }, [data.value])
 
     return <div className='node-item mb-4'>

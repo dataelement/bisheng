@@ -204,7 +204,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             )} */}
 
             <div className="flex items-center space-x-2">
-                <Label className="bisheng-label">是否必填</Label>
+                <Label className="bisheng-label">{t('isRequired')}</Label>
                 <Switch
                     checked={formData.isRequired}
                     onCheckedChange={(checked) => setFormData({ ...formData, isRequired: checked })}

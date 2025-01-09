@@ -2,9 +2,11 @@ import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { getAssistantModelList, getLlmDefaultModel, getModelListApi } from "@/controllers/API/finetune";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function ModelItem({ agent = false, data, onChange, onValidate }) {
     const [options, setOptions] = useState<any[]>([])
+    const { t } = useTranslation()
 
     useEffect(() => {
         (agent ? getAssistantModelList() : getModelListApi()).then(res => {
@@ -61,7 +63,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
         data.required && onValidate(() => {
             if (!data.value) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + ' ' + t('required')
             }
             setError(false)
             return false
