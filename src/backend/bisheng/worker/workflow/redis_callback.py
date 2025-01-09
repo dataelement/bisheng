@@ -3,6 +3,7 @@ import time
 import uuid
 
 from cachetools import TTLCache
+from langchain_core.documents import Document
 from loguru import logger
 
 from bisheng.api.v1.schemas import ChatResponse
@@ -114,6 +115,8 @@ class RedisCallback(BaseCallback):
         if source_documents:
             result = {}
             extra = {}
+            if isinstance(source_documents, Document):
+                result = source_documents
             source, result = sync_judge_source(result, source_documents, self.chat_id, extra)
             chat_response.source = source
             chat_response.extra = json.dumps(extra, ensure_ascii=False)

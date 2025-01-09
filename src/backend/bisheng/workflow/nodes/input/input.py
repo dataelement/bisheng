@@ -49,7 +49,7 @@ class InputNode(BaseNode):
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         return [
-            {"key": k, "value": v, "type": "variable"} for k, v in result.items()
+            {"key": f'{self.id}.{k}', "value": v, "type": "variable"} for k, v in result.items()
         ]
 
     def parse_upload_file(self, key: str, value: str) -> dict | None:

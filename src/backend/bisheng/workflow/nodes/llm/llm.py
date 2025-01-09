@@ -61,7 +61,7 @@ class LLMNode(BaseNode):
         if self._batch_variable_list:
             ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
         for k, v in result.items():
-            ret.append({"key": k, "value": v, "type": "variable"})
+            ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
         return ret
 
     def _run_once(self,

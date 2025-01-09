@@ -129,7 +129,7 @@ class GraphEngine:
         no_wait_nodes = []
         for one in source_ids:
             # output节点有特殊处理逻辑
-            if one.startswith('output_'):
+            if one.startswith(('output_', 'condition_')):
                 continue
             if one in all_next_nodes:
                 no_wait_nodes.append(one)

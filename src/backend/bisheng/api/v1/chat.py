@@ -156,7 +156,7 @@ def get_app_chat_list(*,
     res_obj = PageList(list=[
         AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
                     flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one['flow_id'],
-                    flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else FlowType.FLOW.value,
+                    flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else flow_map[one['flow_id']].flow_type,
                     **one) for one in res if flow_map.get(one['flow_id'])
     ],
                        total=count)
