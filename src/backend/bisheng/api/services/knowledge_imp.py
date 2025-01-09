@@ -836,6 +836,9 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
         if code_ret:
             question_dict = json.loads(code_ret[0])
             return question_dict['questions']
+        elif gen_question:
+            question_dict = json.loads(gen_question)
+            return question_dict.get('questions', [])
         else:
             logger.info('md_code_extract_error {}', gen_question)
         return []
