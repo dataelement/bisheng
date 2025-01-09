@@ -1,15 +1,17 @@
 import { Label } from "@/components/bs-ui/label";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import VarInput from "./VarInput";
 
 export default function VarTextareaItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
     const [error, setError] = useState(false)
+    const { t } = useTranslation()
 
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value.trim()) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + ' ' + t('required')
             }
             setError(false)
             return false

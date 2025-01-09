@@ -33,7 +33,7 @@ jobs:
       - name: Set python version 3.10
         uses: actions/setup-python@v1
         with:
-          python-version: 3.10.15
+          python-version: 3.10.*
 
       - name: Build PyPi bisheng-langchain and push
         id: pypi_build_bisheng_langchain

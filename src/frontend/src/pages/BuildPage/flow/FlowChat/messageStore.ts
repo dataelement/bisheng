@@ -156,7 +156,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }))
     },
     insetNodeRun(data) {
-        if (['input', 'output', 'condition'].includes(data.messages?.node_id.split('_'))) return
+        if (['input', 'output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
         set((state) => {
             let newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
