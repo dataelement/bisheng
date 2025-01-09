@@ -69,6 +69,16 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
         }
     };
 
+    const handleChangeType = (val) => {
+        setInteractionType(val);
+        if (interactionType === "choose" || val === "choose") {
+            const addNodeEvent = new CustomEvent("outputDelEdge", {
+                detail: { nodeId }
+            });
+            window.dispatchEvent(addNodeEvent);
+        }
+    }
+
     const [error, setError] = useState(false);
     useEffect(() => {
         data.required &&
@@ -91,7 +101,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
             <RadioGroup
                 value={interactionType}
                 onValueChange={(val) => {
-                    setInteractionType(val);
+                    handleChangeType(val)
                     onChange({ type: val, value: "" });
                     setError(false);
                 }}

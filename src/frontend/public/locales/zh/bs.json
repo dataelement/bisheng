@@ -553,7 +553,15 @@
     "manageAppTemplates": "管理应用模板",
     "provideSceneTemplates": "我们提供场景模板供您使用和参考",
     "noPermissionToPublish": "您没有权限上线此{{type}}，请联系管理员上线。",
-    "manageYourApplications": "在此页面管理您的应用，对应用上下线、编辑等等"
+    "manageYourApplications": "在此页面管理您的应用，对应用上下线、编辑等等",
+    "workFlow": "工作流",
+    "skillName": "技能名称",
+    "pleaseFillIn": "请填写{{labelName}}名称",
+    "nameTooLong": "{{labelName}}名称过长，不要超过50字",
+    "addDescription": "加些描述能够快速让别人理解您创造的{{labelName}}",
+    "descriptionTooLong": "{{labelName}}描述不可超过 200 字",
+    "templateCreatedSuccessfully": "模板创建成功",
+    "workFlowName": "工作流名称"
   },
   "tools": {
     "addTool": "添加工具",

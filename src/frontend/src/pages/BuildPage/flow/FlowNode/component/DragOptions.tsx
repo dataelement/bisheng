@@ -1,10 +1,11 @@
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { generateUUID } from '@/components/bs-ui/utils';
-import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
-import { useEffect, useRef, useState } from 'react';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { Handle, Position } from '@xyflow/react';
+import i18next from "i18next";
+import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
+import { useEffect, useState } from 'react';
+import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
 interface Iprops {
@@ -21,9 +22,9 @@ interface Iprops {
 
 // TODO 移动到业务组件
 const itemNames = {
-    'select': "下拉选项",
-    'file': "文件",
-    'text': "文本"
+    'select': i18next.t('dropdown', { ns: 'flow' }),
+    'file': i18next.t('file', { ns: 'flow' }),
+    'text': i18next.t('dropdown', { ns: 'flow' })
 }
 
 export default function DragOptions({ edges = false, scroll = false, options, onEditClick, onChange }: Iprops) {

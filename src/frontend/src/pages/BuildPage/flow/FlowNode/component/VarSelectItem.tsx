@@ -6,6 +6,7 @@ import { ChevronDown, X } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
+import { useTranslation } from "react-i18next";
 
 const valueToOutput = (newValues, varZh) => {
     return newValues.map(el => {
@@ -39,11 +40,12 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
         }
     };
 
+    const { t } = useTranslation()
     useEffect(() => {
         data.required && onValidate(() => {
             if (!data.value.length) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + ' ' + t('required')
             }
             setError(false)
             return false
@@ -101,6 +103,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
 // 单选
 export function VarSelectSingleItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
     const [value, setValue] = React.useState(data.value)
+    const { t } = useTranslation()
 
     const handleChange = (item, v) => {
         // [nodeId.xxx]
@@ -122,7 +125,7 @@ export function VarSelectSingleItem({ nodeId, data, onChange, onValidate, onVarE
         data.required && onValidate(() => {
             if (!data.value) {
                 setError(true)
-                return data.label + '不可为空'
+                return data.label + t('required')
             }
             setError(false)
             return false

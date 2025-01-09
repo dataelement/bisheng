@@ -113,6 +113,7 @@
     "textInput": "Text Input",
     "dropdown": "Dropdown",
     "file": "File",
+    "text": "Text",
     "displayName": "Display Name",
     "variableName": "Variable Name",
     "options": "Options",
@@ -153,5 +154,13 @@
     "onlineVersionMessage": "The current version is online and cannot be modified. You can save the changes as a new version.",
     "unsavedChangesMessage": "You have unsaved changes. Are you sure you want to leave?",
     "runNode": "Run this node",
-    "copy": "Copy"
+    "copy": "Copy",
+    "cannotBeEmpty": "{{label}} cannot be empty",
+    "editReportTemplate": "Edit Report Template",
+    "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid, possibly because the related node has been deleted or replaced. Please reassign the variable.",
+    "required": "Required",
+    "isRequired": "Is Required",
+    "documentKnowledgeBase": "Document Knowledge",
+    "temporarySessionFiles": "Temporary Files",
+    "storeFilesSentInCurrentSession": "Store files sent in the current session"
 }

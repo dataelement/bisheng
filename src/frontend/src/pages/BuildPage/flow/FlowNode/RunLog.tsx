@@ -96,20 +96,20 @@ export default function RunLog({ node, children }) {
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
                         if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
-                            // 尝试去value中匹配
+                            // 尝试去value中匹配 (input-form; preset-quesitons)
                             param.value.forEach(value => {
                                 if (!newData[value.key]) return
-                                result[value.label] = newData[value.key];
+                                result[value.label || value.key] = newData[value.key].value;
                                 hasKeys.push(value.key)
                             })
                         } else if (newData[param.key] !== undefined) {
-                            result[param.label || param.key] = newData[param.key];
+                            result[param.label || param.key] = newData[param.key].value;
                             hasKeys.push(param.key)
                         } else if (param.key === 'tool_list') {
                             // tool
                             param.value.some(p => {
                                 if (newData[p.tool_key] !== undefined) {
-                                    result[p.label] = newData[p.tool_key];
+                                    result[p.label] = newData[p.tool_key].value;
                                     hasKeys.push(p.tool_key)
                                     return true
                                 }
@@ -120,7 +120,7 @@ export default function RunLog({ node, children }) {
 
                 for (let key in newData) {
                     if (!hasKeys.includes(key)) {
-                        result[key] = newData[key];
+                        result[key] = newData[key].value;
                     }
                 }
                 setData(result)

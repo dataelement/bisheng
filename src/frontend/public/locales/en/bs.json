@@ -556,7 +556,15 @@
     "manageAppTemplates": "Manage Application Templates",
     "provideSceneTemplates": "We provide scene templates for you to use and reference",
     "noPermissionToPublish": "You do not have permission to publish this {{type}}, please contact the administrator to publish.",
-    "manageYourApplications": "Manage your applications on this page, including publishing, editing, etc."
+    "manageYourApplications": "Manage your applications on this page, including publishing, editing, etc.",
+    "workFlow": "Workflow",
+    "skillName": "Skill Name",
+    "pleaseFillIn": "Please fill in the {{labelName}} name",
+    "nameTooLong": "{{labelName}} name is too long, do not exceed 50 characters",
+    "addDescription": "Add some description to quickly let others understand your {{labelName}}",
+    "descriptionTooLong": "{{labelName}} description cannot exceed 200 characters",
+    "templateCreatedSuccessfully": "Template created successfully",
+    "workFlowName": "Workflow Name"
   },
   "tools": {
     "addTool": "Add Tool",

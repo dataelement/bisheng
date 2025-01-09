@@ -122,7 +122,7 @@ export const RunTest = forwardRef((props, ref) => {
             if (input.required && !input.value) {
                 message({
                     variant: "warning",
-                    description: `${input.label} 不可为空`
+                    description: `${input.label} ${t('required')}`
                 })
                 return true
             }
