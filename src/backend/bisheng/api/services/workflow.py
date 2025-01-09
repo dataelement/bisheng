@@ -136,7 +136,7 @@ class WorkFlowService(BaseService):
                 continue
             if node_data.type == NodeType.RAG.value and one['key'] != 'retrieved_result' and one['type'] != 'variable':
                 continue
-            if node_data.type == NodeType.LLM.value and not one['key'].startswith('output'):
+            if node_data.type == NodeType.LLM.value and one['type'] != 'variable':
                 continue
             if node_data.type == NodeType.AGENT.value and one['type'] not in ['tool', 'variable']:
                 continue
