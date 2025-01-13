@@ -322,7 +322,7 @@ class FlowDao(FlowBase):
                      page: int = 0, limit: int = 0) -> (List[Dict], int):
         """ 获取所有的应用 包含技能、助手、工作流 """
         sub_query = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id, Flow.status, Flow.create_time, Flow.update_time).union_all(
-            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value, Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time, Assistant.update_time)).subquery()
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value, Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time, Assistant.update_time).where(Assistant.is_delete==0)).subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description, sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id, sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
         count_statement = select(func.count(sub_query.c.id))
