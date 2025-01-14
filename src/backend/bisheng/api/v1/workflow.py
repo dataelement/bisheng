@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Optional
 from uuid import UUID
 from uuid import uuid4
@@ -37,6 +38,8 @@ async def get_report_file(
     if not version_key:
         # 重新生成一个version_key
         version_key = uuid4().hex
+    else:
+        version_key = version_key.split('_', 1)[0]
     file_url = ""
     object_name = f"workflow/report/{version_key}.docx"
     minio_client = MinioClient()
@@ -45,7 +48,7 @@ async def get_report_file(
 
     return resp_200(data={
         'url': file_url,
-        'version_key': version_key,
+        'version_key': f'{version_key}_{int(time.time()*1000)}',
     })
 
 
@@ -72,9 +75,10 @@ async def upload_report_file(
         return {'error': 0}
     logger.info(f'office_callback url={file_url}')
     file = Requests().get(url=file_url)
+    version_key = key.split('_', 1)[0]
 
     minio_client = MinioClient()
-    object_name = f"workflow/report/{key}.docx"
+    object_name = f"workflow/report/{version_key}.docx"
     minio_client.upload_minio_data(
         object_name, file._content, len(file._content),
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
