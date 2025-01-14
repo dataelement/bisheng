@@ -657,7 +657,7 @@ class KnowledgeService(KnowledgeUtils):
             file_info = file_map.get(file_id, None)
             # 过滤文件名和总结的文档摘要内容
             result.append(
-                FileChunk(text=one['_source']['text'].split(KnowledgeUtils.chunk_split, 1)[-1],
+                FileChunk(text=KnowledgeUtils.split_chunk_metadata(one['_source']['text']),
                           metadata=one['_source']['metadata'],
                           parse_type=file_info.parse_type if file_info else None))
         return result, res['hits']['total']['value']
@@ -698,7 +698,7 @@ class KnowledgeService(KnowledgeUtils):
             logger.info(f'act=add_vector {knowledge_id}')
             new_metadata = metadata[0]
             new_metadata['bbox'] = bbox
-            text = f"{new_metadata['source']}\n{new_metadata['title']}{KnowledgeUtils.chunk_split}{text}"
+            text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
             res = vector_client.add_texts([text], [new_metadata], timeout=10)
         # delete data
         logger.info(f'act=delete_vector pk={pk}')
