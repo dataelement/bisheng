@@ -15,6 +15,7 @@ from bisheng.api.services.knowledge_imp import (KnowledgeUtils, decide_vectorsto
                                                 read_chunk_text, retry_files)
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (FileChunk, FileChunkMetadata, FileProcessBase, KnowledgeFileOne,
                                     KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk)
 from bisheng.cache.redis import redis_client
@@ -458,11 +459,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def process_one_file(
-        cls,
-        login_user: UserPayload,
-        knowledge: Knowledge,
-        file_info: KnowledgeFileOne,
-        split_rule: Dict,
+            cls,
+            login_user: UserPayload,
+            knowledge: Knowledge,
+            file_info: KnowledgeFileOne,
+            split_rule: Dict,
     ) -> KnowledgeFile:
         """ 处理上传的文件 """
         minio_client = MinioClient()
@@ -511,7 +512,7 @@ class KnowledgeService(KnowledgeUtils):
                             file_name: str = None,
                             status: int = None,
                             page: int = 1,
-                            page_size: int = 10) -> (List[KnowledgeFile], int, bool):
+                            page_size: int = 10) -> (List[KnowledgeFileResp], int, bool):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -524,8 +525,41 @@ class KnowledgeService(KnowledgeUtils):
                                                    page_size)
         total = KnowledgeFileDao.count_file_by_filters(knowledge_id, file_name, status)
 
-        return res, total, login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                                   AccessType.KNOWLEDGE_WRITE)
+        # get file title from es
+        finally_res = []
+        file_title_map = {}
+        if res:
+            try:
+                embeddings = FakeEmbedding()
+                es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+                search_data = {
+                    'size': 1,
+                    'sort': [{
+                        'metadata.chunk_index': {
+                            'order': 'asc',
+                            'missing': 0,
+                            'unmapped_type': 'long'
+                        }
+                    }],
+                    'post_filter': {'terms': {'metadata.file_id': [one.id for one in res]}},
+                    "collapse": {
+                        "field": "metadata.file_id"
+                    },
+                }
+                es_res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
+                for one in es_res['hits']['hits']:
+                    file_title_map[one['_source']['metadata']['file_id']] = one['_source']['metadata']['title']
+            except Exception as e:
+                logger.warning(f'act=get_knowledge_files error={str(e)}')
+                pass
+        for index, one in enumerate(res):
+            finally_res.append(KnowledgeFileResp(**one.model_dump()))
+            if one.status != KnowledgeFileStatus.SUCCESS.value:
+                continue
+            finally_res[index].title = file_title_map.get(one.id, '')
+
+        return finally_res, total, login_user.access_check(db_knowledge.user_id, str(knowledge_id),
+                                                           AccessType.KNOWLEDGE_WRITE)
 
     @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: List[int]):
@@ -584,7 +618,7 @@ class KnowledgeService(KnowledgeUtils):
         search_data = {
             'from': (page - 1) * limit,
             'size':
-            limit,
+                limit,
             'sort': [{
                 'metadata.file_id': {
                     'order': 'desc',
@@ -694,7 +728,7 @@ class KnowledgeService(KnowledgeUtils):
                 },
                 'script': {
                     'source':
-                    'ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;',
+                        'ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;',
                     'params': {
                         'text': text,
                         'bbox': bbox
