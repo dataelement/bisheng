@@ -126,7 +126,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
     }, [data.value])
 
     return (
-        <div>
+        <div className="nowheel max-h-80 overflow-y-auto">
             {items.map((item, index) => (
                 <Item
                     key={index}

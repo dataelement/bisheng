@@ -177,13 +177,15 @@ export default function VarInput({
             className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'
                 }`}
         >
-            <div className="flex justify-between gap-1 border-b px-2 py-1" onClick={() => textareaRef.current.focus()}>
+            <div className="flex justify-between gap-1 border-b dark:border-gray-600 px-2 py-1" onClick={() => textareaRef.current.focus()}>
                 <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>
-                    {t('variableInput')}
+                    {flowNode.required && <span className="text-red-500">*</span>}
+                    {flowNode.label}
                 </Label>
                 <div className="flex gap-2">
                     <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                        <Variable size={16} className="text-muted-foreground hover:text-gray-800" />
+                        <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
+                        {/* <Variable size={16} className="text-muted-foreground hover:text-gray-800" /> */}
                     </SelectVar>
                     {onUpload && (
                         <Button variant="ghost" className="p-0 h-4 text-muted-foreground" onClick={onUpload}>

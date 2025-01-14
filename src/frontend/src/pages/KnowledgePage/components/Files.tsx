@@ -12,7 +12,7 @@ import {
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { Filter, RotateCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -71,10 +71,23 @@ export default function Files({ onPreview }) {
 
     // 重试解析
     const handleRetry = (objs) => {
-        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({file_objs: objs}).then(res => {
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi({ file_objs: objs }).then(res => {
             reload()
         }))
     }
+
+    // 策略解析
+    const dataSouce = useMemo(() => {
+        return datalist.map(el => {
+            const rule = JSON.parse(el.split_rule)
+            const { separator, separator_rule } = rule
+            const data = separator.map((el, i) => `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`)
+            return {
+                ...el,
+                strategy: [data.length > 2 ? data.slice(0, 2).join(',') : '', data.join(',')]
+            }
+        })
+    }, [datalist])
 
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -88,8 +101,9 @@ export default function Files({ onPreview }) {
             <Table>
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[600px]">{t('fileName')}</TableHead>
-                        <TableHead className="flex items-center gap-4">
+                        <TableHead className="min-w-[300px]">{t('fileName')}</TableHead>
+                        <TableHead className="min-w-[220px]">文件摘要</TableHead>
+                        <TableHead className="flex items-center gap-4 min-w-[130px]">
                             {t('status')}
                             <Select onValueChange={selectChange}>
                                 <SelectTrigger className="border-none w-16">
@@ -105,14 +119,25 @@ export default function Files({ onPreview }) {
                                 </SelectContent>
                             </Select>
                         </TableHead>
-                        <TableHead>{t('uploadTime')}</TableHead>
+                        <TableHead className="min-w-[100px]">{t('uploadTime')}</TableHead>
+                        <TableHead>切分策略</TableHead>
                         <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {datalist.map(el => (
+                    {dataSouce.map(el => (
                         <TableRow key={el.id}>
                             <TableCell className="font-medium">{el.file_name}</TableCell>
+                            <TableCell className="font-medium">
+                                {el.title.length > 20 ? <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger>{el.title.slice(0, 20)}...</TooltipTrigger>
+                                        <TooltipContent>
+                                            <div className="max-w-96 text-left break-all whitespace-normal">{el.title}</div>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider> : el.title}
+                            </TableCell>
                             <TableCell>
                                 {el.status === 3 ? <div className="flex items-center">
                                     <TooltipProvider delayDuration={100}>
@@ -133,6 +158,16 @@ export default function Files({ onPreview }) {
                                 }
                             </TableCell>
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                            <TableCell>
+                                {el.strategy[0] ? <TooltipProvider delayDuration={100}>
+                                    <Tooltip>
+                                        <TooltipTrigger>{el.strategy[0]}...</TooltipTrigger>
+                                        <TooltipContent>
+                                            <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1]}</div>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider> : el.strategy[1]}
+                            </TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" disabled={el.status !== 2} className="px-2" onClick={() => onPreview(el.id)}>{t('view')}</Button>
                                 {hasPermission ?

@@ -274,7 +274,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                     {t('processOrchestration')}
                 </Button>
                 <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
-                    onClick={() => { setTabType('api'); onTabChange('api') }}>
+                    onClick={() => {
+                        setTabType('api');
+                        onTabChange('api');
+                        testRef.current.close()
+                    }}>
                     {t('externalRelease')}
                 </Button>
             </div>
@@ -426,7 +430,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </header>
+        </header >
     );
 };
 

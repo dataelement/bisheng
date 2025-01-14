@@ -84,7 +84,7 @@ function FlowControl({ groupId, type, onChange }) {
     const map = {
         3: { name: t('build.assistantName'), label: t('system.AssistantFlowCtrl'), placeholder: t('system.assistantName') },
         2: { name: t('skills.skillName'), label: t('system.SkillFlowCtrl'), placeholder: t('skills.skillName') },
-        5: { name: '工作流名称', label: '工作流流量控制', placeholder: '工作流名称' },
+        5: { name: t('build.workFlowName'), label: t('system.flowCtrl'), placeholder: t('build.workFlowName') },
     }
     const { name, label, placeholder } = map[type]
     const { page, pageSize, data, total, setPage, search, refreshData } = useTable({ pageSize: 10 }, (params) =>

@@ -166,7 +166,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 description: t('model.duplicateServiceProviderName')
             })
         }
-        if (!formData.name || formData.name.length > 30) {
+        if (!formData.name || formData.name.length > 100) {
             return message({
                 variant: 'warning',
                 description: t('model.duplicateServiceProviderNameValidation')
@@ -186,7 +186,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         const error = formData.models.some(model => {
             if (map[model.model_name]) repeat = true
             map[model.model_name] = true
-            return !model.model_name || model.model_name.length > 30
+            return !model.model_name || model.model_name.length > 100
         })
         if (error) {
             return message({
@@ -287,9 +287,9 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
                         <div className={`flex items-center gap-x-2 ${formData.limit_flag ? '' : 'invisible'}`}>
                             <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                className="w-24 h-8"
+                                className="w-20 h-8"
                             ></Input>
-                            <span>{t('model.timesPerDay')}</span>
+                            <span className="min-w-24">{t('model.timesPerDay')}</span>
                         </div>
                     </div>
                 </div>

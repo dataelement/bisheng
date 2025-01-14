@@ -9,7 +9,7 @@ export default function InputListItem({ data, onChange }) {
             {data.label}
             {data.help && <QuestionTooltip content={data.help} />}
         </Label>
-        <div className="nowheel overflow-y-auto max-h-52 mt-2">
+        <div className="nowheel nodrag overflow-y-auto max-h-52 mt-2">
             <InputList
                 rules={[{ maxLength: 50, message: '最大50个字符' }]}
                 value={data.value.length ? data.value : ['']}

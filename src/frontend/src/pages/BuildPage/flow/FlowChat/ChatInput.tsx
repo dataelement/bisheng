@@ -258,7 +258,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         }
 
         if (data.type === 'close') {
-            insetSeparator('本轮会话已结束')
+            insetSeparator(t('chat.chatEndMessage'))
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
@@ -373,7 +373,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const handleRestartClick = () => {
         wsRef.current?.close()
         wsRef.current = null
-        stop.show && insetSeparator('本轮会话已结束')
+        stop.show && insetSeparator(t('chat.chatEndMessage'))
         setTimeout(() => {
             createWebSocket().then(() => {
                 sendWsMsg(onBeforSend('init_data', {}))
@@ -446,7 +446,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
                 placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
+                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#131415] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();

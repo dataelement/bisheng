@@ -27,36 +27,40 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
     const annotRef = useRef(null);
     // 绘制
     const [scaleState, setScaleState] = useState(1)
+    // 清晰度倍数
+    const clarity = 2.5;
     const draw = async () => {
-        const page = pdfPageCache[index + 1] || await pdf.getPage(index + 1); // TODO cache
+        const page = pdfPageCache[index + 1] || await pdf.getPage(index + 1);
         pdfPageCache[index + 1] = page
-        const viewport = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: clarity });
         const scale = size / viewport.width;
-        setScaleState(scale)
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d')
         const outputScale = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(viewport.width * scale);
-        canvas.height = Math.floor(viewport.height * scale);
-        canvas.style.width = Math.floor(viewport.width * scale) + "px";
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        canvas.style.width = size + "px";
         canvas.style.height = Math.floor(viewport.height * scale) + "px";
         wrapRef.current.append(canvas)
         const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale,
             0, 0
         ] : null;
 
-        onLoad?.(viewport.width)
+        const baseViewport = page.getViewport({ scale: 1 });
+        const baseScale = size / baseViewport.width;
+        setScaleState(baseScale)
+        onLoad?.(baseViewport.width)
 
         // 渲染批注层
-        await renderAnnotations(page, scale);
+        await renderAnnotations(page, baseScale);
         // 渲染页面
         page.render({
             canvasContext: context,
-            viewport: page.getViewport({ scale }),
+            viewport: page.getViewport({ scale: clarity }),
             // transform
         });
         // 渲染文本层（如果需要）
-        { drawfont && drawText(page, page.getViewport({ scale })) }
+        { drawfont && drawText(page, page.getViewport({ baseScale })) }
     }
 
     const drawText = async (page, viewport) => {

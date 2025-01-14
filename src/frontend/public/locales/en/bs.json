@@ -87,6 +87,7 @@
     "flowControl": "Overall UserGroup Flow Control",
     "AssistantFlowCtrl": "Assistant Flow Control",
     "SkillFlowCtrl": "Skill Flow Control",
+    "flowCtrl": "workflow Flow Control",
     "createdBy": "CreatedBy",
     "flowCtrlStrategy": "Flow control strategy",
     "limit": "Limit",
@@ -237,7 +238,8 @@
     "searchLabels": "Search labels",
     "confirmed": "Confirmed",
     "confirm": "Confirm",
-    "runNewWorkflow": "Run New Workflow"
+    "runNewWorkflow": "Run New Workflow",
+    "chatEndMessage": "This chat has ended"
   },
   "model": {
     "modelManagement": "Model Management",
@@ -858,7 +860,9 @@
     "labeled": "Labeled",
     "unnecessary": "Unnecessary",
     "previousChat": "Previous Chat",
-    "nextChat": "Next Chat"
+    "nextChat": "Next Chat",
+    "selectPlaceholder": "Please select",
+    "searchAppsPlaceholder": "Search for apps"
   },
   "errors": {
     "10400": "Assistant does not exist",

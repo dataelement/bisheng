@@ -98,7 +98,10 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                     }, 500); // after init
                 }
             }} />
-            <main className="h-full flex flex-1 bg-gray-50" ref={keyBoardPanneRef}>
+            <main
+                className="h-full flex flex-1 bg-gray-50"
+                tabIndex={-1}
+                ref={keyBoardPanneRef}>
                 <div className="size-full" ref={reactFlowWrapper}>
                     <div className="size-full">
                         <ReactFlow

@@ -60,7 +60,7 @@ const Log = ({ type, name, data }) => {
                     <div className="">
                         {Object.keys(data).map(key => data[key].type === 'file' ?
                             <ResultFile title={key} name={name} fileUrl={data[key].value} key={key} />
-                            : <ResultText title={key} value={data[key]} key={key} />)}
+                            : <ResultText title={key} value={data[key].value} key={key} />)}
                     </div>
                 </div>
             )}
@@ -99,17 +99,17 @@ export default function RunLog({ node, children }) {
                             // 尝试去value中匹配 (input-form; preset-quesitons)
                             param.value.forEach(value => {
                                 if (!newData[value.key]) return
-                                result[value.label || value.key] = newData[value.key].value;
+                                result[value.label || value.key] = newData[value.key];
                                 hasKeys.push(value.key)
                             })
                         } else if (newData[param.key] !== undefined) {
-                            result[param.label || param.key] = newData[param.key].value;
+                            result[param.label || param.key] = newData[param.key];
                             hasKeys.push(param.key)
                         } else if (param.key === 'tool_list') {
                             // tool
                             param.value.some(p => {
                                 if (newData[p.tool_key] !== undefined) {
-                                    result[p.label] = newData[p.tool_key].value;
+                                    result[p.label] = newData[p.tool_key];
                                     hasKeys.push(p.tool_key)
                                     return true
                                 }
@@ -120,7 +120,7 @@ export default function RunLog({ node, children }) {
 
                 for (let key in newData) {
                     if (!hasKeys.includes(key)) {
-                        result[key] = newData[key].value;
+                        result[key] = newData[key];
                     }
                 }
                 setData(result)

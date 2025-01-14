@@ -150,7 +150,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         runRef.current.run(node)
     }
 
-    const [expend, setExpend] = useState(!!node.expand)
+    const [expend, setExpend] = useState(node.expand === undefined ? true : node.expand)
     const nodeError = useBorderColor(node)
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
@@ -195,14 +195,16 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 <span className='truncate block min-h-4'>{node.name}</span>
                             </EditText>
                         </div>
-                        {!['output', 'condition', 'end'].includes(node.type) && <ChevronDown
-                            className={`absolute right-0 bisheng-label cursor-pointer ${expend && 'rotate-180'}`}
-                            size={14}
+                        {!['output', 'condition', 'end'].includes(node.type) && <div
+                            className='absolute -right-1 -top-1 cursor-pointer p-2'
                             onClick={() => {
                                 setExpend(!expend)
                                 node.expand = !expend
-                            }}
-                        />}
+                            }}>
+                            <ChevronDown
+                                className={`bisheng-label ${expend && 'rotate-180'}`}
+                                size={16}
+                            /></div>}
                     </div>
                     <EditText
                         className='nodrag mt-2 text-xs text-muted-foreground'

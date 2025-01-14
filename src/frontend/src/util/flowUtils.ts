@@ -186,6 +186,7 @@ export function useCopyPasteNode(dom, lastSelection, paste, del, deps) {
         if (!dom) return
         const onKeyDown = (event: KeyboardEvent) => {
             console.log('event.target :>> ', event.target);
+            if (!dom.contains(event.target)) return
             if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) return // 排除输入框内复制粘贴
             if (
                 event.target instanceof HTMLInputElement ||

@@ -116,6 +116,7 @@ export default function tabTools({ select = null, onSelect }) {
                 }}
                 ref={editRef}
             />
+            {/* 内置工具设置 */}
             <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
         </div>
     );

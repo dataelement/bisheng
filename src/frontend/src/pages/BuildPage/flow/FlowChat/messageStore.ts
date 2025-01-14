@@ -3,6 +3,7 @@ import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
 import { WorkflowMessage } from '@/types/flow';
 import { formatDate } from '@/util/utils';
+import i18next from 'i18next';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
 
@@ -156,7 +157,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }))
     },
     insetNodeRun(data) {
-        if (['input', 'output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
+        if (['output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
         set((state) => {
             let newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
@@ -186,7 +187,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 ...bsMsgItem,
                 category: 'separator',
                 message_id: generateUUID(8),
-                message: '本轮会话已结束',
+                message: i18next.t('chat.chatEndMessage', { ns: 'chat' }),
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             })
         }

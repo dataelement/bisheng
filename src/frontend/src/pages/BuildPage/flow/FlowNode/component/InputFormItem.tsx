@@ -173,7 +173,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             <div>
                 <Label className="flex items-center bisheng-label">
                     {t("variableName")}
-                    <QuestionTooltip content={t("variableNameTooltip")} />
+                    <QuestionTooltip content={formData.formType === FormType.File ? t('variableNameTooltipFile') : t('variableNameTooltipOther')} />
                 </Label>
                 <Input
                     className={`mt-2 ${errors.variableName ? "border-red-500" : ""}`}

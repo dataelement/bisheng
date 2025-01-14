@@ -1,8 +1,8 @@
 {
     "model": {
-        "duplicateServiceProviderName": "服务提供方名称重复，请修改",
-        "duplicateServiceProviderNameValidation": "服务提供方名称不可为空，且最多三十个字符",
-        "modelNameValidation": "模型名称不可为空，且最多三十个字符",
+        "duplicateServiceProviderName": "服务提供方名称不可重复",
+        "duplicateServiceProviderNameValidation": "服务提供方名称不可为空，且最多100个字符",
+        "modelNameValidation": "模型名称不可为空，且最多100个字符",
         "modelDuplicate": "模型不可重复",
         "addSuccess": "添加成功",
         "updateSuccess": "修改成功",
