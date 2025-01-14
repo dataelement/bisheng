@@ -533,7 +533,7 @@ class KnowledgeService(KnowledgeUtils):
                 embeddings = FakeEmbedding()
                 es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
                 search_data = {
-                    'size': 1,
+                    'size': len(res),
                     'sort': [{
                         'metadata.chunk_index': {
                             'order': 'asc',
