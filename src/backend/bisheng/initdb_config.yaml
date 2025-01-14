@@ -49,4 +49,4 @@ workflow:
   # 节点运行最大步数
   max_steps: 50
   # 等待用户输入的超时时间，单位分钟
-  timeout: 720
+  timeout: 3
