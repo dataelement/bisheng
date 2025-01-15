@@ -89,7 +89,7 @@ matplotlib = "3.8.4"
 cchardet = "^2.1.7"
 llama-index = "0.9.48"
 tenacity = "<8.4.0"
-bisheng-ragas = { version = "^1.0.1", source = "dataelem-index" }
+bisheng-ragas = "^1.0.1"
 qianfan = "^0.4.4"
 dashscope = "^1.20.3"
 blobfile = "^3.0.0"
@@ -128,8 +128,3 @@ line-length = 120
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[[tool.poetry.source]]
-name = "dataelem-index"
-url = "https://public:26rS9HRxDqaVy5T@nx.dataelem.com/repository/pypi-hosted/simple"
-priority = "explicit"
