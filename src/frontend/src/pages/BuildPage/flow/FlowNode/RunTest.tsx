@@ -70,6 +70,11 @@ export const RunTest = forwardRef((props, ref) => {
         run: (node: WorkflowNode) => {
             setOpen(true)
             setNode(node)
+            console.log('1111 :>> ', 1111);
+            /**
+             * 遍历当前节点的项,找出要做节点运行入参的input or var的项
+             * 
+             */
             node.group_params.forEach((group) => {
                 group.params.forEach((param) => {
                     if (param.test === 'input') {

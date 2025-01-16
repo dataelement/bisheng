@@ -3,10 +3,10 @@ import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next"; // 引入国际化
 import { CustomHandle } from "..";
 import DragOptions from "./DragOptions";
 import VarInput from "./VarInput";
-import { useTranslation } from "react-i18next"; // 引入国际化
 
 const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
     const { t } = useTranslation('flow'); // 使用国际化
@@ -17,7 +17,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
             text: el.label,
             type: ''
         }))
-    }, [data]);
+    }, [data.options]);
 
     // 根据交互类型切换不同的展示
     const renderContent = () => {
@@ -27,6 +27,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
             case "choose":
                 return (
                     <DragOptions
+                        edit
                         edges
                         options={options}
                         onChange={(opts) => {

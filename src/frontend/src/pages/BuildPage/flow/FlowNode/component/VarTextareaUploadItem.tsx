@@ -34,10 +34,10 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
 
     return (
         <div className='node-item mb-4 nodrag' data-key={data.key}>
-            <Label className='bisheng-label'>
+            {/* <Label className='bisheng-label'>
                 {data.required && <span className="text-red-500">*</span>}
                 {data.label}
-            </Label>
+            </Label> */}
             <VarInput
                 error={error}
                 placeholder={data.placeholder}

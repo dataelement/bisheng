@@ -309,6 +309,7 @@ const workflowTemplate = [
                         "key": "output",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "label": "输出变量",
+                        "help": "模型输出内容将会存储在该变量中。",
                         "type": "var",
                         "value": []
                     }
@@ -470,6 +471,7 @@ const workflowTemplate = [
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "label": "输出变量",
                         "type": "var",
+                        "help": "模型输出内容将会存储在该变量中。",
                         "value": []
                     }
                 ]
@@ -637,6 +639,7 @@ const workflowTemplate = [
                         "key": "output_user_input",
                         "label": "输出变量",
                         "type": "var",
+                        "help": "模型输出内容将会存储在该变量中。",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "value": []
                     }

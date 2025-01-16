@@ -150,6 +150,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                             {type === 'input' ?
                                 <div>
                                     <Textarea
+                                        className="w-96"
                                         ref={textRef}
                                         disabled={inputSended}
                                         defaultValue={data.message.input_msg}

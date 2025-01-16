@@ -1,5 +1,6 @@
 import { Badge } from "@/components/bs-ui/badge";
 import { Label } from "@/components/bs-ui/label";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { ChevronUp } from "lucide-react";
 import { useState } from "react";
 
@@ -8,7 +9,10 @@ export default function VarItem({ data }) {
 
     if (Array.isArray(data.value) && data.value.length > 0) return <div className="mb-2">
         <div className="flex justify-between items-center">
-            <Label className="bisheng-label">{data.label}</Label>
+            <Label className="bisheng-label">
+                {data.label}
+                {data.help && <QuestionTooltip content={data.help} />}
+            </Label>
             <ChevronUp className={open ? 'rotate-180' : ''} onClick={() => setOpen(!open)} />
         </div>
         <div className={open ? 'block' : 'hidden'}>
@@ -21,7 +25,10 @@ export default function VarItem({ data }) {
     </div>
 
     return <div className="mb-4 flex justify-between items-center">
-        <Label className="bisheng-label">{data.label}</Label>
+        <Label className="flex items-center bisheng-label">
+            {data.label}
+            {data.help && <QuestionTooltip content={data.help} />}
+        </Label>
         <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
     </div>
 };

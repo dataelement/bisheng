@@ -2,9 +2,11 @@ import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { ChevronDown, RefreshCcw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from 'react-i18next';
 import { CustomHandle } from "..";
 import SelectVar from "./SelectVar";
 
@@ -19,7 +21,6 @@ interface Item {
     del: boolean
 }
 
-import { useTranslation } from 'react-i18next';
 
 const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }) => {
     const { t } = useTranslation('flow');
@@ -45,20 +46,22 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                 nodeId={nodeId}
                 itemKey={item.id}
                 onSelect={(E, v) => {
-                    onUpdateItem(index, { ...item, left_label: v.label, left_var: `${E.id}.${v.value}` });
+                    onUpdateItem(index, { ...item, left_label: `${E.name}/${v.label}`, left_var: `${E.id}.${v.value}` });
                 }}
             >
-                <div
-                    className={`${required && !item.left_label && 'border-red-500'
-                        } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
-                >
-                    {item.left_label ? (
-                        <span className="flex items-center">{item.left_label}</span>
-                    ) : (
-                        <span className="text-gray-400 mt-0.5">{t('selectVariable')}</span>
-                    )}
-                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-                </div>
+                <Tip content={item.left_label} side="top">
+                    <div
+                        className={`${required && !item.left_label && 'border-red-500'
+                            } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
+                    >
+                        {item.left_label ? (
+                            <span className="flex items-center">{item.left_label}</span>
+                        ) : (
+                            <span className="text-gray-400 mt-0.5">{t('selectVariable')}</span>
+                        )}
+                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                    </div>
+                </Tip>
             </SelectVar>
             {/* condition */}
             <Select value={item.comparison_operation} onValueChange={handleCompTypeChange}>
@@ -102,19 +105,22 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                     {/* value */}
                     {item.right_value_type === 'ref' ? (
                         <SelectVar
+                            className="max-w-40"
                             nodeId={nodeId}
                             itemKey={item.id}
                             onSelect={(E, v) => {
-                                onUpdateItem(index, { ...item, right_label: v.label, right_value: `${E.id}.${v.value}` });
+                                onUpdateItem(index, { ...item, right_label: `${E.name}/${v.label}`, right_value: `${E.id}.${v.value}` });
                             }}
                         >
-                            <div
-                                className={`${required && !item.right_label && 'border-red-500'
-                                    } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
-                            >
-                                <span className="flex items-center">{item.right_label}</span>
-                                <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-                            </div>
+                            <Tip content={item.right_label} side="top">
+                                <div
+                                    className={`${required && !item.right_label && 'border-red-500'
+                                        } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
+                                >
+                                    <span className="flex items-center">{item.right_label}</span>
+                                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                                </div>
+                            </Tip>
                         </SelectVar>
                     ) : (
                         <Input
