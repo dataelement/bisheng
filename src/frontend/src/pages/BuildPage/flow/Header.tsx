@@ -662,7 +662,7 @@ const useVersion = (flow) => {
         versions,
         version,
         isOnlineVersion: version?.id === onlineVid,
-        isOnlineVersionFun: () => version.id === onlineVid,
+        isOnlineVersionFun: () => version?.id === onlineVid,
         lastVersionIndexRef,
         setCurrentVersion(versionId) {
             const currentV = versions.find(el => el.id === versionId)

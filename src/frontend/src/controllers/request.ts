@@ -10,6 +10,16 @@ export const requestInterceptor = {
     remoteLoginFuc(msg) { }
 };
 
+customAxios.interceptors.request.use(function (config) {
+    const token = localStorage.getItem('ws_token');
+    if (token && !/^\/bisheng/.test(config.url)) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+}, function (error) {
+    return Promise.reject(error);
+});
+
 customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
