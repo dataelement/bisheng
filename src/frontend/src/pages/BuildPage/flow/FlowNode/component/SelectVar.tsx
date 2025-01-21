@@ -14,6 +14,25 @@ const isMatch = (obj, expression) => {
     return fn(obj.value);
 };
 
+// 特殊结构提取变量
+const getSpecialVar = (obj, type) => {
+    switch (type) {
+        case 'item:form_input':
+            return obj.value.reduce((res, item) => {
+                if (item.type === 'file') {
+                    // res.push({ label: item.key, value: item.key })
+                    res.push({ label: item.filecontent, value: item.filecontent })
+                    res.push({ label: item.filepath, value: item.filepath })
+                } else {
+                    res.push({ label: item.key, value: item.key })
+                }
+                return res
+            }, [])
+
+    }
+    return []
+}
+
 /**
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
@@ -69,12 +88,16 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                 if (param.global.indexOf('code') === 0) {
                     let result = isMatch(param, param.global.replace('code:', ''));
                     // 没值 key补
-                    if (!result.length && param.key === 'output') {
+                    if (!result.length && param.key.startsWith('output')) {
                         result = [{
                             label: param.key,
                             value: param.key
                         }]
                     }
+                    _vars = [..._vars, ...result]
+                    // 特殊变量(getSpecialVar前端策略)
+                } else if (param.global.startsWith('item')) {
+                    const result = getSpecialVar(param, param.global.replace('code:', ''))
                     _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {

@@ -144,16 +144,16 @@ const workflowTemplate = [
         "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
         "type": "input",
         "tab": {
-            "value": "input",
+            "value": "dialog_input",
             "options": [
                 {
                     "label": "对话框输入",
-                    "key": "input",
+                    "key": "dialog_input",
                     "help": "接收用户从对话框输入的内容。!(input)"
                 },
                 {
                     "label": "表单输入",
-                    "key": "form",
+                    "key": "form_input",
                     "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。!(form)"
                 }
             ]
@@ -167,15 +167,15 @@ const workflowTemplate = [
                         "global": "key",
                         "label": "用户输入内容",
                         "type": "var",
-                        "tab": "input"
+                        "tab": "dialog_input"
                     },
                     {
-                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
                         "key": "form_input",
+                        "global": "item:form_input",
                         "label": "+ 添加表单项",
                         "type": "form",
-                        "value": [],
-                        "tab": "form"
+                        "tab": "form_input",
+                        "value": []
                     }
                 ]
             }
@@ -821,16 +821,16 @@ const workflowTemplateEN = [
         "description": "Receive user input on the session page, supports two forms: dialog input, form input.",
         "type": "input",
         "tab": {
-            "value": "input",
+            "value": "dialog_input",
             "options": [
                 {
                     "label": "Dialog Input",
-                    "key": "input",
+                    "key": "dialog_input",
                     "help": "Receive content entered by the user from the dialog box."
                 },
                 {
                     "label": "Form Input",
-                    "key": "form",
+                    "key": "form_input",
                     "help": "Display a form on the session page to receive content submitted by the user through the form."
                 }
             ]
@@ -844,15 +844,15 @@ const workflowTemplateEN = [
                         "global": "key",
                         "label": "User Input Content",
                         "type": "var",
-                        "tab": "input"
+                        "tab": "dialog_input"
                     },
                     {
-                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
+                        "global": "item:form_input",
                         "key": "form_input",
                         "label": "+ Add Form Item",
                         "type": "form",
                         "value": [],
-                        "tab": "form"
+                        "tab": "form_input"
                     }
                 ]
             }

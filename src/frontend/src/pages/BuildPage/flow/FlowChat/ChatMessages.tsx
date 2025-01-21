@@ -72,13 +72,13 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             let q = ''
             while (index > -1) {
                 const qItem = msgs[--index]
-                if (['question', 'user_input'].includes(qItem?.category)) {
+                if (['question', 'input'].includes(qItem?.category)) {
                     q = qItem.message[qItem.chatKey] || qItem.message
                     break
                 }
             }
             return { q, a }
-        } else if (['question', 'user_input'].includes(item?.category)) {
+        } else if (['question', 'input'].includes(item?.category)) {
             const q = item.message[item.chatKey] || item.message
             let a = ''
             while (msgs[++index]) {
@@ -97,7 +97,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             messagesList.map((msg, index) => {
                 // output节点特殊msg
                 switch (msg.category) {
-                    case 'user_input':
+                    case 'input':
                         return null
                     case 'question':
                         return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />;
@@ -115,9 +115,9 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                         />;
                     case 'separator':
                         return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
-                    case 'output_choose_msg':
+                    case 'output_with_choose_msg':
                         return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} />;
-                    case 'output_input_msg':
+                    case 'output_with_input_msg':
                         return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.message_id} data={msg} />;

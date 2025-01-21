@@ -245,11 +245,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             insetNodeRun(data)
             return sendNodeLogEvent(data)
         }
-        if (data.category === 'user_input') {
+        // if (data.category === 'user_input') {
+        if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
             // 待用户输入
-            input_schema.tab === 'form' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
+            input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.filter(q => q))

@@ -161,7 +161,7 @@
     "required": "不可为空",
     "isRequired": "是否必填",
     "documentKnowledgeBase": "文档知识库",
-    "temporarySessionFiles": "临时会话文件",
+    "temporarySessionFiles": "临时知识库",
     "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
     "displayNameTooltip": "用户会话页面展示此名称",
     "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",

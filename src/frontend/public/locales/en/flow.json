@@ -161,7 +161,7 @@
     "required": "Required",
     "isRequired": "Is Required",
     "documentKnowledgeBase": "Document Knowledge",
-    "temporarySessionFiles": "Temporary Files",
+    "temporarySessionFiles": "Temporary Knowledge",
     "storeFilesSentInCurrentSession": "Store files sent in the current session",
     "displayNameTooltip": "Displayed on the user conversation page",
     "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",

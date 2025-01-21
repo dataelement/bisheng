@@ -55,7 +55,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/\t/g, '\\t')                  // 转义制表符
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
-    return data.filter(item => ["question", "output_input_msg", "output_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "user_input", "node_run"].includes(item.category)).map(item => {
+    return data.filter(item => ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "input", "node_run"].includes(item.category)).map(item => {
         let { message, files, is_bot, intermediate_steps, category, ...other } = item
         try {
             message = message && message[0] === '{' ? JSON.parse(message) : message || ''
