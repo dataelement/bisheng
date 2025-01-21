@@ -163,7 +163,7 @@ class SqlAgentAPIWrapper(BaseModel):
             [("system", query_check_system), ("placeholder", "{messages}")]
         )
         query_check = query_check_prompt | self.llm.bind_tools(
-            [self.db_query_tool], tool_choice="required"
+            [self.db_query_tool]
         )
         return query_check
 
