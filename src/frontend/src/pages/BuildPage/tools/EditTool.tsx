@@ -1,3 +1,4 @@
+import { QuestionMarkIcon } from "@/components/bs-icons"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Plus } from "lucide-react"
@@ -145,7 +147,9 @@ const formData = {
     authType: "basic",
     apiKey: "",
     authMethod: "none",
-    customHeader: ""
+    customHeader: "",
+    apiLocation: "query",
+    parameter: ""
 }
 
 const EditTool = forwardRef((props: any, ref) => {
@@ -179,7 +183,9 @@ const EditTool = forwardRef((props: any, ref) => {
                 authType: tool.auth_type,
                 apiKey: tool.api_key,
                 authMethod: tool.auth_method === 1 ? 'apikey' : 'none',
-                customHeader: ""
+                customHeader: "",
+                apiLocation: tool.api_location || "query",
+                parameter: tool.parameter_name || ""
             })
             setEditShow(true)
             setDelShow(true)
@@ -249,11 +255,37 @@ const EditTool = forwardRef((props: any, ref) => {
             })
         }
         if (formState.authMethod === "apikey" && !formState.apiKey) {
-            return message({
-                description: 'apikey不能为空',
-                variant: "warning"
-            })
+            if (!formState.apiKey) {
+                return message({
+                    description: 'API Key不可为空',
+                    variant: "warning"
+                });
+            }
+
+            if (formState.apiKey.length > 1000) {
+                return message({
+                    description: 'API Key不可大于1000字符',
+                    variant: "warning"
+                });
+            }
         }
+
+        if (formState.authMethod === "apikey" && formState.authType === 'custom') {
+            if (!formState.parameter) {
+                return message({
+                    description: 'Parameter name 不可为空',
+                    variant: "warning"
+                });
+            }
+
+            if (formState.parameter.length > 1000) {
+                return message({
+                    description: 'Parameter name 不可大于1000字符',
+                    variant: "warning"
+                });
+            }
+        }
+
 
         const fromData = fromDataRef.current
         // 参数合并
@@ -263,7 +295,9 @@ const EditTool = forwardRef((props: any, ref) => {
             auth_method: formState.authMethod === 'apikey' ? 1 : 0,
             auth_type: formState.authType,
             name: formState.toolName,
-            openapi_schema: formState.schemaContent
+            openapi_schema: formState.schemaContent,
+            api_location: formState.apiLocation,
+            parameter_name: formState.parameter
         }
 
         const methodApi = delShow ? updateTool : createTool
@@ -390,19 +424,14 @@ const EditTool = forwardRef((props: any, ref) => {
                             </RadioGroup>
                         </div>
                         {formState.authMethod === "apikey" && (<>
-                            <div className="px-6 mb-4">
-                                <label className="bisheng-label" htmlFor="apiKey">API Key</label>
-                                <Input
-                                    id="apiKey"
-                                    name="apiKey"
-                                    className="mt-2"
-                                    value={formState.apiKey}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
-
                             <div className="px-6 mb-4" >
-                                <label htmlFor="open" className="bisheng-label">Auth Type</label>
+                                <Label htmlFor="open" className="bisheng-label flex items-center gap-1">
+                                    Auth Type
+                                    <QuestionTooltip content={<div>
+                                        <p>Basic & Bearer：在 header 中使用 Authorization 传入 API key</p>
+                                        <p>Custom：自定义 API Key的参数名和参数位置</p>
+                                    </div>} />
+                                </Label>
                                 <RadioGroup
                                     id="authType"
                                     name="authType"
@@ -418,25 +447,65 @@ const EditTool = forwardRef((props: any, ref) => {
                                         <RadioGroupItem value="bearer" id="r5" />
                                         <Label htmlFor="r5">Bearer</Label>
                                     </div>
-                                    {/* <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="custom" id="r6" />
-                                    <Label htmlFor="r6">Custom</Label>
-                                </div> */}
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="custom" id="r6" />
+                                        <Label htmlFor="r6">Custom</Label>
+                                    </div>
                                 </RadioGroup>
                             </div>
-                        </>)}
-                        {/* {formState.authMethod === "custom" && (
+                            {formState.authType === "custom" && <>
+                                <div className="px-6 mb-4" >
+                                    <Label htmlFor="apiLocation" className="bisheng-label flex items-center gap-1">
+                                        API Key位置
+                                        <QuestionTooltip content={<div>
+                                            <p>header：API Key为请求头中的参数</p>
+                                            <p>query：API Key 为 URL中查询字符串中的参数</p>
+                                        </div>} />
+                                    </Label>
+                                    <RadioGroup
+                                        id="apiLocation"
+                                        name="apiLocation"
+                                        defaultValue={formState.apiLocation}
+                                        className="flex mt-2 gap-4"
+                                        onValueChange={(value) => setFormState(prevState => ({ ...prevState, apiLocation: value }))}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="header" id="r4" />
+                                            <Label htmlFor="r4">header</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="query" id="r5" />
+                                            <Label htmlFor="r5">query</Label>
+                                        </div>
+                                    </RadioGroup>
+                                </div>
+                                <div className="px-6 mb-4">
+                                    <Label className="bisheng-label" htmlFor="parameter">
+                                        <span className="text-red-500">*</span> Parameter name
+                                    </Label>
+                                    <Input
+                                        id="parameter"
+                                        name="parameter"
+                                        className="mt-2"
+                                        placeholder="请输入自定义API key的参数名"
+                                        value={formState.parameter}
+                                        onChange={handleInputChange}
+                                    />
+                                </div>
+                            </>}
                             <div className="px-6 mb-4">
-                                <label htmlFor="customHeader">Custom Header Name</label>
+                                <Label className="bisheng-label" htmlFor="apiKey">
+                                    <span className="text-red-500">*</span> API Key</Label>
                                 <Input
-                                    id="customHeader"
-                                    name="customHeader"
+                                    id="apiKey"
+                                    name="apiKey"
                                     className="mt-2"
-                                    value={formState.customHeader}
+                                    placeholder="请输入自定义API key的参数名"
+                                    value={formState.apiKey}
                                     onChange={handleInputChange}
                                 />
                             </div>
-                        )} */}
+                        </>)}
                     </div>
                     <label htmlFor="open" className="px-6">{t('tools.availableTools')}</label>
                     <div className="px-6 mb-4" >
