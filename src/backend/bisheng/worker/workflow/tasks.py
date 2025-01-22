@@ -10,9 +10,7 @@ from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.workflow import Workflow
 
 
-@bisheng_celery.task
-def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
-    """ 执行workflow """
+def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
     redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
     try:
         # update workflow status
@@ -34,7 +32,7 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
         first_input = True
         # run workflow
         while True:
-            logger.debug(f'workflow {unique_id} execute status: {workflow.status()}')
+            logger.debug(f'workflow execute status: {workflow.status()}')
             if workflow.status() in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
                 redis_callback.set_workflow_status(status, reason)
                 break
@@ -62,3 +60,10 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: st
     except Exception as e:
         logger.exception('execute_workflow error')
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e)[:100])
+
+
+@bisheng_celery.task
+def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+    """ 执行workflow """
+    with logger.contextualize(trace_id=unique_id):
+        _execute_workflow(unique_id, workflow_id, chat_id, user_id)

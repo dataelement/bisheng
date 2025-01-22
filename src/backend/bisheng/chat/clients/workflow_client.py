@@ -161,56 +161,17 @@ class WorkflowClient(BaseClient):
 
     async def workflow_run(self):
         # 需要不断从redis中获取workflow返回的消息
-        while True:
-            if not self.workflow:
-                break
-            status_info = self.workflow.get_workflow_status()
-            if not status_info:
-                await self.send_response('error', 'over', {'code': 500, 'message': 'workflow status not found'})
-                await self.send_response('processing', 'close', '')
-                return
-            elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
-                # 防止有消息未发送，查询下消息队列
-                send_msg = True
-                while send_msg:
-                    chat_response = self.workflow.get_workflow_response()
-                    if chat_response:
-                        await self.send_json(chat_response)
-                    else:
-                        send_msg = False
+        async for event in self.workflow.get_response_until_break():
+            await self.send_json(event)
 
-                if status_info['status'] == WorkflowStatus.FAILED.value:
-                    if status_info['reason'].find('-- has run more than the maximum number of times') != -1:
-                        await self.send_response('error', 'over', {'code': WorkFlowNodeRunMaxTimesError.Code,
-                                                                   'message': status_info['reason'].split('--')[0]})
-                    elif status_info['reason'].find('workflow wait user input timeout') != -1:
-                        await self.send_response('error', 'over', {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
-                    elif status_info['reason'].find('-- node params is error') != -1:
-                        await self.send_response('error', 'over',
-                                                 {'code': WorkFlowNodeUpdateError.Code, 'message': status_info['reason'].split('--')[0]})
-                    else:
-                        await self.send_response('error', 'over', {'code': 500, 'message': status_info['reason']})
-                await self.send_response('processing', 'close', '')
-                self.workflow.clear_workflow_status()
-                logger.debug('clear workflow status')
-                self.workflow = None
-                break
-            elif time.time() - status_info['time'] > 86400:
-                # 保底措施: 如果状态一天未更新，结束workflow，说明异步任务出现问题
-                self.workflow.set_workflow_stop()
-                await self.send_response('error', 'over',
-                                         {'code': 500, 'message': 'workflow status not update over 1 day'})
-                await self.send_response('processing', 'close', '')
-                self.workflow.clear_workflow_status()
-                break
-            else:
-                chat_response = self.workflow.get_workflow_response()
-                if not chat_response:
-                    await asyncio.sleep(1)
-                    continue
-                await self.send_json(chat_response)
-
-        logger.debug('workflow run over')
+        status_info = self.workflow.get_workflow_status()
+        if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+            await self.send_response('processing', 'close', '')
+            self.workflow = None
+        # 说明运行到了待输入状态
+        elif status_info['status'] != WorkflowStatus.INPUT.value:
+            logger.warning(f'workflow status is unknown: {status_info}')
+        logger.debug('workflow run over until break')
 
     async def handle_user_input(self, data: dict):
         logger.info(f'get user input: {data}')
@@ -238,3 +199,5 @@ class WorkflowClient(BaseClient):
                                                           chat_id=self.chat_id,
                                                           user_id=self.user_id))
         self.workflow.set_user_input(user_input)
+        self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+        await self.workflow_run()

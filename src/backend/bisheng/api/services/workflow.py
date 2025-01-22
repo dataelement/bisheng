@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
+from bisheng.api.v1.schemas import ChatResponse
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
@@ -8,6 +9,8 @@ from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
+    WorkflowOutputSchema
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -34,7 +37,8 @@ class WorkFlowService(BaseService):
         # 通过tag获取id列表
         flow_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW,
+                                                                ResourceTypeEnum.ASSISTANT])
             if not ret:
                 return [], 0
             flow_ids = [one.resource_id for one in ret]
@@ -45,11 +49,13 @@ class WorkFlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW, AccessType.ASSISTANT_READ])
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
+                                                                         AccessType.ASSISTANT_READ])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, page, page_size)
+            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, page,
+                                               page_size)
 
         # 应用ID列表
         resource_ids = []
@@ -115,7 +121,7 @@ class WorkFlowService(BaseService):
                         'key': k,
                         'value': v,
                         'type': 'input'
-                    }for k, v in node_input.items()
+                    } for k, v in node_input.items()
                 ]
             })
         elif node_data.type == NodeType.TOOL.value:
@@ -179,3 +185,107 @@ class WorkFlowService(BaseService):
         db_flow.status = status
         FlowDao.update_flow(db_flow)
         return
+
+    @classmethod
+    def convert_chat_response_to_workflow_event(cls, chat_response: ChatResponse) -> WorkflowEvent:
+        workflow_event = WorkflowEvent(
+            event=chat_response.category,
+            message_id=chat_response.message_id,
+            status='end',
+            node_id=chat_response.message.get('node_id'),
+            node_execution_id=chat_response.message.get('unique_id'),
+        )
+        match workflow_event.event:
+            case WorkflowEventType.UserInput.value:
+                return cls.convert_user_input_event(chat_response, workflow_event)
+            case WorkflowEventType.GuideWord.value:
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message.get('guide_word')
+                )
+            case WorkflowEventType.GuideQuestion.value:
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message.get('guide_question')
+                )
+            case WorkflowEventType.OutputMsg.value:
+                return cls.convert_output_event(chat_response, workflow_event)
+            case WorkflowEventType.OutputWithChoose.value:
+                return cls.convert_output_input_event(chat_response, workflow_event)
+            case WorkflowEventType.OutputWithInput.value:
+                return cls.convert_output_choose_event(chat_response, workflow_event)
+            case WorkflowEventType.StreamMsg.value:
+                workflow_event.status = chat_response.type
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message.get('msg'),
+                    output_key=chat_response.message.get('output_key'),
+                )
+            case WorkflowEventType.Error.value:
+                workflow_event.event = WorkflowEventType.Close.value
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message
+                )
+
+
+        return workflow_event
+
+    @classmethod
+    def convert_user_input_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        event_input_schema = chat_response.message.get('input_schema')
+        input_schema = WorkflowInputSchema(
+            input_type=event_input_schema.get('tab'),
+        )
+        if input_schema.input_type == 'form_input':
+            # 前端的表单定义转为后端的表单定义
+            input_schema.value = [WorkflowInputItem(**one) for one in event_input_schema.get('value', [])]
+            for one in input_schema.value:
+                one.label = one.value
+                one.value = ''
+        else:
+            # 说明是输入框输入
+            input_schema.value = [
+                WorkflowInputItem(
+                    key=event_input_schema.get('key'),
+                    type='text',
+                    required=True,
+                )
+            ]
+        workflow_event.input_schema = input_schema
+        return workflow_event
+
+    @classmethod
+    def convert_output_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        workflow_event.output_schema = WorkflowOutputSchema(
+            message=chat_response.message.get('msg'),
+            files=chat_response.message.get('files'),
+            output_key=chat_response.message.get('output_key'),
+            extra=chat_response.extra,
+        )
+        return workflow_event
+
+    @classmethod
+    def convert_output_input_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        workflow_event = cls.convert_output_event(chat_response, workflow_event)
+        workflow_event.input_schema = WorkflowInputSchema(
+            input_type='message_inline_input',
+            value=[WorkflowInputItem(
+                key=chat_response.message.get('key'),
+                type='dialog',
+                required=True,
+                value=chat_response.message.get('input_msg', '')
+            )]
+        )
+        return workflow_event
+
+    @classmethod
+    def convert_output_choose_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        workflow_event = cls.convert_output_event(chat_response, workflow_event)
+        workflow_event.input_schema = WorkflowInputSchema(
+            input_type='message_inline_option',
+            value=[WorkflowInputItem(
+                key=chat_response.message.get('key'),
+                type='select',
+                required=True,
+                value='',
+                options=chat_response.message.get('options', [])
+            )]
+        )
+        return workflow_event

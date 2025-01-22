@@ -1,11 +1,11 @@
+import asyncio
 import json
 import time
 import uuid
+from typing import AsyncIterator
 
-from cachetools import TTLCache
-from langchain_core.documents import Document
-from loguru import logger
-
+from bisheng.api.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError
+from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
@@ -15,6 +15,9 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
 from bisheng.workflow.common.workflow import WorkflowStatus
+from cachetools import TTLCache
+from langchain_core.documents import Document
+from loguru import logger
 
 
 class RedisCallback(BaseCallback):
@@ -49,6 +52,7 @@ class RedisCallback(BaseCallback):
         self.redis_client.set(self.workflow_status_key,
                               {'status': status, 'reason': reason, 'time': time.time()},
                               expiration=None)
+        self.workflow_cache.clear()
         if status in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             # 消息事件和状态key可能还需要消费
             self.redis_client.delete(self.workflow_data_key)
@@ -67,17 +71,87 @@ class RedisCallback(BaseCallback):
     def insert_workflow_response(self, event: dict):
         self.redis_client.rpush(self.workflow_event_key, json.dumps(event), expiration=self.workflow_expire_time)
 
-    def get_workflow_response(self):
+    def get_workflow_response(self) -> ChatResponse | None:
         response = self.redis_client.lpop(self.workflow_event_key)
         if response:
-            response = json.loads(response)
-            if (response.get('category') == 'node_run' and response.get('type') == 'end'
-                    and response.get('message', {}).get('node_id', '').startswith('end_')):
-                # 如果是结束节点，清空状态缓存
+            response = ChatResponse(**json.loads(response))
+            if ((response.category == WorkflowEventType.NodeRun.value and response.type == 'end'
+                 and response.message and response.message.get('node_id', '').startswith('end_')) or
+                    (response.category in [WorkflowEventType.UserInput.value, WorkflowEventType.OutputWithChoose.value
+                        , WorkflowEventType.OutputWithInput.value])):
+                # 如果是结束节点或者输入事件，清空状态缓存
                 self.workflow_cache.clear()
         return response
 
-    def set_user_input(self, data: dict):
+    def build_chat_response(self, category, category_type, message, extra=None, files=None):
+        return ChatResponse(
+            user_id=self.user_id,
+            chat_id=self.chat_id,
+            flow_id=self.workflow_id,
+            type=category_type,
+            message=message,
+            category=category,
+            extra=extra,
+            files=files,
+        )
+
+    def parse_workflow_failed(self, status_info: dict) -> ChatResponse:
+        if status_info['reason'].find('-- has run more than the maximum number of times') != -1:
+            return self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                            {'code': WorkFlowNodeRunMaxTimesError.Code,
+                                             'message': status_info['reason'].split('--')[0]})
+        elif status_info['reason'].find('workflow wait user input timeout') != -1:
+            return self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                            {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
+        elif status_info['reason'].find('-- node params is error') != -1:
+            return self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                            {'code': WorkFlowNodeRunMaxTimesError.Code,
+                                             'message': status_info['reason'].split('--')[0]})
+        else:
+            return self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                            {'code': 500, 'message': status_info['reason']})
+
+    async def get_response_until_break(self) -> AsyncIterator[ChatResponse]:
+        """ 不断获取workflow的response，直到遇到运行结束或者待输入 """
+        while True:
+            # get workflow status
+            status_info = self.get_workflow_status()
+            if not status_info:
+                yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                               {'code': 500, 'message': 'workflow status not found'})
+                break
+            elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+                while True:
+                    chat_response = self.get_workflow_response()
+                    if not chat_response:
+                        break
+                    yield chat_response
+                if status_info['status'] == WorkflowStatus.FAILED.value:
+                    yield self.parse_workflow_failed(status_info)
+                self.clear_workflow_status()
+                break
+            elif status_info['status'] == WorkflowStatus.INPUT.value:
+                while True:
+                    chat_response = self.get_workflow_response()
+                    if not chat_response:
+                        break
+                    yield chat_response
+                self.clear_workflow_status()
+                break
+            elif time.time() - status_info['time'] > 86400:
+                yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                               {'code': 500, 'message': 'workflow status not update over 1 day'})
+                self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow status not update over 1 day')
+                self.set_workflow_stop()
+                break
+            else:
+                chat_response = self.get_workflow_response()
+                if not chat_response:
+                    await asyncio.sleep(1)
+                    continue
+                yield chat_response
+
+    def set_user_input(self, data: dict, message_id: int = None):
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
 
     def get_user_input(self) -> dict | None:
@@ -98,7 +172,7 @@ class RedisCallback(BaseCallback):
         self.insert_workflow_response(chat_response.dict())
 
         # 判断下是否需要停止workflow, 流式输出时不判断，查询太频繁，而且也停不掉workflow
-        if chat_response.category == 'stream_msg':
+        if chat_response.category == WorkflowEventType.StreamMsg.value:
             return
         if self.workflow and self.get_workflow_stop():
             self.workflow.stop()
@@ -146,7 +220,7 @@ class RedisCallback(BaseCallback):
         logger.debug(f'node start: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
-                         category='node_run',
+                         category=WorkflowEventType.NodeRun.value,
                          type='start',
                          flow_id=self.workflow_id,
                          chat_id=self.chat_id))
@@ -156,7 +230,7 @@ class RedisCallback(BaseCallback):
         logger.debug(f'node end: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
-                         category='node_run',
+                         category=WorkflowEventType.NodeRun.value,
                          type='end',
                          flow_id=self.workflow_id,
                          chat_id=self.chat_id))
@@ -165,7 +239,7 @@ class RedisCallback(BaseCallback):
         """ user input event """
         logger.debug(f'user input: {data}')
         chat_response = ChatResponse(message=data.dict(),
-                                     category='user_input',
+                                     category=WorkflowEventType.UserInput.value,
                                      type='over',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id)
@@ -179,7 +253,7 @@ class RedisCallback(BaseCallback):
         logger.debug(f'guide word: {data}')
         self.send_chat_response(
             ChatResponse(message=data.guide_word,
-                         category='guide_word',
+                         category=WorkflowEventType.GuideWord.value,
                          type='over',
                          flow_id=self.workflow_id,
                          chat_id=self.chat_id))
@@ -189,7 +263,7 @@ class RedisCallback(BaseCallback):
         logger.debug(f'guide question: {data}')
         self.send_chat_response(
             ChatResponse(message=data.guide_question,
-                         category='guide_question',
+                         category=WorkflowEventType.GuideQuestion.value,
                          type='over',
                          flow_id=self.workflow_id,
                          chat_id=self.chat_id))
@@ -197,7 +271,7 @@ class RedisCallback(BaseCallback):
     def on_output_msg(self, data: OutputMsgData):
         logger.debug(f'output msg: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
-                                     category='output_msg',
+                                     category=WorkflowEventType.OutputMsg.value,
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
@@ -212,7 +286,7 @@ class RedisCallback(BaseCallback):
         logger.debug(f'stream msg: {data}')
         self.send_chat_response(
             ChatResponse(message=data.dict(),
-                         category='stream_msg',
+                         category=WorkflowEventType.StreamMsg.value,
                          extra='',
                          type='stream',
                          flow_id=self.workflow_id,
@@ -224,7 +298,7 @@ class RedisCallback(BaseCallback):
         minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
         data.msg = data.msg.replace(f"http://{minio_share}", "")
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
-                                     category='stream_msg',
+                                     category=WorkflowEventType.StreamMsg.value,
                                      extra='',
                                      type='end',
                                      flow_id=self.workflow_id,
@@ -237,7 +311,7 @@ class RedisCallback(BaseCallback):
     def on_output_choose(self, data: OutputMsgChooseData):
         logger.debug(f'output choose: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
-                                     category='output_choose_msg',
+                                     category=WorkflowEventType.OutputWithChoose.value,
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
@@ -251,7 +325,7 @@ class RedisCallback(BaseCallback):
     def on_output_input(self, data: OutputMsgInputData):
         logger.debug(f'output input: {data}')
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
-                                     category='output_input_msg',
+                                     category=WorkflowEventType.OutputWithInput.value,
                                      extra='',
                                      type='over',
                                      flow_id=self.workflow_id,
