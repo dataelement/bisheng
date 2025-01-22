@@ -153,6 +153,28 @@ class RedisCallback(BaseCallback):
 
     def set_user_input(self, data: dict, message_id: int = None):
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
+        if not self.chat_id:
+            return
+        # todo 说明是输出带输入的消息类型，需要更新数据库内的数据
+        if message_id:
+            message_db = ChatMessageDao.get_message_by_id(message_id)
+            if not message_db:
+                return
+            self.update_old_message(data, message_db)
+            return
+        # todo 输入节点的输入新插入一条数据库记录
+
+    def update_old_message(self, user_input: dict, message_db: ChatMessage):
+        # 更新输出待输入消息里用户的输入和选择
+        old_message = json.loads(message_db.message)
+        if message_db.category == WorkflowEventType.OutputWithInput.value:
+            old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
+        elif message_db.category == WorkflowEventType.OutputWithChoose.value:
+            old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
+        else:
+            return False
+        message_db.message = json.dumps(old_message, ensure_ascii=False)
+        ChatMessageDao.update_message_model(message_db)
 
     def get_user_input(self) -> dict | None:
         ret = self.redis_client.get(self.workflow_input_key)
