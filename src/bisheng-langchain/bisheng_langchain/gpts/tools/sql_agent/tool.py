@@ -79,6 +79,11 @@ class SqlAgentAPIWrapper(BaseModel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.llm = kwargs.get('llm')
+
+        # todo 修改sql agent实现逻辑。此处逻辑只支持bishengLLM组件。原因是因为目前的实现必须实例化多个llm对象，每个llm对象绑定不同的tool
+        self.schema_llm = self.llm.__class__(model_id=self.llm.model_id, model_name=self.llm.model_name)
+        self.query_check_llm = self.llm.__class__(model_id=self.llm.model_id, model_name=self.llm.model_name)
+        self.query_gen_llm = self.llm.__class__(model_id=self.llm.model_id, model_name=self.llm.model_name)
         self.sql_address = kwargs.get('sql_address')
 
         self.db = SQLDatabase.from_uri(self.sql_address)
@@ -94,7 +99,7 @@ class SqlAgentAPIWrapper(BaseModel):
         # Define a new graph
         self.workflow = StateGraph(State)
         self.init_workflow()
-        self.app = self.workflow.compile(checkpointer=False)
+        self.app = self.workflow.compile(checkpointer=False, debug=True)
 
     def init_workflow(self):
         self.workflow.add_node("first_tool_call", self.first_tool_call)
@@ -104,7 +109,7 @@ class SqlAgentAPIWrapper(BaseModel):
 
         self.workflow.add_node("get_schema_tool", create_tool_node_with_fallback([self.get_schema_tool]))
 
-        model_get_schema = self.llm.bind_tools(
+        model_get_schema = self.schema_llm.bind_tools(
             [self.get_schema_tool]
         )
         self.workflow.add_node(
@@ -162,7 +167,7 @@ class SqlAgentAPIWrapper(BaseModel):
         query_check_prompt = ChatPromptTemplate.from_messages(
             [("system", query_check_system), ("placeholder", "{messages}")]
         )
-        query_check = query_check_prompt | self.llm.bind_tools(
+        query_check = query_check_prompt | self.query_check_llm.bind_tools(
             [self.db_query_tool]
         )
         return query_check
@@ -195,7 +200,7 @@ class SqlAgentAPIWrapper(BaseModel):
         query_gen_prompt = ChatPromptTemplate.from_messages(
             [("system", query_gen_system), ("placeholder", "{messages}")]
         )
-        query_gen = query_gen_prompt | self.llm.bind_tools(
+        query_gen = query_gen_prompt | self.query_gen_llm.bind_tools(
             [SubmitFinalAnswer]
         )
         return query_gen
@@ -250,7 +255,10 @@ class SqlAgentTool(BaseTool):
 if __name__ == '__main__':
     from langchain_openai import AzureChatOpenAI
 
-    llm = AzureChatOpenAI()
+    llm = AzureChatOpenAI(azure_endpoint="https://qinrui.openai.azure.com/",
+                           openai_api_key='cd1a57f3ee5c457eb6f6166ae3f1c996',
+                           openai_api_version="2024-02-01",
+                           model_name='gpt-4o')
     sql_agent_tool = SqlAgentTool(
         api_wrapper=SqlAgentAPIWrapper(
             llm=llm,
