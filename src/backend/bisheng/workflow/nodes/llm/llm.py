@@ -98,9 +98,11 @@ class LLMNode(BaseNode):
                                               output=self._output_user,
                                               output_key=output_key)
         config = RunnableConfig(callbacks=[llm_callback])
+        inputs = []
+        if system:
+            inputs.append(SystemMessage(content=system))
+        inputs.append(HumanMessage(content=user))
 
-        result = self._llm.invoke([SystemMessage(content=system),
-                                   HumanMessage(content=user)],
-                                  config=config)
+        result = self._llm.invoke(inputs, config=config)
 
         return result.content
