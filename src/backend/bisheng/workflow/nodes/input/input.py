@@ -31,7 +31,11 @@ class InputNode(BaseNode):
 
     def is_dialog_input(self):
         """ 是否是对话形式的输入 """
-        return self._tab != 'form_input'
+        if self._tab == 'dialog_input':
+            return True
+        elif self._tab == 'form_input':
+            return False
+        raise IgnoreException(f'{self.name} -- workflow node is update')
 
     def get_input_schema(self) -> Any:
         if self.is_dialog_input():
