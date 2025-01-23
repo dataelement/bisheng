@@ -56,9 +56,12 @@ class InputNode(BaseNode):
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return [
-            {"key": f'{self.id}.{k}', "value": v, "type": "variable"} for k, v in result.items()
-        ]
+        ret = []
+        for k,v in result.items():
+            if self._node_params_map.get(k) and self._node_params_map[k]['type'] == 'file':
+                continue
+            ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
+        return [ret]
 
     def parse_upload_file(self, key: str, key_info: dict, value: str) -> dict | None:
         """

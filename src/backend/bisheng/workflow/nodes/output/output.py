@@ -74,7 +74,7 @@ class OutputNode(BaseNode):
                 "value": self._handled_output_result,
                 "type": "key"
             })
-        return ret
+        return [ret]
 
     def parse_output_msg(self):
         """ 填充msg中的变量，获取文件的share地址 """

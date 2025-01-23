@@ -35,7 +35,7 @@ class AgentNode(BaseNode):
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
 
-        self._batch_variable_list = {}
+        self._batch_variable_list = []
         self._system_prompt_list = []
         self._user_prompt_list = []
         self._tool_invoke_list = []
@@ -213,7 +213,7 @@ class AgentNode(BaseNode):
         ret = {}
         variable_map = {}
 
-        self._batch_variable_list = {}
+        self._batch_variable_list = []
         self._system_prompt_list = []
         self._user_prompt_list = []
         self._tool_invoke_list = []
@@ -225,15 +225,18 @@ class AgentNode(BaseNode):
         self._init_agent(system_prompt)
 
         if self._tab == 'single':
-            ret['output'] = self._run_once(None, unique_id, 'output')
+            self._tool_invoke_list.append([])
+            ret['output'] = self._run_once(None, unique_id, 'output', self._tool_invoke_list[0])
             self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
                                                                    msg=ret['output'],
                                                                    unique_id=unique_id,
                                                                    output_key='output'))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
+                self._batch_variable_list[index] = self.graph_state.get_variable_by_str(one)
                 output_key = self.node_params['output'][index]['key']
-                ret[output_key] = self._run_once(one, unique_id, output_key)
+                self._tool_invoke_list.append([])
+                ret[output_key] = self._run_once(one, unique_id, output_key, self._tool_invoke_list[index])
                 self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
                                                                        msg=ret[output_key],
                                                                        unique_id=unique_id,
@@ -250,31 +253,39 @@ class AgentNode(BaseNode):
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         ret = []
-        if self._batch_variable_list:
-            ret.append({"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
+        index = 0
+        for k, v in result.items():
+            one_ret = [
+                {"key": "system_prompt", "value": self._system_prompt_list[0], "type": "params"},
+                {"key": "user_prompt", "value": self._user_prompt_list[index], "type": "params"},
+            ]
+            if self._batch_variable_list:
+                one_ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "params"})
 
-        ret.extend([
-            {"key": "system_prompt", "value": self._system_prompt_list, "type": "params"},
-            {"key": "user_prompt", "value": self._user_prompt_list, "type": "params"},
-        ])
+            # 处理工具调用日志
+            one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
+            one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
+        return ret
+
+    def parse_tool_log(self, tool_invoke_list: list) -> list:
+        ret = []
         tool_invoke_info = {}
-        if self._tool_invoke_list:
-            for one in self._tool_invoke_list:
-                if one['run_id'] not in tool_invoke_info:
-                    tool_invoke_info[one['run_id']] = {}
-                if one['type'] == 'start':
-                    tool_invoke_info[one['run_id']].update({
-                        'name': one['name'],
-                        'input': one['input']
-                    })
-                elif one['type'] == 'end':
-                    tool_invoke_info[one['run_id']].update({
-                        'output': one['output']
-                    })
-                elif one['type'] == 'error':
-                    tool_invoke_info[one['run_id']].update({
-                        'output': f'Error: {one["error"]}'
-                    })
+        for one in tool_invoke_list:
+            if one['run_id'] not in tool_invoke_info:
+                tool_invoke_info[one['run_id']] = {}
+            if one['type'] == 'start':
+                tool_invoke_info[one['run_id']].update({
+                    'name': one['name'],
+                    'input': one['input']
+                })
+            elif one['type'] == 'end':
+                tool_invoke_info[one['run_id']].update({
+                    'output': one['output']
+                })
+            elif one['type'] == 'error':
+                tool_invoke_info[one['run_id']].update({
+                    'output': f'Error: {one["error"]}'
+                })
         if tool_invoke_info:
             for one in tool_invoke_info.values():
                 ret.append({
@@ -282,10 +293,9 @@ class AgentNode(BaseNode):
                     "value": f"Tool Input:\n {one['input']}, Tool Output:\n {one['output']}",
                     "type": "tool"
                 })
-        ret.extend([{"key": f'{self.id}.{k}', "value": v, "type": "variable"} for k, v in result.items()])
         return ret
 
-    def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None):
+    def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None, tool_invoke_list: list = None):
         """
         input_variable: 输入变量，如果是batch，则需要传入一个list，否则为None
         """
@@ -295,7 +305,6 @@ class AgentNode(BaseNode):
         for one in self._system_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
-                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         # system = self._system_prompt.format(variable_map)
@@ -304,7 +313,6 @@ class AgentNode(BaseNode):
         for one in self._user_variables:
             if input_variable and one == special_variable:
                 variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
-                self._batch_variable_list[input_variable] = variable_map[one]
                 continue
             variable_map[one] = self.graph_state.get_variable_by_str(one)
         user = self._user_prompt.format(variable_map)
@@ -319,7 +327,7 @@ class AgentNode(BaseNode):
                                               node_id=self.id,
                                               output=self._output_user,
                                               output_key=output_key,
-                                              tool_list=self._tool_invoke_list,
+                                              tool_list=tool_invoke_list,
                                               cancel_llm_end=True)
         config = RunnableConfig(callbacks=[llm_callback])
 

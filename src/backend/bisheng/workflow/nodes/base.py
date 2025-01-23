@@ -71,19 +71,21 @@ class BaseNode(ABC):
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         """
-         返回节点运行日志，默认返回节点的输出内容，有特殊需求自行覆盖此函数
+         返回节点运行日志，默认返回为空
         params:
             result: 节点运行结果
-        return:
+        return:  最外层是轮次，里面是每个轮次的日志
         [
-            {
-                "key": "xxx",
-                "value": "xxx",
-                "type": "tool" # tool: 工具类型的日志, variable：全局变量的日志, params：节点参数类型的日志，key：展示key本身
-            }
+            [
+                {
+                    "key": "xxx",
+                    "value": "xxx",
+                    "type": "tool" # tool: 工具类型的日志, variable：全局变量的日志, params：节点参数类型的日志，key：展示key本身
+                }
+            ]
         ]
         """
-        return result
+        return []
 
     def get_input_schema(self) -> Any:
         """ 返回用户需要输入的表单描述信息 """

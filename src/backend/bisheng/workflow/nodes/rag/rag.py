@@ -64,10 +64,14 @@ class RagNode(BaseNode):
         self._es = None
 
     def _run(self, unique_id: str):
+        self._log_source_documents = {}
+        self._log_system_prompt = []
+        self._log_user_prompt = []
+
         self.init_qa_prompt()
         self.init_milvus()
         self.init_es()
-        self._log_source_documents = {}
+
 
         retriever = BishengRetrievalQA.from_llm(
             llm=self._llm,
@@ -114,28 +118,29 @@ class RagNode(BaseNode):
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        output_keys = []
-        source_documents = []
+        ret = []
+        index = 0
+        user_question_list = self.init_user_question()
         for key, val in result.items():
-            output_keys.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
-            source_documents.append([one.page_content for one in self._log_source_documents[key]])
+            tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]], indent=2, ensure_ascii=False)
+            one_ret =[
+                {'key': 'user_question', 'value': user_question_list[index], "type": "params"},
+                {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": 'params'},
+                {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
+                {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
+                {'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'}
+            ]
+            index += 1
+            ret.append(one_ret)
 
-        tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
-        tmp_retrieved_type = 'params'
-        if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
-            tmp_retrieved_type = 'file'
-            tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
-            self._minio_client.upload_tmp(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
-            share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
-            tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
-
-        ret = [
-            {'key': 'user_question', 'value': self.init_user_question(), "type": "params"},
-            {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
-            {'key': 'system_prompt', 'value': self._log_system_prompt, "type": "params"},
-            {'key': 'user_prompt', 'value': self._log_user_prompt, "type": "params"},
-        ]
-        ret.extend(output_keys)
+        # tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
+        # tmp_retrieved_type = 'params'
+        # if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
+        #     tmp_retrieved_type = 'file'
+        #     tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
+        #     self._minio_client.upload_tmp(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
+        #     share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
+        #     tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
         return ret
 
     def init_user_question(self) -> List[str]:

@@ -34,7 +34,7 @@ class StartNode(BaseNode):
         }
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return [
+        return [[
             {
                 "key": "current_time",
                 "value": result['current_time'],
@@ -45,4 +45,4 @@ class StartNode(BaseNode):
                 "value": result['preset_question'],
                 "type": "params"
             }
-        ]
+        ]]
