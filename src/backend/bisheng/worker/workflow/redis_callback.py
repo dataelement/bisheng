@@ -152,17 +152,13 @@ class RedisCallback(BaseCallback):
                 yield chat_response
 
     def set_user_input(self, data: dict, message_id: int = None):
-        self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
-        if not self.chat_id:
-            return
-        # todo 说明是输出带输入的消息类型，需要更新数据库内的数据
-        if message_id:
+        if self.chat_id and message_id:
             message_db = ChatMessageDao.get_message_by_id(message_id)
-            if not message_db:
-                return
-            self.update_old_message(data, message_db)
-            return
-        # todo 输入节点的输入新插入一条数据库记录
+            if message_db:
+                self.update_old_message(data, message_db)
+        # 通知异步任务用户输入
+        self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
+        return
 
     def update_old_message(self, user_input: dict, message_db: ChatMessage):
         # 更新输出待输入消息里用户的输入和选择
@@ -171,8 +167,27 @@ class RedisCallback(BaseCallback):
             old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
         elif message_db.category == WorkflowEventType.OutputWithChoose.value:
             old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
-        else:
-            return False
+        elif message_db.category == WorkflowEventType.UserInput.value:
+            user_input = user_input[old_message['node_id']]
+            # 说明是表单输入
+            if old_message['input_schema']['tab'] == 'form_input':
+                user_input_message=''
+                for key_info in old_message['input_schema']['value']:
+                    user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"
+            else:
+                # 说明对话框输入
+                user_input_message = user_input[old_message['input_schema']['key']]
+            ChatMessageDao.insert_one(ChatMessage(
+                user_id=self.user_id,
+                chat_id=self.chat_id,
+                flow_id=self.workflow_id,
+                type=ChatMessageType.WORKFLOW.value,
+
+                is_bot=False,
+                message=user_input_message,
+                category='question',
+            ))
+            return
         message_db.message = json.dumps(old_message, ensure_ascii=False)
         ChatMessageDao.update_message_model(message_db)
 

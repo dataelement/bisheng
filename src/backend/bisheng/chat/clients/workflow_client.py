@@ -183,21 +183,12 @@ class WorkflowClient(BaseClient):
             logger.warning('workflow is not input status')
             return
         user_input = {}
+        message_id = None
+        # 目前支持一个输入节点
         for node_id, node_info in data.items():
             user_input[node_id] = node_info['data']
-            # 保存用户输入到历史记录
-            if node_info.get('message_id'):
-                # 更新聊天消息
-                await self.update_chat_message(node_info['message_id'], node_info['message'])
-            else:
-                # 插入新的聊天消息
-                await self.save_chat_message(ChatResponse(message=node_info['message'],
-                                                          category='question',
-                                                          is_bot=False,
-                                                          type='end',
-                                                          flow_id=self.client_id,
-                                                          chat_id=self.chat_id,
-                                                          user_id=self.user_id))
-        self.workflow.set_user_input(user_input)
+            message_id = node_info.get('message_id')
+            break
+        self.workflow.set_user_input(user_input, message_id=message_id)
         self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         await self.workflow_run()

@@ -24,9 +24,10 @@ router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
 @router.post('/invoke')
 async def invoke_workflow(request: Request,
                           workflow_id: str = Body(..., description='工作流唯一ID'),
-                          stream: bool = Body(default=False, description='是否流式调用'),
-                          input: dict = Body(default=None, description='用户输入'),
-                          session_id: str = Body(default=None, description='会话ID,一次workflow调用的唯一标识')):
+                          stream: Optional[bool] = Body(default=False, description='是否流式调用'),
+                          user_input: Optional[dict] = Body(default=None, description='用户输入', alias='input'),
+                          message_id: Optional[str] = Body(default=None, description='消息ID'),
+                          session_id: Optional[str] = Body(default=None, description='会话ID,一次workflow调用的唯一标识')):
     login_user = get_default_operator()
 
     # 解析出chat_id和unique_id
@@ -56,9 +57,8 @@ async def invoke_workflow(request: Request,
         execute_workflow.delay(unique_id, workflow_id, chat_id, str(login_user.user_id))
     else:
         # 设置用户的输入
-        if status_info['status'] == WorkflowStatus.INPUT.value and input:
-            # todo 将用户输入插入到数据库
-            workflow.set_user_input(input)
+        if status_info['status'] == WorkflowStatus.INPUT.value and user_input:
+            workflow.set_user_input(user_input, message_id)
             workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
 
     async def handle_workflow_event(event_list: List):
