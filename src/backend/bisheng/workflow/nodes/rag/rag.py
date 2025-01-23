@@ -190,11 +190,12 @@ class RagNode(BaseNode):
             embeddings = LLMService.get_knowledge_default_embedding()
             if not embeddings:
                 raise Exception('没有配置默认的embedding模型')
-            file_ids = []
+            file_ids = ["0"]
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
+                file_metadata = self.graph_state.get_variable_by_str(one)
                 if not file_metadata:
-                    raise Exception(f'未找到对应的临时文件数据：{one}')
+                    # 未找到对应的临时文件数据, 用户未上传文件
+                    continue
                 file_ids.append(file_metadata['file_id'])
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'
@@ -221,9 +222,11 @@ class RagNode(BaseNode):
                 '_is_check_auth': self._knowledge_auth
             }
         else:
-            file_ids = []
+            file_ids = ["0"]
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
+                file_metadata = self.graph_state.get_variable_by_str(one)
+                if not file_metadata:
+                    continue
                 file_ids.append(file_metadata['file_id'])
             node_type = 'ElasticKeywordsSearch'
             params = {

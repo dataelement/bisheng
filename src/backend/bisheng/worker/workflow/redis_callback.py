@@ -4,7 +4,8 @@ import time
 import uuid
 from typing import AsyncIterator
 
-from bisheng.api.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError
+from bisheng.api.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
+    WorkFlowNodeUpdateError, WorkFlowVersionUpdateError
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
@@ -105,8 +106,13 @@ class RedisCallback(BaseCallback):
                                             {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
         elif status_info['reason'].find('-- node params is error') != -1:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                            {'code': WorkFlowNodeRunMaxTimesError.Code,
+                                            {'code': WorkFlowNodeUpdateError.Code,
                                              'message': status_info['reason'].split('--')[0]})
+        elif status_info['reason'].find('-- workflow node is update') != -1:
+            return self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                            {'code': WorkFlowVersionUpdateError.Code,
+                                             'message': status_info['reason'].split('--')[0]})
+
         else:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                             {'code': 500, 'message': status_info['reason']})
@@ -171,7 +177,7 @@ class RedisCallback(BaseCallback):
             user_input = user_input[old_message['node_id']]
             # 说明是表单输入
             if old_message['input_schema']['tab'] == 'form_input':
-                user_input_message=''
+                user_input_message = ''
                 for key_info in old_message['input_schema']['value']:
                     user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"
             else:

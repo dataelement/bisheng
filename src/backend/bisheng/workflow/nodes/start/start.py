@@ -1,6 +1,7 @@
 import datetime
 from typing import Any, Dict
 
+from bisheng.chat.types import IgnoreException
 from bisheng.workflow.callback.event import GuideQuestionData, GuideWordData
 from bisheng.workflow.nodes.base import BaseNode
 from langchain.memory import ConversationBufferWindowMemory
@@ -24,6 +25,8 @@ class StartNode(BaseNode):
         if self.node_params['guide_question']:
             self.callback_manager.on_guide_question(data=GuideQuestionData(
                 node_id=self.id, guide_question=self.node_params['guide_question']))
+        if isinstance(self.node_params['preset_question'], list):
+            raise IgnoreException(f'{self.name} -- workflow node is update')
         return {
             'current_time': self.node_params['current_time'],
             'chat_history': '',

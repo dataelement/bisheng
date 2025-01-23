@@ -65,3 +65,8 @@ class FlowTemplateNameError(BaseErrorCode):
 class WorkFlowNodeUpdateError(BaseErrorCode):
     Code: int = 10531
     Msg: str = '<节点名称>功能已升级，需删除后重新拖入。'
+
+
+class WorkFlowVersionUpdateError(BaseErrorCode):
+    Code: int = 10532
+    Msg: str = '工作流版本已升级，请联系创建者重新编排'
