@@ -233,7 +233,7 @@ class AgentNode(BaseNode):
                                                                    output_key='output'))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
-                self._batch_variable_list[index] = self.graph_state.get_variable_by_str(one)
+                self._batch_variable_list.append(self.graph_state.get_variable_by_str(one))
                 output_key = self.node_params['output'][index]['key']
                 self._tool_invoke_list.append([])
                 ret[output_key] = self._run_once(one, unique_id, output_key, self._tool_invoke_list[index])
