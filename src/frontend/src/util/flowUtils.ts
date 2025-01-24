@@ -102,6 +102,8 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
                     return varNameCn.endsWith(param.value[varName.match(/#(\d+)/)[1]] || 'xxx')
                 } else if (param.type === 'form' || (param.type === 'var' && Array.isArray(param.value) && param.value.length) || param.type === 'code_output') {
                     return param.value.some(item => `${node.id}.${item.key}` === varName)
+                } else if (param.tab && param.tab !== node.data.tab.value) {
+                    return false
                 } else {
                     return `${node.id}.${param.key}` === varName
                 }

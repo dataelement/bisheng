@@ -169,7 +169,7 @@ export default function Files({ onPreview }) {
                                 </TooltipProvider> : el.strategy[1]}
                             </TableCell>
                             <TableCell className="text-right">
-                                <Button variant="link" disabled={el.status !== 2} className="px-2" onClick={() => onPreview(el.id)}>{t('view')}</Button>
+                                <Button variant="link" disabled={el.status !== 2} className="px-2 dark:disabled:opacity-80" onClick={() => onPreview(el.id)}>{t('view')}</Button>
                                 {hasPermission ?
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
                                     <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>

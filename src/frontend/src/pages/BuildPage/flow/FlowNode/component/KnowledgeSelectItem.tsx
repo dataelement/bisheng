@@ -119,10 +119,14 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     const [error, setError] = useState(false)
     useEffect(() => {
-        data.required && onValidate(() => {
+        // data.required && onValidate(() => {
+        onValidate(() => {
             if (!data.value.value.length) {
                 setError(true)
                 return data.label + ' ' + t('required')
+            }
+            if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
+                return 'input_file'
             }
             setError(false)
             return false
@@ -142,6 +146,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         })
         setErrorKeys(_errorKeys)
         // _errorKeys.length && setError(true)
+        // TODO 知识库校验是否存在 临时文件(变量)&知识库(找知识库是否存在)
         return error;
     };
     useEffect(() => {

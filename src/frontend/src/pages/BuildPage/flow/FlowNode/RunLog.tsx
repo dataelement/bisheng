@@ -71,6 +71,7 @@ const Log = ({ type, name, data }) => {
 
 export default function RunLog({ node, children }) {
     const [state, setState] = useState<Status>(Status.normal)
+    const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
     const [data, setData] = useState<any>({})
     const { t } = useTranslation('flow')
     // 订阅日志事件

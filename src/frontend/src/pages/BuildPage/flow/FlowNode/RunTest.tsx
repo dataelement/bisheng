@@ -11,13 +11,15 @@ import { copyText } from "@/utils";
 import { Copy, CopyCheck } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
+import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
 
 interface Input {
     key: string,
     required: boolean,
     label: string,
-    value: string
+    value: string,
+    autoFill: boolean
 }
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
@@ -66,46 +68,60 @@ export const RunTest = forwardRef((props, ref) => {
         }
     }, [open])
 
+    const runCache = useFlowStore(state => state.runCache)
+    const setRunCache = useFlowStore(state => state.setRunCache)
+
     useImperativeHandle(ref, () => ({
         run: (node: WorkflowNode) => {
             setOpen(true)
             setNode(node)
-            console.log('1111 :>> ', 1111);
+
+            // 自动填充
+            const appendAutoFillin = (param) => {
+                // 预置问题自动填充
+                const autoFill = /start_[a-zA-Z0-9]+\.preset_question/.test(param.key)
+                if (autoFill) {
+                    return { ...param, autoFill, value: param.label.split('/')[1] }
+                } else {
+                    const cache = runCache[node.id]
+                    const value = cache?.[param.key] || ''
+                    return { ...param, autoFill, value }
+                }
+            }
             /**
              * 遍历当前节点的项,找出要做节点运行入参的input or var的项
-             * 
              */
             node.group_params.forEach((group) => {
                 group.params.forEach((param) => {
-                    if (param.test === 'input') {
+                    if (param.test === 'input') { // 遍历value[] ,每一项作为一个test输入
                         if (node.type === "tool") {
                             return setInputs((prev) => {
-                                return [...prev, { key: param.label, required: false, label: param.label, value: '' }]
+                                return [...prev, appendAutoFillin({ key: param.label, required: false, label: param.label, value: '' })]
                             })
                         }
                         // if (param.type === 'code_input') {
                         // code_input类型特殊处理
                         return param.value.forEach(val => {
                             setInputs((prev) => {
-                                return [...prev, { key: val.key, required: false, label: val.key, value: '' }]
+                                return [...prev, appendAutoFillin({ key: val.key, required: false, label: val.key, value: '' })]
                             })
                         })
-                    } else if (param.test === 'var') {
+                    } else if (param.test === 'var') { // 提取value中的变量,每个变量作为一个test输入
                         let allVarInput = []
-                        if (param.type === 'var_textarea') {
+                        if (param.type === 'var_textarea') { // 从textarea提取变量
                             const regex = /{{#(.*?)#}}/g;
                             const parts = param.value.split(regex);
                             allVarInput = parts.reduce((res, part, index) => {
                                 if (index % 2 === 1) {
-                                    res.push({ key: part, required: false, label: param.varZh?.[part] || part, value: '' })
+                                    res.push(appendAutoFillin({ key: part, required: false, label: param.varZh?.[part] || part, value: '' }))
                                 }
                                 return res
                             }, [])
-                        } else if (param.type === 'var_select') {
-                            allVarInput = [{ key: param.value, required: false, label: param.varZh?.[param.value] || param.value, value: '' }]
-                        } else if (param.type === 'user_question') {
+                        } else if (param.type === 'var_select') { // 从变量选择列表提取变量
+                            allVarInput = [appendAutoFillin({ key: param.value, required: false, label: param.varZh?.[param.value] || param.value, value: '' })]
+                        } else if (param.type === 'user_question') { // 从批量问题提取变量
                             allVarInput = param.value.map(part =>
-                                ({ key: part, required: false, label: param.varZh?.[part] || part, value: '' })
+                                (appendAutoFillin({ key: part, required: false, label: param.varZh?.[part] || part, value: '' }))
                             )
                         }
 
@@ -132,6 +148,14 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
+
+        // cache
+        const cacheData = inputs.reduce((res, input) => {
+            res[input.key] = input.value
+            return res
+        }, {})
+        setRunCache(node.id, cacheData)
+
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
@@ -209,13 +233,14 @@ export const RunTest = forwardRef((props, ref) => {
                 </SheetHeader>
                 <div className="px-2 pt-2 pb-10 h-[calc(100vh-40px)] overflow-y-auto bg-[#fff] dark:bg-[#303134]">
                     {inputs.map((input) => (
-                        <div className="mb-2" key={input.key}>
+                        input.autoFill ? null : <div className="mb-2" key={input.key}>
                             <Label className="flex items-center bisheng-label mb-2">
                                 {input.required && <span className="text-red-500">*</span>}
                                 {input.label}
                             </Label>
                             <Textarea
                                 className=""
+                                defaultValue={input.value}
                                 onChange={(e) => {
                                     setInputs((prev) =>
                                         prev.map((item) =>

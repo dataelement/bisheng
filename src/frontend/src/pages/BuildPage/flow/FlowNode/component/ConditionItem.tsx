@@ -5,10 +5,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { ChevronDown, RefreshCcw, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import { CustomHandle } from "..";
 import SelectVar from "./SelectVar";
+import useFlowStore from "../../flowStore";
+import { isVarInFlow } from "@/util/flowUtils";
 
 interface Item {
     id: string;  // UUID 类型的字符串
@@ -22,7 +24,7 @@ interface Item {
 }
 
 
-const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onDeleteItem }) => {
     const { t } = useTranslation('flow');
 
     const handleCompTypeChange = (newType) => {
@@ -38,6 +40,11 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
         onUpdateItem(index, { ...item, right_value: e.target.value });
     };
 
+    const [leftError, rightError] = useMemo(() => {
+        if (!varErrors) return [false, false];
+        return varErrors;
+    }, [varErrors])
+
     return (
         <div className="flex gap-1 items-center mb-1 hover-reveal">
             {/* key */}
@@ -51,7 +58,7 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
             >
                 <Tip content={item.left_label} side="top">
                     <div
-                        className={`${required && !item.left_label && 'border-red-500'
+                        className={`${(required && !item.left_label || leftError) && 'border-red-500'
                             } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
                     >
                         {item.left_label ? (
@@ -114,7 +121,7 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                         >
                             <Tip content={item.right_label} side="top">
                                 <div
-                                    className={`${required && !item.right_label && 'border-red-500'
+                                    className={`${(required && !item.right_label || rightError) && 'border-red-500'
                                         } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
                                 >
                                     <span className="flex items-center">{item.right_label}</span>
@@ -147,7 +154,7 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
     );
 };
 
-export default function ConditionItem({ nodeId, node, data, onChange, onValidate }) {
+export default function ConditionItem({ nodeId, node, data, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 获取翻译函数
     const [value, setValue] = useState([]);
     const [required, setRequired] = useState(false);
@@ -231,6 +238,34 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
         return () => onValidate(() => { });
     }, [data.value]);
 
+    // 校验变量是否可用
+    const { flow } = useFlowStore();
+    const [varErrors, setVarErrors] = useState([]);
+    const validateVarAvailble = () => {
+        const newVarErrors = [] // 存储所有验证结果
+        let errorMsg = '';
+        value.forEach((item, index) => {
+            const conditionErrors = []
+            item.conditions.forEach((cds) => {
+                const leftError = isVarInFlow(nodeId, flow.nodes, cds.left_var, cds.left_label)
+                let rightError = ''
+
+                if (cds.right_value_type === 'ref') {
+                    rightError = isVarInFlow(nodeId, flow.nodes, cds.right_value, cds.right_label)
+                }
+                errorMsg = rightError || leftError || errorMsg;
+                conditionErrors.push([!!leftError, !!rightError])
+            })
+            newVarErrors.push(conditionErrors)
+        })
+        setVarErrors(newVarErrors)
+        return errorMsg;
+    };
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data, value]);
+
     return (
         <div>
             {value.map((val, vindex) => (
@@ -253,6 +288,7 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
                                 nodeId={nodeId}
                                 item={item}
                                 index={index}
+                                varErrors={varErrors[vindex]?.[index]}
                                 del={val.conditions.length > 1}
                                 onUpdateItem={(index, item) => {
                                     val.conditions[index] = item;

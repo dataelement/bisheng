@@ -21,14 +21,13 @@ const getSpecialVar = (obj, type) => {
             return obj.value.reduce((res, item) => {
                 if (item.type === 'file') {
                     // res.push({ label: item.key, value: item.key })
-                    res.push({ label: item.filecontent, value: item.filecontent })
-                    res.push({ label: item.filepath, value: item.filepath })
+                    res.push({ label: item.file_content, value: item.file_content })
+                    res.push({ label: item.file_path, value: item.file_path })
                 } else {
                     res.push({ label: item.key, value: item.key })
                 }
                 return res
             }, [])
-
     }
     return []
 }
@@ -97,7 +96,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                     _vars = [..._vars, ...result]
                     // 特殊变量(getSpecialVar前端策略)
                 } else if (param.global.startsWith('item')) {
-                    const result = getSpecialVar(param, param.global.replace('code:', ''))
+                    const result = getSpecialVar(param, param.global)
                     _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {

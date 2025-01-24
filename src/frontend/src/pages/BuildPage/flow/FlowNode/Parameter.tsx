@@ -113,7 +113,14 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'add_tool':
             return <ToolItem data={item} onChange={handleOnNewValue} />;
         case 'condition':
-            return <ConditionItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <ConditionItem
+                nodeId={nodeId}
+                node={node}
+                data={item}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
+                onVarEvent={bindVarValidate}
+            />;
         case 'report':
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'sql_config':

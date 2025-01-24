@@ -137,10 +137,11 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         setFocusUpdate(!focusUpdate) // render
     }
 
-    const { paramValidateEntities, varValidateEntities, validateParams } = useEventMaster(node)
+    const [nodeError, setNodeError] = useBorderColor(node)
+    const { paramValidateEntities, varValidateEntities, validateParams } = useEventMaster(node, setNodeError)
     const handleRun = () => {
         // vilidate node
-        const errors = validateParams()
+        const errors = validateParams(true)
 
         if (errors.length) return message({
             description: errors,
@@ -151,7 +152,6 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     const [expend, setExpend] = useState(node.expand === undefined ? true : node.expand)
-    const nodeError = useBorderColor(node)
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
 
@@ -269,24 +269,28 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
 export default CustomNode;
 
 
-const useEventMaster = (node) => {
+const useEventMaster = (node, setNodeError) => {
     const paramValidateEntities = useRef({})
     const varValidateEntities = useRef({})
 
-    const validateParams = () => {
+    const validateParams = (noTemporaryFile) => {
         const errors = []
         Object.keys(paramValidateEntities.current).forEach(key => {
             const { param, validate } = paramValidateEntities.current[key]
             if (param.tab && node.tab && node.tab.value !== param.tab) return
             const msg = validate()
-            msg && errors.push(msg)
+            if (noTemporaryFile && msg === 'input_file') {
+                errors.push('临时知识库不支持单节点调试')
+            } else {
+                msg && errors.push(msg)
+            }
         })
         return errors
     }
 
     const validateAll = () => {
         // item
-        const errors = validateParams()
+        const errors = validateParams(false)
         // var
         Object.keys(varValidateEntities.current).forEach(key => {
             const { param, validate } = varValidateEntities.current[key]
@@ -294,6 +298,8 @@ const useEventMaster = (node) => {
             const msg = validate()
             msg && errors.push(msg)
         })
+
+        if (errors.length > 0) setNodeError(true)
         return errors
     }
 
@@ -343,7 +349,7 @@ const useBorderColor = (node) => {
         }
     }, [])
 
-    return error
+    return [error, setError]
 }
 
 

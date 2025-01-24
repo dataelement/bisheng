@@ -15,6 +15,12 @@ const enum FormType {
     File = "file",
 }
 
+const names = {
+    [FormType.Text]: "text_input",
+    [FormType.Select]: "category",
+    [FormType.File]: "file",
+}
+
 function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     const { t } = useTranslation('flow');
     const namePlaceholders = {
@@ -35,9 +41,12 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         options: [],  // Options for Select input
     });
     const [errors, setErrors] = useState<any>({});
+    const editRef = useRef(false); // 编辑状态
+    const oldFormTypeRef = useRef('')
 
     const oldVarNameRef = useRef("");
     useEffect(() => {
+        editRef.current = false
         if (initialData) {
             const {
                 type: formType,
@@ -60,6 +69,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 isMultiple: allowMultiple
             });
 
+            editRef.current = true
+            oldFormTypeRef.current = formType
             oldVarNameRef.current = variableName;
         }
     }, [initialData]);
@@ -68,11 +79,6 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     useEffect(() => {
         if (initialData) return
         // 初始化变量名
-        const names = {
-            [FormType.Text]: "text_input",
-            [FormType.Select]: "category",
-            [FormType.File]: "file",
-        }
         let initialVarName = names[formData.formType];
         let initialFileContent = 'file_content'
         let initialFilePath = 'file_path'
@@ -176,6 +182,24 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             options,
         }));
     };
+
+    // if the form type hasn't changed, it keeps the variable name as it was. Otherwise, it generates a new unique variable name.
+    const handleChangeFormType = (formType) => {
+        setFormData({ ...formData, formType })
+        if (editRef.current) {
+            if (oldFormTypeRef.current === formType) {
+                setFormData({ ...formData, formType, variableName: oldVarNameRef.current })
+            } else {
+                let counter = 1;
+                let initialVarName = names[formType];
+                while (existingOptions?.some(opt => opt.key === initialVarName)) {
+                    counter += 1;
+                    initialVarName = `${names[formType]}${counter}`;
+                }
+                setFormData({ ...formData, formType, variableName: initialVarName })
+            }
+        }
+    }
     // text form
     const InputForm = <div className="space-y-4">
         <div>
@@ -355,7 +379,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         className={`flex flex-col h-18 w-28 ${formData.formType === FormType.Text ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
                         type="button"
                         variant="outline"
-                        onClick={() => setFormData({ ...formData, formType: FormType.Text })}
+                        onClick={() => handleChangeFormType(FormType.Text)}
                     >
                         <Type size={18} />
                         {t("textInput")}
@@ -364,7 +388,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         className={`flex flex-col h-18 w-28 ${formData.formType === FormType.Select ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
                         type="button"
                         variant="outline"
-                        onClick={() => setFormData({ ...formData, formType: FormType.Select })}
+                        onClick={() => handleChangeFormType(FormType.Select)}
                     >
                         <ChevronsDown size={18} />
                         {t("dropdown")}
@@ -373,7 +397,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                         className={`flex flex-col h-18 w-28 ${formData.formType === FormType.File ? "border-primary/40 bg-[#DFE9FD] text-primary" : ""}`}
                         type="button"
                         variant="outline"
-                        onClick={() => setFormData({ ...formData, formType: FormType.File })}
+                        onClick={() => handleChangeFormType(FormType.File)}
                     >
                         <CloudUpload size={18} />
                         {t("file")}

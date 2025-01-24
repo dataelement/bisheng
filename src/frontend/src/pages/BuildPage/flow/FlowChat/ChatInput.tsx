@@ -308,7 +308,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             detail: {
                 nodeId: node_id,
                 action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
-                data: isError ? { 'error': data.message.reason } : data.message.log_data
+                data: isError ? { 'error': data.message.reason } : data.message.log_data // 缓存TODO
             }
         })
         window.dispatchEvent(event)

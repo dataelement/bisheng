@@ -117,7 +117,6 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     useEffect(() => {
         if (id === -1) return
         getLLmServerDetail(id).then(res => {
-            console.log('res :>> ', res);
             setFormData(res)
         })
     }, [id])

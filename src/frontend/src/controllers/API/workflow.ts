@@ -88,6 +88,7 @@ const workflowTemplate = [
         "name": "开始",
         "description": "工作流运行的起始节点。",
         "type": "start",
+        "v": "1",
         "group_params": [
             {
                 "name": "开场引导",
@@ -143,18 +144,19 @@ const workflowTemplate = [
         "name": "输入",
         "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
         "type": "input",
+        "v": "1",
         "tab": {
             "value": "dialog_input",
             "options": [
                 {
                     "label": "对话框输入",
                     "key": "dialog_input",
-                    "help": "接收用户从对话框输入的内容。!(input)"
+                    "help": "接收用户从对话框输入的内容。"
                 },
                 {
                     "label": "表单输入",
                     "key": "form_input",
-                    "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。!(form)"
+                    "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。"
                 }
             ]
         },
@@ -186,6 +188,7 @@ const workflowTemplate = [
         "name": "输出",
         "description": "可向用户发送消息，并且支持进行更丰富的交互，例如请求用户批准进行某项敏感操作、允许用户在模型输出内容的基础上直接修改并提交。",
         "type": "output",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -221,6 +224,7 @@ const workflowTemplate = [
         "name": "大模型",
         "description": "调用大模型回答用户问题或者处理任务。",
         "type": "llm",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -242,6 +246,7 @@ const workflowTemplate = [
                         "label": "批处理变量",
                         "global": "self",
                         "type": "user_question",
+                        "test": "var",
                         "value": [],
                         "required": true,
                         "linkage": "output",
@@ -322,6 +327,7 @@ const workflowTemplate = [
         "name": "助手",
         "description": "AI 自主进行任务规划，选择合适的知识库、数据库或工具进行调用。",
         "type": "agent",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -344,6 +350,7 @@ const workflowTemplate = [
                         "required": true,
                         "global": "self",
                         "type": "user_question",
+                        "test": "var",
                         "value": [],
                         "linkage": "output",
                         "placeholder": "请选择批处理变量",
@@ -483,6 +490,7 @@ const workflowTemplate = [
         "name": "QA知识库检索",
         "description": "从 QA 知识库中检索问题以及对应的答案。",
         "type": "qa_retriever",
+        "v": "1",
         "group_params": [
             {
                 "name": "检索设置",
@@ -537,6 +545,7 @@ const workflowTemplate = [
         "name": "文档知识库问答",
         "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
         "type": "rag",
+        "v": "1",
         "group_params": [
             {
                 "name": "知识库检索设置",
@@ -652,6 +661,7 @@ const workflowTemplate = [
         "name": "报告",
         "description": "按照预设的word模板生成报告。",
         "type": "report",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -672,6 +682,7 @@ const workflowTemplate = [
         "name": "代码",
         "description": "自定义需要执行的代码。",
         "type": "code",
+        "v": "1",
         "group_params": [
             {
                 "name": "入参",
@@ -737,6 +748,7 @@ const workflowTemplate = [
         "name": "条件分支",
         "description": "根据条件表达式执行不同的分支。",
         "type": "condition",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -755,6 +767,7 @@ const workflowTemplate = [
         "name": "结束",
         "description": "工作流运行到此结束。",
         "type": "end",
+        "v": "1",
         "group_params": []
     },
 ]
@@ -765,6 +778,7 @@ const workflowTemplateEN = [
         "name": "Start",
         "description": "The starting node of the workflow.",
         "type": "start",
+        "v": "1",
         "group_params": [
             {
                 "name": "Opening Guide",
@@ -820,6 +834,7 @@ const workflowTemplateEN = [
         "name": "Input",
         "description": "Receive user input on the session page, supports two forms: dialog input, form input.",
         "type": "input",
+        "v": "1",
         "tab": {
             "value": "dialog_input",
             "options": [
@@ -863,6 +878,7 @@ const workflowTemplateEN = [
         "name": "Output",
         "description": "Send messages to users and support richer interactions, such as requesting user approval for sensitive operations or allowing users to directly modify and submit model-generated content.",
         "type": "output",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -898,6 +914,7 @@ const workflowTemplateEN = [
         "name": "LLM",
         "description": "Invoke a large language model to answer user questions or process tasks.",
         "type": "llm",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -995,6 +1012,7 @@ const workflowTemplateEN = [
         "name": "Agent",
         "description": "AI autonomously plans tasks and selects appropriate knowledge bases or tools for invocation.",
         "type": "agent",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -1149,6 +1167,7 @@ const workflowTemplateEN = [
         "name": "QA Retrieval",
         "description": "Retrieve questions and corresponding answers from the QA knowledge base.",
         "type": "qa_retriever",
+        "v": "1",
         "group_params": [
             {
                 "name": "Retrieval Settings",
@@ -1203,6 +1222,7 @@ const workflowTemplateEN = [
         "name": "Document Retrieval",
         "description": "Retrieve relevant content from the knowledge base based on user questions and generate final answers using the retrieved results and a large language model. Supports parallel execution for multiple questions.",
         "type": "rag",
+        "v": "1",
         "group_params": [
             {
                 "name": "Knowledge Base Retrieval Settings",
@@ -1314,6 +1334,7 @@ const workflowTemplateEN = [
         "name": "Report",
         "description": "Generate reports based on pre-defined Word templates.",
         "type": "report",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -1334,6 +1355,7 @@ const workflowTemplateEN = [
         "name": "Condition",
         "description": "Execute different branches based on conditional expressions.",
         "type": "condition",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -1352,6 +1374,7 @@ const workflowTemplateEN = [
         "name": "Code",
         "description": "Customize and execute specific code.",
         "type": "code",
+        "v": "1",
         "group_params": [
             {
                 "name": "Input Parameters",
@@ -1420,5 +1443,3 @@ const workflowTemplateEN = [
         "group_params": []
     }
 ];
-
-

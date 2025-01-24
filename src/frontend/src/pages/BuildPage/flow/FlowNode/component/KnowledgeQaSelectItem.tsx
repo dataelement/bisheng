@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 
-export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
+export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation()
     const [value, setValue] = useState<any>(() => data.value.map(el => {
         return { label: el.label, value: el.key }
@@ -49,12 +49,27 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
                 setError(true)
                 return data.label + ' ' + t('required')
             }
+            if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
+                return 'input_file'
+            }
             setError(false)
             return false
         })
 
         return () => onValidate(() => { })
     }, [data.value])
+
+    // 校验变量是否可用
+    const [errorKeys, setErrorKeys] = useState<string[]>([])
+    const validateVarAvailble = () => {
+        let error = ''
+        // TODO 知识库校验是否存在
+        return error;
+    };
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data, value]);
 
     return <div className='node-item mb-4'>
         <Label className="flex items-center bisheng-label mb-2">
@@ -64,6 +79,7 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate }) {
         <MultiSelect
             id="knowledge-qaselect"
             error={error}
+            errorKeys={errorKeys}
             multiple
             className={''}
             value={value}

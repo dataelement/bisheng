@@ -17,7 +17,7 @@ export default function FlowPage() {
     //     }
     // }, [])
 
-    const { flow, setFlow } = useFlowStore()
+    const { flow, setFlow, clearRunCache } = useFlowStore()
 
     useEffect(() => {
         getFlowApi(id).then(f => {
@@ -43,7 +43,10 @@ export default function FlowPage() {
                 version_list: []
             })
         })
-        return () => setFlow(null)
+        return () => {
+            setFlow(null);
+            clearRunCache();
+        }
     }, [])
 
     const [copyFlow, preFlow] = useMemo(() => {

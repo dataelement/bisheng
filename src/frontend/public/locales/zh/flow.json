@@ -157,7 +157,7 @@
     "copy": "复制",
     "cannotBeEmpty": "{{label}}不可为空",
     "editReportTemplate": "编辑报告模板",
-    "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效，可能是相关节点已被删除或替换，请重新引用变量。",
+    "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效，相关节点可能已被删除或替换，请重新引用变量。",
     "required": "不可为空",
     "isRequired": "是否必填",
     "documentKnowledgeBase": "文档知识库",

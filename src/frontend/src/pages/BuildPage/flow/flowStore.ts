@@ -3,7 +3,12 @@ import create from 'zustand';
 
 type State = {
     flow: WorkFlow
-    fitView: boolean
+    fitView: boolean,
+    runCache: {
+        [nodeId: string]: {
+            [key: string]: string
+        }
+    }
 }
 
 type Actions = {
@@ -11,11 +16,14 @@ type Actions = {
     uploadFlow: (file?: File) => void;
     setFitView: () => void;
     // updateNode: (id: string, data: any) => void;
+    setRunCache: (nodeId: string, keyInput: { key: string, value: string }) => void;
+    clearRunCache: () => void;
 }
 
 const useFlowStore = create<State & Actions & { notifications: Notification[]; addNotification: (notification: Notification) => void; clearNotifications: () => void }>((set) => ({
     flow: null,
     fitView: false,
+    runCache: {},
     notifications: [], // 消息队列
     setFlow: (newFlow) => set({ flow: newFlow }),
     setFitView: () => set((state) => ({ fitView: !state.fitView })),
@@ -48,7 +56,17 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
             notifications: [...state.notifications, notification]
         })),
     // 清空消息队列
-    clearNotifications: () => set({ notifications: [] })
+    clearNotifications: () => set({ notifications: [] }),
+    // 运行缓存
+    setRunCache: (nodeId, keyInput) => {
+        set((state) => ({
+            runCache: {
+                ...state.runCache,
+                [nodeId]: keyInput
+            }
+        }));
+    },
+    clearRunCache: () => set({ runCache: {} })
 }));
 
 type Notification = {
