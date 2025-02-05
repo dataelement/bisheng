@@ -48,7 +48,8 @@ class RagNode(BaseNode):
 
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
                                                temperature=self.node_params.get(
-                                                   'temperature', 0.3))
+                                                   'temperature', 0.3),
+                                               cache=False)
 
         self._user_info = UserDao.get_user(int(self.user_id))
 
