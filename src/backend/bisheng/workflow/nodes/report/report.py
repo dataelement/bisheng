@@ -2,9 +2,9 @@ import io
 from uuid import uuid4
 
 from bisheng.utils.minio_client import MinioClient
+from bisheng.utils.docx_temp import DocxTemplateRender
 from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
-from bisheng.workflow.nodes.report.template import DocxTemplateRender
 
 
 class ReportNode(BaseNode):
