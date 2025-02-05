@@ -165,6 +165,7 @@
 import os
 import tempfile
 from pathlib import Path
+from typing import IO
 from urllib.parse import unquote, urlparse
 
 import requests
