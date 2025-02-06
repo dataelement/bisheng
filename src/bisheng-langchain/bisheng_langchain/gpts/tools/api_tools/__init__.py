@@ -1,6 +1,13 @@
 from typing import Any, Callable, Dict, List, Tuple
 
 # from .eastmoney import
+from bisheng_langchain.gpts.tools.api_tools.firecrawl import FireCrawl
+from bisheng_langchain.gpts.tools.api_tools.jina import JinaTool
+from bisheng_langchain.gpts.tools.api_tools.silicon_flow import SiliconFlow
+from bisheng_langchain.gpts.tools.message.dingding import DingdingMessageTool
+from bisheng_langchain.gpts.tools.message.email import EmailMessageTool
+from bisheng_langchain.gpts.tools.message.feishu import FeishuMessageTool
+from bisheng_langchain.gpts.tools.message.wechat import WechatMessageTool
 from langchain_core.tools import BaseTool
 from mypy_extensions import KwArg
 
@@ -43,8 +50,82 @@ _TMP_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
     f'flow_{name}': (FlowTools.get_api_tool, ['collection_id', 'description'])
     for name in _tmp_flow
 }
+firecrawl_class_methods = [
+    method for method in FireCrawl.__dict__
+    if isinstance(FireCrawl.__dict__[method], classmethod)
+]
+
+_FIRE_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'fire_{name}': (FireCrawl.get_api_tool, [])
+    for name in firecrawl_class_methods
+}
+jina_class_methods = [
+    method for method in JinaTool.__dict__
+    if isinstance(JinaTool.__dict__[method], classmethod)
+]
+_JINA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'jina_{name}': (JinaTool.get_api_tool, [])
+    for name in jina_class_methods
+}
+silicon_class_methods = [
+    method for method in SiliconFlow.__dict__
+    if isinstance(SiliconFlow.__dict__[method], classmethod)
+]
+_SILICON_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'silicon_{name}': (SiliconFlow.get_api_tool, [])
+    for name in silicon_class_methods
+}
+dingding_class_methods = [
+    method for method in DingdingMessageTool.__dict__
+    if isinstance(DingdingMessageTool.__dict__[method], classmethod)
+]
+
+_DING_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'ding_{name}': (DingdingMessageTool.get_api_tool, [])
+    for name in dingding_class_methods
+}
+
+
+email_class_methods = [
+    method for method in EmailMessageTool.__dict__
+    if isinstance(EmailMessageTool.__dict__[method], classmethod)
+]
+
+_EMAIL_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'email_{name}': (EmailMessageTool.get_api_tool, [])
+    for name in email_class_methods
+}
+
+feishu_class_methods = [
+    method for method in FeishuMessageTool.__dict__
+    if isinstance(FeishuMessageTool.__dict__[method], classmethod)
+]
+
+_FEISHU_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'feishu_{name}': (FeishuMessageTool.get_api_tool, [])
+    for name in feishu_class_methods
+}
+
+wechat_class_methods = [
+    method for method in WechatMessageTool.__dict__
+    if isinstance(WechatMessageTool.__dict__[method], classmethod)
+]
+
+_WECHAT_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    f'wechat_{name}': (WechatMessageTool.get_api_tool, [])
+    for name in wechat_class_methods
+}
+
+
 ALL_API_TOOLS = {}
 ALL_API_TOOLS.update(_TIAN_YAN_CHA_TOOLS)
 ALL_API_TOOLS.update(_SINA_TOOLS)
 ALL_API_TOOLS.update(_MACRO_TOOLS)
 ALL_API_TOOLS.update(_TMP_TOOLS)
+ALL_API_TOOLS.update(_FIRE_TOOLS)
+ALL_API_TOOLS.update(_JINA_TOOLS)
+ALL_API_TOOLS.update(_SILICON_TOOLS)
+ALL_API_TOOLS.update(_DING_TOOLS)
+ALL_API_TOOLS.update(_EMAIL_TOOLS)
+ALL_API_TOOLS.update(_FEISHU_TOOLS)
+ALL_API_TOOLS.update(_WECHAT_TOOLS)
