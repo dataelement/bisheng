@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, List
 
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string, BaseMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GraphState(BaseModel):
@@ -12,7 +12,7 @@ class GraphState(BaseModel):
     history_memory: Optional[ConversationBufferWindowMemory]
 
     # 全局变量池
-    variables_pool: Dict[str, Dict[str, Any]] = {}
+    variables_pool: Dict[str, Dict[str, Any]] = Field(default={}, description='全局变量池: {node_id: {key: value}}')
 
     def get_history_memory(self, count: int) -> str:
         """ 获取聊天历史记录

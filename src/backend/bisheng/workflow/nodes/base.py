@@ -35,6 +35,9 @@ class BaseNode(ABC):
         # 存储节点所需的参数 处理后的可直接用的参数
         self.node_params = {}
 
+        # 存储节点所需的其他节点变量的值
+        self.other_node_variable = {}
+
         # 用来判断是否运行超过最大次数
         self.current_step = 0
         self.max_steps = max_steps
@@ -86,6 +89,12 @@ class BaseNode(ABC):
         ]
         """
         return []
+
+    def get_other_node_variable(self, variable_key: str) -> Any:
+        """ 从全局变量中获取其他节点的变量值 """
+        value = self.graph_state.get_variable_by_str(variable_key)
+        self.other_node_variable[variable_key] = value
+        return value
 
     def get_input_schema(self) -> Any:
         """ 返回用户需要输入的表单描述信息 """
@@ -141,7 +150,8 @@ class BaseNode(ABC):
             # 输出节点的结束日志由fake节点输出
             if reason or self.type != NodeType.OUTPUT.value:
                 self.callback_manager.on_node_end(data=NodeEndData(
-                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
+                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data,
+                    input_data=self.other_node_variable))
         return state
 
     async def arun(self, state: dict) -> Any:

@@ -147,7 +147,7 @@ class RagNode(BaseNode):
     def init_user_question(self) -> List[str]:
         ret = []
         for one in self.node_params['user_question']:
-            ret.append(self.graph_state.get_variable_by_str(one))
+            ret.append(self.get_other_node_variable(one))
         return ret
 
     def init_qa_prompt(self):
@@ -158,7 +158,7 @@ class RagNode(BaseNode):
             elif one == f'{self.id}.retrieved_result':
                 variable_map[one] = '$$context$$'
             else:
-                variable_map[one] = self.graph_state.get_variable_by_str(one)
+                variable_map[one] = self.get_other_node_variable(one)
         if variable_map.get(f'{self.id}.retrieved_result') is None:
             raise IgnoreException('用户提示词必须包含 retrieved_result 变量')
         user_prompt = self._user_prompt.format(variable_map)
@@ -169,7 +169,7 @@ class RagNode(BaseNode):
 
         variable_map = {}
         for one in self._system_variables:
-            variable_map[one] = self.graph_state.get_variable_by_str(one)
+            variable_map[one] = self.get_other_node_variable(one)
         system_prompt = self._system_prompt.format(variable_map)
         system_prompt.replace('{', '{{').replace('}', '}}')
         self._log_system_prompt.append(system_prompt)
@@ -198,7 +198,7 @@ class RagNode(BaseNode):
                 raise Exception('没有配置默认的embedding模型')
             file_ids = ["0"]
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(one)
+                file_metadata = self.get_other_node_variable(one)
                 if not file_metadata:
                     # 未找到对应的临时文件数据, 用户未上传文件
                     continue
@@ -230,7 +230,7 @@ class RagNode(BaseNode):
         else:
             file_ids = ["0"]
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(one)
+                file_metadata = self.get_other_node_variable(one)
                 if not file_metadata:
                     continue
                 file_ids.append(file_metadata['file_id'])

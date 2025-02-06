@@ -134,7 +134,7 @@ class AgentNode(BaseNode):
                 vector_client = self.init_knowledge_milvus(knowledge_info)
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
-                file_metadata = self.graph_state.get_variable_by_str(knowledge_id)
+                file_metadata = self.get_other_node_variable(knowledge_id)
                 if not file_metadata:
                     # 没有上传文件，则不去检索
                     continue
@@ -220,7 +220,7 @@ class AgentNode(BaseNode):
         self._tool_invoke_list = []
 
         for one in self._system_variables:
-            variable_map[one] = self.graph_state.get_variable_by_str(one)
+            variable_map[one] = self.get_other_node_variable(one)
         system_prompt = self._system_prompt.format(variable_map)
         self._system_prompt_list.append(system_prompt)
         self._init_agent(system_prompt)
@@ -234,7 +234,7 @@ class AgentNode(BaseNode):
                                                                    output_key='output'))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
-                self._batch_variable_list.append(self.graph_state.get_variable_by_str(one))
+                self._batch_variable_list.append(self.get_other_node_variable(one))
                 output_key = self.node_params['output'][index]['key']
                 self._tool_invoke_list.append([])
                 ret[output_key] = self._run_once(one, unique_id, output_key, self._tool_invoke_list[index])
@@ -298,24 +298,24 @@ class AgentNode(BaseNode):
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None, tool_invoke_list: list = None):
         """
-        input_variable: 输入变量，如果是batch，则需要传入一个list，否则为None
+        input_variable: 输入变量，如果是batch，则需要传入一个变量的key，否则为None
         """
         # 说明是引用了批处理的变量, 需要把变量的值替换为用户选择的变量
         special_variable = f'{self.id}.batch_variable'
         variable_map = {}
         for one in self._system_variables:
             if input_variable and one == special_variable:
-                variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                variable_map[one] = self.get_other_node_variable(input_variable)
                 continue
-            variable_map[one] = self.graph_state.get_variable_by_str(one)
+            variable_map[one] = self.get_other_node_variable(one)
         # system = self._system_prompt.format(variable_map)
 
         variable_map = {}
         for one in self._user_variables:
             if input_variable and one == special_variable:
-                variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                variable_map[one] = self.get_other_node_variable(input_variable)
                 continue
-            variable_map[one] = self.graph_state.get_variable_by_str(one)
+            variable_map[one] = self.get_other_node_variable(one)
         user = self._user_prompt.format(variable_map)
         self._user_prompt_list.append(user)
 

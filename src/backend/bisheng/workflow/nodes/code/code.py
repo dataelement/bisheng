@@ -46,7 +46,7 @@ class CodeNode(BaseNode):
         ret = {}
         for one in self._code_input:
             if one["type"] == "ref":
-                ret[one['key']] = self.graph_state.get_variable_by_str(one['value'])
+                ret[one['key']] = self.get_other_node_variable(one['value'])
             else:
                 ret[one['key']] = one['value']
         return ret

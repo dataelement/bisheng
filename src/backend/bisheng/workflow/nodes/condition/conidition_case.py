@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 from loguru import logger
 
-from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.nodes.base import BaseNode
 
 
 class ConditionOne(BaseModel):
@@ -15,12 +15,12 @@ class ConditionOne(BaseModel):
     right_value: str = Field(..., description='Right value')
     variable_key_value: Dict = Field(default={}, description='variable key value')
 
-    def evaluate(self, graph_state: GraphState) -> bool:
-        left_value = graph_state.get_variable_by_str(self.left_var)
+    def evaluate(self, node_instance: BaseNode) -> bool:
+        left_value = node_instance.get_other_node_variable(self.left_var)
         self.variable_key_value[self.left_var] = left_value
         right_value = self.right_value
         if self.right_value_type == 'ref' and self.right_value:
-            right_value = graph_state.get_variable_by_str(self.right_value)
+            right_value = node_instance.get_other_node_variable(self.right_value)
             self.variable_key_value[self.right_value] = right_value
         logger.debug(f'condition evaluate ope: {self.comparison_operation},'
                      f' left value: {left_value}, right value: {right_value}')
@@ -68,13 +68,13 @@ class ConditionCases(BaseModel):
     conditions: Optional[List[ConditionOne]] = Field(None, description='Conditions for case')
     variable_key_value: Dict = Field(default={}, description='variable key value')
 
-    def evaluate_conditions(self, graph_state: GraphState) -> bool:
+    def evaluate_conditions(self, node_instance: BaseNode) -> bool:
         # 正常来讲只有else没有conditions
         if not self.conditions:
             return True
 
         for condition in self.conditions:
-            flag = condition.evaluate(graph_state)
+            flag = condition.evaluate(node_instance)
             self.variable_key_value.update(condition.variable_key_value)
             if self.operator == 'and':
                 if not flag:

@@ -20,7 +20,7 @@ class ConditionNode(BaseNode):
         self._variable_key_value = {}
         next_node_ids = None
         for one in self._condition_cases:
-            flag = one.evaluate_conditions(self.graph_state)
+            flag = one.evaluate_conditions(self)
             self._variable_key_value.update(one.variable_key_value)
             if flag:
                 next_node_ids = self.get_next_node_id(one.id)

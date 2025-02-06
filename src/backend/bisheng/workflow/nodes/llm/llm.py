@@ -44,7 +44,7 @@ class LLMNode(BaseNode):
             result['output'] = self._run_once(None, unique_id, 'output')
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
-                self._batch_variable_list.append(self.graph_state.get_variable_by_str(one))
+                self._batch_variable_list.append(self.get_other_node_variable(one))
                 output_key = self.node_params['output'][index]['key']
                 result[output_key] = self._run_once(one, unique_id, output_key)
 
@@ -78,18 +78,18 @@ class LLMNode(BaseNode):
         variable_map = {}
         for one in self._system_variables:
             if input_variable and one == special_variable:
-                variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                variable_map[one] = self.get_other_node_variable(input_variable)
                 continue
-            variable_map[one] = self.graph_state.get_variable_by_str(one)
+            variable_map[one] = self.get_other_node_variable(one)
         system = self._system_prompt.format(variable_map)
         self._system_prompt_list.append(system)
 
         variable_map = {}
         for one in self._user_variables:
             if input_variable and one == special_variable:
-                variable_map[one] = self.graph_state.get_variable_by_str(input_variable)
+                variable_map[one] = self.get_other_node_variable(input_variable)
                 continue
-            variable_map[one] = self.graph_state.get_variable_by_str(one)
+            variable_map[one] = self.get_other_node_variable(one)
         user = self._user_prompt.format(variable_map)
         self._user_prompt_list.append(user)
 
