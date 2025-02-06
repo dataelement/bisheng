@@ -31,6 +31,7 @@ class SiliconFlow(APIToolBase):
 
     @classmethod
     def stable_diffusion(cls, api_key: str, prompt: str) -> "SiliconFlow":
+        """silicon stable diffusion api"""
         url = "https://api.siliconflow.cn/v1/images/generations"
         input_key = "prompt"
         headers = {
@@ -47,6 +48,7 @@ class SiliconFlow(APIToolBase):
 
     @classmethod
     def flux(cls, api_key: str, prompt: str) -> "SiliconFlow":
+        """silicon flux api"""
         url = "https://api.siliconflow.cn/v1/images/generations"
         input_key = "prompt"
         headers = {

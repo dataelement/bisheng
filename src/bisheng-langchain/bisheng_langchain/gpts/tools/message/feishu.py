@@ -5,8 +5,8 @@ from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase
 
 
 class FeishuMessageTool(APIToolBase):
-    name = "dingding_message"
-    description = "发送钉钉消息"
+    name = "feishu_message"
+    description = "发送飞书消息"
 
     def run(self, query: str) -> str:
         """Run query through api and parse result."""

@@ -4,8 +4,8 @@ from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase
 
 
 class WechatMessageTool(APIToolBase):
-    name = "dingding_message"
-    description = "发送钉钉消息"
+    name = "wechat_message"
+    description = "发送企业微信消息"
 
     def run(self, query: str) -> str:
         """Run query through api and parse result."""
