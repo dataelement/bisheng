@@ -68,39 +68,39 @@ class EmailMessageTool(APIToolBase):
             server.quit()
 
     # -------------------- 使用示例 -------------------- 
-    if __name__ == "__main__":
-        # 安全提示：建议将敏感信息存储在环境变量中
-        # 例如 os.environ.get('EMAIL_PASSWORD')
-        
-        # 基础文本邮件
-        send_email(
-            sender='your_email@qq.com',
-            password='your_authorization_code',  # 注意：QQ邮箱用授权码，非登录密码
-            receiver=['target1@example.com', 'target2@example.com'],
-            subject='测试文本邮件',
-            content='这是一封来自Python的测试邮件',
-            smtp_server='smtp.qq.com',
-            port=465
-        )
-
-        # HTML邮件+附件
-        html_content = '''
-        <h1 style="color:red">HTML内容测试</h1>
-        <p>这是一封带样式的邮件</p>
-        <ul>
-            <li>项目1</li>
-            <li>项目2</li>
-        </ul>
-        '''
-        
-        send_email(
-            sender='your_email@163.com',
-            password='your_password',
-            receiver='target@example.com',
-            subject='HTML邮件测试',
-            content=html_content,
-            content_type='html',
-            attachments=['data.xlsx', 'report.pdf'],
-            smtp_server='smtp.163.com',
-            port=465
-        )
+    # if __name__ == "__main__":
+    #     # 安全提示：建议将敏感信息存储在环境变量中
+    #     # 例如 os.environ.get('EMAIL_PASSWORD')
+    #     
+    #     # 基础文本邮件
+    #     send_email(
+    #         sender='your_email@qq.com',
+    #         password='your_authorization_code',  # 注意：QQ邮箱用授权码，非登录密码
+    #         receiver=['target1@example.com', 'target2@example.com'],
+    #         subject='测试文本邮件',
+    #         content='这是一封来自Python的测试邮件',
+    #         smtp_server='smtp.qq.com',
+    #         port=465
+    #     )
+    #
+    #     # HTML邮件+附件
+    #     html_content = '''
+    #     <h1 style="color:red">HTML内容测试</h1>
+    #     <p>这是一封带样式的邮件</p>
+    #     <ul>
+    #         <li>项目1</li>
+    #         <li>项目2</li>
+    #     </ul>
+    #     '''
+    #     
+    #     send_email(
+    #         sender='your_email@163.com',
+    #         password='your_password',
+    #         receiver='target@example.com',
+    #         subject='HTML邮件测试',
+    #         content=html_content,
+    #         content_type='html',
+    #         attachments=['data.xlsx', 'report.pdf'],
+    #         smtp_server='smtp.163.com',
+    #         port=465
+    #     )
