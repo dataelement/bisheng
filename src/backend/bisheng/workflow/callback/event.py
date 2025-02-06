@@ -21,11 +21,13 @@ class UserInputData(BaseModel):
 
 
 class GuideWordData(BaseModel):
+    unique_id: Optional[str] = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     guide_word: str = Field(..., description='Guide word')
 
 
 class GuideQuestionData(BaseModel):
+    unique_id: Optional[str] = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     guide_question: List[str] = Field(..., description='Guide question')
 
