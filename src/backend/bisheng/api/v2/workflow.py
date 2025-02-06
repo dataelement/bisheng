@@ -38,6 +38,7 @@ async def invoke_workflow(request: Request,
     else:
         chat_id = session_id.split('_', 1)[0]
         unique_id = session_id
+    logger.debug(f'invoke_workflow: {workflow_id}, {session_id}')
     workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
 
     # 查询工作流信息

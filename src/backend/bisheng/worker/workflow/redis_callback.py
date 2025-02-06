@@ -295,7 +295,7 @@ class RedisCallback(BaseCallback):
         """ guide word event """
         logger.debug(f'guide word: {data}')
         self.send_chat_response(
-            ChatResponse(message=data.guide_word,
+            ChatResponse(message=data.dict(),
                          category=WorkflowEventType.GuideWord.value,
                          type='over',
                          flow_id=self.workflow_id,
@@ -305,7 +305,7 @@ class RedisCallback(BaseCallback):
         """ guide question event """
         logger.debug(f'guide question: {data}')
         self.send_chat_response(
-            ChatResponse(message=data.guide_question,
+            ChatResponse(message=data.dict(),
                          category=WorkflowEventType.GuideQuestion.value,
                          type='over',
                          flow_id=self.workflow_id,

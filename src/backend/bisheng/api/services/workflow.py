@@ -1,7 +1,6 @@
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from uuid import UUID, uuid4
 
-from bisheng.api.v1.schemas import ChatResponse
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
@@ -9,6 +8,7 @@ from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
@@ -223,7 +223,6 @@ class WorkFlowService(BaseService):
                 workflow_event.output_schema = WorkflowOutputSchema(
                     message=chat_response.message
                 )
-
 
         return workflow_event
 

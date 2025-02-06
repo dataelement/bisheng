@@ -1,10 +1,11 @@
 import datetime
 from typing import Any, Dict
 
+from langchain.memory import ConversationBufferWindowMemory
+
 from bisheng.chat.types import IgnoreException
 from bisheng.workflow.callback.event import GuideQuestionData, GuideWordData
 from bisheng.workflow.nodes.base import BaseNode
-from langchain.memory import ConversationBufferWindowMemory
 
 
 class StartNode(BaseNode):
@@ -21,10 +22,11 @@ class StartNode(BaseNode):
     def _run(self, unique_id: str) -> Dict[str, Any]:
         if self.node_params['guide_word']:
             self.callback_manager.on_guide_word(
-                data=GuideWordData(node_id=self.id, guide_word=self.node_params['guide_word']))
+                data=GuideWordData(node_id=self.id, unique_id=unique_id, guide_word=self.node_params['guide_word']))
         if self.node_params['guide_question']:
-            self.callback_manager.on_guide_question(data=GuideQuestionData(
-                node_id=self.id, guide_question=self.node_params['guide_question']))
+            self.callback_manager.on_guide_question(
+                data=GuideQuestionData(node_id=self.id, unique_id=unique_id,
+                                       guide_question=self.node_params['guide_question']))
         if not self.node_data.v:
             raise IgnoreException(f'{self.name} -- workflow node is update')
 
