@@ -1,15 +1,15 @@
 from typing import Any
 
 import requests
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)
 
 
 class InputArgs(BaseModel):
-    input_key: str
-    target_url: str
+    input_key: str = Field(description="apikey")
+    target_url: str = Field(description="params target_url")
 
 
 class JinaTool(BaseModel):
@@ -17,7 +17,7 @@ class JinaTool(BaseModel):
     @classmethod
     def get_url(cls, target_url: str, input_key: str) -> "JinaTool":
         """get url from jina api"""
-        url = "https://r.jina.ai/".join(target_url)
+        url = "https://r.jina.ai/" + target_url
 
         headers = {
             "Content-Type": "application/json",
