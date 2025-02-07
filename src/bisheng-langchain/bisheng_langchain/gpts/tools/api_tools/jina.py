@@ -8,7 +8,7 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    jina_api_key: str = Field(description="jina api key")
+    jina_api_key: Optional[str] = Field(default=None,description="jina api key")
     target_url: Optional[str] = Field(default=None,description="params target_url")
 
 
