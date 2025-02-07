@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import requests
 from pydantic import BaseModel, Field
@@ -9,7 +9,7 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 class InputArgs(BaseModel):
     input_key: str = Field(description="apikey")
-    target_url: str = Field(description="params target_url")
+    target_url: Optional[str] = Field(default=None,description="params target_url")
 
 
 class JinaTool(BaseModel):
@@ -35,9 +35,14 @@ class JinaTool(BaseModel):
         attr_name = name.split("_", 1)[-1]
         class_method = getattr(cls, attr_name)
 
+        input_key = kwargs.get("jina_api_key", "")
+        input_args = InputArgs(
+            input_key=input_key
+        )
+
         return MultArgsSchemaTool(
             name=name,
             description=class_method.__doc__,
             func=class_method,
-            args_schema=InputArgs,
+            args_schema=input_args,
         )
