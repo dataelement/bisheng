@@ -142,6 +142,14 @@ def get_knowledge(*,
                                                 page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
+@router.get('/info', status_code=200)
+def get_knowledge_info(*,
+                       request: Request,
+                       login_user: UserPayload = Depends(get_login_user),
+                       knowledge_id: List[int] = Query(...)):
+    """ 根据知识库ID读取知识库信息. """
+    res = KnowledgeService.get_knowledge_info(request, login_user, knowledge_id)
+    return resp_200(data=res)
 
 @router.put('/', status_code=200)
 async def update_knowledge(*,
