@@ -8,20 +8,20 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    input_key: str = Field(description="apikey")
+    jina_api_key: str = Field(description="jina api key")
     target_url: Optional[str] = Field(default=None,description="params target_url")
 
 
 class JinaTool(BaseModel):
 
     @classmethod
-    def get_markdown(cls, target_url: str, input_key: str) -> Any:
+    def get_markdown(cls, target_url: str, jina_api_key: str) -> Any:
         """get url from jina api"""
         url = "https://r.jina.ai/" + target_url
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + input_key,
+            "Authorization": "Bearer " + jina_api_key,
         }
 
         response = requests.get(url, headers=headers)
@@ -35,10 +35,7 @@ class JinaTool(BaseModel):
         attr_name = name.split("_", 1)[-1]
         class_method = getattr(cls, attr_name)
 
-        input_key = kwargs.get("jina_api_key", "")
-        input_args = InputArgs(
-            input_key=input_key
-        )
+        input_args = InputArgs(**kwargs)
 
         return MultArgsSchemaTool(
             name=name,
