@@ -11,6 +11,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
+from bisheng.chat.utils import SourceType
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -255,9 +256,10 @@ class WorkFlowService(BaseService):
         workflow_event.output_schema = WorkflowOutputSchema(
             message=chat_response.message.get('msg'),
             files=chat_response.message.get('files'),
-            output_key=chat_response.message.get('output_key'),
-            extra=chat_response.extra,
+            output_key=chat_response.message.get('output_key')
         )
+        if chat_response.source != SourceType.NOT_SUPPORT.value:
+            workflow_event.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
         return workflow_event
 
     @classmethod
