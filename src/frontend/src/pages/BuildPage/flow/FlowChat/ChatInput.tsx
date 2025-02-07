@@ -21,6 +21,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const [inputLock, setInputLock] = useState({ locked: true, reason: '' })
     const questionsRef = useRef(null)
     const inputNodeIdRef = useRef('') // 当前输入框节点id
+    const messageIdRef = useRef('') // 当前输入框节点messageId
     const [inputForm, setInputForm] = useState(null) // input表单
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
@@ -104,7 +105,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             msg: value,
             category: "question",
             extra: '',
-            message_id: '',
+            message_id: messageIdRef.current,
             source: 0
         })
         // msg to store
@@ -131,7 +132,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 [inputNodeIdRef.current]: {
                     data,
                     message: msg,
-                    message_id: '',
+                    message_id: messageIdRef.current,
                     category: 'question',
                     extra: '',
                     source: 0
@@ -245,15 +246,20 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             insetNodeRun(data)
             return sendNodeLogEvent(data)
         }
+        // 
+        if (data.category === "guide_word") {
+            data.message.msg = data.message.guide_word
+        }
         // if (data.category === 'user_input') {
         if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
+            messageIdRef.current = data.message_id
             // 待用户输入
             input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
             return
         } else if (data.category === 'guide_question') {
-            return questionsRef.current.updateQuestions(data.message.filter(q => q))
+            return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
         }
@@ -263,41 +269,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
-
-        // if (Array.isArray(data) && data.length) return
-        // if (data.type === 'start') {
-        //     msgClosedRef.current = false
-        //     // 非continue时，展示stop按钮
-        //     !continueRef.current && setStop({ show: true, disable: false })
-        //     createWsMsg(data)
-        // } else if (data.type === 'stream') {
-        //     //@ts-ignore
-        //     updateCurrentMessage({
-        //         chat_id: data.chat_id,
-        //         message: data.message,
-        //         thought: data.intermediate_steps
-        //     })
-        // } else if (['end', 'end_cover'].includes(data.type)) {
-        //     if (msgClosedRef.current && !['tool', 'flow', 'knowledge'].includes(data.category)) {
-        //         // 无未闭合的消息，先创建（补一条start）  工具类除外
-        //         console.log('重复end,新建消息 :>> ');
-        //         createWsMsg(data)
-        //     }
-        //     updateCurrentMessage({
-        //         ...data,
-        //         end: true,
-        //         thought: data.intermediate_steps || '',
-        //         messageId: data.message_id,
-        //         noAccess: false,
-        //         liked: 0,
-        //         update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-        //     }, data.type === 'end_cover')
-
-        //     if (!msgClosedRef.current) msgClosedRef.current = true
-        // } else if (data.type === "close") {
-        //     setStop({ show: false, disable: false })
-        //     setInputLock({ locked: false, reason: '' })
-        // }
     }
 
     // 日志广播->nodes

@@ -129,7 +129,7 @@ const workflowTemplate = [
                     {
                         "key": "preset_question",
                         "label": "预置问题列表",
-                        "global": "index",
+                        "global": "item:input_list",
                         "type": "input_list",
                         "value": [],
                         "placeholder": "输入批量预置问题",
@@ -348,7 +348,6 @@ const workflowTemplate = [
                         "key": "batch_variable",
                         "label": "批处理变量",
                         "required": true,
-                        "global": "self",
                         "type": "user_question",
                         "test": "var",
                         "value": [],
@@ -819,7 +818,7 @@ const workflowTemplateEN = [
                     {
                         "key": "preset_question",
                         "label": "Preset Question List",
-                        "global": "index",
+                        "global": "item:input_list",
                         "type": "input_list",
                         "value": [],
                         "placeholder": "Enter batch preset questions",
@@ -1033,7 +1032,6 @@ const workflowTemplateEN = [
                         "key": "batch_variable",
                         "label": "Batch Variable",
                         "required": true,
-                        "global": "self",
                         "type": "user_question",
                         "value": [],
                         "linkage": "output",

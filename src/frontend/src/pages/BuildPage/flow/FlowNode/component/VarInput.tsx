@@ -1,12 +1,13 @@
 import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { isVarInFlow } from "@/util/flowUtils";
-import { UploadCloud, Variable } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Expand, UploadCloud } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
-import { useTranslation } from "react-i18next";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -55,6 +56,7 @@ export default function VarInput({
     itemKey,
     placeholder = '',
     flowNode,
+    full = false,
     value,
     error = false,
     children = null,
@@ -64,6 +66,7 @@ export default function VarInput({
 }) {
     const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
     const valueRef = useRef(value || '');
+    const [fullVarInputValue, setFullVarInputValue] = useState(value || '');
     const selectVarRef = useRef(null);
     const { t } = useTranslation('flow')
 
@@ -85,6 +88,7 @@ export default function VarInput({
         const value = parseToValue(textareaRef.current.innerHTML, flowNode);
         // console.log('textarea value :>> ', value);
         valueRef.current = value;
+        setFullVarInputValue(value)
         onChange(value);
     };
 
@@ -171,7 +175,7 @@ export default function VarInput({
     };
     // resize
     const { height, handleMouseDown } = useResize(textareaRef, 80, 40);
-
+    
     return (
         <div
             className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'
@@ -192,6 +196,35 @@ export default function VarInput({
                             <UploadCloud size={16} />
                         </Button>
                     )}
+                    {!full && <Dialog >
+                        <DialogTrigger asChild>
+                            <Button className="text-muted-foreground absolute right-0 top-6 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
+                        </DialogTrigger>
+                        <DialogContent className="lg:max-w-[800px]">
+                            {/* <DialogHeader>
+                                <DialogTitle className="flex items-center"></DialogTitle>
+                            </DialogHeader> */}
+                            <div>
+                                <VarInput
+                                    full
+                                    nodeId={nodeId}
+                                    itemKey={itemKey}
+                                    placeholder={placeholder}
+                                    flowNode={flowNode}
+                                    value={fullVarInputValue}
+                                    error={error}
+                                    children={children}
+                                    onUpload={onUpload}
+                                    onChange={(val) => {
+                                        textareaRef.current.innerHTML = parseToHTML(val || '')[0];
+                                        handleBlur();
+                                        onChange(val)
+                                    }}
+                                >
+                                </VarInput>
+                            </div>
+                        </DialogContent>
+                    </Dialog>}
                 </div>
             </div>
             <div
@@ -222,8 +255,9 @@ export default function VarInput({
                             e.preventDefault();  // 阻止默认行为
                         }
                     }
+                    e.stopPropagation()
                 }}
-                className="nowheel bisheng-richtext px-3 py-2 cursor-text whitespace-pre-line min-h-[80px] max-h-64 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${full ? 'min-h-64' : 'max-h-64 min-h-[80px]'} nowheel bisheng-richtext px-3 py-2 cursor-text whitespace-pre-line overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50`}
             ></div>
             {children}
             <div

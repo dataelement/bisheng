@@ -281,7 +281,6 @@ const FormField = ({ showDefault, field, value, onChange }) => {
 const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     const [form, setForm] = useState(formData);
     const fields = modelProviders[provider] || [];
-    console.log('form :>> ', form);
 
     const handleChange = (key, value) => {
         setForm((prevData) => ({
@@ -293,7 +292,11 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     useImperativeHandle(ref, () => ({
         getData() {
             const errorObj = fields.find(field => field.required && !form[field.key]);
-            return [form, errorObj ? errorObj.label : ''];
+            const newForm = fields.reduce((res, field) => {
+                res[field.key] = form[field.key]
+                return res
+            }, {});
+            return [newForm, errorObj ? errorObj.label : ''];
         }
     }))
 

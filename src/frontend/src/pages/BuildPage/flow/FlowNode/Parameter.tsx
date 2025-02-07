@@ -54,7 +54,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'input':
             return <InputItem data={item} onChange={handleOnNewValue} />;
         case 'input_list':
-            return <InputListItem data={item} onChange={handleOnNewValue} />;
+            return <InputListItem data={item} dict={item.key === "preset_question"} onChange={handleOnNewValue} />;
         case 'var':
             return <VarItem data={item} />
         case 'chat_history_num':

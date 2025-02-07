@@ -4,6 +4,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
+import { cloneDeep } from "lodash-es";
 
 const isMatch = (obj, expression) => {
     // 临时关闭 file类型表单变量
@@ -28,6 +29,10 @@ const getSpecialVar = (obj, type) => {
                 }
                 return res
             }, [])
+        case 'item:input_list':
+            const param = cloneDeep(obj)
+            param.value = param.value.map(item => ({ label: item.value, value: item.key }))
+            return [{ param, label: obj.key, value: obj.key }]
     }
     return []
 }
@@ -104,12 +109,6 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                         label: param.key,
                         value: param.key
                     })
-                } else if (param.global === 'index') {
-                    _vars.push({
-                        param,
-                        label: `${param.key}`,
-                        value: `${param.key}`
-                    })
                 } else if (param.global && param.global.indexOf('=') !== -1) {
                     const [key, value] = param.global.split('=')
                     // 特殊逻辑
@@ -148,10 +147,10 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
     // 三级变量 预置问题
     const [questions, setQuestions] = useState([])
     const handleShowQuestions = (param) => {
-        const values = param.value.filter(e => e)
-        setQuestions(values.map((el, index) => ({
-            label: el,
-            value: `${param.key}#${index}`
+        const values = param.value.filter(e => e.label)
+        setQuestions(values.map(({ label, value }) => ({
+            label,
+            value: `${param.key}#${value}`
         })))
     }
 

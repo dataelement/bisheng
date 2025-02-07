@@ -97,11 +97,16 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
         switch (name) {
             case 'Dalle3绘画':
                 return <Dalle3ToolForm formData={formData} onSubmit={handleSubmit} />;
-                // return <CrawlerConfigForm formData={formData} onSubmit={handleSubmit} />
-                // return <EmailConfigForm formData={formData} onSubmit={handleSubmit} />;
-                // return <JinaApiKeyForm formData={formData} onSubmit={handleSubmit} />;
-                // return <FeishuConfigForm formData={formData} onSubmit={handleSubmit} />;
-                // return <SiliconFlowApiKeyForm formData={formData} onSubmit={handleSubmit} />;
+            case 'Firecrawl':
+                return <CrawlerConfigForm formData={formData} onSubmit={handleSubmit} />;
+            case 'Jina AI':
+                return <JinaApiKeyForm formData={formData} onSubmit={handleSubmit} />;
+            case 'SiliconFlow':
+                return <SiliconFlowApiKeyForm formData={formData} onSubmit={handleSubmit} />;
+            case '发送邮件':
+                return <EmailConfigForm formData={formData} onSubmit={handleSubmit} />;
+            case '飞书发送消息':
+                return <FeishuConfigForm formData={formData} onSubmit={handleSubmit} />;
             case 'Bing web搜索':
                 return <BingToolForm formData={formData} onSubmit={handleSubmit} />;
             case '天眼查':

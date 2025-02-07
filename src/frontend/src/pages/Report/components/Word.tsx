@@ -1,6 +1,7 @@
 import i18next from "i18next"
 import { useEffect, useContext } from "react"
 import { locationContext } from "../../../contexts/locationContext"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
 
 export default function Word({ data, workflow }) {
     const { appConfig } = useContext(locationContext)
@@ -82,6 +83,7 @@ export default function Word({ data, workflow }) {
         window.editor = new window.DocsAPI.DocEditor('bsoffice', editorConfig)
     }
 
+    const { toast } = useToast()
     useEffect(() => {
         if (window.DocsAPI) {
             createEditor()
@@ -90,11 +92,18 @@ export default function Word({ data, workflow }) {
             script.src = wordUrl + '/web-apps/apps/api/documents/api.js' // 在线编辑服务
             script.onload = createEditor
             document.head.appendChild(script)
+            script.onerror = () => {
+                toast({
+                    variant: 'error',
+                    title: 'word编辑器加载失败',
+                    description: '请检查Office服务地址配置是否正确并正常启动.'
+                })
+            }
         }
 
         return () => {
             console.log('destroyEditor :>> ');
-            window.editor.destroyEditor();
+            window.editor?.destroyEditor();
         }
     }, [])
 

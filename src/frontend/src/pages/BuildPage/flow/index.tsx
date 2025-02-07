@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import Panne from "./Panne";
 import useFlowStore from "./flowStore";
+import { flowVersionCompatible } from "@/util/flowCompatible";
 
 
 export default function FlowPage() {
@@ -52,7 +53,9 @@ export default function FlowPage() {
     const [copyFlow, preFlow] = useMemo(() => {
         if (flow?.id === id) {
             // const copyFlow = cloneDeep(flow)
-            return [flow, JSON.stringify(flow || null)] as const
+            // 版本兼容
+            const newFlow = flowVersionCompatible(flow)
+            return [newFlow, JSON.stringify(newFlow || null)] as const
         }
         return []
     }, [flow, id])
