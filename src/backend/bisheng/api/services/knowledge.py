@@ -66,17 +66,36 @@ class KnowledgeService(KnowledgeUtils):
             res = KnowledgeDao.get_all_knowledge(name, knowledge_type, page=page, limit=limit)
             total = KnowledgeDao.count_all_knowledge(name, knowledge_type)
 
-        db_user_ids = {one.user_id for one in res}
+        result = cls.convert_knowledge_read(login_user, res)
+        return result, total
+
+    @classmethod
+    def convert_knowledge_read(cls, login_user: UserPayload, knowledge_list: List[Knowledge]) -> List[KnowledgeRead]:
+        db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
+        res = []
 
-        result = []
-        for one in res:
-            result.append(
-                KnowledgeRead(**one.model_dump(),
-                              user_name=db_user_dict.get(one.user_id, one.user_id),
-                              copiable=login_user.copiable_check(one.user_id)))
-        return result, total
+        for one in knowledge_list:
+            res.append(KnowledgeRead(**one.model_dump(),
+                                     user_name=db_user_dict.get(one.user_id, one.user_id),
+                                     copiable=login_user.copiable_check(one.user_id)))
+        return res
+
+    @classmethod
+    def get_knowledge_info(cls, request: Request, login_user: UserPayload, knowledge_id: List[int]) -> List[KnowledgeRead]:
+        db_knowledge = KnowledgeDao.get_list_by_ids(knowledge_id)
+        filter_knowledge = db_knowledge
+        if not login_user.is_admin():
+            filter_knowledge = []
+            for one in db_knowledge:
+                # 判断用户是否有权限
+                if login_user.access_check(one.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
+                    filter_knowledge.append(one)
+        if not filter_knowledge:
+            return []
+
+        return cls.convert_knowledge_read(login_user, filter_knowledge)
 
     @classmethod
     def create_knowledge(cls, request: Request, login_user: UserPayload,
