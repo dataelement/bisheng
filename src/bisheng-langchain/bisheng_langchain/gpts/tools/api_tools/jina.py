@@ -15,7 +15,7 @@ class InputArgs(BaseModel):
 class JinaTool(BaseModel):
 
     @classmethod
-    def get_markdown(cls, target_url: str, input_key: str) -> "JinaTool":
+    def get_markdown(cls, target_url: str, input_key: str) -> Any:
         """get url from jina api"""
         url = "https://r.jina.ai/" + target_url
 
@@ -26,7 +26,7 @@ class JinaTool(BaseModel):
 
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            return response.json()
+            return response.text
 
         return cls()
 
