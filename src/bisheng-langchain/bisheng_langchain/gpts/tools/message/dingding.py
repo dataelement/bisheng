@@ -12,25 +12,21 @@ class InputArgs(BaseModel):
     message: str = Field(description='需要发送的钉钉消息')
 
 class DingdingMessageTool(APIToolBase):
-    name = "dingding_message"
-    description = "发送钉钉消息"
+    # name = "dingding_message"
+    # description = "发送钉钉消息"
     args_schema: Type[BaseModel] = InputArgs
 
-    def run(self, params: InputArgs) -> str:
+    def run(self, url:str,message:str) -> str:
         """Run query through api and parse result."""
-        if params:
-            self.params[self.input_key] = {
-                'question':params 
-            }
         json = {
             "text": {
-                "content": params.message
+                "content": message
             },
             "msgtype":"text"
         }
-        url = self.url
+        # url = self.url
         logger.info('api_call url={}', url)
-        resp = self.client.post(params.url, json=json)
+        resp = self.client.post(url, json=json)
         if resp.status_code != 200:
             logger.info('api_call_fail res={}', resp.text)
         return resp.text
@@ -49,7 +45,7 @@ class DingdingMessageTool(APIToolBase):
         return resp
 
     @classmethod
-    def send_message(cls,api_key:str='') -> "DingdingMessageTool":
+    def send_message(cls) -> "DingdingMessageTool":
         input_key = "msg"
         params = {
             "text": {
@@ -58,7 +54,7 @@ class DingdingMessageTool(APIToolBase):
             "msgtype":"text"
         }
 
-        return cls(api_key=api_key, input_key=input_key, params=params)
+        return cls()
 
 
 
