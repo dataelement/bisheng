@@ -49,7 +49,7 @@ class DingdingMessageTool(APIToolBase):
         return resp
 
     @classmethod
-    def send_message(cls,api_key:str) -> "DingdingMessageTool":
+    def send_message(cls,api_key:str='') -> "DingdingMessageTool":
         input_key = "msg"
         params = {
             "text": {
