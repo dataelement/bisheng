@@ -21,11 +21,12 @@ class InputNode(BaseNode):
         self._node_params_map = {}
         new_node_params = {}
         if self.is_dialog_input():
+            new_node_params['user_input'] = self.node_params['user_input']
+        else:
             for value_info in self.node_params['form_input']:
                 new_node_params[value_info['key']] = value_info['value']
                 self._node_params_map[value_info['key']] = value_info
-        else:
-            new_node_params['user_input'] = self.node_params['user_input']
+
         self.node_params = new_node_params
         self._file_ids = []
 

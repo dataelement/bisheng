@@ -122,26 +122,29 @@ class RagNode(BaseNode):
         ret = []
         index = 0
         user_question_list = self.init_user_question()
+        # 判断检索结果是否超出一定的长度, 原因是ws发送的消息超过一定的长度会报错
+        source_documents = [one.page_content for one in self._log_source_documents.values()]
+        tmp_retrieved_type = 'params'
+        tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
+        if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
+            tmp_retrieved_type = 'file'
+            tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
+            self._minio_client.upload_tmp(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
+            share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
+            tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
+
         for key, val in result.items():
-            tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]], indent=2, ensure_ascii=False)
+            if tmp_retrieved_type != 'file':
+                tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]], indent=2, ensure_ascii=False)
             one_ret =[
                 {'key': 'user_question', 'value': user_question_list[index], "type": "params"},
-                {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": 'params'},
+                {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
                 {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
                 {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
                 {'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'}
             ]
             index += 1
             ret.append(one_ret)
-
-        # tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
-        # tmp_retrieved_type = 'params'
-        # if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
-        #     tmp_retrieved_type = 'file'
-        #     tmp_object_name = f'/workflow/source_document/{time.time()}.txt'
-        #     self._minio_client.upload_tmp(tmp_object_name, tmp_retrieved_result.encode('utf-8'))
-        #     share_url = self._minio_client.get_share_link(tmp_object_name, self._minio_client.tmp_bucket)
-        #     tmp_retrieved_result = self._minio_client.clear_minio_share_host(share_url)
         return ret
 
     def init_user_question(self) -> List[str]:
