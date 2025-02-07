@@ -30,7 +30,7 @@ class FeishuMessageTool(BaseModel):
         # 构建请求头
         headers = {"Content-Type": "application/json"}
         # 构建请求体
-        data = {"msg_type": "text", "text": {"content": message}}
+        data = {"msg_type": "text", "content": {"text": message}}
 
         try:
             # 发送 POST 请求
