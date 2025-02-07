@@ -45,6 +45,9 @@ class OutputNode(BaseNode):
         group_params = self.node_data.dict(include={'group_params'})
         return group_params['group_params']
 
+    def is_condition_node(self) -> bool:
+        return self._output_type == 'choose'
+
     def route_node(self, state: dict) -> str | list[str]:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':

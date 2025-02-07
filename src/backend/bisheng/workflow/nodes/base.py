@@ -100,6 +100,10 @@ class BaseNode(ABC):
         """ 返回用户需要输入的表单描述信息 """
         return None
 
+    def is_condition_node(self) -> bool:
+        """ 是否是互斥节点 """
+        return self.node_data.type == NodeType.CONDITION.value
+
     def handle_input(self, user_input: dict) -> Any:
         # 将用户输入的数据更新到节点数里
         self.node_params.update(user_input)
@@ -147,7 +151,7 @@ class BaseNode(ABC):
             reason = str(e)
             raise e
         finally:
-            # 输出节点的结束日志由fake节点输出
+            # 输出节点的结束日志由fake节点输出, 因为需要等待用户先输入完成，才能正确显示日志
             if reason or self.type != NodeType.OUTPUT.value:
                 self.callback_manager.on_node_end(data=NodeEndData(
                     unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data,
