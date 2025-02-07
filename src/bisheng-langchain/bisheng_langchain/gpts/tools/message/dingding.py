@@ -9,13 +9,11 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    """args_schema"""
-
     url: str = Field(description="钉钉机器人的URL地址")
     message: str = Field(description="需要发送的钉钉消息")
 
 
-class DingdingMessageTool(APIToolBase):
+class DingdingMessageTool(BaseModel):
 
     @classmethod
     def send_message(cls, message: str, url: str) -> "DingdingMessageTool":
