@@ -1,12 +1,20 @@
 
 
+from typing import Type
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from loguru import logger
 from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase
 
 
+class InputArgs(BaseModel):
+    """args_schema"""
+    url: str = Field(description='钉钉机器人的URL地址')
+    message: str = Field(description='需要发送的钉钉消息')
+
 class DingdingMessageTool(APIToolBase):
     name = "dingding_message"
     description = "发送钉钉消息"
+    args_schema: Type[BaseModel] = InputArgs
 
     def run(self, query: str) -> str:
         """Run query through api and parse result."""
