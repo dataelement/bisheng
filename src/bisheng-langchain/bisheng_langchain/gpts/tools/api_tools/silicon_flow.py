@@ -1,33 +1,18 @@
+from typing import Any
+
+from pydantic import Field
 from loguru import logger
 
-from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase
+from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase, MultArgsSchemaTool
 
+class InputArgs:
+    api_key: str = Field(description="apikey")
+    target_url: str = Field(description="params target_url")
+    max_depth: str = Field(description="params maxDepth")
+    limit: str = Field(description="params limit")
 
 class SiliconFlow(APIToolBase):
-    """siliconFlow api"""
 
-    def run(self, query: str) -> str:
-        """Run query through api and parse result."""
-        if query:
-            self.params[self.input_key] = {"question": query}
-
-        url = self.url
-        logger.info("api_call url={}", url)
-        resp = self.client.post(url, json=self.params)
-        if resp.status_code != 200:
-            logger.info("api_call_fail res={}", resp.text)
-        return resp.text
-
-    async def arun(self, query: str) -> str:
-        """Run query through api and parse result."""
-        if query:
-            self.params[self.input_key] = {"question": query}
-
-        url = self.url
-        logger.info("api_call url={}", url)
-        resp = await self.async_client.apost(url, json=self.params)
-        logger.info(resp)
-        return resp
 
     @classmethod
     def stable_diffusion(cls, api_key: str, prompt: str) -> "SiliconFlow":
@@ -62,3 +47,16 @@ class SiliconFlow(APIToolBase):
         }
 
         return cls(url=url, api_key=api_key, input_key=input_key, headers=headers,params=params)
+
+    @classmethod
+    def get_api_tool(cls, name: str, **kwargs: Any) -> "SiliconFlow":
+        attr_name = name.split("_", 1)[-1]
+        class_method = getattr(cls, attr_name)
+
+        return MultArgsSchemaTool(
+            name=name,
+            description=class_method.__doc__,
+            func=class_method,
+            args_schema=InputArgs,
+        )
+
