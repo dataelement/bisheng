@@ -12,6 +12,7 @@ import { RefreshCw } from "lucide-react";
 import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
+import useFlowStore from "../flowStore";
 
 export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
     const { toast } = useToast()
@@ -233,6 +234,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         })
     }
 
+    const setRunCache = useFlowStore(state => state.setRunCache)
     // 接受 ws 消息
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
@@ -243,6 +245,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             });
         }
         if (data.category === 'node_run') {
+            // 缓存运行结果,用于[单节点运行]自动填写参数
+            if (data.type === 'end' && data.message.input_data) {
+                setRunCache(data.message.node_id
+                    , data.message.input_data)
+            }
             insetNodeRun(data)
             return sendNodeLogEvent(data)
         }

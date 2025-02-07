@@ -22,6 +22,8 @@ export default function FlowPage() {
 
     useEffect(() => {
         getFlowApi(id).then(f => {
+            clearRunCache();
+
             if (f.data) {
                 const { data, ..._flow } = f
                 return setFlow({
@@ -42,7 +44,7 @@ export default function FlowPage() {
                     zoom: 1
                 },
                 version_list: []
-            })
+            });
         })
         return () => {
             setFlow(null);

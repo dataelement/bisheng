@@ -149,7 +149,7 @@ export const RunTest = forwardRef((props, ref) => {
             }
         })
 
-        // cache
+        // save cache
         const cacheData = inputs.reduce((res, input) => {
             res[input.key] = input.value
             return res
