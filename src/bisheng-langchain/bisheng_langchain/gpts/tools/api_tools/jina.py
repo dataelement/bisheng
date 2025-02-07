@@ -15,7 +15,7 @@ class InputArgs(BaseModel):
 class JinaTool(BaseModel):
 
     @classmethod
-    def get_url(cls, target_url: str, input_key: str) -> "JinaTool":
+    def get_markdown(cls, target_url: str, input_key: str) -> "JinaTool":
         """get url from jina api"""
         url = "https://r.jina.ai/" + target_url
 
