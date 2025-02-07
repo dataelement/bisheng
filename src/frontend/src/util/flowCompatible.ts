@@ -10,7 +10,6 @@ export const flowVersionCompatible = (flow) => {
             case 'input': comptibleInput(node.data); break;
         }
     })
-    console.log('flow xxxxxxxxx :>> ', flow);
     return flow
 }
 
@@ -23,6 +22,8 @@ const comptibleStart = (node) => {
             value: item
         }))
         // TODO 历史使用过的预知问题变量替换
+
+        node.v = 1
     }
 }
 
@@ -49,5 +50,7 @@ const comptibleInput = (node) => {
             }
             return item
         })
+
+        node.v = 1
     }
 }
