@@ -1,12 +1,13 @@
 import { LoadIcon } from "@/components/bs-icons/loading";
+import { Button } from "@/components/bs-ui/button";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { downloadFile } from "@/util/utils";
 import { Check, ChevronsRightIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
 import { ResultText } from "./RunTest";
-import { Button } from "@/components/bs-ui/button";
-import { downloadFile } from "@/util/utils";
-import useFlowStore from "../flowStore";
 
 const enum Status {
     normal = 'normal',
@@ -15,73 +16,22 @@ const enum Status {
     error = 'error'
 }
 
-const Log = ({ type, name, data }) => {
-    const [open, setOpen] = useState(false);
-    const ref = useRef(null);
-    const { t } = useTranslation('flow')
-
-    const handleClickOutside = (event) => {
-        if (ref.current && !ref.current.contains(event.target)) {
-            setOpen(false);
-        }
-    };
-
-    useEffect(() => {
-        if (open) {
-            document.addEventListener("click", handleClickOutside);
-        } else {
-            document.removeEventListener("click", handleClickOutside);
-        }
-        return () => {
-            document.removeEventListener("click", handleClickOutside);
-        };
-    }, [open]);
-
-    return (
-        <div className="relative" ref={ref}>
-            <div
-                className="flex items-center text-primary text-sm cursor-pointer"
-                onClick={() => setOpen(!open)}
-            >
-                <span><span>{t('viewLogs')}</span></span>
-                <span>
-                    <ChevronsRightIcon size={18} />
-                </span>
-            </div>
-            {open && (
-                <div className="absolute top-0 left-full w-96 rounded-lg shadow-lg p-2 bg-[#F7F8FB] dark:bg-[#303134] z-10">
-                    <div className="flex justify-between items-center mb-2">
-                        <div className="relative z-10 flex gap-2">
-                            <NodeLogo type={type} colorStr={name} />
-                            <span className="truncate block">{name}</span>
-                        </div>
-                        <X size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
-                    </div>
-                    <div className="">
-                        {Object.keys(data).map(key => data[key].type === 'file' ?
-                            <ResultFile title={key} name={name} fileUrl={data[key].value} key={key} />
-                            : <ResultText title={key} value={data[key].value} key={key} />)}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-
+// 日志组件
 export default function RunLog({ node, children }) {
     const [state, setState] = useState<Status>(Status.normal)
     const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
-    const [data, setData] = useState<any>({})
+    const [data, setData] = useState<any>([])
     const { t } = useTranslation('flow')
+
     // 订阅日志事件
     useEffect(() => {
-        const onNodeLogEvent = (e) => {
-            const { nodeId, action, data } = e.detail
-            if (nodeId !== node.id && nodeId !== '*') return
-
+        const buildData = (data) => {
             if (data) {
-                // newData  key: {id: value}
+                /**
+                 * newData
+                 * key: {type: value}  
+                 * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
+                 */
                 const newData = data.reduce((res, item) => {
                     if (item.type === 'variable') {
                         const key = item.key.split('.')
@@ -94,6 +44,8 @@ export default function RunLog({ node, children }) {
                 let result = {};
                 let hasKeys = []
 
+                // 根据node params替换newData的key值 替换为name
+                // "当前时间": {type: "param", value: "2023-11-20 16:00:00"}
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
                         if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
@@ -124,8 +76,14 @@ export default function RunLog({ node, children }) {
                         result[key] = newData[key];
                     }
                 }
-                setData(result)
+                return result
             }
+        }
+
+        const onNodeLogEvent = (e) => {
+            const { nodeId, action, data } = e.detail
+            if (nodeId !== node.id && nodeId !== '*') return
+            data && setData(data.map(d => buildData(d)))
             setState(action)
         }
         window.addEventListener('nodeLogEvent', onNodeLogEvent)
@@ -168,6 +126,79 @@ export default function RunLog({ node, children }) {
     );
 };
 
+
+// 日志模板
+const Log = ({ type, name, data }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+    const { t } = useTranslation('flow')
+    const [currentIndex, setCurrentIndex] = useState(0)
+    const currentData = useMemo(() =>
+        data[currentIndex] || {}, [data, currentIndex]
+    )
+
+    const handleClickOutside = (event) => {
+        if (ref.current && !ref.current.contains(event.target)) {
+            setOpen(false);
+        }
+    };
+
+    useEffect(() => {
+        if (open) {
+            document.addEventListener("click", handleClickOutside);
+        } else {
+            document.removeEventListener("click", handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener("click", handleClickOutside);
+        };
+    }, [open]);
+
+    return (
+        <div className="relative" ref={ref}>
+            <div
+                className="flex items-center text-primary text-sm cursor-pointer"
+                onClick={() => setOpen(!open)}
+            >
+                <span><span>{t('viewLogs')}</span></span>
+                <span>
+                    <ChevronsRightIcon size={18} />
+                </span>
+            </div>
+            {open && (
+                <div className="absolute top-0 left-full w-96 rounded-lg shadow-lg p-2 bg-[#F7F8FB] dark:bg-[#303134] z-10">
+                    <div className="flex justify-between items-center mb-2">
+                        <div className="relative z-10 flex gap-2">
+                            <NodeLogo type={type} colorStr={name} />
+                            <span className="truncate block">{name}</span>
+                        </div>
+                        <X size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
+                    </div>
+                    {data.length > 1 && <div className="mb-2">
+                        <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
+                            <SelectTrigger className="w-[180px]">
+                                {/* <SelectValue /> */}
+                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {
+                                        data.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                    }
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>}
+                    <div className="">
+                        {Object.keys(currentData).map(key => currentData[key].type === 'file' ?
+                            <ResultFile title={key} name={name} fileUrl={currentData[key].value} key={key + currentIndex} />
+                            : <ResultText title={key} value={currentData[key].value} key={key + currentIndex} />)}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 // 下载文件
 export const ResultFile = ({ title, name, fileUrl }: { title: string, name: string, fileUrl: string }) => {

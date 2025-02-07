@@ -150,46 +150,48 @@ Textarea.displayName = "Textarea"
  */
 const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     rules?: any[],
+    dict?: boolean, // value 数据结构类型
     value?: string[],
     inputClassName?: string,
     className?: string,
     defaultValue?: string[],
     onChange?: (values: string[]) => void
 }>(
-    ({ rules = [], className, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
+    ({ rules = [], className, dict = false, inputClassName, value = [], defaultValue = [], ...props }, ref) => {
         // 初始化 inputs 状态，为每个值分配唯一 ID
         const [inputs, setInputs] = React.useState(() =>
-            value.map(val => ({ id: generateUUID(8), value: val }))
+            dict ? value : value.map(val => ({ key: generateUUID(6), value: val }))
         );
 
         React.useEffect(() => {
+            if (dict) return
             // 仅为新增的值分配新的 ID
             const updatedInputs = value.map((val, index) => {
                 return inputs[index] && inputs[index].value === val
                     ? inputs[index] // 如果当前输入项与外部值相同，则保持不变
-                    : { id: generateUUID(8), value: val }; // 否则，创建新的输入项
+                    : { id: generateUUID(6), value: val }; // 否则，创建新的输入项
             });
             setInputs(updatedInputs);
-        }, [value]); // 依赖项中包含 value，确保外部 value 更新时同步更新
+        }, [dict, value]); // 依赖项中包含 value，确保外部 value 更新时同步更新
 
 
         const handleChange = (newValue, id, index) => {
             let newInputs = inputs.map(input =>
-                input.id === id ? { ...input, value: newValue } : input
+                input.key === id ? { ...input, value: newValue } : input
             );
             // push
             if (index === newInputs.length - 1) {
-                newInputs = ([...newInputs, { id: generateUUID(8), value: '' }]);
+                newInputs = ([...newInputs, { key: generateUUID(6), value: '' }]);
             }
             setInputs(newInputs);
-            props.onChange(newInputs.map(input => input.value));
+            props.onChange(dict ? newInputs : newInputs.map(input => input.value));
         };
 
         // delete input
         const handleRemoveInput = (id) => {
-            const newInputs = inputs.filter(input => input.id !== id);
+            const newInputs = inputs.filter(input => input.key !== id);
             setInputs(newInputs);
-            props.onChange(newInputs.map(input => input.value));
+            props.onChange(dict ? newInputs : newInputs.map(input => input.value));
         };
 
         return <div className={cname('', className)}>
@@ -197,11 +199,11 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                 inputs.map((item, index) => (
                     <div className="relative mb-2">
                         <Input
-                            key={item.id}
+                            key={item.key}
                             defaultValue={item.value}
                             className={cname('pr-8', inputClassName)}
                             placeholder={props.placeholder || ''}
-                            onChange={(e) => handleChange(e.target.value, item.id, index)}
+                            onChange={(e) => handleChange(e.target.value, item.key, index)}
                             onInput={(e) => {
                                 rules.some(rule => {
                                     if (rule.maxLength && e.target.value.length > rule.maxLength) {
@@ -223,7 +225,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                         <p className="text-sm text-red-500" style={{ display: 'none' }}></p>
                         {index === inputs.length - 1 ? <CirclePlus className="w-4 h-4 absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer"
                             onClick={() => {
-                                const newInputs = [...inputs, { id: generateUUID(8), value: '' }]
+                                const newInputs = [...inputs, { key: generateUUID(6), value: '' }]
                                 setInputs(newInputs);
                                 props.onChange(newInputs.map(input => input.value));
                             }} /> : <CircleMinus
@@ -231,7 +233,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                                 if (e.target.previousSibling) {
                                     e.target.previousSibling.style.display = 'none';
                                 }
-                                handleRemoveInput(item.id)
+                                handleRemoveInput(item.key)
                             }} className="w-4 h-4 absolute top-2.5 right-2 text-gray-500 hover:text-gray-700 cursor-pointer" />}
                     </div>
                 ))

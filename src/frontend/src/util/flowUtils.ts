@@ -88,7 +88,7 @@ export function getToolTree(temp) {
 // 变量是否存在flow中
 // 所有情况
 // start_3ca7f.preset_question
-// start_3ca7f.preset_question#0   type: "input_list"  value个数
+// start_3ca7f.preset_question#uuid   type: "input_list"  value个数
 // input_dee6e.text_input2    type: form   变量名 -> value[0].key
 // llm_b12e5.output_start_d377c.chat_history   type:var && value是数组时  变量名 -> value[0].key
 export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
@@ -98,8 +98,9 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
     const res = nodes.some(node =>
         varNodeId === node.id ? node.data.group_params.some(group =>
             group.params.some(param => {
-                if (param.type === 'input_list' && varName.indexOf('#') !== -1) {
-                    return varNameCn.endsWith(param.value[varName.match(/#(\d+)/)[1]] || 'xxx')
+                if (param.type === 'input_list' && varName.indexOf('preset_question') !== -1) {
+                    const questionId = varName.split('#')[1]
+                    return param.value.some(item => item.key === questionId)
                 } else if (param.type === 'form' || (param.type === 'var' && Array.isArray(param.value) && param.value.length) || param.type === 'code_output') {
                     return param.value.some(item => `${node.id}.${item.key}` === varName)
                 } else if (param.tab && param.tab !== node.data.tab.value) {

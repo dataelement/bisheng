@@ -14,6 +14,8 @@ class EdgeBase(BaseModel):
     targetHandle: str = Field(..., description="target node handle")
     targetType: Optional[str] = Field("", description="target node type")
 
+    is_cycle: bool = Field(default=False, description="is cycle edge ?")
+
 
 class EdgeManage:
 

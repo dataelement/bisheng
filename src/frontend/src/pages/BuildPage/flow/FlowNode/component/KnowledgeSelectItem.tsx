@@ -141,12 +141,12 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         let error = ''
         const _errorKeys = []
         value.map(el => {
-            error = isVarInFlow(nodeId, flow.nodes, el.value, '');
+            error = isVarInFlow(nodeId, flow.nodes, el.value, ''); // 通过变量id再nodes中查找,找不到返回错误信息
             error && _errorKeys.push(el.value)
         })
         setErrorKeys(_errorKeys)
         // _errorKeys.length && setError(true)
-        // TODO 知识库校验是否存在 临时文件(变量)&知识库(找知识库是否存在)
+        // TODO 知识库校验是否存在 知识库(找知识库是否存在)
         return error;
     };
     useEffect(() => {

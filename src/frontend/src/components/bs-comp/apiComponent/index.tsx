@@ -17,7 +17,7 @@ const enum API_TYPE {
  * @ 助手id/技能useContext(TabsContext)/ 
  */
 const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
-    const [activeMenu, setActiveMenu] = useState(type === API_TYPE.FLOW ? 'no-login-link' : 'api-access');
+    const [activeMenu, setActiveMenu] = useState('api-access');
     const { t } = useTranslation()
 
     const renderContent = () => {
@@ -39,14 +39,14 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
             <aside className="w-52 text-white flex-shrink-0">
                 <nav className="p-2">
                     <ul className="space-y-4">
-                        {type !== API_TYPE.FLOW && <li>
+                        <li>
                             <button
                                 className={`w-full text-left ${activeMenu === 'api-access' ? 'bg-card' : ''} p-2 pl-6 rounded`}
                                 onClick={() => setActiveMenu('api-access')}
                             >
                                 {t('api.apiAccess')}
                             </button>
-                        </li>}
+                        </li>
                         <li>
                             <button
                                 className={`w-full text-left ${activeMenu === 'no-login-link' ? 'bg-card' : ''} p-2 pl-6 rounded`}

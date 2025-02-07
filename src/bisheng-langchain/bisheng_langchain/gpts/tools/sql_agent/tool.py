@@ -255,10 +255,7 @@ class SqlAgentTool(BaseTool):
 if __name__ == '__main__':
     from langchain_openai import AzureChatOpenAI
 
-    llm = AzureChatOpenAI(azure_endpoint="https://qinrui.openai.azure.com/",
-                           openai_api_key='cd1a57f3ee5c457eb6f6166ae3f1c996',
-                           openai_api_version="2024-02-01",
-                           model_name='gpt-4o')
+    llm = AzureChatOpenAI()
     sql_agent_tool = SqlAgentTool(
         api_wrapper=SqlAgentAPIWrapper(
             llm=llm,
