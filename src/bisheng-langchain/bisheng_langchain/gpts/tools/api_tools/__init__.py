@@ -101,8 +101,8 @@ feishu_class_methods = [
 ]
 
 _FEISHU_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'feishu_{name}': (FeishuMessageTool.get_api_tool, [])
-    for name in feishu_class_methods
+    'feishu_send_message': (FeishuMessageTool.get_api_tool, ['app_id', 'app_secret']),
+    'feishu_get_chat_messages': (FeishuMessageTool.get_api_tool, ['app_id', 'app_secret']),
 }
 
 wechat_class_methods = [
