@@ -24,6 +24,10 @@ class FireCrawl(BaseModel):
     def search_crawl(self,  target_url: str) -> str:
         """crawl from firecrawl"""
         url = "https://api.firecrawl.dev/v1/crawl"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + self.api_key,
+        }
         params = {
             "url": target_url,
             "timeout": self.timeout,
@@ -35,13 +39,17 @@ class FireCrawl(BaseModel):
                 "headers": {},
             },
         }
-        response = requests.post(url, json=params, headers={'Content-Type': 'application/json'})
+        response = requests.post(url, json=params, headers=headers)
         return response.text
 
 
     def search_scrape(self, target_url: str) -> str:
         """scrape from firecrawl"""
         url = "https://api.firecrawl.dev/v1/scrape"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + self.api_key,
+        }
         params = {
             "url": target_url,
             "formats": ["markdown"],
@@ -50,7 +58,7 @@ class FireCrawl(BaseModel):
             "limit": self.limit,
         }
 
-        response = requests.post(url, json=params, headers={'Content-Type': 'application/json'})
+        response = requests.post(url, json=params, headers=headers)
         return response.text
 
 
