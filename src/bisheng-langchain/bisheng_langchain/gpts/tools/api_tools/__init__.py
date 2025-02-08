@@ -71,8 +71,8 @@ silicon_class_methods = [
     if isinstance(SiliconFlow.__dict__[method], classmethod)
 ]
 _SILICON_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'silicon_{name}': (SiliconFlow.get_api_tool, [])
-    for name in silicon_class_methods
+    'silicon_stable_diffusion': (SiliconFlow.get_api_tool, ['siliconflow_api_key']),
+    'silicon_flux': (SiliconFlow.get_api_tool, ['siliconflow_api_key'])
 }
 dingding_class_methods = [
     method for method in DingdingMessageTool.__dict__

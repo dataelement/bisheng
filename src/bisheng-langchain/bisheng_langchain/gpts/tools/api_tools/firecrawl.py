@@ -21,7 +21,7 @@ class FireCrawl(BaseModel):
     timeout: int = Field(description="params timeout")
 
 
-    def search_crawl(self,  target_url: str) -> "FireCrawl":
+    def search_crawl(self,  target_url: str) -> str:
         """crawl from firecrawl"""
         url = "https://api.firecrawl.dev/v1/crawl"
         params = {
@@ -36,10 +36,10 @@ class FireCrawl(BaseModel):
             },
         }
         response = requests.post(url, json=params, headers={'Content-Type': 'application/json'})
-        return response.json()
+        return response.text
 
 
-    def search_scrape(self, target_url: str) -> "FireCrawl":
+    def search_scrape(self, target_url: str) -> str:
         """scrape from firecrawl"""
         url = "https://api.firecrawl.dev/v1/scrape"
         params = {
@@ -51,7 +51,7 @@ class FireCrawl(BaseModel):
         }
 
         response = requests.post(url, json=params, headers={'Content-Type': 'application/json'})
-        return response.json()
+        return response.text
 
 
     @classmethod

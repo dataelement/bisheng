@@ -1,57 +1,59 @@
 from typing import Any
 
-from pydantic import Field
+import requests
 from loguru import logger
+from pydantic import Field
 
-from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase, MultArgsSchemaTool
+from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
+                                                         MultArgsSchemaTool)
+
 
 class InputArgs:
-    api_key: str = Field(description="apikey")
-    target_url: str = Field(description="params target_url")
-    max_depth: str = Field(description="params maxDepth")
-    limit: str = Field(description="params limit")
+    prompt: str = Field(description="apikey")
+
 
 class SiliconFlow(APIToolBase):
 
+    siliconflow_api_key: str = Field(description="params maxDepth")
 
-    @classmethod
-    def stable_diffusion(cls, api_key: str, prompt: str) -> "SiliconFlow":
+    def stable_diffusion(self, negative_prompt: str, prompt: str) -> str:
         """silicon stable diffusion api"""
         url = "https://api.siliconflow.cn/v1/images/generations"
-        input_key = "prompt"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + api_key,
+            "Authorization": "Bearer " + self.siliconflow_api_key,
         }
-        params= {
+        params = {
             "model": "stabilityai/stable-diffusion-3-5-large",
             "prompt": prompt,
+            "negative_prompt": negative_prompt,
             "seed": 4999999999,
         }
 
-        return cls(url=url, api_key=api_key, input_key=input_key, headers=headers,params=params)
+        response = requests.post(url, json=params, headers=headers)
+        return response.text
 
-    @classmethod
-    def flux(cls, api_key: str, prompt: str) -> "SiliconFlow":
+    def flux(self, prompt: str) -> str:
         """silicon flux api"""
         url = "https://api.siliconflow.cn/v1/images/generations"
-        input_key = "prompt"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer " + api_key,
+            "Authorization": "Bearer " + self.siliconflow_api_key,
         }
-        params= {
+        params = {
             "model": "black-forest-labs/FLUX.1-pro",
             "prompt": prompt,
             "seed": 4999999999,
         }
 
-        return cls(url=url, api_key=api_key, input_key=input_key, headers=headers,params=params)
+        response = requests.post(url, json=params, headers=headers)
+        return response.text
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "SiliconFlow":
         attr_name = name.split("_", 1)[-1]
-        class_method = getattr(cls, attr_name)
+        c = SiliconFlow(**kwargs)
+        class_method = getattr(c, attr_name)
 
         return MultArgsSchemaTool(
             name=name,
@@ -59,4 +61,3 @@ class SiliconFlow(APIToolBase):
             func=class_method,
             args_schema=InputArgs,
         )
-
