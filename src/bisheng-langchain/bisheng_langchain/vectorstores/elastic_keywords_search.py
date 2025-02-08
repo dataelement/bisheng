@@ -1,6 +1,7 @@
 """Wrapper around Elasticsearch vector database."""
 from __future__ import annotations
 
+import ast
 import uuid
 from abc import ABC
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
@@ -233,7 +234,7 @@ class ElasticKeywordsSearch(VectorStore, ABC):
             keywords_str = self.llm_chain.run(query)
             print('llm search keywords:', keywords_str)
             try:
-                keywords = eval(keywords_str)
+                keywords = ast.literal_eval(keywords_str)
                 if not isinstance(keywords, list):
                     raise ValueError('Keywords extracted by llm is not list.')
             except Exception as e:

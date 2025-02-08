@@ -275,7 +275,7 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
     # 支持request_timeout & max_retries
     if hasattr(llm, 'request_timeout') and 'request_timeout' in llm_config:
         if isinstance(llm_config.get('request_timeout'), str):
-            llm.request_timeout = eval(llm_config.get('request_timeout'))
+            llm.request_timeout = int(llm_config.get('request_timeout'))
         else:
             llm.request_timeout = llm_config.get('request_timeout')
     if hasattr(llm, 'max_retries') and 'max_retries' in llm_config:
@@ -347,7 +347,7 @@ def instantiate_chains(node_type, class_object: Type[Chain], params: Dict, id_di
         params['chains'] = [chains_origin[chains_dict.get(id)] for id in chain_order]
     # dict 转换
     if 'headers' in params and isinstance(params['headers'], str):
-        params['headers'] = eval(params['headers'])
+        params['headers'] = json.loads(params['headers'])
     if node_type == 'ConversationalRetrievalChain':
         params['get_chat_history'] = str
         params['combine_docs_chain_kwargs'] = {

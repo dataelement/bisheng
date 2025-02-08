@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import time
@@ -390,7 +391,7 @@ class SenseChat(BaseChatModel):
 
         def _norm_text(text):
             if text[0] == '"' and text[-1] == '"':
-                out = eval(text)
+                out = ast.literal_eval(text)
             else:
                 out = text
             return out

@@ -214,7 +214,7 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
             'connection_args')
     elif isinstance(params.get('connection_args'), str):
         print(f"milvus before params={params} type={type(params['connection_args'])}")
-        params['connection_args'] = eval(params.pop('connection_args'))
+        params['connection_args'] = json.loads(params.pop('connection_args'))
     if 'embedding' not in params:
         # 匹配知识库的embedding
         col = params['collection_name']
@@ -246,10 +246,10 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
 
     if not params.get('ssl_verify') and settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch'):
-        params['ssl_verify'] = eval(settings.get_knowledge().get('vectorstores').get(
+        params['ssl_verify'] = json.loads(settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch').get('ssl_verify'))
     elif isinstance(params.get('ssl_verify'), str):
-        params['ssl_verify'] = eval(params['ssl_verify'])
+        params['ssl_verify'] = json.loads(params['ssl_verify'])
 
     collection_id = params.pop('collection_id', '')
     if collection_id:
