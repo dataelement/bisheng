@@ -1,3 +1,4 @@
+import time
 from typing import Any, Dict, Type
 
 import requests
@@ -30,7 +31,6 @@ class FireCrawl(BaseModel):
         }
         params = {
             "url": target_url,
-            "waitFor": self.timeout,
             "maxDepth": self.maxdepth,
             "limit": self.limit,
             "scrapeOptions": {
@@ -38,7 +38,20 @@ class FireCrawl(BaseModel):
             },
         }
         response = requests.post(url, json=params, headers=headers)
-        return response.text
+        start_time = time.time()
+        while True:
+            response = requests.get(response.json()["url"],headers=headers)
+            print("wating for completion " + response.json()["url"])
+            data = response.json()
+            if time.time() - start_time > self.timeout:
+                return "timeout"
+            if data["status"] == "completed":
+                return response.text
+            elif data["status"] == "failed":
+                return "failed"
+            else:
+                time.sleep(5)
+
 
 
     def search_scrape(self, target_url: str) -> str:

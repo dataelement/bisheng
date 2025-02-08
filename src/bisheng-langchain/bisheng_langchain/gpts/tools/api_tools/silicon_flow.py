@@ -2,13 +2,13 @@ from typing import Any, Optional
 
 import requests
 from loguru import logger
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)
 
 
-class InputArgs:
+class InputArgs(BaseModel):
     prompt: str = Field(description="text to image prompt ")
     negative_prompt: Optional[str] = Field(default=None,description="text to image negative_prompt")
 
