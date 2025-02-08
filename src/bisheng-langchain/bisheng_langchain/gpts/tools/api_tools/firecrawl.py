@@ -16,8 +16,8 @@ class FireCrawl(BaseModel):
 
     api_key: str = Field(description="apikey")
     base_url: str = Field(description="params base_url")
-    maxdepth: str = Field(description="params maxDepth")
-    limit: str = Field(description="params limit")
+    maxdepth: int = Field(description="params maxDepth")
+    limit: int = Field(description="params limit")
     timeout: int = Field(description="params timeout")
 
 
@@ -33,10 +33,8 @@ class FireCrawl(BaseModel):
             "timeout": self.timeout,
             "maxDepth": self.maxdepth,
             "limit": self.limit,
-            "webhook": "",
             "scrapeOptions": {
                 "formats": ["markdown"],
-                "headers": {},
             },
         }
         response = requests.post(url, json=params, headers=headers)
@@ -54,8 +52,6 @@ class FireCrawl(BaseModel):
             "url": target_url,
             "formats": ["markdown"],
             "timeout": self.timeout,
-            "maxDepth": self.maxdepth,
-            "limit": self.limit,
         }
 
         response = requests.post(url, json=params, headers=headers)
