@@ -11,18 +11,20 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 class InputArgs(BaseModel):
     message: str = Field(description="需要发送的钉钉消息")
     receive_id: str = Field(description="接收的ID")
+    receive_id_type: str = Field(description="接收的ID类型")
     container_id: str = Field(description="container_id")
     start_time: str = Field(description="start_time")
     end_time: str = Field(description="end_time")
     page_token: str = Field(description="page_token")
+    container_id_type: str = Field(description="container_id_type")
 
 
 class FeishuMessageTool(BaseModel):
-    API_BASE_URL = "https://open.feishu.cn/open-apis/"
+    API_BASE_URL = "https://open.feishu.cn/open-apis"
     app_id: str = Field(description="app_id")
     app_secret: str = Field(description="app_secret")
 
-    def send_message(self, message: str, receive_id: str) -> str:
+    def send_message(self, message: str, receive_id: str, receive_id_type: str) -> str:
         """
         发送钉钉机器人消息
 
@@ -36,7 +38,7 @@ class FeishuMessageTool(BaseModel):
         # 构建请求头
         headers = {"Content-Type": "application/json","Authorization":f"Bearer {self.get_access_token()}"}
         # 构建请求体
-        url = f"{self.API_BASE_URL}/im/v1/messages"
+        url = f"{self.API_BASE_URL}/im/v1/messages?receive_id_type={receive_id_type}"
         payload = {
             "receive_id": receive_id,
             "msg_type": "text",
@@ -49,7 +51,7 @@ class FeishuMessageTool(BaseModel):
 
             # 检查响应状态
             response.raise_for_status()
-            return response.text
+            return response.json()
 
         except requests.exceptions.RequestException as e:
             print(f"发送消息失败: {str(e)}")
@@ -59,6 +61,7 @@ class FeishuMessageTool(BaseModel):
     def get_chat_messages(
         self,
         container_id: str,
+        container_id_type: str,
         start_time: str,
         end_time: str,
         page_token: str,
@@ -67,15 +70,19 @@ class FeishuMessageTool(BaseModel):
     ) -> str:
         url = f"{self.API_BASE_URL}/im/v1/messages"
         headers = {"Content-Type": "application/json","Authorization":f"Bearer {self.get_access_token()}"}
-        params = {
-            "container_id": container_id,
-            "start_time": start_time,
-            "end_time": end_time,
-            "sort_type": sort_type,
-            "page_token": page_token,
-            "page_size": page_size,
-        }
-        response = requests.get(url=url, headers=headers, json=params)
+        response = requests.get(
+            url=url,
+            headers=headers,
+            params={
+                "container_id": container_id,
+                "container_id_type": container_id_type,
+                "start_time": start_time,
+                "end_time": end_time,
+                "sort_type": sort_type,
+                "page_token": page_token,
+                "page_size": page_size,
+            }
+        )
 
         return response.json()
 
