@@ -209,7 +209,7 @@ class RagNode(BaseNode):
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'
             params = {
-                'collection_name': self.tmp_collection_name,
+                'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
                 'partition_key': self.workflow_id,
                 'embedding': embeddings,
                 'metadata_expr': f'file_id in {file_ids}'

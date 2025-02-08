@@ -88,8 +88,10 @@ class InputNode(BaseNode):
         embeddings = LLMService.get_knowledge_default_embedding()
         if not embeddings:
             raise Exception('没有配置默认的embedding模型')
+
         # 2、初始化milvus和es实例
-        vector_client = decide_vectorstores(self.tmp_collection_name, 'Milvus', embeddings)
+        milvus_collection_name = self.get_milvus_collection_name(getattr(embeddings, 'model_id'))
+        vector_client = decide_vectorstores(milvus_collection_name, 'Milvus', embeddings)
         es_client = decide_vectorstores(self.tmp_collection_name, 'ElasticKeywordsSearch',
                                         embeddings)
 
