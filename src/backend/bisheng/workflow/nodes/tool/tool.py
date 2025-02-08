@@ -40,7 +40,7 @@ class ToolNode(BaseNode):
             "value": result.get("output", ''),
             "type": "params"
         })
-        return ret
+        return [ret]
 
     def parse_tool_input(self) -> dict:
         ret = {}
