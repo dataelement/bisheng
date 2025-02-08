@@ -10,6 +10,11 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 class InputArgs(BaseModel):
     message: str = Field(description="需要发送的钉钉消息")
+    receive_id: str = Field(description="接收的ID")
+    container_id: str = Field(description="container_id")
+    start_time: str = Field(description="start_time")
+    end_time: str = Field(description="end_time")
+    page_token: str = Field(description="page_token")
 
 
 class FeishuMessageTool(BaseModel):
