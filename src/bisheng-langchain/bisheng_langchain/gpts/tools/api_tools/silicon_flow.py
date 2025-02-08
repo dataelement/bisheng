@@ -25,10 +25,9 @@ class SiliconFlow(APIToolBase):
             "Authorization": "Bearer " + self.siliconflow_api_key,
         }
         params = {
-            "model": "stabilityai/stable-diffusion-3-5-large",
+            "model": "stabilityai/stable-diffusion-3-5-large-turbo",
             "prompt": prompt,
             "negative_prompt": negative_prompt,
-            "seed": 4999999999,
         }
 
         response = requests.post(url, json=params, headers=headers)
@@ -44,7 +43,6 @@ class SiliconFlow(APIToolBase):
         params = {
             "model": "black-forest-labs/FLUX.1-pro",
             "prompt": prompt,
-            "seed": 4999999999,
         }
 
         response = requests.post(url, json=params, headers=headers)

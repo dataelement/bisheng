@@ -42,7 +42,7 @@ class BingSearchResults(BaseTool):
         "Useful for when you need to answer questions about current events. "
         "Input should be a search query. Output is a JSON array of the query results"
     )
-    num_results: int = 4
+    num_results: int = 5
     args_schema = BingSearchInput
     api_wrapper: BingSearchAPIWrapper
 
