@@ -30,7 +30,7 @@ class FireCrawl(BaseModel):
         }
         params = {
             "url": target_url,
-            "timeout": self.timeout,
+            "waitFor": self.timeout,
             "maxDepth": self.maxdepth,
             "limit": self.limit,
             "scrapeOptions": {

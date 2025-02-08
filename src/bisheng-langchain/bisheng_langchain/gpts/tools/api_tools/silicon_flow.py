@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 import requests
 from loguru import logger
@@ -9,12 +9,13 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs:
-    prompt: str = Field(description="apikey")
+    prompt: str = Field(description="text to image prompt ")
+    negative_prompt: Optional[str] = Field(default=None,description="text to image negative_prompt")
 
 
 class SiliconFlow(APIToolBase):
 
-    siliconflow_api_key: str = Field(description="params maxDepth")
+    siliconflow_api_key: str = Field(description="params api key")
 
     def stable_diffusion(self, negative_prompt: str, prompt: str) -> str:
         """silicon stable diffusion api"""
