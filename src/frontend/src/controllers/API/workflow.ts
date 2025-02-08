@@ -78,6 +78,23 @@ export const runWorkflowNodeApi = async (node_input, data): Promise<any> => {
     });
 }
 
+/**
+ * 复制报告模板
+ */
+export const copyReportTemplate = async (nodeData): Promise<any> => {
+    // console.log('nodeData :>> ', nodeData);
+    if (nodeData.type === 'report') {
+        const { version_key } = nodeData.group_params[0].params[0].value
+        if (version_key) {
+            return axios.post(`/api/v1/workflow/report/copy`, {
+                version_key
+            }).then(res => {
+                nodeData.group_params[0].params[0].value.version_key = res.version_key
+            })
+        }
+    }
+    return Promise.resolve('ok')
+}
 
 /**
  * 工作流节点模板

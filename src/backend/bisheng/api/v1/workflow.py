@@ -9,7 +9,7 @@ from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError, WorkflowNameExistsError
+from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
@@ -55,7 +55,7 @@ async def get_report_file(
 async def copy_report_file(
         request: Request,
         login_user: UserPayload = Depends(get_login_user),
-        version_key: str = Body(..., description="minio的object_name")):
+        version_key: str = Body(..., embed=True, description="minio的object_name")):
     """ 复制report节点的模板文件 """
     version_key = version_key.split('_', 1)[0]
     new_version_key = uuid4().hex
@@ -246,7 +246,7 @@ async def update_flow(*,
 
     if db_flow.status == FlowStatus.ONLINE.value and (
             'status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):
-        raise FlowOnlineEditError.http_exception()
+        raise WorkFlowOnlineEditError.http_exception()
 
     for key, value in flow_data.items():
         if key in ['data', 'create_time', 'update_time']:

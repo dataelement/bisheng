@@ -1,3 +1,4 @@
+import { copyReportTemplate } from '@/controllers/API/workflow';
 import { WorkFlow } from '@/types/flow';
 import create from 'zustand';
 
@@ -27,7 +28,7 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
     notifications: [], // 消息队列
     setFlow: (newFlow) => set({ flow: newFlow }),
     setFitView: () => set((state) => ({ fitView: !state.fitView })),
-    uploadFlow(file?: File) {
+    uploadFlow(file?: File) { // 导入工作流
         const input = document.createElement("input");
         input.type = "file";
         input.accept = ".json";
@@ -36,6 +37,10 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
                 const currentfile = (e.target as HTMLInputElement).files[0];
                 currentfile.text().then((text) => {
                     let flow = JSON.parse(text);
+                    // 复制报告节点中报告模板
+                    flow.nodes.forEach((node) => {
+                        copyReportTemplate(node.data)
+                    })
                     set((state) => ({
                         flow: {
                             ...state.flow,

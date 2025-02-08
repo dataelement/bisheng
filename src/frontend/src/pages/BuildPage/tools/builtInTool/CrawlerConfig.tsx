@@ -36,7 +36,7 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // onSubmit(localFormData);
+            onSubmit(localFormData);
         }
     };
 
