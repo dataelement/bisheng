@@ -64,8 +64,7 @@ jina_class_methods = [
     if isinstance(JinaTool.__dict__[method], classmethod)
 ]
 _JINA_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'jina_{name}': (JinaTool.get_api_tool, [])
-    for name in jina_class_methods
+    'jina_get_markdown': (JinaTool.get_api_tool, ['jina_api_key'])
 }
 silicon_class_methods = [
     method for method in SiliconFlow.__dict__
