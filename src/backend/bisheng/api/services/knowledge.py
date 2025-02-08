@@ -689,7 +689,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                       AccessType.KNOWLEDGE):
+                                       AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
 
         index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
@@ -765,7 +765,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                       AccessType.KNOWLEDGE):
+                                       AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
 
         index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
