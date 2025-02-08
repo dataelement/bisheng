@@ -137,26 +137,29 @@ class WorkFlowService(BaseService):
         exec_id = uuid4().hex
         result = node._run(exec_id)
         log_data = node.parse_log(exec_id, result)
-        ret = []
-        for one in log_data:
-            if node_data.type == NodeType.QA_RETRIEVER.value and one['key'] != 'retrieved_result':
-                continue
-            if node_data.type == NodeType.RAG.value and one['key'] != 'retrieved_result' and one['type'] != 'variable':
-                continue
-            if node_data.type == NodeType.LLM.value and one['type'] != 'variable':
-                continue
-            if node_data.type == NodeType.AGENT.value and one['type'] not in ['tool', 'variable']:
-                continue
-            if node_data.type == NodeType.CODE.value and one['key'] != 'code_output':
-                continue
-            if node_data.type == NodeType.TOOL.value and one['key'] != 'output':
-                continue
-            ret.append({
-                'key': one['key'],
-                'value': one['value'],
-                'type': one['type']
-            })
-        return ret
+        res = []
+        for one_batch in log_data:
+            ret = []
+            for one in one_batch:
+                if node_data.type == NodeType.QA_RETRIEVER.value and one['key'] != 'retrieved_result':
+                    continue
+                if node_data.type == NodeType.RAG.value and one['key'] != 'retrieved_result' and one['type'] != 'variable':
+                    continue
+                if node_data.type == NodeType.LLM.value and one['type'] != 'variable':
+                    continue
+                if node_data.type == NodeType.AGENT.value and one['type'] not in ['tool', 'variable']:
+                    continue
+                if node_data.type == NodeType.CODE.value and one['key'] != 'code_output':
+                    continue
+                if node_data.type == NodeType.TOOL.value and one['key'] != 'output':
+                    continue
+                ret.append({
+                    'key': one['key'],
+                    'value': one['value'],
+                    'type': one['type']
+                })
+            res.append(ret)
+        return res
 
     @classmethod
     def update_flow_status(cls, login_user: UserPayload, flow_id: str, version_id: int, status: int):
