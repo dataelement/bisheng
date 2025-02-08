@@ -9,14 +9,14 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    message: str = Field(description="需要发送的钉钉消息")
-    receive_id: str = Field(description="接收的ID")
-    receive_id_type: str = Field(description="接收的ID类型")
-    container_id: str = Field(description="container_id")
-    start_time: str = Field(description="start_time")
-    end_time: str = Field(description="end_time")
-    page_token: str = Field(description="page_token")
-    container_id_type: str = Field(description="container_id_type")
+    message: Optional[str] = Field(description="需要发送的钉钉消息")
+    receive_id: Optional[str] = Field(description="接收的ID")
+    receive_id_type: Optional[str] = Field(description="接收的ID类型")
+    container_id: Optional[str] = Field(description="container_id")
+    start_time: Optional[str] = Field(description="start_time")
+    end_time: Optional[str] = Field(description="end_time")
+    page_token: Optional[str] = Field(description="page_token")
+    container_id_type: Optional[str] = Field(description="container_id_type")
 
 
 class FeishuMessageTool(BaseModel):
