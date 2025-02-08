@@ -9,10 +9,7 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    api_key: str = Field(description="apikey")
     target_url: str = Field(description="params target_url")
-    max_depth: str = Field(description="params maxDepth")
-    limit: str = Field(description="params limit")
 
 
 class FireCrawl(BaseModel):
