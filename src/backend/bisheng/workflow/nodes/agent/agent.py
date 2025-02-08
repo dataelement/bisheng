@@ -176,7 +176,7 @@ class AgentNode(BaseNode):
             raise Exception('没有配置默认的embedding模型')
         file_ids = [file_metadata['file_id']]
         params = {
-            'collection_name': self.tmp_collection_name,
+            'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
             'partition_key': self.workflow_id,
             'embedding': embeddings,
             'metadata_expr': f'file_id in {file_ids}'
