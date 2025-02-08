@@ -13,7 +13,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
-import { onlineWorkflow, onlineWorkflowApi, saveWorkflow } from "@/controllers/API/workflow";
+import { copyReportTemplate, onlineWorkflow, onlineWorkflowApi, saveWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
@@ -140,11 +140,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         setOpen(false)
         const nFlow = cloneDeep(flow)
         // 删除report节点文档key
-        nFlow.nodes.forEach(node => {
-            if (node.data.type === 'report') {
-                node.data.group_params[0].params[0].value.version_key = ''
-            }
-        })
+        // nFlow.nodes.forEach(node => {
+        //     if (node.data.type === 'report') {
+        //         node.data.group_params[0].params[0].value.version_key = ''
+        //     }
+        // })
         const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
             JSON.stringify(nFlow)
         )}`;
@@ -199,6 +199,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         // 累加版本 vx ++
         const maxNo = lastVersionIndexRef.current + 1
         const { nodes, edges, viewport } = flow
+        // 复制报告节点中报告模板
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            await copyReportTemplate(node.data)
+        }
         const res = await captureAndAlertRequestErrorHoc(
             createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: { nodes, edges, viewport }, original_version_id: version.id })
         )
@@ -374,11 +379,12 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
             <ChatTest ref={testRef} />
             {/* 修改应用弹窗 flow&assistant */}
             <CreateApp ref={updateAppModalRef} onSave={(base) => {
-                f.name = base.name
-                f.description = base.description
-                f.logo = base.logo
-                setFlow({ ...f, ...base })
-                onlineWorkflow(f)
+                captureAndAlertRequestErrorHoc(onlineWorkflow(f).then(res => {
+                    f.name = base.name
+                    f.description = base.description
+                    f.logo = base.logo
+                    setFlow({ ...f, ...base })
+                }))
             }} />
             {/* 上线不可修改提示 */}
             <Dialog open={!!modelVersionId}>

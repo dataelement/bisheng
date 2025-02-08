@@ -13,6 +13,7 @@ import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import useFlowStore from "./flowStore";
+import { copyReportTemplate } from "@/controllers/API/workflow";
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
@@ -328,6 +329,8 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
                 // node.id = nodeId
                 // id替换
                 const data = JSON.parse(JSON.stringify(node.data).replaceAll(nodeId, newNodeId))
+                // 复制报告节点中报告模板
+                copyReportTemplate(data)
                 return {
                     id: newNodeId,
                     type: "flowNode",
@@ -453,6 +456,8 @@ const useKeyBoard = (_reactFlowInstance, reactFlowWrapper) => {
                 newNode.data.id = nodeId
                 const newName = autoNodeName(nds, newNode.data.name)
                 newNode.data.name = newName
+                // 复制报告节点中报告模板
+                copyReportTemplate(newNode.data)
                 // newNode.selected = false
 
                 newNode.position = _reactFlowInstance.screenToFlowPosition({

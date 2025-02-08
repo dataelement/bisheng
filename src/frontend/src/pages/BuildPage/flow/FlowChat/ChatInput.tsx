@@ -385,7 +385,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 {
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
+                        // onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>
