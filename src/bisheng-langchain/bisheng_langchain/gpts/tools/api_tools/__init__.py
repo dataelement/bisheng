@@ -56,8 +56,8 @@ firecrawl_class_methods = [
 ]
 
 _FIRE_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'fire_{name}': (FireCrawl.get_api_tool, [])
-    for name in firecrawl_class_methods
+    'fire_search_crawl': (FireCrawl.get_api_tool, ['api_key','max_depth', 'limit', 'timeout','url']),
+    'fire_search_scrape': (FireCrawl.get_api_tool, ['api_key','max_depth', 'limit', 'timeout','url'])
 }
 jina_class_methods = [
     method for method in JinaTool.__dict__

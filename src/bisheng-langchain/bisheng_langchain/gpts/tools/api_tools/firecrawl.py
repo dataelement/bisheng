@@ -17,18 +17,21 @@ class InputArgs(BaseModel):
 
 class FireCrawl(BaseModel):
 
-    @classmethod
-    def search_crawl(
-        cls, api_key: str, target_url: str, timeout: int, max_depth: int, limit: int
-    ) -> "FireCrawl":
+    api_key: str = Field(description="apikey")
+    base_url: str = Field(description="params base_url")
+    max_depth: str = Field(description="params maxDepth")
+    limit: str = Field(description="params limit")
+    timeout: int = Field(description="params timeout")
+
+
+    def search_crawl(self,  target_url: str) -> "FireCrawl":
         """crawl from firecrawl"""
         url = "https://api.firecrawl.dev/v1/crawl"
-        input_key = "word"
         params = {
             "url": target_url,
-            "timeout": timeout,
-            "maxDepth": max_depth,
-            "limit": limit,
+            "timeout": self.timeout,
+            "maxDepth": self.max_depth,
+            "limit": self.limit,
             "webhook": "",
             "scrapeOptions": {
                 "formats": ["markdown"],
@@ -36,36 +39,29 @@ class FireCrawl(BaseModel):
             },
         }
         response = requests.post(url, json=params, headers={'Content-Type': 'application/json'})
-        if response.status_code == 200:
-            return response.json()
+        return response.json()
 
-        return cls(url=url, api_key=api_key, input_key=input_key, params=params)
 
-    @classmethod
-    def search_scrape(
-        cls, api_key: str, target_url: str, timeout: int, max_depth: int, limit: int
-    ) -> "FireCrawl":
+    def search_scrape(self, target_url: str) -> "FireCrawl":
         """scrape from firecrawl"""
         url = "https://api.firecrawl.dev/v1/scrape"
-        input_key = "word"
         params = {
             "url": target_url,
             "formats": ["markdown"],
-            "timeout": timeout,
-            "maxDepth": max_depth,
-            "limit": limit,
+            "timeout": self.timeout,
+            "maxDepth": self.max_depth,
+            "limit": self.limit,
         }
 
         response = requests.post(url, json=params, headers={'Content-Type': 'application/json'})
-        if response.status_code == 200:
-            return response.json()
+        return response.json()
 
-        return cls(url=url, api_key=api_key, input_key=input_key, params=params)
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "FireCrawl":
         attr_name = name.split("_", 1)[-1]
-        class_method = getattr(cls, attr_name)
+        c = FireCrawl(**kwargs)
+        class_method = getattr(c, attr_name)
 
         return MultArgsSchemaTool(
             name=name,
