@@ -366,6 +366,14 @@ export async function getFileBboxApi(file_id) {
 }
 
 /**
+ * 获取知识库详情
+ */
+export async function getKnowledgeDetailApi(knowledge_id): Promise<any[]> {
+  let queryStr = knowledge_id.map(id => `knowledge_id=${id}`).join('&');
+  return await axios.get(`/api/v1/knowledge/info?${queryStr}`);
+}
+
+/**
  * 获取RT服务列表
  */
 export async function getServicesApi(): Promise<RTServer[]> {

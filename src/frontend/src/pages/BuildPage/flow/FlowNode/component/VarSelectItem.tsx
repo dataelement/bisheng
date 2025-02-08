@@ -65,7 +65,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
             error && _errorKeys.push(key)
         })
         setErrorKeys(_errorKeys)
-        return error;
+        return Promise.resolve(error);
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
@@ -138,7 +138,7 @@ export function VarSelectSingleItem({ nodeId, data, onChange, onValidate, onVarE
     const validateVarAvailble = () => {
         const error = isVarInFlow(nodeId, flow.nodes, value, data.varZh?.[value])
         error && setError(true)
-        return error;
+        return Promise.resolve(error);
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);

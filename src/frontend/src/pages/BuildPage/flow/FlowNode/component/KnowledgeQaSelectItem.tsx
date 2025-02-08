@@ -1,12 +1,14 @@
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { readFileLibDatabase } from "@/controllers/API";
+import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import useFlowStore from "../../flowStore";
 
 
-export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVarEvent }) {
+export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation()
+    const { flow } = useFlowStore()
     const [value, setValue] = useState<any>(() => data.value.map(el => {
         return { label: el.label, value: el.key }
     }))
@@ -49,7 +51,7 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVa
                 setError(true)
                 return data.label + ' ' + t('required')
             }
-            if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
+            if (data.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
                 return 'input_file'
             }
             setError(false)
@@ -61,10 +63,24 @@ export default function KnowledgeQaSelectItem({ data, onChange, onValidate, onVa
 
     // 校验变量是否可用
     const [errorKeys, setErrorKeys] = useState<string[]>([])
-    const validateVarAvailble = () => {
-        let error = ''
-        // TODO 知识库校验是否存在
-        return error;
+    const validateVarAvailble = async () => {
+        if (!value.length) return ''
+        let error = '';
+        const _errorKeys = [];
+        const effectiveKnowledges = await getKnowledgeDetailApi(value.map(el => el.value));
+        for (const el of value) {
+            // If not found, check against effectiveKnowledges
+            if (!effectiveKnowledges.some(base => base.id === el.value)) {
+                error = t('nodeErrorMessage', {
+                    ns: 'flow',
+                    nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
+                    varNameCn: ''
+                });
+            }
+            error && _errorKeys.push(el.value);
+            setErrorKeys(_errorKeys);
+            return error;
+        }
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);

@@ -76,7 +76,7 @@ export default function VarInput({
         const value = valueRef.current;
         const [html, error] = parseToHTML(value || '', true);
         textareaRef.current.innerHTML = html;
-        return error;
+        return Promise.resolve(error);
     };
 
     useEffect(() => {
@@ -175,7 +175,7 @@ export default function VarInput({
     };
     // resize
     const { height, handleMouseDown } = useResize(textareaRef, 80, 40);
-    
+
     return (
         <div
             className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'

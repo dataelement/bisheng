@@ -43,9 +43,9 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
     const validateNodes = useNodeEvent(flow)
     const addNotification = useFlowStore((state) => state.addNotification);
 
-    const handleRunClick = () => {
+    const handleRunClick = async () => {
         // 记录错误日志
-        const errors = validateNodes()
+        const errors = await validateNodes()
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',
@@ -462,11 +462,18 @@ const useNodeEvent = (flow) => {
         };
     }, []);
 
-    return () => {
+    return async () => {
         let errors = [];
-        Object.keys(nodeValidateEntitiesRef.current).forEach(key => {
-            errors = [...errors, ...nodeValidateEntitiesRef.current[key]()];
+        // 使用 map 来收集所有的 Promise
+        const promises = Object.keys(nodeValidateEntitiesRef.current).map(async (key) => {
+            const result = await nodeValidateEntitiesRef.current[key]();  // 等待验证结果
+
+            // 如果有错误，合并到 errors 数组中
+            if (result && result.length > 0) {
+                errors = [...errors, ...result];
+            }
         });
+        await Promise.all(promises);
 
         // event func
         const sendEvent = (ids) => {
