@@ -82,7 +82,7 @@ class FeishuMessageTool(BaseModel):
     def get_access_token(self) -> str:
         url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
         params = {"app_id":self.app_id , "app_secret": self.app_secret}
-        response = requests.get(url,json=params)
+        response = requests.post(url,json=params)
         return response.json()["tenant_access_token"]
 
 
