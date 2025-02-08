@@ -2,11 +2,11 @@ import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { readFileLibDatabase } from "@/controllers/API";
+import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";
+import { isVarInFlow } from "@/util/flowUtils";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
-import { isVarInFlow } from "@/util/flowUtils";
 
 
 const TabsHead = memo(({ tab, onChange }) => {
@@ -137,20 +137,40 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     // 校验变量是否可用
     const [errorKeys, setErrorKeys] = useState<string[]>([])
-    const validateVarAvailble = () => {
-        let error = ''
-        const _errorKeys = []
-        value.map(el => {
-            error = isVarInFlow(nodeId, flow.nodes, el.value, ''); // 通过变量id再nodes中查找,找不到返回错误信息
-            error && _errorKeys.push(el.value)
-        })
-        setErrorKeys(_errorKeys)
-        // _errorKeys.length && setError(true)
-        // TODO 知识库校验是否存在 知识库(找知识库是否存在)
+    const validateVarAvailable = async () => {
+        if (!value.length) return ''
+        let error = '';
+        const _errorKeys = [];
+        if (typeof value[0].value === 'number') {
+            const effectiveKnowledges = await getKnowledgeDetailApi(value.map(el => el.value));
+            for (const el of value) {
+                // If not found, check against effectiveKnowledges
+                if (!effectiveKnowledges.some(base => base.id === el.value)) {
+                    error = t('nodeErrorMessage', {
+                        ns: 'flow',
+                        nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
+                        varNameCn: ''
+                    });
+                }
+                error && _errorKeys.push(el.value);
+                setErrorKeys(_errorKeys);
+                return error;
+            }
+        }
+        for (const el of value) {
+            // Check if variable exists in flow
+            let _error = isVarInFlow(nodeId, flow.nodes, el.value, '');
+            if (_error) {
+                _errorKeys.push(el.value);
+                error = _error;
+            }
+        }
+        setErrorKeys(_errorKeys);
         return error;
     };
+
     useEffect(() => {
-        onVarEvent && onVarEvent(validateVarAvailble);
+        onVarEvent && onVarEvent(validateVarAvailable);
         return () => onVarEvent && onVarEvent(() => { });
     }, [data, value]);
 

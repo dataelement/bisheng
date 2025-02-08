@@ -101,7 +101,13 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
                 onVarEvent={bindVarValidate}
             />;
         case 'qa_select_multi':
-            return <KnowledgeQaSelectItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <KnowledgeQaSelectItem
+                nodeId={nodeId}
+                data={item}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
+                onVarEvent={bindVarValidate}
+            />;
         case 'number':
             return <InputItem type='number' data={item} onChange={handleOnNewValue} />;
         case 'code_input':

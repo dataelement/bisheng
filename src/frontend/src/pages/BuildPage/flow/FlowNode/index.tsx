@@ -282,25 +282,33 @@ const useEventMaster = (node, setNodeError) => {
             if (noTemporaryFile && msg === 'input_file') {
                 errors.push('临时知识库不支持单节点调试')
             } else {
-                msg && errors.push(msg)
+                msg && msg !== 'input_file' && errors.push(msg)
             }
         })
         return errors
     }
 
-    const validateAll = () => {
+    const validateAll = async () => {
         // item
-        const errors = validateParams(false)
-        // var
-        Object.keys(varValidateEntities.current).forEach(key => {
-            const { param, validate } = varValidateEntities.current[key]
-            if (param.tab && node.tab && node.tab.value !== param.tab) return
-            const msg = validate()
-            msg && errors.push(msg)
-        })
+        const errors = validateParams(false);
 
-        if (errors.length > 0) setNodeError(true)
-        return errors
+        // var
+        const promises = Object.keys(varValidateEntities.current).map(async (key) => {
+            const { param, validate } = varValidateEntities.current[key];
+
+            // 如果 param.tab 存在且不匹配，则跳过当前项
+            if (param.tab && node.tab && node.tab.value !== param.tab) return;
+
+            const msg = await validate(); // 获取验证结果
+            if (msg) errors.push(msg); 
+        });
+
+        await Promise.all(promises);
+
+        // 如果有错误，设置错误状态
+        if (errors.length > 0) setNodeError(true);
+
+        return errors;
     }
 
     // 控制权交出

@@ -259,7 +259,7 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
             newVarErrors.push(conditionErrors)
         })
         setVarErrors(newVarErrors)
-        return errorMsg;
+        return Promise.resolve(errorMsg);
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
