@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
 import ParagraphEdit from "./ParagraphEdit"
 import { LoadingIcon } from "@/components/bs-icons/loading"
+import useKnowledgeStore from "../useKnowledgeStore"
 
 export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
     const { t } = useTranslation('knowledge')
@@ -31,6 +32,8 @@ export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
             }
         })
     }
+
+    const { isEditable } = useKnowledgeStore();
 
     return (
         <Card className="relative w-[378px]">
@@ -46,12 +49,15 @@ export const ParagraphsItem = ({ data, disabled = false, onEdit, onDeled }) => {
             </CardContent>
             <CardFooter className="flex justify-between items-center">
                 <div className="flex space-x-2">
-                    <Button variant="link" disabled={disabled} className="p-0" onClick={handleDel}>
+                    {isEditable && <Button variant="link" disabled={disabled} className="p-0" onClick={handleDel}>
                         {t('delete')}
-                    </Button>
-                    <Button variant="link" disabled={disabled} className="p-0" onClick={onEdit}>
+                    </Button>}
+                    {isEditable && <Button variant="link" disabled={disabled} className="p-0" onClick={onEdit}>
                         {t('edit')}
-                    </Button>
+                    </Button>}
+                    {!isEditable && <Button variant="link" disabled={disabled} className="p-0" onClick={onEdit}>
+                        查看
+                    </Button>}
                 </div>
                 <p className="text-xs text-muted-foreground">{t('charCount', { count: data.text.length })}</p>
             </CardFooter>
@@ -64,6 +70,8 @@ export default function Paragraphs({ fileId }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const [value, setValue] = useState([])
+    const { isEditable } = useKnowledgeStore();
+
     useEffect(() => {
         if (fileId) {
             setValue([fileId])
@@ -157,6 +165,7 @@ export default function Paragraphs({ fileId }) {
         <Dialog open={paragraph.show} onOpenChange={(show) => setParagraph({ ...paragraph, show })}>
             <DialogContent close={false} className='size-full max-w-full sm:rounded-none p-0 border-none'>
                 <ParagraphEdit
+                    edit={isEditable}
                     fileId={paragraph.fileId}
                     chunkId={paragraph.chunkId}
                     isUns={paragraph.isUns}

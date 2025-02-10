@@ -13,6 +13,7 @@ import Markdown from './Markdown';
 
 // 上传预览时携带chunks
 const ParagraphEdit = ({
+    edit = true,
     chunks = null,
     partitions = null,
     oriFilePath = '',
@@ -132,6 +133,7 @@ const ParagraphEdit = ({
     }, [data]);
 
     const handleSelectLabels = (lbs) => {
+        if (!edit) return
         // 相同的partId同时被选中
         const distinct = {}
         const selectLabels = lbs.reduce((res, item) => {
@@ -214,7 +216,7 @@ const ParagraphEdit = ({
         <div className="flex px-4 py-2 select-none">
             {/* left */}
             <div className="relative" style={{ width: leftPanelWidth }}>
-                <Markdown ref={markDownRef} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
+                <Markdown ref={markDownRef} edit={edit} isUns={isUns} title={fileName} q={chunkId + 1} value={value} />
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">{t('inputNotEmpty')}</p>}
                 {!isUns && <div className="flex justify-end gap-4">
                     <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
@@ -241,7 +243,7 @@ const ParagraphEdit = ({
                         </div>
                         <div className="flex justify-end gap-4">
                             <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
-                            <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
+                            {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
                         </div>
                     </div>
                     {/* file view */}
