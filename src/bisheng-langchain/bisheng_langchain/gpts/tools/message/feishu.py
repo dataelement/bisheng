@@ -42,7 +42,7 @@ class FeishuMessageTool(BaseModel):
         payload = {
             "receive_id": receive_id,
             "msg_type": "text",
-            "content": {"text": message},
+            "content": '{\"text\":\"' + message + '\"}',
             # "content": message.strip('"').replace(r"\"", '"').replace(r"\\", "\\"),
         }
         try:
