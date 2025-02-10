@@ -37,7 +37,7 @@ class ArxivAPIWrapperSelf(ArxivAPIWrapper):
             f"Published: {result.updated.date()}\n"
             f"Title: {result.title}\n"
             f"Authors: {', '.join(a.name for a in result.authors)}\n"
-            f"Summary: {result.summary}"
+            f"Summary: {result.summary}\n"
             f"pdf_url: {result.pdf_url}"
             for result in results
         ]
