@@ -86,11 +86,12 @@ class EmailMessageTool(APIToolBase):
             # 发送邮件
             server.sendmail(self.email_account, receiver, msg.as_string())
             print("邮件发送成功！")
-
+            return "发送成功"
         except Exception as e:
             print(f"发送失败: {str(e)}")
         finally:
             server.quit()
+        return "发送失败"
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "EmailMessageTool":
