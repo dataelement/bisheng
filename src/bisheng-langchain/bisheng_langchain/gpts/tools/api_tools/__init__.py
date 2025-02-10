@@ -91,8 +91,7 @@ email_class_methods = [
 ]
 
 _EMAIL_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'email_{name}': (EmailMessageTool.get_api_tool, [])
-    for name in email_class_methods
+    'email_send_email': (EmailMessageTool.get_api_tool, ['email_account','email_password','smtp_server','smtp_port','encrypt_method']),
 }
 
 feishu_class_methods = [

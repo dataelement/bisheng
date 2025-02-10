@@ -1,19 +1,39 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
 import os
+import smtplib
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from typing import Any, Optional
 
-from bisheng_langchain.gpts.tools.api_tools.base import APIToolBase
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+
+from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
+                                                         MultArgsSchemaTool)
+
+
+class InputArgs(BaseModel):
+    receiver: str = Field(description="收件人（多个用列表）")
+    subject: str = Field(description="邮件主题")
+    content: str = Field(description="邮件正文内容")
+
 
 class EmailMessageTool(APIToolBase):
 
-    @classmethod
-    def send_email(cls,sender, password, receiver, subject, content, 
-                content_type='plain', attachments=None, smtp_server='smtp.qq.com', port=465):
+    email_account: str = Field(description="发件人邮箱")
+    email_password: str = Field(description="邮箱授权码/密码")
+    smtp_server: str = Field(description="SMTP服务器地址")
+    encrypt_method: str = Field(description="encrypt_method")
+    smtp_port: int = Field(default=465, description=" 端口号（SSL一般465，TLS用587）")
+
+    def send_email(
+        self,
+        receiver,
+        subject,
+        content,
+    ):
         """
         发送电子邮件函数
-        
+
         参数：
         sender : str - 发件人邮箱
         password : str - 邮箱授权码/密码
@@ -25,82 +45,62 @@ class EmailMessageTool(APIToolBase):
         smtp_server : str - SMTP服务器地址
         port : int - 端口号（SSL一般465，TLS用587）
         """
-        
+
+        content_type = "plain"
         # 创建邮件对象
         msg = MIMEMultipart()
-        msg['From'] = sender
-        msg['To'] = ', '.join(receiver) if isinstance(receiver, list) else receiver
-        msg['Subject'] = subject
+        msg["From"] = self.email_account
+        # msg["To"] = ", ".join(receiver) if isinstance(receiver, list) else receiver
+        msg["To"] = receiver
+        msg["Subject"] = subject
 
         # 添加正文
-        body = MIMEText(content, content_type, 'utf-8')
+        body = MIMEText(content, content_type, "utf-8")
         msg.attach(body)
 
         # 添加附件
-        if attachments:
-            for file_path in attachments:
-                with open(file_path, 'rb') as f:
-                    part = MIMEApplication(f.read())
-                    part.add_header('Content-Disposition', 'attachment', 
-                                filename=os.path.basename(file_path))
-                    msg.attach(part)
+        # if attachments:
+        #     for file_path in attachments:
+        #         with open(file_path, "rb") as f:
+        #             part = MIMEApplication(f.read())
+        #             part.add_header(
+        #                 "Content-Disposition",
+        #                 "attachment",
+        #                 filename=os.path.basename(file_path),
+        #             )
+        #             msg.attach(part)
 
         try:
             # 创建SMTP连接
-            if port == 465:
+            if self.smtp_port == 465:
                 # SSL连接
-                server = smtplib.SMTP_SSL(smtp_server, port)
+                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
             else:
                 # TLS连接
-                server = smtplib.SMTP(smtp_server, port)
+                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
                 server.starttls()
-            
+
             # 登录邮箱
-            server.login(sender, password)
-            
+            server.login(self.email_account, self.email_password)
+
             # 发送邮件
-            server.sendmail(sender, receiver, msg.as_string())
+            server.sendmail(self.email_account, receiver, msg.as_string())
             print("邮件发送成功！")
-            
+
         except Exception as e:
             print(f"发送失败: {str(e)}")
         finally:
             server.quit()
 
-    # -------------------- 使用示例 -------------------- 
-    # if __name__ == "__main__":
-    #     # 安全提示：建议将敏感信息存储在环境变量中
-    #     # 例如 os.environ.get('EMAIL_PASSWORD')
-    #     
-    #     # 基础文本邮件
-    #     send_email(
-    #         sender='your_email@qq.com',
-    #         password='your_authorization_code',  # 注意：QQ邮箱用授权码，非登录密码
-    #         receiver=['target1@example.com', 'target2@example.com'],
-    #         subject='测试文本邮件',
-    #         content='这是一封来自Python的测试邮件',
-    #         smtp_server='smtp.qq.com',
-    #         port=465
-    #     )
-    #
-    #     # HTML邮件+附件
-    #     html_content = '''
-    #     <h1 style="color:red">HTML内容测试</h1>
-    #     <p>这是一封带样式的邮件</p>
-    #     <ul>
-    #         <li>项目1</li>
-    #         <li>项目2</li>
-    #     </ul>
-    #     '''
-    #     
-    #     send_email(
-    #         sender='your_email@163.com',
-    #         password='your_password',
-    #         receiver='target@example.com',
-    #         subject='HTML邮件测试',
-    #         content=html_content,
-    #         content_type='html',
-    #         attachments=['data.xlsx', 'report.pdf'],
-    #         smtp_server='smtp.163.com',
-    #         port=465
-    #     )
+    @classmethod
+    def get_api_tool(cls, name: str, **kwargs: Any) -> "EmailMessageTool":
+        attr_name = name.split("_", 1)[-1]
+        c = EmailMessageTool(**kwargs)
+        class_method = getattr(c, attr_name)
+
+        return MultArgsSchemaTool(
+            name=name,
+            description=class_method.__doc__,
+            func=class_method,
+            args_schema=InputArgs,
+        )
