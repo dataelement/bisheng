@@ -68,6 +68,7 @@ class FeishuMessageTool(BaseModel):
         sort_type: str = "ByCreateTimeAsc",
         page_size: int = 20,
     ) -> str:
+        """获取聊天记录"""
         url = f"{self.API_BASE_URL}/im/v1/messages"
         headers = {"Content-Type": "application/json","Authorization":f"Bearer {self.get_access_token()}"}
         response = requests.get(
