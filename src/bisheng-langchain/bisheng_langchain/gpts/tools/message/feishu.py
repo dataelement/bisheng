@@ -15,7 +15,7 @@ class InputArgs(BaseModel):
     container_id: Optional[str] = Field(description="container_id")
     start_time: Optional[str] = Field(description="start_time")
     end_time: Optional[str] = Field(description="end_time")
-    page_token: Optional[str] = Field(description="page_token")
+    # page_token: Optional[str] = Field(description="page_token")
     container_id_type: Optional[str] = Field(description="container_id_type")
 
 
@@ -80,7 +80,7 @@ class FeishuMessageTool(BaseModel):
                 "start_time": start_time,
                 "end_time": end_time,
                 "sort_type": sort_type,
-                "page_token": page_token,
+                # "page_token": page_token,
                 "page_size": page_size,
             }
         )
