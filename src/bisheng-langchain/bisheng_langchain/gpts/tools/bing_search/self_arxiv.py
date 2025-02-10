@@ -22,11 +22,16 @@ class ArxivAPIWrapperSelf(ArxivAPIWrapper):
             query: a plaintext search query
         """
         try:
-            results = self._fetch_results(
-                query
-            )  # Using helper function to fetch results
+            if self.is_arxiv_identifier(query):
+                results = self.arxiv_search(
+                    id_list=query.split(),
+                    max_results=self.top_k_results,
+                ).results()
+            else:
+                results = self.arxiv_search(  # type: ignore
+                    query[: self.ARXIV_MAX_QUERY_LENGTH], max_results=self.top_k_results
+                ).results()
         except self.arxiv_exceptions as ex:
-            logger.error(f"Arxiv exception: {ex}")  # Added error logging
             return f"Arxiv exception: {ex}"
         docs = [
             f"Published: {result.updated.date()}\n"
