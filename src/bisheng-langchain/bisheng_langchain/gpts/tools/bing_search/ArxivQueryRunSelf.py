@@ -36,6 +36,6 @@ class ArxivQueryRunSelf(BaseTool):  # type: ignore[override, override]
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the Arxiv tool."""
-        document = self.api_wrapper.run(query)
+        document = self.api_wrapper.load(query)
         print(document)
         return ""
