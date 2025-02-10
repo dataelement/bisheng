@@ -37,7 +37,7 @@ class EmailMessageTool(APIToolBase):
         参数：
         sender : str - 发件人邮箱
         password : str - 邮箱授权码/密码
-        receiver : str/list - 收件人（多个用列表）
+        receiver : str/list - 收件人（多个用逗号）
         subject : str - 邮件主题
         content : str - 邮件正文内容
         content_type : str - 内容类型（plain/html）
@@ -84,7 +84,7 @@ class EmailMessageTool(APIToolBase):
             server.login(self.email_account, self.email_password)
 
             # 发送邮件
-            server.sendmail(self.email_account, receiver, msg.as_string())
+            server.sendmail(self.email_account, receiver.split(","), msg.as_string())
             return "发送成功"
         except Exception as e:
             print(f"发送失败: {str(e)}")
