@@ -40,7 +40,7 @@ def _get_calculator() -> BaseTool:
 
 
 def _get_arxiv() -> BaseTool:
-    return ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=5,load_max_docs=5))
+    return ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=5,load_max_docs=5,load_all_available_meta=True))
 
 
 _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
