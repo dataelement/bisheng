@@ -9,19 +9,18 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    url: str = Field(description="钉钉机器人的URL地址")
-    message: str = Field(description="需要发送的钉钉消息")
+    url: str = Field(description="企业微信机器人的webhook地址")
+    message: str = Field(description="需要发送的消息")
 
 
 class WechatMessageTool(BaseModel):
 
-    @classmethod
-    def send_message(cls, message: str, url: str) -> "WechatMessageTool":
+    def send_message(self, message: str, url: str) -> str:
         """
         发送企业微信机器人消息
         
         Args:
-            webhook_url: 钉钉机器人的 webhook 地址
+            webhook_url: 机器人的 webhook 地址
             message: 要发送的消息内容
         
         Returns:
@@ -32,23 +31,15 @@ class WechatMessageTool(BaseModel):
         # 构建请求体
         data = {"msgtype": "text", "text": {"content": message}}
 
-        try:
             # 发送 POST 请求
-            response = requests.post(url=url, headers=headers, json=data)
-
-            # 检查响应状态
-            response.raise_for_status()
-            return response.json()
-
-        except requests.exceptions.RequestException as e:
-            print(f"发送消息失败: {str(e)}")
-
-        return cls()
+        response = requests.post(url=url, headers=headers, json=data)
+        return response.json()
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "WechatMessageTool":
         attr_name = name.split("_", 1)[-1]
-        class_method = getattr(cls, attr_name)
+        c = WechatMessageTool(**kwargs)
+        class_method = getattr(c, attr_name)
 
         return MultArgsSchemaTool(
             name=name,
