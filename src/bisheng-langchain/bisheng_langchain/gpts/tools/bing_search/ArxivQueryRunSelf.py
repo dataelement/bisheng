@@ -15,7 +15,7 @@ class ArxivInput(BaseModel):
     query: str = Field(description="search query to look up")
 
 
-class ArxivQueryRun(BaseTool):  # type: ignore[override, override]
+class ArxivQueryRunSelf(BaseTool):  # type: ignore[override, override]
     """Tool that searches the Arxiv API."""
 
     name: str = "arxiv"

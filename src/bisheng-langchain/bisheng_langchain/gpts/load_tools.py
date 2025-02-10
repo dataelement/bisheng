@@ -16,8 +16,8 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool, Tool
 from mypy_extensions import Arg, KwArg
 
-from bisheng_langchain.gpts.tools import ArxivQueryRunSelf
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
+from bisheng_langchain.gpts.tools.bing_search.ArxivQueryRunSelf import ArxivQueryRunSelf
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
