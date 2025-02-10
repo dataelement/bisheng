@@ -64,7 +64,7 @@ class FeishuMessageTool(BaseModel):
         container_id_type: str,
         start_time: str,
         end_time: str,
-        page_token: str,
+        # page_token: str,
         sort_type: str = "ByCreateTimeAsc",
         page_size: int = 20,
     ) -> str:
