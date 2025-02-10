@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 from typing import Any, Callable, Dict, Type
@@ -246,7 +247,7 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
 
     if not params.get('ssl_verify') and settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch'):
-        params['ssl_verify'] = json.loads(settings.get_knowledge().get('vectorstores').get(
+        params['ssl_verify'] = ast.literal_eval(settings.get_knowledge().get('vectorstores').get(
             'ElasticKeywordsSearch').get('ssl_verify'))
     elif isinstance(params.get('ssl_verify'), str):
         params['ssl_verify'] = json.loads(params['ssl_verify'])
