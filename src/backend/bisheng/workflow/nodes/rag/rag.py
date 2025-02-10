@@ -7,7 +7,7 @@ from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTempla
                                     SystemMessagePromptTemplate)
 
 from bisheng.api.services.llm import LLMService
-from bisheng.chat.clients.llm_callback import LLMRagNodeCallbackHandler
+from bisheng.workflow.callback.llm_callback import LLMRagNodeCallbackHandler
 from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore

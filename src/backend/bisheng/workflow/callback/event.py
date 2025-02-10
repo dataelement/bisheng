@@ -57,7 +57,8 @@ class OutputMsgChooseData(OutputMsgData):
 class StreamMsgData(BaseModel):
     unique_id: str = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
-    msg: str = Field('', description='Stream msg')
+    msg: Optional[str] = Field('', description='Stream msg')
+    reasoning_content: Optional[str] = Field(None, description='Reasoning content')
     output_key: str = Field(..., description='Whether the message is stream')
 
 

@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
-from bisheng.chat.clients.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore

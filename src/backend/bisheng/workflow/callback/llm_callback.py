@@ -97,8 +97,9 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             self.output = True
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        chunk = kwargs.get('chunk', None)
         # azure偶尔会返回一个None
-        if token is None:
+        if token is None and chunk is None:
             return
         if not self.output or not self.stream:
             return
@@ -107,6 +108,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.callback_manager.on_stream_msg(
             StreamMsgData(node_id=self.node_id,
                           msg=token,
+                          reasoning_content=getattr(chunk.message, 'additional_kwargs', {}).get('reasoning_content'),
                           unique_id=self.unique_id,
                           output_key=self.output_key))
 
@@ -120,10 +122,13 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             logger.warning('LLM output is empty')
             return
 
+        reasoning_content = getattr(response.generations[0].message, 'additional_kwargs', {}).get('reasoning_content')
+
         if self.stream and self.output_len > 0:
             # 流式输出结束需要返回一个流式结束事件
             self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.node_id,
                                                                    msg=msg,
+                                                                   reasoning_content=reasoning_content,
                                                                    unique_id=self.unique_id,
                                                                    output_key=self.output_key))
             return
