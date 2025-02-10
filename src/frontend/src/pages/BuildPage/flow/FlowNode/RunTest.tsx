@@ -4,6 +4,7 @@ import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { runWorkflowNodeApi } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { WorkflowNode } from "@/types/flow";
@@ -60,6 +61,7 @@ export const RunTest = forwardRef((props, ref) => {
     const [node, setNode] = useState<WorkflowNode>(null)
     const { message } = useToast()
     const { t } = useTranslation('flow')
+    const [currentIndex, setCurrentIndex] = useState(0)
 
     useEffect(() => {
         if (!open) {
@@ -166,7 +168,7 @@ export const RunTest = forwardRef((props, ref) => {
                 }, {}),
                 node
             ).then(res => {
-                const result = TranslationName(res) // .map(item => ({ title: item.key, text: item.value }))
+                const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
                 setResults(result)
             })
         );
@@ -256,8 +258,23 @@ export const RunTest = forwardRef((props, ref) => {
                         {t('run')}
                     </Button>
                     {results.length !== 0 && <p className="mt-2 mb-3 text-sm font-bold">{t('runResults')}</p>}
-                    {results.map((res) => (
-                        <ResultText key={res.text} title={res.title} value={res.text} />
+                    {results.length > 1 && <div className="mb-2">
+                        <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
+                            <SelectTrigger className="w-[180px]">
+                                {/* <SelectValue /> */}
+                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {
+                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                    }
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>}
+                    {results[currentIndex]?.map((res, i) => (
+                        <ResultText key={res.text + i} title={res.title} value={res.text} />
                     ))}
                 </div>
                 <SheetFooter>

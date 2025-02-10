@@ -21,14 +21,16 @@ import { deleteFile, readFileByLibDatabase, retryKnowledgeFileApi } from "../../
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import useKnowledgeStore from "../useKnowledgeStore";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
 
+    const { isEditable, setEditable } = useKnowledgeStore();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
-            setHasPermission(res.writeable)
+            setEditable(res.writeable)
             return res
         })
     )
@@ -42,8 +44,6 @@ export default function Files({ onPreview }) {
             return () => clearTimeout(timerRef.current)
         }
     }, [datalist])
-
-    const [hasPermission, setHasPermission] = useState(true)
 
     // filter
     const [filter, setFilter] = useState(999)
@@ -79,6 +79,10 @@ export default function Files({ onPreview }) {
     // 策略解析
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
+            if (!el.split_rule) return {
+                ...el,
+                strategy: ['', '']
+            }
             const rule = JSON.parse(el.split_rule)
             const { separator, separator_rule } = rule
             const data = separator.map((el, i) => `${separator_rule[i] === 'before' ? '✂️' : ''}${el}${separator_rule[i] === 'after' ? '✂️' : ''}`)
@@ -95,7 +99,7 @@ export default function Files({ onPreview }) {
         </div>}
         <div className="absolute right-0 top-[-62px] flex gap-4 items-center">
             <SearchInput placeholder={t('searchFileName')} onChange={(e) => search(e.target.value)}></SearchInput>
-            {hasPermission && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>{t('uploadFile')}</Button></Link>}
+            {isEditable && <Link to={`/filelib/upload/${id}`}><Button className="px-8" onClick={() => { }}>{t('uploadFile')}</Button></Link>}
         </div>
         <div className="h-[calc(100vh-144px)] overflow-y-auto pb-20">
             <Table>
@@ -129,7 +133,7 @@ export default function Files({ onPreview }) {
                         <TableRow key={el.id}>
                             <TableCell className="font-medium">{el.file_name}</TableCell>
                             <TableCell className="font-medium">
-                                {el.title.length > 20 ? <TooltipProvider delayDuration={100}>
+                                {el.title?.length > 20 ? <TooltipProvider delayDuration={100}>
                                     <Tooltip>
                                         <TooltipTrigger>{el.title.slice(0, 20)}...</TooltipTrigger>
                                         <TooltipContent>
@@ -170,9 +174,9 @@ export default function Files({ onPreview }) {
                             </TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" disabled={el.status !== 2} className="px-2 dark:disabled:opacity-80" onClick={() => onPreview(el.id)}>{t('view')}</Button>
-                                {hasPermission ?
+                                {isEditable ?
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-2">{t('delete')}</Button> :
-                                    <Button variant="link" className="ml-4 text-gray-400">{t('delete')}</Button>
+                                    <Button variant="link" className="ml-4 text-gray-400 px-2">{t('delete')}</Button>
                                 }
                             </TableCell>
                         </TableRow>
