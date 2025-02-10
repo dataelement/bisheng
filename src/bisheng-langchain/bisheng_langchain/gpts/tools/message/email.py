@@ -12,7 +12,7 @@ from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
 
 
 class InputArgs(BaseModel):
-    receiver: str = Field(description="收件人（多个用列表）")
+    receiver: str = Field(description="收件人）")
     subject: str = Field(description="邮件主题")
     content: str = Field(description="邮件正文内容")
 
@@ -85,13 +85,12 @@ class EmailMessageTool(APIToolBase):
 
             # 发送邮件
             server.sendmail(self.email_account, receiver, msg.as_string())
-            print("邮件发送成功！")
             return "发送成功"
         except Exception as e:
             print(f"发送失败: {str(e)}")
+            return (f"发送失败: {str(e)}")
         finally:
             server.quit()
-        return "发送失败"
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "EmailMessageTool":
