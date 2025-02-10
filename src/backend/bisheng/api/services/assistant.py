@@ -407,6 +407,9 @@ class AssistantService(BaseService, AssistantUtils):
             if not user.is_admin():
                 one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])
+            extra = json.loads(one['extra'])
+            one["parameter_name"] = extra.get("parameter_name")
+            one["api_location"] = extra.get("api_location")
 
         return res
 
@@ -493,6 +496,8 @@ class AssistantService(BaseService, AssistantUtils):
         exist_tool_type.api_key = req.api_key
         exist_tool_type.auth_type = req.auth_type
         exist_tool_type.openapi_schema = req.openapi_schema
+        tool_extra = {"api_location":req.api_location,"parameter_name":req.parameter_name}
+        exist_tool_type.extra= json.dumps(tool_extra, ensure_ascii=False)
 
         children_map = {}
         for one in req.children:
