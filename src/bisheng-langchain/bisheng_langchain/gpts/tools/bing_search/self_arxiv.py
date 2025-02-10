@@ -1,13 +1,8 @@
 """Util that calls Arxiv."""
 
 import logging
-import os
-import re
-from typing import Any, Dict, Iterator, List, Optional
 
 from langchain_community.utilities.arxiv import ArxivAPIWrapper
-from langchain_core.documents import Document
-from pydantic import BaseModel, model_validator
 
 logger = logging.getLogger(__name__)
 
