@@ -16,6 +16,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool, Tool
 from mypy_extensions import Arg, KwArg
 
+from bisheng_langchain.gpts.tools import ArxivQueryRunSelf
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
@@ -40,7 +41,7 @@ def _get_calculator() -> BaseTool:
 
 
 def _get_arxiv() -> BaseTool:
-    return ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=5,load_max_docs=5,load_all_available_meta=True))
+    return ArxivQueryRunSelf(api_wrapper=ArxivAPIWrapper(top_k_results=5,load_max_docs=5,load_all_available_meta=True))
 
 
 _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
