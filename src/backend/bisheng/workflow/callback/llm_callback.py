@@ -92,7 +92,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                           output_key=self.output_key))
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        self.reasoning_content = getattr(response.generations[0].message, 'additional_kwargs', {}).get('reasoning_content')
+        self.reasoning_content = getattr(response.generations[0][0].message, 'additional_kwargs', {}).get('reasoning_content')
         if self.cancel_llm_end:
             return
         if not self.output:
