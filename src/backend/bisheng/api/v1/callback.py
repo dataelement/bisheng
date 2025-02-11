@@ -45,17 +45,27 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
+        chunk = kwargs.get('chunk')
         # azure偶尔会返回一个None
-        if token is None:
+        if token is None and chunk is None:
             return
-        resp = ChatResponse(message=token,
+        reasoning_content = getattr(chunk.message, 'additional_kwargs', {}).get('reasoning_content')
+        if token is None:
+            token = ''
+        resp = ChatResponse(message={
+            'content': token,
+            'reasoning_content': reasoning_content
+        },
                             type='stream',
                             flow_id=self.flow_id,
                             chat_id=self.chat_id)
         # 将流式输出内容放入到队列内，以方便中断流式输出后，可以将内容记录到数据库
         await self.websocket.send_json(resp.dict())
         if self.stream_queue:
-            self.stream_queue.put(token)
+            if reasoning_content:
+                self.stream_queue.put({'type': 'reasoning', 'content': reasoning_content})
+            if token:
+                self.stream_queue.put({'type': 'answer', 'content': token})
 
     async def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str],
                            **kwargs: Any) -> Any:

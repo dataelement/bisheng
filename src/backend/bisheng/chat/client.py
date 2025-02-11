@@ -236,6 +236,7 @@ class ChatClient:
         while not self.stream_queue.empty():
             self.stream_queue.get()
 
+
     async def handle_gpts_message(self, message: Dict[any, any]):
         if not message:
             return
@@ -298,6 +299,14 @@ class ChatClient:
             if getattr(self.gpts_agent.llm, 'streaming', False):
                 answer_end_type = 'end_cover'
 
+            # 从队列中获取reasoning content
+            reasoning_content = ''
+            while not self.stream_queue.empty():
+                msg = self.stream_queue.get()
+                if msg.get('type') == 'reasoning':
+                    reasoning_content = msg.get('content')
+
+            res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
             res = await self.add_message('bot', answer, 'answer')
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
