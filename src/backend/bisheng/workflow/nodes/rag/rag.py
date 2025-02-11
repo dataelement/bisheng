@@ -128,7 +128,7 @@ class RagNode(BaseNode):
         index = 0
         user_question_list = self.init_user_question()
         # 判断检索结果是否超出一定的长度, 原因是ws发送的消息超过一定的长度会报错
-        source_documents = [one.page_content for one in self._log_source_documents.values()]
+        source_documents = [[d.page_content for d in one] for one in self._log_source_documents.values()]
         tmp_retrieved_type = 'params'
         tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
         if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
