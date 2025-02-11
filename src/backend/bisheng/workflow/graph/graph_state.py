@@ -103,6 +103,6 @@ class GraphState(BaseModel):
                 ret[f'{node_id}.{key}'] = self.get_variable(node_id, key)
                 # 特殊处理下 preset_question key
                 if key == 'preset_question':
-                    for one in range(len(value)):
-                        ret[f'{node_id}.{key}#{one}'] = value[one]
+                    for k, v in value.items():
+                        ret[f'{node_id}.{key}#{k}'] = v
         return ret
