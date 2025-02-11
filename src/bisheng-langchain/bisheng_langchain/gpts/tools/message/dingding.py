@@ -16,7 +16,7 @@ class InputArgs(BaseModel):
 class DingdingMessageTool(BaseModel):
 
     @classmethod
-    def send_message(cls, message: str, url: str) -> "DingdingMessageTool":
+    def send_message(cls, message: str, url: str) -> str:
         """
         发送钉钉机器人消息
         
@@ -42,8 +42,8 @@ class DingdingMessageTool(BaseModel):
 
         except requests.exceptions.RequestException as e:
             print(f"发送消息失败: {str(e)}")
+            return f"发送消息失败: {str(e)}"
 
-        return cls()
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "DingdingMessageTool":
