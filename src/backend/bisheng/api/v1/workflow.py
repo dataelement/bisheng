@@ -63,7 +63,7 @@ async def copy_report_file(
     new_object_name = f"workflow/report/{new_version_key}.docx"
     minio_client = MinioClient()
     if minio_client.object_exists(minio_client.bucket, object_name):
-        minio_client.copy_object(minio_client.bucket, object_name, new_object_name)
+        minio_client.copy_object(object_name, new_object_name, minio_client.bucket)
     return resp_200(data={
         'version_key': f'{new_version_key}',
     })
