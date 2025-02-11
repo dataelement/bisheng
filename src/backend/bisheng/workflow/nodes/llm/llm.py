@@ -22,12 +22,14 @@ class LLMNode(BaseNode):
         # 初始化prompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
         self._system_variables = self._system_prompt.extract()
-        self._system_prompt_list = []
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
-        self._user_prompt_list = []
 
+        # 存储日志所需数据
+        self._system_prompt_list = []
+        self._user_prompt_list = []
         self._batch_variable_list = []
+        self._log_reasoning_content = []
 
         # 初始化llm对象
         self._stream = True
@@ -39,17 +41,20 @@ class LLMNode(BaseNode):
         self._system_prompt_list = []
         self._user_prompt_list = []
         self._batch_variable_list = []
+        self._log_reasoning_content = []
+
         result = {}
         if self._tab == 'single':
-            result['output'] = self._run_once(None, unique_id, 'output')
+            result['output'], reasoning_content = self._run_once(None, unique_id, 'output')
+            self._log_reasoning_content.append(reasoning_content)
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
                 self._batch_variable_list.append(self.get_other_node_variable(one))
                 output_key = self.node_params['output'][index]['key']
-                result[output_key] = self._run_once(one, unique_id, output_key)
+                result[output_key], reasoning_content = self._run_once(one, unique_id, output_key)
+                self._log_reasoning_content.append(reasoning_content)
 
         if self._output_user:
-            # 非stream 模式，处理结果
             for k, v in result.items():
                 self.graph_state.save_context(content=v, msg_sender='AI')
         return result
@@ -61,6 +66,7 @@ class LLMNode(BaseNode):
             one_ret = [
                 {"key": "system_prompt", "value": self._system_prompt_list[index], "type": "params"},
                 {"key": "user_prompt", "value": self._user_prompt_list[index], "type": "params"},
+                {"key": "思考过程", "value": self._log_reasoning_content[index], "type": "params"},
                 {"key": f'{self.id}.{k}', "value": v, "type": "variable"}
             ]
             if self._batch_variable_list:
@@ -72,7 +78,7 @@ class LLMNode(BaseNode):
     def _run_once(self,
                   input_variable: str = None,
                   unique_id: str = None,
-                  output_key: str = None) -> str:
+                  output_key: str = None) -> (str, str):
         # 说明是引用了批处理的变量, 需要把变量的值替换为用户选择的变量
         special_variable = f'{self.id}.batch_variable'
         variable_map = {}
@@ -108,4 +114,4 @@ class LLMNode(BaseNode):
 
         result = self._llm.invoke(inputs, config=config)
 
-        return result.content
+        return result.content, llm_callback.reasoning_content

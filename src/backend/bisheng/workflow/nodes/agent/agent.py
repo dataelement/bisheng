@@ -39,9 +39,10 @@ class AgentNode(BaseNode):
         self._system_prompt_list = []
         self._user_prompt_list = []
         self._tool_invoke_list = []
+        self._log_reasoning_content = []
 
         # 聊天消息
-        self._chat_history_flag = self.node_params['chat_history_flag']['value'] != 0
+        self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
@@ -218,6 +219,7 @@ class AgentNode(BaseNode):
         self._system_prompt_list = []
         self._user_prompt_list = []
         self._tool_invoke_list = []
+        self._log_reasoning_content = []
 
         for one in self._system_variables:
             variable_map[one] = self.get_other_node_variable(one)
@@ -227,9 +229,11 @@ class AgentNode(BaseNode):
 
         if self._tab == 'single':
             self._tool_invoke_list.append([])
-            ret['output'] = self._run_once(None, unique_id, 'output', self._tool_invoke_list[0])
+            ret['output'], reasoning_content = self._run_once(None, unique_id, 'output', self._tool_invoke_list[0])
+            self._log_reasoning_content.append(reasoning_content)
             self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
                                                                    msg=ret['output'],
+                                                                   reasoning_content=reasoning_content,
                                                                    unique_id=unique_id,
                                                                    output_key='output'))
         else:
@@ -237,9 +241,11 @@ class AgentNode(BaseNode):
                 self._batch_variable_list.append(self.get_other_node_variable(one))
                 output_key = self.node_params['output'][index]['key']
                 self._tool_invoke_list.append([])
-                ret[output_key] = self._run_once(one, unique_id, output_key, self._tool_invoke_list[index])
+                ret[output_key], reasoning_content = self._run_once(one, unique_id, output_key, self._tool_invoke_list[index])
+                self._log_reasoning_content.append(reasoning_content)
                 self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
                                                                        msg=ret[output_key],
+                                                                       reasoning_content=reasoning_content,
                                                                        unique_id=unique_id,
                                                                        output_key=output_key))
 
@@ -259,6 +265,7 @@ class AgentNode(BaseNode):
             one_ret = [
                 {"key": "system_prompt", "value": self._system_prompt_list[0], "type": "params"},
                 {"key": "user_prompt", "value": self._user_prompt_list[index], "type": "params"},
+                {"key": "思考过程", "value": self._log_reasoning_content[index], "type": "params"}
             ]
             if self._batch_variable_list:
                 one_ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "params"})
@@ -296,20 +303,20 @@ class AgentNode(BaseNode):
                 })
         return ret
 
-    def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None, tool_invoke_list: list = None):
+    def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None,
+                  tool_invoke_list: list = None) -> (str, str):
         """
-        input_variable: 输入变量，如果是batch，则需要传入一个变量的key，否则为None
+        params:
+            input_variable: 输入变量，如果是batch，则需要传入一个变量的key，否则为None
+            unique_id: 节点执行唯一id
+            output_key: 输出变量的key
+            tool_invoke_list: 工具调用日志
+        return:
+            0: 输出给用户的结果
+            1: 模型思考的过程
         """
         # 说明是引用了批处理的变量, 需要把变量的值替换为用户选择的变量
         special_variable = f'{self.id}.batch_variable'
-        variable_map = {}
-        for one in self._system_variables:
-            if input_variable and one == special_variable:
-                variable_map[one] = self.get_other_node_variable(input_variable)
-                continue
-            variable_map[one] = self.get_other_node_variable(one)
-        # system = self._system_prompt.format(variable_map)
-
         variable_map = {}
         for one in self._user_variables:
             if input_variable and one == special_variable:
@@ -331,6 +338,7 @@ class AgentNode(BaseNode):
                                               tool_list=tool_invoke_list,
                                               cancel_llm_end=True)
         config = RunnableConfig(callbacks=[llm_callback])
+        logger.debug(f'user_prompt: {user}, history: {chat_history}')
 
         if self._agent_executor_type == 'ReAct':
             result = self._agent.invoke({
@@ -341,8 +349,8 @@ class AgentNode(BaseNode):
             output = result['agent_outcome'].return_values['output']
             if isinstance(output, dict):
                 output = list(output.values())[0]
-            return output
+            return output, llm_callback.reasoning_content
         else:
             chat_history.append(HumanMessage(content=user))
             result = self._agent.invoke(chat_history, config=config)
-            return result[-1].content
+            return result[-1].content, llm_callback.reasoning_content

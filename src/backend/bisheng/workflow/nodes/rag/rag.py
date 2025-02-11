@@ -7,7 +7,7 @@ from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTempla
                                     SystemMessagePromptTemplate)
 
 from bisheng.api.services.llm import LLMService
-from bisheng.workflow.callback.llm_callback import LLMRagNodeCallbackHandler
+from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
@@ -60,6 +60,7 @@ class RagNode(BaseNode):
         self._log_source_documents = {}
         self._log_system_prompt = []
         self._log_user_prompt = []
+        self._log_reasoning_content = {}
 
         self._milvus = None
         self._es = None
@@ -68,6 +69,7 @@ class RagNode(BaseNode):
         self._log_source_documents = {}
         self._log_system_prompt = []
         self._log_user_prompt = []
+        self._log_reasoning_content = {}
 
         self.init_qa_prompt()
         self.init_milvus()
@@ -88,11 +90,12 @@ class RagNode(BaseNode):
         for index, question in enumerate(user_questions):
             output_key = self.node_params['output_user_input'][index]['key']
             # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
-            llm_callback = LLMRagNodeCallbackHandler(callback=self.callback_manager,
+            llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                                      unique_id=unique_id,
                                                      node_id=self.id,
                                                      output=self._output_user,
-                                                     output_key=output_key)
+                                                     output_key=output_key,
+                                                     cancel_llm_end=True)
 
             result = retriever._call({'query': question}, run_manager=llm_callback)
 
@@ -106,15 +109,17 @@ class RagNode(BaseNode):
                                       output_key=output_key,
                                       source_documents=result['source_documents']))
                 else:
-                    # 说明有流式输出，则触发流式结束事件
+                    # 说明有流式输出，则触发流式结束事件, 因为需要source_document所以在此执行流式结束事件
                     self.callback_manager.on_stream_over(StreamMsgOverData(
                         node_id=self.id,
                         msg=result['result'],
+                        reasoning_content=llm_callback.reasoning_content,
                         unique_id=unique_id,
                         source_documents=result['source_documents'],
                         output_key=output_key,
                     ))
             ret[output_key] = result[retriever.output_key]
+            self._log_reasoning_content[output_key] = llm_callback.reasoning_content
             self._log_source_documents[output_key] = result['source_documents']
         return ret
 
@@ -141,6 +146,7 @@ class RagNode(BaseNode):
                 {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
                 {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
                 {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
+                {'key': '思考内容', 'value': self._log_reasoning_content[key], "type": "params"},
                 {'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'}
             ]
             index += 1
