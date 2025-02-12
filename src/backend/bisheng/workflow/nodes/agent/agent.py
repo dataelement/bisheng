@@ -274,6 +274,7 @@ class AgentNode(BaseNode):
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             ret.append(one_ret)
+            index += 1
         return ret
 
     def parse_tool_log(self, tool_invoke_list: list) -> list:
