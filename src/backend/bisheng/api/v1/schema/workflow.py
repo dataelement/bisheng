@@ -34,7 +34,7 @@ class WorkflowInputItem(BaseModel):
     type: str = Field(default=None, description='The input type, select or dialog or file')
     value: str = Field(default=None, description='The input default value')
     label: str = Field(default=None, description='The key label')
-    multi: bool = Field(default=False, description='The input is multi select')
+    multiple: bool = Field(default=False, description='The input is multi select')
     required: bool = Field(default=False, description='The input is required')
     options: Optional[Any] = Field(default=None, description='The select type options')
 
