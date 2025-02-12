@@ -120,12 +120,11 @@ class GraphEngine:
                 continue
             # 有多个扇入节点，判断此节点是否需要等待
             wait_nodes, no_wait_nodes = self.parse_fan_in_node(node_id)
+            logger.debug(f'node {node_id} wait nodes {wait_nodes}, no wait nodes {no_wait_nodes}')
             if wait_nodes:
-                logger.debug(f'node {node_id} need wait nodes {wait_nodes}')
                 self.graph_builder.add_edge(wait_nodes, node_id)
             if no_wait_nodes:
                 for one in no_wait_nodes:
-                    logger.debug(f'node {node_id} no need wait nodes {one}')
                     self.graph_builder.add_edge(one, node_id)
 
     def parse_fan_in_node(self, node_id: str):

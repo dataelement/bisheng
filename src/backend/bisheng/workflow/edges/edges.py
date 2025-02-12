@@ -63,6 +63,7 @@ class EdgeManage:
         def get_node_branch(node_id, branch: List, node_map: dict):
             # 已经遍历过的节点不再遍历，说明成环了
             if node_id in node_map or node_id == end_node_id:
+                branch.append(node_id)
                 branches.append(branch)
                 return branch
             branch.append(node_id)
