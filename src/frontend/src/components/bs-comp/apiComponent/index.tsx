@@ -68,7 +68,7 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
             </aside>
 
             {/* 右侧内容区 */}
-            <main className="flex-1 p-2 pl-0 overflow-y-auto">
+            <main className="flex-1 p-2 pl-0 overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
                 {renderContent()}
             </main>
         </div>
