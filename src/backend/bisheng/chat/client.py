@@ -304,7 +304,7 @@ class ChatClient:
             while not self.stream_queue.empty():
                 msg = self.stream_queue.get()
                 if msg.get('type') == 'reasoning':
-                    reasoning_content = msg.get('content')
+                    reasoning_content += msg.get('content')
 
             res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
             res = await self.add_message('bot', answer, 'answer')
