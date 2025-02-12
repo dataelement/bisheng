@@ -261,7 +261,7 @@ class WorkFlowService(BaseService):
     def convert_output_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
         workflow_event.output_schema = WorkflowOutputSchema(
             message=chat_response.message.get('msg'),
-            files=chat_response.message.get('files'),
+            files=chat_response.files,
             output_key=chat_response.message.get('output_key')
         )
         if chat_response.source != SourceType.NOT_SUPPORT.value:
