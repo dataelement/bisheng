@@ -89,6 +89,11 @@ class RagNode(BaseNode):
         ret = {}
         for index, question in enumerate(user_questions):
             output_key = self.node_params['output_user_input'][index]['key']
+            if question is None:
+                ret[output_key] = ''
+                self._log_reasoning_content[output_key] = ''
+                self._log_source_documents[output_key] = []
+                continue
             # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
             llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                                      unique_id=unique_id,
