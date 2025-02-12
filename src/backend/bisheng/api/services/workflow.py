@@ -220,8 +220,11 @@ class WorkFlowService(BaseService):
                 workflow_event.status = chat_response.type
                 workflow_event.output_schema = WorkflowOutputSchema(
                     message=chat_response.message.get('msg'),
+                    reasoning_content=chat_response.message.get('reasoning_content'),
                     output_key=chat_response.message.get('output_key'),
                 )
+                if chat_response.source != SourceType.NOT_SUPPORT.value:
+                    workflow_event.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
             case WorkflowEventType.Error.value:
                 workflow_event.event = WorkflowEventType.Close.value
                 workflow_event.output_schema = WorkflowOutputSchema(

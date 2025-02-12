@@ -22,6 +22,7 @@ class WorkflowEventType(Enum):
 
 class WorkflowOutputSchema(BaseModel):
     message: Any = Field(default=None, description='The message content')
+    reasoning_content: Optional[str] = Field(default=None, description='The reasoning content')
     output_key: Optional[str] = Field(default=None, description='output message key')
     files: Optional[List[Any]] = Field(default=None, description='The files list')
     source_url: Optional[str] = Field(default=None, description='The document source url, is web url')
