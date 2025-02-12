@@ -95,7 +95,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         console.log('change createWsMsg');
         set((state) => {
             let newChat = cloneDeep(state.messages);
-            const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id } = data
+            const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id, reasoning_log } = data
             // 删除与历史消息中message_id相同的消息,则删除
             newChat = newChat.filter((item => !(item.message_id === message_id && item.his)))
             newChat.push({
@@ -108,7 +108,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 sender: '',
                 node_id: message?.node_id || '',
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
-                extra
+                extra,
+                reasoning_log
             })
             return { messages: newChat }
         })
@@ -116,15 +117,18 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     // stream
     streamWsMsg(data) {
         let messages = cloneDeep(get().messages);
-        const { unique_id, output_key, type } = data.message;
+        const { unique_id, output_key, reasoning_content } = data.message;
         const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
         const currentMsg = messages[currentMessageIndex]
-        if (!currentMsg) return get().createWsMsg({ ...data, message: data.message.msg, message_id: unique_id + output_key })
+        if (!currentMsg) return get().createWsMsg(
+            { ...data, message: data.message.msg, reasoning_log: reasoning_content, message_id: unique_id + output_key }
+        )
         // append
         const newCurrentMessage = {
             ...currentMsg,
             message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
             message: data.type === 'end' ? data.message.msg : currentMsg.message + data.message.msg,
+            reasoning_log: reasoning_content ? currentMsg.reasoning_log + reasoning_content : currentMsg.reasoning_log,
             update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
             end: data.type === 'end'

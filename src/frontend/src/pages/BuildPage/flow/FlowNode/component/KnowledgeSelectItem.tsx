@@ -121,7 +121,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     useEffect(() => {
         // data.required && onValidate(() => {
         onValidate(() => {
-            if (!data.value.value.length) {
+            if (data.required &&!data.value.value.length) {
                 setError(true)
                 return data.label + ' ' + t('required')
             }

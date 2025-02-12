@@ -1,10 +1,18 @@
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
 import { cname } from "@/components/bs-ui/utils";
-import { Check, ChevronRight } from "lucide-react";
+import { cloneDeep } from "lodash-es";
+import { ChevronRight } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
-import { cloneDeep } from "lodash-es";
+
+// 全选 半选 未选
+const enum SelectStatus {
+    Uncheck = false,
+    HalfCheck = 'indeterminate',
+    Check = true,
+}
 
 const isMatch = (obj, expression) => {
     // 临时关闭 file类型表单变量
@@ -41,7 +49,7 @@ const getSpecialVar = (obj, type) => {
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
  */
-const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], children, onSelect, className = '' }, ref) => {
+const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
 
@@ -162,6 +170,104 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
         }
     }, [open])
 
+    // 级联checkbox
+    const checkKeys = useMemo(() => {
+        if (!onCheck) return {};
+
+        // 工具函数：计算选中状态
+        const getCheckStatus = (checkedCount, totalCount) => {
+            if (totalCount === 0) return SelectStatus.Uncheck;
+            if (checkedCount === totalCount) return SelectStatus.Check;
+            if (checkedCount > 0) return SelectStatus.HalfCheck;
+            return SelectStatus.Uncheck;
+        };
+
+        // 工具函数：处理三级菜单（如 preset_question）
+        const handleNestedItems = (parentKey, items, valueSet) => {
+            const keys = {};
+            let checkedCount = 0;
+
+            items.forEach((item, index) => {
+                if (index === items.length - 1) return
+                const itemKey = `${parentKey}#${item.value}`;
+                const isChecked = valueSet.has(itemKey);
+                keys[itemKey] = isChecked ? SelectStatus.Check : SelectStatus.Uncheck;
+                if (isChecked) checkedCount++;
+            });
+
+            keys[parentKey] = getCheckStatus(checkedCount, items.length - 1);
+            return { keys, checkedCount };
+        };
+
+        const valueSet = new Set(value);
+
+        // 遍历一级菜单
+        return nodeTemps.reduce((acc, itemL1) => {
+            let checkedCountL1 = 0;
+
+            // 遍历二级菜单
+            itemL1.data.forEach((itemL2) => {
+                const keyL2 = `${itemL1.id}.${itemL2.value}`;
+
+                if (itemL2.value === 'preset_question') {
+                    // 处理三级菜单
+                    const { keys: nestedKeys, checkedCount: checkedCountL2 } = handleNestedItems(
+                        keyL2,
+                        itemL2.param.value,
+                        valueSet
+                    );
+                    Object.assign(acc, nestedKeys);
+                    if (checkedCountL2 === itemL2.param.value.length - 1) checkedCountL1++;
+                } else {
+                    // 处理普通二级菜单
+                    const isChecked = valueSet.has(keyL2);
+                    acc[keyL2] = isChecked ? SelectStatus.Check : SelectStatus.Uncheck;
+                    if (isChecked) checkedCountL1++;
+                }
+            });
+
+            // 更新一级菜单的选中状态
+            acc[itemL1.id] = getCheckStatus(checkedCountL1, itemL1.data.length);
+            return acc;
+        }, {});
+    }, [nodeTemps, value, onCheck]);
+
+
+    const handleCheckClick = (checked, nodeId, variable = null) => {
+        const currentNode = nodeTemps.find((item) => item.id === nodeId);
+        if (!currentNode) return;
+
+        // 工具函数：处理预设问题（preset_question）
+        const handlePresetQuestion = (data, tasks) => {
+            return data.param.value
+                .slice(0, -1) // 排除最后一个元素
+                .map((item) => {
+                    tasks.push({
+                        node: currentNode,
+                        variable: { ...item, value: `${data.value}#${item.value}` },
+                    })
+                });
+        };
+
+        // 工具函数：处理普通变量
+        const handleNormalVariable = (item) => {
+            return { node: currentNode, variable: item };
+        };
+
+        // 生成任务列表
+        const tasks = [];
+        if (variable && variable.value !== 'preset_question') {
+            tasks.push(handleNormalVariable(variable))
+        } else {
+            currentNode.data?.map((item) =>
+                item.param ? handlePresetQuestion(item, tasks) : variable?.value !== 'preset_question' && tasks.push(handleNormalVariable(item))
+            ) || []
+        }
+
+        // 回调父组件
+        onCheck(checked, tasks);
+    };
+
     return <Select open={open} onOpenChange={setOpen}>
         <SelectTrigger
             onClick={() => inputOpenRef.current = false}
@@ -171,6 +277,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
         </SelectTrigger>
         <SelectContent position="popper" avoidCollisions={false}>
             <div className="flex max-h-[360px] ">
+                {/* 三级菜单 */}
                 <div className="w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
@@ -180,6 +287,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                                 setVars(item.data)
                             }}
                         >
+                            {onCheck && <Checkbox checked={checkKeys[item.id]} onCheckedChange={(bln) => handleCheckClick(bln, item.id)} className="mr-1" />}
                             {item.icon}
                             <span className="w-28 overflow-hidden text-ellipsis ml-2">{item.name}</span>
                             <ChevronRight className="size-4" />
@@ -196,9 +304,15 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                                 !multip && setOpen(false)
                             }}
                             onMouseEnter={() => v.param ? handleShowQuestions(v.param) : setQuestions([])}>
+                            {onCheck && <Checkbox
+                                checked={checkKeys[`${currentMenuRef.current.id}.${v.value}`]}
+                                className="mr-1"
+                                onCheckedChange={(bln) => handleCheckClick(bln, currentMenuRef.current.id, v)}
+                                onClick={e => e.stopPropagation()}
+                            />}
                             <span className="w-28 overflow-hidden text-ellipsis">{v.label}</span>
                             {v.param && <ChevronRight className="size-4" />}
-                            {value.includes(`${currentMenuRef.current.id}.${v.value}`) && <Check size={14} />}
+                            {/* {value.includes(`${currentMenuRef.current.id}.${v.value}`) && <Check size={14} />} */}
                         </div>
                     )}
                 </div>}
@@ -211,8 +325,14 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                                     onSelect(currentMenuRef.current, q, inputOpenRef.current)
                                     !multip && setOpen(false)
                                 }}>
+                                {onCheck && <Checkbox
+                                    checked={checkKeys[`${currentMenuRef.current.id}.${q.value}`]}
+                                    className="mr-1"
+                                    onCheckedChange={(bln) => handleCheckClick(bln, currentMenuRef.current.id, q)}
+                                    onClick={e => e.stopPropagation()}
+                                />}
                                 <span className="w-full overflow-hidden text-ellipsis truncate">{q.label}</span>
-                                {value.includes(`${currentMenuRef.current.id}.${q.value}`) && <Check size={14} />}
+                                {/* {value.includes(`${currentMenuRef.current.id}.${q.value}`) && <Check size={14} />} */}
                             </div>
                         )}
                     </div>

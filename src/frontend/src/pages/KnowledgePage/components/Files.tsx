@@ -167,10 +167,10 @@ export default function Files({ onPreview }) {
                                     <Tooltip>
                                         <TooltipTrigger>{el.strategy[0]}...</TooltipTrigger>
                                         <TooltipContent>
-                                            <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1]}</div>
+                                            <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div>
                                         </TooltipContent>
                                     </Tooltip>
-                                </TooltipProvider> : el.strategy[1]}
+                                </TooltipProvider> : el.strategy[1].replace(/\n/g, '\\n')}
                             </TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" disabled={el.status !== 2} className="px-2 dark:disabled:opacity-80" onClick={() => onPreview(el.id)}>{t('view')}</Button>

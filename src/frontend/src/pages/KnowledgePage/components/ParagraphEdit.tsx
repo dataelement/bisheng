@@ -4,7 +4,7 @@ import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Crosshair, Info } from "lucide-react";
+import { Crosshair, Info, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
@@ -242,8 +242,9 @@ const ParagraphEdit = ({
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
                         </div>
                         <div className="flex justify-end gap-4">
-                            <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
+                            {edit && <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>}
                             {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
+                            {!edit && <X className="cursor-pointer size-5 text-gray-500" />}
                         </div>
                     </div>
                     {/* file view */}

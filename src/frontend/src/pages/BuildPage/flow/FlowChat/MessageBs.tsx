@@ -1,18 +1,20 @@
 import MessageButtons from "@/components/bs-comp/chatComponent/MessageButtons";
 import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import ChatFile from "./ChatFileFile";
 import { useMessageStore } from "./messageStore";
+import { ChevronDown } from "lucide-react";
+import { cname } from "@/components/bs-ui/utils";
 
 // 颜色列表
 const colorList = [
@@ -28,6 +30,32 @@ const colorList = [
     "#E67E22",
     "#95A5A6"
 ]
+
+const ReasoningLog = ({ loading, msg = '' }) => {
+    const [open, setOpen] = useState(true)
+    // console.log('msg :>> ', msg);
+
+    if (!msg) return null
+
+    return <div className="py-1">
+        <div className="rounded-sm border">
+            <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
+                <div className="flex items-center font-bold gap-2 text-sm">
+                    {
+                        loading && <LoadIcon className="text-primary duration-300" />
+                    }
+                    <span>深度思考</span>
+                </div>
+                <ChevronDown className={open && 'rotate-180'} />
+            </div>
+            <div className={cname('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
+                {msg.split('\n').map((line, index) => (
+                    <p className="text-md mb-1 text-muted-foreground" key={index}>{line}</p>
+                ))}
+            </div>
+        </div>
+    </div>
+}
 
 export default function MessageBs({ mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
@@ -88,6 +116,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
     const chatId = useMessageStore(state => state.chatId)
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
+            <ReasoningLog loading={!data.end && data.reasoning_log} msg={data.reasoning_log} />
             <div className="flex justify-between items-center mb-1">
                 {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
                 <div className={`text-right group-hover:opacity-100 opacity-0`}>
@@ -131,14 +160,14 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                             message,
                         })}
                     />
-                    <MessageButtons
+                    {/* <MessageButtons
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                    ></MessageButtons>
+                    ></MessageButtons> */}
                 </div>
             }
         </div>

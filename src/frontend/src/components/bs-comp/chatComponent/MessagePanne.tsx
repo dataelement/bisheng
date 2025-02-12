@@ -3,14 +3,14 @@ import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import FileBs from "./FileBs";
-import MessageBs from "./MessageBs";
+import MessageBs, { ReasoningLog } from "./MessageBs";
 import MessageSystem from "./MessageSystem";
 import MessageUser from "./MessageUser";
 import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => {} }) {
+export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => { } }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -105,6 +105,8 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
                     type = 'runLog'
                 } else if (msg.thought) {
                     type = 'system'
+                } else if (msg.category === 'reasoning_answer') {
+                    type = 'reasoning'
                 }
 
                 switch (type) {
@@ -128,6 +130,8 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
                         return <FileBs key={msg.id} data={msg} />;
                     case 'runLog':
                         return <RunLog key={msg.id} data={msg} />;
+                    case 'reasoning':
+                        return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
                 }

@@ -23,7 +23,11 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
     }, {}))
 
     const handleChange = (item, value) => {
-        formDataRef.current[item.key].value = Array.isArray(value) ? value : [value]
+        if (item.type === FormItemType.File) {
+            formDataRef.current[item.key].value = Array.isArray(value) ? value : [value]
+        } else {
+            formDataRef.current[item.key].value = value
+        }
     }
 
     const updataFileName = (item, fileName) => {

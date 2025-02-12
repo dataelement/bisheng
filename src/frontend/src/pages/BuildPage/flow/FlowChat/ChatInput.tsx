@@ -185,9 +185,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
                     // // 拦截会话串台
                     if (data.chat_id && currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
-                    if (data.category === 'node_run') {
-                        inputNodeIdRef.current = data.message.node_id
-                    }
                     handleWsMessage(data);
                     ['begin', 'close'].includes(data.type) && onLoad()
                     // if ('close' === data.type) {
@@ -243,8 +240,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 variant: 'error',
                 description: code == 500 ? message : t(`errors.${code}`, { type: message })
             });
-        }
-        if (data.category === 'node_run') {
+        } else if (data.category === 'node_run') {
+            inputNodeIdRef.current = data.message.node_id
             // 缓存运行结果,用于[单节点运行]自动填写参数
             if (data.type === 'end' && data.message.input_data) {
                 setRunCache(data.message.node_id
@@ -252,13 +249,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             }
             insetNodeRun(data)
             return sendNodeLogEvent(data)
-        }
-        // 
-        if (data.category === "guide_word") {
+        } else if (data.category === "guide_word") {
             data.message.msg = data.message.guide_word
-        }
-        // if (data.category === 'user_input') {
-        if (data.category === 'input') {
+        } else if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
             messageIdRef.current = data.message_id
@@ -385,7 +378,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 {
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        // onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
+                    // onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>

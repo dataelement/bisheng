@@ -27,6 +27,7 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
             data: value
         }), '*');
     }
+    const [show, setShow] = useState(true) // 处理var select聚焦问题
 
     if (pageLoading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-primary/20">
         <LoadingIcon />
@@ -64,9 +65,15 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                     <DialogClose className="">
                         <Button variant="outline" size="icon" className="bg-[#fff] size-8"><ChevronLeft /></Button>
                     </DialogClose>
-                    <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => handleInset(`${E.id}.${v.value}`)}>
+                    {show && <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
+                        handleInset(`${E.id}.${v.value}`)
+                        setShow(false)
+                        setTimeout(() => {
+                            setShow(true)
+                        }, 1);
+                    }}>
                         <Button className="h-8">{t('inserVar')}<ChevronDown size={14} /></Button>
-                    </SelectVar>
+                    </SelectVar>}
                 </div>
                 <Word data={docx} workflow></Word>
                 {/* <LabelPanne onInset={handleInset}></LabelPanne> */}

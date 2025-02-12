@@ -467,15 +467,19 @@ const EditTool = forwardRef((props: any, ref) => {
                                         name="apiLocation"
                                         defaultValue={formState.apiLocation}
                                         className="flex mt-2 gap-4"
-                                        onValueChange={(value) => setFormState(prevState => ({ ...prevState, apiLocation: value }))}
+                                        onValueChange={(value) => setFormState(prevState =>{
+                                            console.log('prevState :>> ', prevState, value);
+                                            return  ({ ...prevState, apiLocation: value })
+                                        }
+                                    )}
                                     >
                                         <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="header" id="r4" />
-                                            <Label htmlFor="r4">header</Label>
+                                            <RadioGroupItem value="header" id="r7" />
+                                            <Label htmlFor="r7">header</Label>
                                         </div>
                                         <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="query" id="r5" />
-                                            <Label htmlFor="r5">query</Label>
+                                            <RadioGroupItem value="query" id="r8" />
+                                            <Label htmlFor="r8">query</Label>
                                         </div>
                                     </RadioGroup>
                                 </div>
