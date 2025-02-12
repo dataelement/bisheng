@@ -72,6 +72,9 @@ class SqlAgentAPIWrapper(BaseModel):
     query_gen: Optional[Any]
     workflow: Optional[StateGraph]
     app: Optional[Any]
+    schema_llm: Optional[Any]
+    query_check_llm: Optional[Any]
+    query_gen_llm: Optional[Any]
 
     class Config:
         arbitrary_types_allowed = True
