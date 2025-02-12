@@ -213,9 +213,9 @@ class WorkFlowService(BaseService):
             case WorkflowEventType.OutputMsg.value:
                 return cls.convert_output_event(chat_response, workflow_event)
             case WorkflowEventType.OutputWithChoose.value:
-                return cls.convert_output_input_event(chat_response, workflow_event)
-            case WorkflowEventType.OutputWithInput.value:
                 return cls.convert_output_choose_event(chat_response, workflow_event)
+            case WorkflowEventType.OutputWithInput.value:
+                return cls.convert_output_input_event(chat_response, workflow_event)
             case WorkflowEventType.StreamMsg.value:
                 workflow_event.status = chat_response.type
                 workflow_event.output_schema = WorkflowOutputSchema(
@@ -275,7 +275,7 @@ class WorkFlowService(BaseService):
             input_type='message_inline_input',
             value=[WorkflowInputItem(
                 key=chat_response.message.get('key'),
-                type='dialog',
+                type='text',
                 required=True,
                 value=chat_response.message.get('input_msg', '')
             )]
