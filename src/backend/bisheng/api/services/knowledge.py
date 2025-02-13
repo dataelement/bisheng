@@ -829,8 +829,8 @@ class KnowledgeService(KnowledgeUtils):
         return json.loads(new_data.read().decode('utf-8'))
 
     @classmethod
-    def copy_knowledge(cls, background_tasks: BackgroundTasks, login_user: UserPayload,
-                       knowledge: Knowledge) -> int:
+    def copy_knowledge(cls, request, background_tasks: BackgroundTasks, login_user: UserPayload,
+                       knowledge: Knowledge) -> Any:
         knowledge.state = 2
         KnowledgeDao.update_one(knowledge)
         knowldge_dict = knowledge.model_dump()
@@ -850,5 +850,6 @@ class KnowledgeService(KnowledgeUtils):
             'login_user': login_user
         }
         # file_worker.file_copy_celery.delay()
+        cls.create_knowledge_hook(request, login_user, target_knowlege)
         background_tasks.add_task(file_worker.file_copy_celery, params)
-        return knowledge
+        return target_knowlege

@@ -123,7 +123,7 @@ async def copy_knowledge(*,
     )
     if knowledge.state != 1 or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
-    knowledge = KnowledgeService.copy_knowledge(background_tasks, login_user, knowledge)
+    knowledge = KnowledgeService.copy_knowledge(request,background_tasks, login_user, knowledge)
     return resp_200(knowledge)
 
 
