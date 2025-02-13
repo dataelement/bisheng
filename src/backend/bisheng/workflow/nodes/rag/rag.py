@@ -2,21 +2,19 @@ import json
 import time
 from typing import List, Any
 
-
-from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
-                                    SystemMessagePromptTemplate)
-
 from bisheng.api.services.llm import LLMService
-from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.utils.minio_client import MinioClient
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
+from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
+from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
+                                    SystemMessagePromptTemplate)
 
 
 class RagNode(BaseNode):
@@ -75,7 +73,6 @@ class RagNode(BaseNode):
         self.init_milvus()
         self.init_es()
 
-
         retriever = BishengRetrievalQA.from_llm(
             llm=self._llm,
             vector_store=self._milvus,
@@ -93,11 +90,11 @@ class RagNode(BaseNode):
                 question = ''
             # 因为rag需要溯源所以不能用通用llm callback来返回消息。需要拿到source_document之后在返回消息内容
             llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
-                                                     unique_id=unique_id,
-                                                     node_id=self.id,
-                                                     output=self._output_user,
-                                                     output_key=output_key,
-                                                     cancel_llm_end=True)
+                                                  unique_id=unique_id,
+                                                  node_id=self.id,
+                                                  output=self._output_user,
+                                                  output_key=output_key,
+                                                  cancel_llm_end=True)
 
             result = retriever._call({'query': question}, run_manager=llm_callback)
 
@@ -142,8 +139,9 @@ class RagNode(BaseNode):
 
         for key, val in result.items():
             if tmp_retrieved_type != 'file':
-                tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]], indent=2, ensure_ascii=False)
-            one_ret =[
+                tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]],
+                                                  indent=2, ensure_ascii=False)
+            one_ret = [
                 {'key': 'user_question', 'value': user_question_list[index], "type": "params"},
                 {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
                 {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
@@ -173,7 +171,8 @@ class RagNode(BaseNode):
         if variable_map.get(f'{self.id}.retrieved_result') is None:
             raise IgnoreException('用户提示词必须包含 retrieved_result 变量')
         user_prompt = self._user_prompt.format(variable_map)
-        log_user_prompt = user_prompt.replace('$$question$$', '{user_question}').replace('$$context$$', '{retrieved_result}')
+        log_user_prompt = user_prompt.replace('$$question$$', '{user_question}').replace('$$context$$',
+                                                                                         '{retrieved_result}')
         user_prompt = (user_prompt.replace('{', '{{').replace('}', '}}')
                        .replace('$$question$$', '{question}').replace('$$context$$', '{context}'))
         self._log_user_prompt.append(log_user_prompt)

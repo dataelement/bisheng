@@ -1,20 +1,23 @@
 from typing import Any, Dict
 
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.load_tools import load_tools
+from loguru import logger
+
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.llm import LLMService
-from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.workflow.callback.event import StreamMsgOverData
+from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.load_tools import load_tools
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
-from loguru import logger
+
+
 
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
@@ -231,23 +234,26 @@ class AgentNode(BaseNode):
             self._tool_invoke_list.append([])
             ret['output'], reasoning_content = self._run_once(None, unique_id, 'output', self._tool_invoke_list[0])
             self._log_reasoning_content.append(reasoning_content)
-            self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
-                                                                   msg=ret['output'],
-                                                                   reasoning_content=reasoning_content,
-                                                                   unique_id=unique_id,
-                                                                   output_key='output'))
+            if self._output_user:
+                self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                       msg=ret['output'],
+                                                                       reasoning_content=reasoning_content,
+                                                                       unique_id=unique_id,
+                                                                       output_key='output'))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
                 self._batch_variable_list.append(self.get_other_node_variable(one))
                 output_key = self.node_params['output'][index]['key']
                 self._tool_invoke_list.append([])
-                ret[output_key], reasoning_content = self._run_once(one, unique_id, output_key, self._tool_invoke_list[index])
+                ret[output_key], reasoning_content = self._run_once(one, unique_id, output_key,
+                                                                    self._tool_invoke_list[index])
                 self._log_reasoning_content.append(reasoning_content)
-                self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
-                                                                       msg=ret[output_key],
-                                                                       reasoning_content=reasoning_content,
-                                                                       unique_id=unique_id,
-                                                                       output_key=output_key))
+                if self._output_user:
+                    self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                           msg=ret[output_key],
+                                                                           reasoning_content=reasoning_content,
+                                                                           unique_id=unique_id,
+                                                                           output_key=output_key))
 
         logger.debug('agent_over result={}', ret)
         if self._output_user:
@@ -268,7 +274,8 @@ class AgentNode(BaseNode):
                 {"key": "思考过程", "value": self._log_reasoning_content[index], "type": "params"}
             ]
             if self._batch_variable_list:
-                one_ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "params"})
+                one_ret.insert(0,
+                               {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "params"})
 
             # 处理工具调用日志
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
