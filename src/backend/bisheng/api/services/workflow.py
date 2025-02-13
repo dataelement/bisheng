@@ -223,8 +223,7 @@ class WorkFlowService(BaseService):
                     reasoning_content=chat_response.message.get('reasoning_content'),
                     output_key=chat_response.message.get('output_key'),
                 )
-                if chat_response.source != SourceType.NOT_SUPPORT.value:
-                    workflow_event.output_schema.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
+                cls.handle_source(chat_response, workflow_event)
             case WorkflowEventType.Error.value:
                 workflow_event.event = WorkflowEventType.Close.value
                 workflow_event.output_schema = WorkflowOutputSchema(
@@ -232,6 +231,14 @@ class WorkFlowService(BaseService):
                 )
 
         return workflow_event
+
+    @classmethod
+    def handle_source(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent):
+        if chat_response.source == SourceType.FILE.value:
+            workflow_event.output_schema.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
+        elif chat_response.source in [SourceType.LINK.value, SourceType.QA.value]:
+            workflow_event.output_schema.extra = chat_response.extra
+
 
     @classmethod
     def convert_user_input_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
@@ -264,8 +271,7 @@ class WorkFlowService(BaseService):
             files=chat_response.files,
             output_key=chat_response.message.get('output_key')
         )
-        if chat_response.source != SourceType.NOT_SUPPORT.value:
-            workflow_event.output_schema.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
+        cls.handle_source(chat_response, workflow_event)
         return workflow_event
 
     @classmethod
