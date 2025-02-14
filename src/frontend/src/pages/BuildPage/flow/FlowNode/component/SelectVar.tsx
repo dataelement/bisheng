@@ -277,7 +277,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
         </SelectTrigger>
         <SelectContent position="popper" avoidCollisions={false}>
             <div className="flex max-h-[360px] ">
-                {/* 三级菜单 */}
+                {/* 三级级联菜单 */}
                 <div className="w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
@@ -285,6 +285,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                             onMouseEnter={() => {
                                 currentMenuRef.current = item;
                                 setVars(item.data)
+                                setQuestions([])
                             }}
                         >
                             {onCheck && <Checkbox checked={checkKeys[item.id]} onCheckedChange={(bln) => handleCheckClick(bln, item.id)} className="mr-1" />}

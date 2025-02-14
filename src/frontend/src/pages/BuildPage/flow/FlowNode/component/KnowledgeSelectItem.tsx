@@ -154,8 +154,8 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
                 }
                 error && _errorKeys.push(el.value);
                 setErrorKeys(_errorKeys);
-                return error;
             }
+            return error;
         }
         for (const el of value) {
             // Check if variable exists in flow

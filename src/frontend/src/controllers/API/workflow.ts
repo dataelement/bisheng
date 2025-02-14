@@ -90,6 +90,8 @@ export const copyReportTemplate = async (nodeData): Promise<any> => {
                 version_key
             }).then(res => {
                 nodeData.group_params[0].params[0].value.version_key = res.version_key
+                console.warn('REPORT:使用旧KEY :>> ', version_key);
+                console.warn('REPORT:获取新KEY :>> ', res.version_key);
             })
         }
     }

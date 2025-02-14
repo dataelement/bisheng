@@ -1,8 +1,8 @@
 import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
+import { formatDate } from '@/util/utils';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
-import { formatDate } from '@/util/utils';
 
 /**
  * 会话消息管理

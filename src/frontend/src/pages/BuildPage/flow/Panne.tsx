@@ -22,10 +22,12 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     // 导入自适应布局
     const fitView = useFlowStore(state => state.fitView)
+    const [flowKey, setFlowKey] = useState(1)
     useEffect(() => {
         if (reactFlowInstance) {
             setTimeout(() => {
                 reactFlowInstance.fitView();
+                setFlowKey(Date.now())
             }, 0);
         }
     }, [fitView])
@@ -106,6 +108,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                 <div className="size-full" ref={reactFlowWrapper}>
                     <div className="size-full">
                         <ReactFlow
+                            key={flowKey}
                             nodes={nodes}
                             edges={edges}
                             onInit={setReactFlowInstance}
@@ -319,18 +322,18 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         }
 
         // copy
-        const handleCopy = (event) => {
+        const handleCopy = async (event) => {
             const nodeIds = event.detail;
             let nodes = _reactFlowInstance.getNodes();
             // let edges = _reactFlowInstance.getEdges();
-            const newNodes = nodeIds.map(nodeId => {
+
+            const newNodes = await Promise.all(nodeIds.map(async nodeId => {
                 const node = nodes.find(n => n.id === nodeId);
                 const newNodeId = `${node.data.type}_${generateUUID(5)}`
-                // node.id = nodeId
                 // id替换
                 const data = JSON.parse(JSON.stringify(node.data).replaceAll(nodeId, newNodeId))
                 // 复制报告节点中报告模板
-                copyReportTemplate(data)
+                await copyReportTemplate(data);
                 return {
                     id: newNodeId,
                     type: "flowNode",
@@ -344,16 +347,18 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
                     },
                     selected: false
                 };
-            });
+            }));
+
             // 增加节点
             setNodes((nds) => {
                 const _newNodes = newNodes.map(node => {
                     node.data.name = autoNodeName(nds, node.data.name)
                     return node
-                })
+                });
                 return nds.map((e) => ({ ...e, selected: false })).concat(_newNodes)
             });
         }
+
         // add node by handle
         const handleAddNode = (event) => {
             takeSnapshot()

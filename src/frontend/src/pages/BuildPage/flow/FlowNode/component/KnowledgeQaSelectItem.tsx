@@ -79,8 +79,8 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
             }
             error && _errorKeys.push(el.value);
             setErrorKeys(_errorKeys);
-            return error;
         }
+        return error;
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);

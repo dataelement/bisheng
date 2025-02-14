@@ -35,12 +35,15 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
         input.onchange = (e: Event) => {
             if ((e.target as HTMLInputElement).files[0].type === "application/json") {
                 const currentfile = (e.target as HTMLInputElement).files[0];
-                currentfile.text().then((text) => {
+                currentfile.text().then(async (text) => {
                     let flow = JSON.parse(text);
-                    // 复制报告节点中报告模板
-                    flow.nodes.forEach((node) => {
-                        copyReportTemplate(node.data)
-                    })
+
+                    // 使用 Promise.all 等待所有的 copyReportTemplate 完成
+                    await Promise.all(flow.nodes.map(async (node) => {
+                        await copyReportTemplate(node.data);
+                    }));
+
+                    // 所有的异步操作完成后，再执行 set
                     set((state) => ({
                         flow: {
                             ...state.flow,

@@ -99,6 +99,8 @@ const useReport = (versionKey, onchange) => {
                 key: res.version_key,
                 path: res.url
             })
+            console.warn('REPORT:读取报告所用KEY是 :>> ', versionKey);
+            console.warn('REPORT:读取报告所后变更KEY是 :>> ', res.version_key);
             onchange(res.version_key)
         })
     }, [])

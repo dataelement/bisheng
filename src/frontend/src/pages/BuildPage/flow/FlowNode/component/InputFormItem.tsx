@@ -35,7 +35,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         variableName: "",
         filecontent: '',
         filepath: '',
-        isMultiple: false, // default value for multiple file upload
+        isMultiple: true, // default value for multiple file upload
         isRequired: true,
         allowMultiple: false,  // Allow multiple file uploads
         options: [],  // Options for Select input

@@ -217,7 +217,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         </p> */}
         {
             !customWsHost && <div
-                className="relative z-50 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
+                className="relative z-40 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
                 onClick={() => {
                     document.getElementById('newchat')?.click()
                 }}>

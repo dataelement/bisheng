@@ -248,7 +248,7 @@ const ApiAccessFlow = () => {
 
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button className="fixed bottom-10 right-10 z-10 size-11 rounded-full">导航</Button>
+                            <Button className="fixed top-20 right-10 z-10 size-11 rounded-full">导航</Button>
                         </PopoverTrigger>
                         <PopoverContent className="p-4 shadow-lg flex flex-col gap-2">
                             <Badge variant='gray' className='p-2'><span className='size-2 rounded-full bg-[#FFD89A] mr-2'></span><a href="#guide-word">开场白事件数据示例</a></Badge>
