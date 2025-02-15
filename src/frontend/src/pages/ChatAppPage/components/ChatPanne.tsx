@@ -20,6 +20,7 @@ import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
+import CommitmentDialog from "./CommitmentDialog";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
     const { id, chatId, type } = data
@@ -249,7 +250,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
                 {/* 强制提醒 */}
-                <ForcePrompt id={flow.id} />
+                <CommitmentDialog id={flow.id} />
             </div>
         }
         {/* 助手会话 */}
@@ -272,7 +273,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     inputForm={null}
                 />
                 {/* 强制提醒 */}
-                <ForcePrompt id={assistant.id} />
+                <CommitmentDialog id={assistant.id} />
             </div>
         }
         {/* 工作流会话 */}
@@ -283,6 +284,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <span className="text-sm">{workflow.name}</span>
                 </div>
                 <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
+                <CommitmentDialog id={workflow.id} />
             </div>
         }
     </div>

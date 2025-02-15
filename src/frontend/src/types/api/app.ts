@@ -8,6 +8,7 @@ export type AppConfig = {
     pro: boolean;
     sso: boolean;
     application_usage_tips: boolean;
+    enable_security_commitment: boolean;
     show_github_and_help: boolean;
     version: string;
     /** 注册入口 */

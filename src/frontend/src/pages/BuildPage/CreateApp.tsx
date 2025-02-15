@@ -18,6 +18,7 @@ import { AppType } from "@/types/app";
 import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { SelectCommitment } from "../ChatAppPage/components/CommitmentDialog";
 
 type ModalProps = {};
 type ModalRef = {
@@ -235,6 +236,10 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             onChange={handleChange}
                         />
                         {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
+                    </div>
+                    <div className="mb-6">
+                        <label className="bisheng-label">承诺书:</label>
+                        <SelectCommitment value="1" onChange={(e) => console.log(e)} />
                     </div>
                 </div>
                 {/* 工作流安全审查 */}

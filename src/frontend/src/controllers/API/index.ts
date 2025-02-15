@@ -639,6 +639,23 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
   return await axios.get(`/api/v1/finetune/gpu`);
 }
 
+/**
+ * 
+ *  获取用户在当前应用是否已经签署过承诺
+ */
+export async function commitmentApi(userId: string, appId: string): Promise<any> {
+  // return await axios.get(`/api/v1/server/${id}`);
+  return await Promise.resolve({ signed: false, id: ['1', '2'][Date.now() % 2] })
+}
+
+/**
+ * 记录用户签署承诺
+ */
+export async function signCommitmentApi(userId: string, appId: string, id: string): Promise<any> {
+  // return await axios.get(`/api/v1/server/${id}`);
+  // return await Promise.resolve({ signed: true })
+  return await Promise.resolve('ok')
+}
 /***************************
  * ************ 溯源 ************ 
  */
