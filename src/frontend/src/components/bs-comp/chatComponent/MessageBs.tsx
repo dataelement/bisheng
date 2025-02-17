@@ -79,7 +79,9 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                                 return (<span className="form-modal-markdown-span"> ▍ </span>);
                             }
 
-                            children[0] = (children[0] as string).replace("`▍`", "▍");
+                            if (typeof children[0] === "string") {
+                                children[0] = children[0].replace("▍", "▍");
+                            }
                         }
 
                         const match = /language-(\w+)/.exec(className || "");

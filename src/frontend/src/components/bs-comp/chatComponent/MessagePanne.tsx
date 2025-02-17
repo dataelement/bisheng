@@ -26,10 +26,24 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
         scrollLockRef.current = false
         queryLockRef.current = false
     }, [chatId])
+    const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
     useEffect(() => {
-        if (scrollLockRef.current) return
+        if (scrollLockRef.current) return;
+
+        const now = Date.now();
+        const throttleTime = 1200; // 1秒
+
+        // 如果距离上次执行的时间小于 throttleTime，则直接返回
+        if (now - lastScrollTimeRef.current < throttleTime) {
+            return;
+        }
+
+        // 执行滚动操作
         messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }, [messages])
+
+        // 更新上次执行的时间戳
+        lastScrollTimeRef.current = now;
+    }, [messages]);
 
     // 消息滚动加载
     const queryLockRef = useRef(false)
@@ -38,7 +52,7 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
             if (queryLockRef.current) return
             const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
             // 距离底部 600px内，开启自动滚动
-            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 600
+            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400
 
             if (messagesRef.current.scrollTop <= 90) {
                 console.log('请求 :>> ', 1);
