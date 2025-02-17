@@ -17,6 +17,7 @@ class ConfigKeyEnum(Enum):
     ASSISTANT_LLM = 'assistant_llm'  # 助手默认模型配置
     EVALUATION_LLM = 'evaluation_llm'  # 评测默认模型配置
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
+    AUDIT_LLM = 'audit_llm'  # 审计默认模型配置
 
 
 class ConfigBase(SQLModelSerializable):

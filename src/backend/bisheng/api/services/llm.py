@@ -346,6 +346,27 @@ class LLMService:
         return EvaluationLLMConfig(**ret)
 
     @classmethod
+    def update_audit_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \
+            -> EvaluationLLMConfig:
+        """ 更新审计的默认模型配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_LLM)
+        if config:
+            config.value = json.dumps(data.dict())
+        else:
+            config = Config(key=ConfigKeyEnum.AUDIT_LLM.value, value=json.dumps(data.dict()))
+        ConfigDao.insert_config(config)
+        return data
+
+    @classmethod
+    def get_audit_llm(cls, request: Request, login_user: UserPayload) -> EvaluationLLMConfig:
+        """ 获取审计的默认模型配置 """
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return EvaluationLLMConfig(**ret)
+
+    @classmethod
     def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> List[LLMServerInfo]:
         """ 获取助手可选的模型列表 """
         assistant_llm = cls.get_assistant_llm()
