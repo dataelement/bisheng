@@ -1,11 +1,14 @@
+import json
 from typing import Any, List, Optional
 from uuid import UUID
 
 from loguru import logger
 
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.v1.schema.audit import AuditSessionConfig
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.assistant import AssistantDao, Assistant
+from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import GroupDao, Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -389,3 +392,16 @@ class AuditLogService:
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
                         ObjectType.NONE, '', '')
+
+    @classmethod
+    def get_session_config(cls, user: UserPayload) -> AuditSessionConfig:
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_SESSION_CONFIG)
+        if config:
+            ret = json.loads(config.value)
+        return AuditSessionConfig(**ret)
+
+    @classmethod
+    def update_session_config(cls, user: UserPayload, data: AuditSessionConfig) -> AuditSessionConfig:
+        ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.AUDIT_SESSION_CONFIG.value, value=json.dumps(data.dict())))
+        return data
