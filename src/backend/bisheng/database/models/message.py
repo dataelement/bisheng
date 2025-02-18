@@ -3,14 +3,12 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy.sql import not_
-
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.session import ReviewStatus
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, or_, text, update
-from sqlmodel import Field, delete, select
+from sqlmodel import Field, delete, select, JSON, Column, DateTime, String, Text, case, func, or_, text, update, not_
 
 
 class ChatMessageType(Enum):
@@ -26,6 +24,7 @@ class MessageBase(SQLModelSerializable):
     mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
     mark_user: Optional[int] = Field(index=False, description='标记用户')
     mark_user_name: Optional[str] = Field(index=False, description='标记用户')
+    review_status: Optional[int] = Field(index=True, default=ReviewStatus.DEFAULT.value, description='会话审查状态')
     message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
     extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
@@ -95,11 +94,15 @@ class MessageDao(MessageBase):
             page_num: int,
             flow_ids: Optional[list[str]],
             user_ids: Optional[list[int]],
+            start_date: datetime = None,
+            end_date: datetime = None,
+            feedback: str = None,
+            exclude_flow_ids: List[str] = None
     ) -> Tuple[List[Dict], int]:
         with session_getter() as session:
             count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
             sql = select(ChatMessage.chat_id, ChatMessage.user_id, ChatMessage.flow_id,
-                         func.max(ChatMessage.create_time).label('create_time'),
+                         func.min(ChatMessage.create_time).label('create_time'),
                          func.sum(case((ChatMessage.liked == 1, 1), else_=0)),
                          func.sum(case((ChatMessage.liked == 2, 1), else_=0)),
                          func.sum(case((ChatMessage.copied == 1, 1), else_=0)), )
@@ -114,9 +117,30 @@ class MessageDao(MessageBase):
                 ))
                 sql = sql.where(or_(ChatMessage.mark_user.in_(user_ids),
                                     ChatMessage.mark_status == 1))
+            if start_date and end_date:
+                count_stat = count_stat.where(ChatMessage.create_time >= start_date).where(
+                    ChatMessage.create_time <= end_date
+                )
+                sql = sql.where(ChatMessage.create_time >= start_date).where(
+                    ChatMessage.create_time <= end_date
+                )
+            if feedback == 'like':
+                count_stat = count_stat.where(ChatMessage.liked == 1)
+                sql = sql.where(ChatMessage.liked == 1)
+            elif feedback == 'dislike':
+                count_stat = count_stat.where(ChatMessage.liked == 2)
+                sql = sql.where(ChatMessage.liked == 2)
+            elif feedback == 'copied':
+                count_stat = count_stat.where(ChatMessage.copied == 1)
+                sql = sql.where(ChatMessage.copied == 1)
+
+            if exclude_flow_ids:
+                count_stat = count_stat.where(ChatMessage.flow_id.not_in(exclude_flow_ids))
+                sql = sql.where(ChatMessage.flow_id.not_in(exclude_flow_ids))
+
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
-                func.max(ChatMessage.create_time).desc()).offset(
+                func.min(ChatMessage.create_time).desc()).offset(
                 page_size * (page_num - 1)).limit(page_size)
 
             res_list = session.exec(sql).all()
@@ -177,7 +201,8 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage.chat_id,ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id,ChatMessage.flow_id)
+            statement = select(ChatMessage.chat_id, ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(
+                not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id, ChatMessage.flow_id)
             return session.exec(statement).all()
 
     @classmethod

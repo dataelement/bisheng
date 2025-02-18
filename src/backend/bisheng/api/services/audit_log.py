@@ -2,22 +2,24 @@ import json
 from typing import Any, List, Optional
 from uuid import UUID
 
-from loguru import logger
-
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.audit import AuditSessionConfig
-from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
+from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.assistant import AssistantDao, Assistant
+from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
-from bisheng.database.models.group import GroupDao, Group
+from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.database.models.role import RoleDao, Role
+from bisheng.database.models.message import MessageDao
+from bisheng.database.models.role import Role
+from bisheng.database.models.session import MessageSessionDao, ReviewStatus
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
+from loguru import logger
 
 
 class AuditLogService:
@@ -155,7 +157,7 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str,flow_type:Optional[int] = None):
+    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         新建技能的审计日志
         """
@@ -170,7 +172,7 @@ class AuditLogService:
                        flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
-    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str,flow_type:Optional[int] = None):
+    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         更新技能的审计日志
         """
@@ -185,7 +187,7 @@ class AuditLogService:
                        flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
-    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow,flow_type:Optional[int] = None):
+    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
         """
         删除技能的审计日志
         """
@@ -396,12 +398,113 @@ class AuditLogService:
     @classmethod
     def get_session_config(cls, user: UserPayload) -> AuditSessionConfig:
         ret = {}
-        config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_SESSION_CONFIG)
+        config = ConfigDao.get_config(ConfigKeyEnum.REVIEW_SESSION_CONFIG)
         if config:
             ret = json.loads(config.value)
         return AuditSessionConfig(**ret)
 
     @classmethod
     def update_session_config(cls, user: UserPayload, data: AuditSessionConfig) -> AuditSessionConfig:
-        ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.AUDIT_SESSION_CONFIG.value, value=json.dumps(data.dict())))
+        ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.REVIEW_SESSION_CONFIG.value, value=json.dumps(data.dict())))
         return data
+
+    @classmethod
+    def get_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
+                         feedback, review_status, page, page_size) -> (list, int):
+        group_admins = []
+        if not user.is_admin():
+            user_groups = UserGroupDao.get_user_admin_group(user.user_id)
+            # 不是用户组管理员，没有权限
+            if not user_groups:
+                raise UnAuthorizedError.http_exception()
+            group_admins = [one.group_id for one in user_groups]
+
+        # 分组id做交集
+        if group_ids:
+            if group_admins:
+                group_admins = list(set(group_admins) & set(group_ids))
+                if len(group_admins) == 0:
+                    return [], 0
+            else:
+                group_admins = group_ids
+
+        # 获取分组下所有的应用ID
+        group_flows = []
+        if group_admins:
+            group_flows = GroupResourceDao.get_groups_resource(group_admins)
+            if not group_flows:
+                return [], 0
+            group_flows = [one.third_id for one in group_flows]
+
+        # 获取最终的技能ID限制列表
+        filter_flow_ids = []
+        exclude_flow_ids = []
+        if flow_ids and group_flows:
+            filter_flow_ids = list(set(group_admins) & set(flow_ids))
+            if not filter_flow_ids:
+                return [], 0
+        elif flow_ids:
+            filter_flow_ids = flow_ids
+        elif group_flows:
+            filter_flow_ids = group_flows
+
+        if review_status:
+            # 未审查状态的，目前的实现需要采用过滤的形式来搜索，目前在表里的都是未审查的
+            if review_status == ReviewStatus.DEFAULT.value:
+                session_list = MessageSessionDao.filter_session()
+                exclude_flow_ids = [one.flow_id for one in session_list]
+            else:
+                session_list = MessageSessionDao.filter_session(review_status=[review_status])
+                if not session_list:
+                    return [], 0
+                if filter_flow_ids:
+                    filter_flow_ids = list(set(filter_flow_ids) & set([one.flow_id for one in session_list]))
+                    if not filter_flow_ids:
+                        return [], 0
+                else:
+                    filter_flow_ids = [one.flow_id for one in session_list]
+
+        res, total = MessageDao.app_list_group_by_chat_id(page_size, page, filter_flow_ids, user_ids, start_date,
+                                                          end_date, feedback, exclude_flow_ids)
+
+        res_users = []
+        res_flows = []
+        res_chats = []
+        for one in res:
+            res_users.append(one['user_id'])
+            res_flows.append(one['flow_id'])
+            res_chats.append(one['chat_id'])
+        user_list = UserDao.get_user_by_ids(res_users)
+        user_groups = UserGroupDao.get_users_group(res_users)
+        flow_list = FlowDao.get_flow_by_ids(res_flows)
+        assistant_list = AssistantDao.get_assistants_by_ids(res_flows)
+        session_list = MessageSessionDao.filter_session(chat_ids=res_chats)
+
+        user_map = {user.user_id: user.user_name for user in user_list}
+        flow_map = {flow.id: flow for flow in flow_list}
+        assistant_map = {assistant.id: assistant for assistant in assistant_list}
+        flow_map.update(assistant_map)
+        user_groups_map = {}
+        for one in user_groups:
+            if one.user_id not in user_groups_map:
+                user_groups_map[one.user_id] = []
+            user_groups_map[one.user_id].append(one.group_id)
+        session_map = {one.chat_id: one for one in session_list}
+
+        result = []
+        for one in res:
+            if not flow_map.get(one['flow_id']):
+                continue
+            result.append(AppChatList(**one,
+                                      user_name=user_map.get(one['user_id'], one['user_id']),
+                                      user_groups=user_groups_map.get(one['user_id'], []),
+                                      flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one[
+                                          'flow_id'],
+                                      flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else
+                                      flow_map[one['flow_id']].flow_type,
+                                      review_status=session_map[one['chat_id']].review_status if session_map.get(
+                                          one['chat_id']) else ReviewStatus.DEFAULT.value
+                                      )
+                          )
+
+        return result, total

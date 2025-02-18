@@ -21,17 +21,14 @@ from bisheng.database.models.group import Group, GroupCreate, GroupRead
 from bisheng.database.models.user import User
 from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
 
-router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(get_login_user)])
+router = APIRouter(prefix='/group', tags=['Group'], dependencies=[Depends(get_login_user)])
 
 
 @router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]])
-async def get_all_group(Authorize: AuthJWT = Depends()):
+async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
     """
     获取所有分组
     """
-    Authorize.jwt_required()
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
     if login_user.is_admin():
         groups = []
     else:
@@ -211,6 +208,18 @@ async def get_group_resources(*,
         name=name,
         page_size=page_size,
         page_num=page_num)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
+
+@router.get("/manage/resources", response_model=UnifiedResponseModel)
+async def get_manage_resources(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                               keyword: str = Query(None, description="搜索关键字"),
+                               page: int = 1,
+                               page_size: int = 10):
+    """ 获取管理的用户组下的应用列表 """
+    res, total = RoleGroupService().get_manage_resources(request, login_user, keyword, page, page_size)
     return resp_200(data={
         "data": res,
         "total": total

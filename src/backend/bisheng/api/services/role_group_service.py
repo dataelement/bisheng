@@ -3,16 +3,13 @@ from datetime import datetime
 from typing import List, Any, Dict, Optional
 from uuid import UUID
 
-from fastapi.encoders import jsonable_encoder
-from fastapi import Request, HTTPException
-
-from bisheng.cache.redis import redis_client
+from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
@@ -21,8 +18,10 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import AdminRole, RoleDao
 from bisheng.database.models.user import User, UserDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
+from bisheng.database.models.user_role import UserRoleDao
+from fastapi import Request, HTTPException
+from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 
@@ -263,7 +262,8 @@ class RoleGroupService():
         user_map = {user.user_id: user.user_name for user in user_list}
         return user_map
 
-    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,flow_type:Optional[FlowType] = None) -> (List[Any], int):
+    def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,
+                       flow_type: Optional[FlowType] = None) -> (List[Any], int):
         """ 获取用户组下的知识库列表 """
         # 查询用户组下的技能ID列表
         rs_type = ResourceTypeEnum.FLOW
@@ -274,7 +274,7 @@ class RoleGroupService():
             return [], 0
         res = []
         flow_ids = [UUID(resource.third_id) for resource in resource_list]
-        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value 
+        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value
         data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)
@@ -334,3 +334,22 @@ class RoleGroupService():
             one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
             res.append(one_dict)
         return res, total
+
+    def get_manage_resources(self, request: Request, login_user: UserPayload, keyword: str, page: int,
+                             page_size: int) -> (list, int):
+        """ 获取用户所管理的用户组下的应用列表 """
+        groups = []
+        if not login_user.is_admin():
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            if not groups:
+                return [], 0
+
+        resource_ids = []
+        # 说明是用户组管理员，需要过滤获取到对应组下的资源
+        if groups:
+            group_resources = GroupResourceDao.get_groups_resource(groups)
+            if not group_resources:
+                return [], 0
+            resource_ids = [one.third_id for one in group_resources]
+
+        return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)
