@@ -31,9 +31,12 @@ class WechatMessageTool(BaseModel):
         # 构建请求体
         data = {"msgtype": "text", "text": {"content": message}}
 
+        try:
             # 发送 POST 请求
-        response = requests.post(url=url, headers=headers, json=data)
-        return response.json()
+            response = requests.post(url=url, headers=headers, json=data)
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return f"发送消息失败: {str(e)}"
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "WechatMessageTool":
