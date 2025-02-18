@@ -8,7 +8,7 @@ import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
-import { readTempsDatabase } from "@/controllers/API";
+import { getCommitmentApi, readTempsDatabase, setCommitmentApi } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant"; // 假设有对应的接口
 import { createWorkflowApi } from "@/controllers/API/workflow";
 // import { createWorkflowApi, getWorkflowApi, updateWorkflowApi } from "@/controllers/API/workflow"; // 假设有对应的接口
@@ -38,6 +38,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
     const [loading, setLoading] = useState(false);
     const { t } = useTranslation('flow');
     const { appConfig } = useContext(locationContext)
+    // 承诺书id
+    const [commitmentId, setCommitmentId] = useState<string>('');
 
     // 应用id (edit)
     const appidRef = useRef<string>('');
@@ -75,7 +77,13 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setErrors({})
             setOpen(true);
             tempDataRef.current = null;
-            appidRef.current = flow.flow_id;
+            appidRef.current = flow.id;
+            // 承诺书
+            if (appConfig.securityCommitment) {
+                getCommitmentApi(flow.id).then(res => {
+                    setCommitmentId(res[0].promise_id);
+                })
+            }
         },
     }));
 
@@ -151,6 +159,8 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             // 编辑
             setLoading(false);
             setOpen(false);
+
+            appConfig.securityCommitment && setCommitmentApi(appidRef.current, commitmentId)
             // 修改成功
             return onSave({
                 name: formData.name,
@@ -164,12 +174,14 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             // 创建by模板
             if (AppType.FLOW === appType) {
                 const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current))
+                appConfig.securityCommitment && setCommitmentApi(res.id, commitmentId)
                 if (res) navigate('/flow/' + res.id)
             }
         } else {
             // 创建
             if (appType === AppType.ASSISTANT) {
                 const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.desc, formData.url))
+                appConfig.securityCommitment && setCommitmentApi(res.id, commitmentId)
                 if (res) {
                     //@ts-ignore
                     window.assistantCreate = true // 标记新建助手
@@ -178,6 +190,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             } else {
                 // 工作流
                 const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url))
+                appConfig.securityCommitment && setCommitmentApi(res.id, commitmentId)
                 if (res) navigate('/flow/' + res.id)
             }
         }
@@ -237,10 +250,10 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                         />
                         {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
                     </div>
-                    <div className="mb-6">
+                    {appConfig.securityCommitment && <div className="mb-6">
                         <label className="bisheng-label">承诺书:</label>
-                        <SelectCommitment value="1" onChange={(e) => console.log(e)} />
-                    </div>
+                        <SelectCommitment value={commitmentId} onChange={setCommitmentId} />
+                    </div>}
                 </div>
                 {/* 工作流安全审查 */}
                 {appConfig.isPro && <Accordion type="multiple" className="w-full">

@@ -6,6 +6,8 @@ import { formatStrTime } from "@/util/utils";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
+import { Badge } from "@/components/bs-ui/badge";
+import { ShieldAlert } from "lucide-react";
 
 export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const { t } = useTranslation()
@@ -34,6 +36,9 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                     <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
                 </div>
                 {useName && <p className="text-gray-600 text-sm">{useName}</p>}
+            </div>
+            <div className="text-right">
+                <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: 泄露天机</Badge>
             </div>
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">

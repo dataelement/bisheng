@@ -150,3 +150,36 @@ export async function getMarkStatusApi({ chat_id, task_id }) {
         }
     })
 }
+
+// 获取会话分析策略配置
+export async function getChatAnalysisConfigApi(): Promise<any> {
+    return await axios.get('/api/v1/chat/analysis').then(res => {
+        console.log('res :>> ', res);
+        const formData = {
+            reviewEnabled: res.flag,          // Map flag to reviewEnabled
+            reviewKeywords: res.prompt,      // Map prompt to reviewKeywords
+            reviewFrequency: res.day_cron === 'day' ? 'daily' : 'weekly',  // Check if it's daily or weekly
+            reviewTime: res.hour_cron,       // Map hour_cron to reviewTime
+            reviewDay: '',                    // Default empty, to be set if frequency is weekly
+        };
+
+        // Set reviewDay only if the frequency is weekly
+        if (formData.reviewFrequency === 'weekly') {
+            formData.reviewDay = res.day_cron; // Map the backend day to reviewDay (e.g., 'mon', 'tues', etc.)
+        }
+
+        return formData;
+    })
+}
+
+// 更新会话分析策略配置
+export async function updateChatAnalysisConfigApi(formData: { reviewEnabled: boolean, reviewKeywords: string, reviewFrequency: string, reviewTime: string, reviewDay: string }) {
+    const backendData = {
+        flag: formData.reviewEnabled,         // Map reviewEnabled to flag
+        prompt: formData.reviewKeywords,      // Map reviewKeywords to prompt
+        day_cron: formData.reviewFrequency === 'daily' ? 'day' : formData.reviewDay,  // Convert frequency and day
+        hour_cron: formData.reviewTime,      // Map reviewTime to hour_cron
+    };
+
+    return await axios.post('/api/v1/mark/mark', backendData)
+}

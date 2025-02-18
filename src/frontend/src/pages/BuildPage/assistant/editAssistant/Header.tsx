@@ -50,6 +50,7 @@ export default function Header({ onSave, onLine, onTabChange }) {
                 </DialogTrigger>
                 {
                     editShow && <EditAssistantDialog
+                        id={assistantState.id}
                         logo={assistantState.logo || ''}
                         name={assistantState.name}
                         desc={assistantState.desc}

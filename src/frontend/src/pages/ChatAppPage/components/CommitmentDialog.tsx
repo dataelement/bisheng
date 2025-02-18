@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { locationContext } from '@/contexts/locationContext';
 import { userContext } from '@/contexts/userContext';
-import { commitmentApi, signCommitmentApi } from '@/controllers/API';
+import { getCommitmentApi, signCommitmentApi } from '@/controllers/API';
 import { useContext, useEffect, useState } from 'react';
 
 const loadCommitments = async () => {
@@ -43,20 +43,21 @@ const CommitmentDialog = ({ id }) => {
 
     const handleSubmit = () => {
         setFinished(true);
+        signCommitmentApi(id, commitmentsData.id)
         message({
             description: '签署成功',
             variant: 'success',
         })
-        signCommitmentApi(user.id, id, commitmentsData.id)
     };
 
     useEffect(() => {
         if (!appConfig.securityCommitment) return setFinished(true)
         const fetchData = async () => {
             // 获取用户在当前应用是否已经签署过承诺 res
-            const [data, res] = await Promise.all([loadCommitments(), commitmentApi(user.id, id)]);
-            setFinished(res.signed)
-            const currentData = data.find(el => el.id === res.id)
+            const [data, res] = await Promise.all([loadCommitments(), getCommitmentApi(id)]);
+            if (res.length === 0) return setFinished(true)
+            setFinished(res[0].write)
+            const currentData = data.find(el => el.id === res[0].promise_id)
             setCommitmentsData(currentData);
             // 初始化checkedItems的长度与commitments长度一致
             if (currentData.commitments.length > 0) {
@@ -67,7 +68,7 @@ const CommitmentDialog = ({ id }) => {
         fetchData();
     }, [id, appConfig.securityCommitment]);
 
-    const [finished, setFinished] = useState(false);
+    const [finished, setFinished] = useState(true);
     if (finished) return null;
 
     return (
@@ -142,7 +143,7 @@ export const SelectCommitment = ({ value, onChange }) => {
                 onChange(data[0].id)
             }
         };
-        appConfig.securityCommitment && fetchData();
+        appConfig.securityCommitment && options.length === 0 && fetchData();
     }, [value]);
 
     if (!appConfig.securityCommitment) return null

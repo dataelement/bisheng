@@ -56,6 +56,7 @@
         "no": "No",
         "selectModel": "Select",
         "defaultEvaluationFeature": "Default Eval Model",
+        "auditModel": "Audit Model",
         "machineName": "Machine Name",
         "gpuNumber": "GPU Number",
         "gpuID": "GPU ID",

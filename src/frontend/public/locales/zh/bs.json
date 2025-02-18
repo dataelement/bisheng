@@ -245,7 +245,7 @@
     "systemModelSettings": "系统模型设置",
     "addModel": "添加模型",
     "refresh": "刷新",
-    "serviceProvider": "服务提供方",
+    "serviceProvider": "模型服务提供方",
     "actions": "操作",
     "modelType": "模型类型",
     "onlineOfflineOperation": "上下线操作",

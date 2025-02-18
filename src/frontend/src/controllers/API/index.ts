@@ -640,21 +640,26 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
 }
 
 /**
- * 
- *  获取用户在当前应用是否已经签署过承诺
- */
-export async function commitmentApi(userId: string, appId: string): Promise<any> {
-  // return await axios.get(`/api/v1/server/${id}`);
-  return await Promise.resolve({ signed: false, id: ['1', '2'][Date.now() % 2] })
-}
-
-/**
  * 记录用户签署承诺
  */
-export async function signCommitmentApi(userId: string, appId: string, id: string): Promise<any> {
-  // return await axios.get(`/api/v1/server/${id}`);
-  // return await Promise.resolve({ signed: true })
-  return await Promise.resolve('ok')
+export async function signCommitmentApi(business_id: string, promise_id: string): Promise<any> {
+  return await axios.post(`/api/v1/promise/business/user`, {
+    business_id,
+    promise_id
+  })
+}
+
+// 设置应用的承诺书
+export async function setCommitmentApi(business_id: string, promise_id: string): Promise<any> {
+  return await axios.post(`/api/v1/promise/business`, {
+    business_id,
+    promise_id
+  })
+}
+
+// 获取应用的承诺书
+export async function getCommitmentApi(business_id: string): Promise<any> {
+  return await axios.get(`/api/v1/promise/business`, { params: { business_id } })
 }
 /***************************
  * ************ 溯源 ************ 
