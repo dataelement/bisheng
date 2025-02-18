@@ -33,14 +33,17 @@ class PromiseService:
         for one in promise_list:
             write = False
             create_time = None
+            user_name = None
             key = f'{one.business_id}_{one.promise_id}'
             if user_business_map.get(key, None):
                 write = True
                 create_time = user_business_map[key].create_time
+                user_name = user_business_map[key].user_name
             res.append(BusinessUserPromise(
                 business_id=one.business_id,
                 promise_id=one.promise_id,
                 user_id=login_user.user_id,
+                user_name=user_name,
                 write=write,
                 create_time=create_time
             ))
