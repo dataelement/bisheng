@@ -55,9 +55,8 @@ class FeishuMessageTool(BaseModel):
             return response.json()
 
         except requests.exceptions.RequestException as e:
-            print(f"发送消息失败: {str(e)}")
+            return f"发送消息失败: {str(e)}"
 
-        return ""
 
     def get_chat_messages(
         self,
