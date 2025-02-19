@@ -533,6 +533,7 @@ class AuditLogService:
                 break
             for one in res:
                 cls.review_one_session(one['chat_id'], all_message=True)
+            page += 1
 
         return cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, review_status,
                                     1, 10)
