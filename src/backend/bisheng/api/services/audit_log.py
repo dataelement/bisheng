@@ -1,10 +1,12 @@
 import json
 from datetime import datetime
+from tempfile import NamedTemporaryFile
 from typing import Any, List, Optional
 from uuid import UUID
 
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
+from openpyxl.workbook import Workbook
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.knowledge_imp import extract_code_blocks
@@ -13,6 +15,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.audit import ReviewSessionConfig
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schemas import resp_200
+from bisheng.database.base import generate_uuid
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
@@ -25,6 +28,7 @@ from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, ReviewStatus, MessageSession
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.utils.minio_client import MinioClient
 
 
 class AuditLogService:
@@ -414,7 +418,7 @@ class AuditLogService:
         return data
 
     @classmethod
-    def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids:List[str]) -> (bool, List):
+    def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str]) -> (bool, List):
         """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 """
         group_admins = []
         if not user.is_admin():
@@ -679,14 +683,16 @@ class AuditLogService:
 
     @classmethod
     def get_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
-                          end_date: datetime, page: int, page_size: int) -> (List, int):
+                          end_date: datetime, order_field: str = None, order_type: str = None, page: int = 0,
+                          page_size: int = 0) -> (List, int):
 
         """ 获取会话聚合数据 """
         flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
         if not flag:
             return [], 0
 
-        res, total = ChatMessageDao.get_chat_info_group_by_app(filter_flow_ids, start_date, end_date, page, page_size)
+        res, total = ChatMessageDao.get_chat_info_group_by_app(filter_flow_ids, start_date, end_date, order_field,
+                                                               order_type, page, page_size)
         if len(res) == 0:
             return res, total
         flow_ids = [one['flow_id'] for one in res]
@@ -729,3 +735,35 @@ class AuditLogService:
             result.append(one)
 
         return result, total
+
+    @classmethod
+    def export_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [['用户组', '应用名称', '会话数', '用书输入消息数', '应用输出消息数', '违规消息数']]
+        for one in result:
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                one['session_num'],
+                one['input_num'],
+                one['output_num'],
+                one['violations_num']
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'/tmp/session/export_{generate_uuid()}'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio_file_io(tmp_object_name, tmp_file, minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)

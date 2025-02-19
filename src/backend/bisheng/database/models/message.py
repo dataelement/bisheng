@@ -315,17 +315,18 @@ class ChatMessageDao(MessageBase):
             session.commit()
 
     @classmethod
-    def get_chat_info_group_by_app(cls, flow_ids: List[str], start_date: datetime, end_date: datetime,
-                                   page: int, page_size: int):
+    def get_chat_info_group_by_app(cls, flow_ids: List[str], start_date: datetime, end_date: datetime, order_field: str,
+                                   order_type: str, page: int, page_size: int):
         """ 获取会话的一些信息，根据技能来聚合 """
         count_stat = select(func.count(func.distinct(ChatMessage.flow_id)))
         sql = select(
             ChatMessage.flow_id,
             func.min(ChatMessage.user_id),
-            func.count(ChatMessage.chat_id),
-            func.sum(case((ChatMessage.category == 'answer', 1), else_=0)),
-            func.sum(case((ChatMessage.category != 'answer', 1), else_=0)),
-            func.sum(case((ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1), else_=0))
+            func.count(ChatMessage.chat_id).label('session_num'),
+            func.sum(case((ChatMessage.category == 'question', 1), else_=0)).label('input_num'),
+            func.sum(case((ChatMessage.category != 'question', 1), else_=0)).label('output_num'),
+            func.sum(case((ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1), else_=0)).label(
+                'violations_num')
         )
         if flow_ids:
             sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
@@ -334,7 +335,12 @@ class ChatMessageDao(MessageBase):
             sql = sql.where(ChatMessage.create_time > start_date, ChatMessage.create_time < end_date)
             count_stat = count_stat.where(ChatMessage.create_time > start_date, ChatMessage.create_time < end_date)
 
-        sql = sql.group_by(ChatMessage.flow_id).order_by(func.min(ChatMessage.create_time).desc())
+        sql = sql.group_by(ChatMessage.flow_id)
+        if order_field and order_type:
+            sql = sql.order_by(text(f'{order_field} {order_type}'))
+            pass
+        else:
+            sql = sql.order_by(func.min(ChatMessage.create_time).desc())
         if page and page_size:
             sql = sql.offset((page - 1) * page_size).limit(page_size)
 

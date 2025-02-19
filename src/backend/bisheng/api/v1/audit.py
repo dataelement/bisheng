@@ -96,10 +96,13 @@ async def get_session_chart(request: Request, login_user: UserPayload = Depends(
                             group_ids: Optional[List[str]] = Query(default=[], description='用户组id列表'),
                             start_date: Optional[datetime] = Query(default=None, description='开始时间'),
                             end_date: Optional[datetime] = Query(default=None, description='结束时间'),
+                            order_field: Optional[str] = Query(default=None, description='排序字段'),
+                            order_type: Optional[str] = Query(default=None, description='排序类型'),
                             page: Optional[int] = Query(default=1, description='页码'),
                             page_size: Optional[int] = Query(default=10, description='每页条数')):
     """ 按照用户组聚合统计会话数据 """
-    data, total = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date, page, page_size)
+    data, total = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date,
+                                                    order_field, order_type, page, page_size)
     return resp_200(data={
         'data': data,
         'total': total
@@ -107,12 +110,13 @@ async def get_session_chart(request: Request, login_user: UserPayload = Depends(
 
 
 @router.get('/session/chart/export')
-async def get_session_chart(request: Request, login_user: UserPayload = Depends(get_login_user),
-                            user_ids: Optional[List[str]] = Query(default=[], description='用户id列表'),
-                            group_ids: Optional[List[str]] = Query(default=[], description='用户组id列表'),
-                            start_date: Optional[datetime] = Query(default=None, description='开始时间'),
-                            end_date: Optional[datetime] = Query(default=None, description='结束时间')):
+async def export_session_chart(request: Request, login_user: UserPayload = Depends(get_login_user),
+                               flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
+                               group_ids: Optional[List[str]] = Query(default=[], description='用户组id列表'),
+                               start_date: Optional[datetime] = Query(default=None, description='开始时间'),
+                               end_date: Optional[datetime] = Query(default=None, description='结束时间')):
     """ 根据筛选条件导出最终的结果 """
+    url = AuditLogService.export_session_chart(login_user, flow_ids, group_ids, start_date, end_date, )
     return resp_200(data={
-        'url': ''
+        'url': url
     })
