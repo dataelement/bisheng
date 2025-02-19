@@ -3,12 +3,13 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.session import ReviewStatus
 from loguru import logger
 from pydantic import BaseModel
 from sqlmodel import Field, delete, select, JSON, Column, DateTime, String, Text, case, func, or_, text, update, not_
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.session import ReviewStatus
 
 
 class ChatMessageType(Enum):
@@ -25,6 +26,7 @@ class MessageBase(SQLModelSerializable):
     mark_user: Optional[int] = Field(index=False, description='标记用户')
     mark_user_name: Optional[str] = Field(index=False, description='标记用户')
     review_status: Optional[int] = Field(index=True, default=ReviewStatus.DEFAULT.value, description='会话审查状态')
+    review_reason: Optional[str] = Field(sa_column=Column(String(length=4096)), description='会话审查原因')
     message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
     extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
@@ -105,7 +107,7 @@ class MessageDao(MessageBase):
                          func.min(ChatMessage.create_time).label('create_time'),
                          func.sum(case((ChatMessage.liked == 1, 1), else_=0)),
                          func.sum(case((ChatMessage.liked == 2, 1), else_=0)),
-                         func.sum(case((ChatMessage.copied == 1, 1), else_=0)), )
+                         func.sum(case((ChatMessage.copied == 1, 1), else_=0)))
 
             if flow_ids:
                 count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
@@ -208,7 +210,7 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_msg_by_chat_id(cls, chat_id: str):
         with session_getter() as session:
-            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
+            statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(ChatMessage.id.asc())
             return session.exec(statement).all()
 
     @classmethod
@@ -302,3 +304,51 @@ class ChatMessageDao(MessageBase):
             statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def update_review_status(cls, message_ids: List[int], review_status: int, review_reason: str):
+        """ 更新消息的审核状态 """
+        statement = update(ChatMessage).where(ChatMessage.id.in_(message_ids)).values(review_status=review_status,
+                                                                                      review_reason=review_reason)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def get_chat_info_group_by_app(cls, flow_ids: List[str], start_date: datetime, end_date: datetime,
+                                   page: int, page_size: int):
+        """ 获取会话的一些信息，根据技能来聚合 """
+        count_stat = select(func.count(func.distinct(ChatMessage.flow_id)))
+        sql = select(
+            ChatMessage.flow_id,
+            func.min(ChatMessage.user_id),
+            func.count(ChatMessage.chat_id),
+            func.sum(case((ChatMessage.category == 'answer', 1), else_=0)),
+            func.sum(case((ChatMessage.category != 'answer', 1), else_=0)),
+            func.sum(case((ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1), else_=0))
+        )
+        if flow_ids:
+            sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
+            count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
+        if start_date and end_date:
+            sql = sql.where(ChatMessage.create_time > start_date, ChatMessage.create_time < end_date)
+            count_stat = count_stat.where(ChatMessage.create_time > start_date, ChatMessage.create_time < end_date)
+
+        sql = sql.group_by(ChatMessage.flow_id).order_by(func.min(ChatMessage.create_time).desc())
+        if page and page_size:
+            sql = sql.offset((page - 1) * page_size).limit(page_size)
+
+        with session_getter() as session:
+            res_list = session.exec(sql).all()
+            total = session.scalar(count_stat)
+        res = [
+            {
+                'flow_id': one[0],
+                'user_id': one[1],
+                'session_num': one[2],
+                'input_num': one[3],
+                'output_num': one[4],
+                'violations_num': one[5]
+            } for one in res_list
+        ]
+        return res, total

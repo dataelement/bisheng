@@ -21,9 +21,9 @@ class MessageSessionBase(SQLModelSerializable):
     flow_type: int = Field(description='应用类型。技能、助手、工作流')
     flow_name: str = Field(description='应用名称')
     user_id: int = Field(description='创建会话的用户ID')
-    like: int = Field(description='点赞的消息数量')
-    dislike: int = Field(description='点踩的消息数量')
-    copied: int = Field(description='已复制的消息数量')
+    like: Optional[int] = Field(default=0, description='点赞的消息数量')
+    dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
+    copied: Optional[int] = Field(default=0, description='已复制的消息数量')
     review_status: int = Field(default=ReviewStatus.DEFAULT.value, description='审查状态')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

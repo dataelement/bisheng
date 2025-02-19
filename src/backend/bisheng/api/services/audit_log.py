@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
 
@@ -16,12 +17,12 @@ from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
-from bisheng.database.models.group import Group
+from bisheng.database.models.group import Group, GroupDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.database.models.message import MessageDao, ChatMessageDao
 from bisheng.database.models.role import Role
-from bisheng.database.models.session import MessageSessionDao, ReviewStatus
+from bisheng.database.models.session import MessageSessionDao, ReviewStatus, MessageSession
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -413,8 +414,8 @@ class AuditLogService:
         return data
 
     @classmethod
-    def get_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
-                         feedback, review_status, page, page_size) -> (list, int):
+    def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids:List[str]) -> (bool, List):
+        """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 """
         group_admins = []
         if not user.is_admin():
             user_groups = UserGroupDao.get_user_admin_group(user.user_id)
@@ -422,13 +423,13 @@ class AuditLogService:
             if not user_groups:
                 raise UnAuthorizedError.http_exception()
             group_admins = [one.group_id for one in user_groups]
-
         # 分组id做交集
         if group_ids:
             if group_admins:
+                # 查询了不属于用户管理的用户组，返回为空
                 group_admins = list(set(group_admins) & set(group_ids))
                 if len(group_admins) == 0:
-                    return [], 0
+                    return False, []
             else:
                 group_admins = group_ids
 
@@ -436,22 +437,30 @@ class AuditLogService:
         group_flows = []
         if group_admins:
             group_flows = GroupResourceDao.get_groups_resource(group_admins)
+            # 用户管理下的用户组没有资源
             if not group_flows:
-                return [], 0
+                return False, []
             group_flows = [one.third_id for one in group_flows]
 
         # 获取最终的技能ID限制列表
         filter_flow_ids = []
-        exclude_flow_ids = []
         if flow_ids and group_flows:
             filter_flow_ids = list(set(group_admins) & set(flow_ids))
             if not filter_flow_ids:
-                return [], 0
+                return False, []
         elif flow_ids:
             filter_flow_ids = flow_ids
         elif group_flows:
             filter_flow_ids = group_flows
+        return True, filter_flow_ids
 
+    @classmethod
+    def get_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
+                         feedback, review_status, page, page_size) -> (list, int):
+        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        if not flag:
+            return [], 0
+        exclude_flow_ids = []
         if review_status:
             # 未审查状态的，目前的实现需要采用过滤的形式来搜索，目前在表里的都是未审查的
             if review_status == ReviewStatus.DEFAULT.value:
@@ -544,16 +553,32 @@ class AuditLogService:
         # 审查通过的消息列表 {id: 1}
         update_pass_messages = []
         # 违规的消息列表 {id: 1, review_reason: []}
-        update_reject_messages = []
+        update_violations_messages = []
+        old_violations_messages = []
         # 审查失败的消息列表 {id: 1, review_reason: []}
         update_failed_messages = []
+        old_failed_messages = []
 
         message_list = []
         message_content_len = 0
-        # 大于1000个字符则去请求模型审查
-        max_message_len = 1000
+        # 大于多少字符则去请求模型审查
+        max_message_len = 500
         session_status = ReviewStatus.PASS.value
+        chat_flow_id = None
+        chat_flow_type = None
+        chat_flow_name = None
+        chat_user_id = None
+        chat_create_time = None
         for one in all_message:
+            if chat_flow_id is None:
+                flow_info = FlowDao.get_flow_by_id(one.flow_id)
+                chat_flow_id = one.flow_id
+                chat_user_id = one.user_id
+                chat_create_time = one.create_time
+                if flow_info:
+                    chat_flow_name = flow_info.name
+                    chat_flow_type = flow_info.flow_type
+
             if all_message or one.review_status == ReviewStatus.DEFAULT.value:
                 # 需要审查的消息, 内容为空的消息默认通过审查
                 message_content = one.message if one.message else one.intermediate_steps
@@ -568,10 +593,53 @@ class AuditLogService:
                 if message_content_len > max_message_len:
                     a, b, c = cls.review_some_message(review_llm, review_config, message_list)
                     update_pass_messages.extend(a)
-                    update_reject_messages.extend(b)
+                    update_violations_messages.extend(b)
                     update_failed_messages.extend(c)
                     message_list = []
                     message_content_len = 0
+            else:
+                if one.review_status == ReviewStatus.VIOLATIONS.value:
+                    old_violations_messages.append(one)
+                elif one.review_status == ReviewStatus.FAILED.value:
+                    old_failed_messages.append(one)
+        if message_list:
+            a, b, c = cls.review_some_message(review_llm, review_config, message_list)
+            update_pass_messages.extend(a)
+            update_violations_messages.extend(b)
+            update_failed_messages.extend(c)
+
+        # 更新审查状态
+        if update_pass_messages:
+            ChatMessageDao.update_review_status([one['id'] for one in update_pass_messages],
+                                                session_status, '')
+        if update_violations_messages:
+            for one in update_violations_messages:
+                ChatMessageDao.update_review_status([one['id']], ReviewStatus.VIOLATIONS.value, one['reason'])
+        if update_failed_messages:
+            for one in update_failed_messages:
+                ChatMessageDao.update_review_status([one['id']], ReviewStatus.FAILED.value, one['reason'])
+
+        # 更新会话的状态
+        if update_violations_messages or old_violations_messages:
+            session_status = ReviewStatus.VIOLATIONS.value
+        elif update_failed_messages or old_failed_messages:
+            session_status = ReviewStatus.FAILED.value
+
+        # 更新会话的状态
+        message_session = MessageSessionDao.filter_session(chat_ids=[chat_id])
+        if message_session.__len__() > 0:
+            message_session = message_session[0]
+            message_session.review_status = session_status
+        else:
+            message_session = MessageSession(chat_id=chat_id,
+                                             flow_id=chat_flow_id,
+                                             flow_type=chat_flow_type,
+                                             flow_name=chat_flow_name,
+                                             user_id=chat_user_id,
+                                             create_time=chat_create_time)
+        MessageSessionDao.insert_one(message_session)
+        logger.info(f"act=review_one_session_over chat_id={chat_id} all_message={all_message}")
+        return
 
     @classmethod
     def review_some_message(cls, review_llm: BaseChatModel, review_config: ReviewSessionConfig,
@@ -608,3 +676,56 @@ class AuditLogService:
         except Exception as e:
             logger.exception(f'review_some_message {message_list} error')
             return [], [], [{'id': one['id'], 'reason': str(e)[-100:]} for one in message_list]
+
+    @classmethod
+    def get_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                          end_date: datetime, page: int, page_size: int) -> (List, int):
+
+        """ 获取会话聚合数据 """
+        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        if not flag:
+            return [], 0
+
+        res, total = ChatMessageDao.get_chat_info_group_by_app(filter_flow_ids, start_date, end_date, page, page_size)
+        if len(res) == 0:
+            return res, total
+        flow_ids = [one['flow_id'] for one in res]
+        # 获取这些应用所属的分组信息
+        app_groups = GroupResourceDao.get_resources_group(None, [one.hex for one in flow_ids])
+        app_groups_map = {}
+        group_ids = []
+        group_info_map = {}
+        for one in app_groups:
+            group_ids.append(int(one.group_id))
+            if one.third_id not in app_groups_map:
+                app_groups_map[one.third_id] = []
+            app_groups_map[one.third_id].append(int(one.group_id))
+        if group_ids:
+            group_info = GroupDao.get_group_by_ids(group_ids)
+            for one in group_info:
+                group_info_map[one.id] = one
+
+        # 获取应用信息
+        flow_list = FlowDao.get_flow_by_ids(flow_ids)
+        assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
+        flow_map = {flow.id: flow for flow in flow_list}
+        assistant_map = {assistant.id: assistant for assistant in assistant_list}
+
+        result = []
+        for one in res:
+            if flow_map.get(one['flow_id']):
+                flow_name = flow_map[one['flow_id']].name
+            elif assistant_map.get(one['flow_id']):
+                flow_name = assistant_map[one['flow_id']].name
+            else:
+                continue
+            group_ids = app_groups_map.get(one['flow_id'].hex, [])
+
+            one['name'] = flow_name
+            one['group_info'] = [{
+                'id': group_id,
+                'group_name': group_info_map[group_id].group_name if group_info_map.get(group_id) else group_id
+            } for group_id in group_ids]
+            result.append(one)
+
+        return result, total

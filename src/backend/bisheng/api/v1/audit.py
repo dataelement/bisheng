@@ -92,27 +92,17 @@ async def review_session_list(request: Request, login_user: UserPayload = Depend
 
 @router.get('/session/chart', response_model=UnifiedResponseModel)
 async def get_session_chart(request: Request, login_user: UserPayload = Depends(get_login_user),
-                            user_ids: Optional[List[str]] = Query(default=[], description='用户id列表'),
+                            flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
                             group_ids: Optional[List[str]] = Query(default=[], description='用户组id列表'),
                             start_date: Optional[datetime] = Query(default=None, description='开始时间'),
                             end_date: Optional[datetime] = Query(default=None, description='结束时间'),
                             page: Optional[int] = Query(default=1, description='页码'),
                             page_size: Optional[int] = Query(default=10, description='每页条数')):
     """ 按照用户组聚合统计会话数据 """
+    data, total = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date, page, page_size)
     return resp_200(data={
-        'data': [
-            {
-                'group_id': 1,
-                'group_name': '测试分组1',
-                'name': '应用名称',
-                'flow_id': '应用唯一ID',
-                'session_num': 100,  # 会话数
-                'input_num': 100,  # 应用输入消息数
-                'output_num': 200,  # 应用输出消息数
-                'violations_num': 300, # 违规消息数
-            }
-        ],
-        'total': 1
+        'data': data,
+        'total': total
     })
 
 
