@@ -80,8 +80,7 @@ dingding_class_methods = [
 ]
 
 _DING_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'ding_{name}': (DingdingMessageTool.get_api_tool, [])
-    for name in dingding_class_methods
+    'ding_send_message': (DingdingMessageTool.get_api_tool, [])
 }
 
 
@@ -110,8 +109,7 @@ wechat_class_methods = [
 ]
 
 _WECHAT_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
-    f'wechat_{name}': (WechatMessageTool.get_api_tool, [])
-    for name in wechat_class_methods
+    'wechat_send_message': (WechatMessageTool.get_api_tool, [])
 }
 
 

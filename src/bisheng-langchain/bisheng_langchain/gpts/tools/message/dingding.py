@@ -15,8 +15,7 @@ class InputArgs(BaseModel):
 
 class DingdingMessageTool(BaseModel):
 
-    @classmethod
-    def send_message(cls, message: str, url: str) -> str:
+    def send_message(self, message: str, url: str) -> str:
         """
         发送钉钉机器人消息
         

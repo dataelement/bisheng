@@ -38,10 +38,11 @@ class FireCrawl(BaseModel):
             },
         }
         response = requests.post(url, json=params, headers=headers)
+        status_url = response.json()["url"]
         start_time = time.time()
         while True:
-            response = requests.get(response.json()["url"],headers=headers)
-            print("wating for completion " + response.json()["url"])
+            response = requests.get(status_url,headers=headers)
+            print("wating for completion " + status_url)
             data = response.json()
             if time.time() - start_time > self.timeout:
                 return "timeout"
