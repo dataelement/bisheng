@@ -25,7 +25,7 @@ class SiliconFlow(APIToolBase):
             "Authorization": "Bearer " + self.siliconflow_api_key,
         }
         params = {
-            "model": "stabilityai/stable-diffusion-3-5-large-turbo",
+            "model": "stabilityai/stable-diffusion-3-5-large",
             "prompt": prompt,
             "negative_prompt": negative_prompt,
         }
