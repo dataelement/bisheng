@@ -93,6 +93,7 @@ bisheng-ragas = { version = "^1.0.1", source = "dataelem-index" }
 qianfan = "^0.4.4"
 dashscope = "^1.20.3"
 blobfile = "^3.0.0"
+celery-redbeat = "^2.2.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"

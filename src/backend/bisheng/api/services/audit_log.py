@@ -4,9 +4,11 @@ from tempfile import NamedTemporaryFile
 from typing import Any, List, Optional
 from uuid import UUID
 
+from celery.schedules import crontab
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
 from openpyxl.workbook import Workbook
+from redbeat import RedBeatSchedulerEntry
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.knowledge_imp import extract_code_blocks
@@ -414,6 +416,20 @@ class AuditLogService:
 
     @classmethod
     def update_session_config(cls, user: UserPayload, data: ReviewSessionConfig) -> ReviewSessionConfig:
+        from bisheng.worker import bisheng_celery
+        if data.flag:
+            hour, minute = data.get_hour_minute()
+            schedule = {
+                'hour': hour,
+                'minute': minute
+            }
+            if day_of_week:=data.get_celery_crontab_week() is not None:
+                schedule['day_of_week'] = day_of_week
+            beat_task = RedBeatSchedulerEntry(name='review_session_message',
+                                              task='bisheng.worker.audit.tasks.review_session_message',
+                                              schedule=crontab(**schedule),
+                                              app=bisheng_celery)
+            beat_task.save()
         ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.REVIEW_SESSION_CONFIG.value, value=json.dumps(data.dict())))
         return data
 
@@ -529,10 +545,10 @@ class AuditLogService:
         while True:
             res, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
                                               review_status, page, page_size)
-            if res.len() == 0:
+            if len(res) == 0:
                 break
             for one in res:
-                cls.review_one_session(one['chat_id'], all_message=True)
+                cls.review_one_session(one.chat_id, all_message=True)
             page += 1
 
         return cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, review_status,
@@ -576,13 +592,20 @@ class AuditLogService:
         chat_create_time = None
         for one in all_message:
             if chat_flow_id is None:
-                flow_info = FlowDao.get_flow_by_id(one.flow_id)
-                chat_flow_id = one.flow_id
+                flow_info = FlowDao.get_flow_by_id(one.flow_id.hex)
+                assistant_info = AssistantDao.get_one_assistant(one.flow_id)
+                chat_flow_id = one.flow_id.hex
                 chat_user_id = one.user_id
                 chat_create_time = one.create_time
                 if flow_info:
                     chat_flow_name = flow_info.name
                     chat_flow_type = flow_info.flow_type
+                elif assistant_info:
+                    chat_flow_name = assistant_info.name
+                    chat_flow_type = FlowType.ASSISTANT.value
+                else:
+                    logger.debug(f'not found flow info: {one.flow_id.hex}')
+                    return
 
             if all_message or one.review_status == ReviewStatus.DEFAULT.value:
                 # 需要审查的消息, 内容为空的消息默认通过审查
