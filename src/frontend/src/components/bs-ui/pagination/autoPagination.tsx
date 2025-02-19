@@ -33,7 +33,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
         if (page !== 1) {
             items.push(
                 <PaginationItem key="start">
-                    <PaginationLink href="#" onClick={() => handlePageChange(1)} >
+                    <PaginationLink href="javascrit:;" onClick={() => handlePageChange(1)} >
                         <ChevronsLeft />
                     </PaginationLink>
                 </PaginationItem>
@@ -42,7 +42,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
         // Previous Button
         items.push(
             <PaginationItem key="previous">
-                <PaginationPrevious href="#"
+                <PaginationPrevious href="javascrit:;"
                     className={page === startPage && 'text-gray-400'}
                     onClick={() => handlePageChange(page - 1)} />
             </PaginationItem>
@@ -54,7 +54,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
             for (let i = 1; i <= totalPages; i++) {
                 items.push(
                     <PaginationItem key={i}>
-                        <PaginationLink href="#"
+                        <PaginationLink href="javascrit:;"
                             className={page === i ? 'font-bold' : 'text-gray-500'}
                             onClick={() => handlePageChange(i)} isActive={i === page}>
                             {i}
@@ -76,7 +76,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
             for (let i = startPage; i <= endPage; i++) {
                 items.push(
                     <PaginationItem key={i}>
-                        <PaginationLink href="#"
+                        <PaginationLink href="javascrit:;"
                             className={page === i ? 'font-bold' : 'text-gray-500'}
                             onClick={() => handlePageChange(i)} isActive={i === page}>
                             {i}
@@ -98,7 +98,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
         // Next Button
         items.push(
             <PaginationItem key="next">
-                <PaginationNext href="#"
+                <PaginationNext href="javascrit:;"
                     className={page === endPage && 'text-gray-400'}
                     onClick={() => handlePageChange(page + 1)} />
             </PaginationItem>
@@ -107,7 +107,7 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
         if (page !== totalPages) {
             items.push(
                 <PaginationItem key="end">
-                    <PaginationLink href="#" onClick={() => handlePageChange(totalPages)} >
+                    <PaginationLink href="javascrit:;" onClick={() => handlePageChange(totalPages)} >
                         <ChevronsRight />
                     </PaginationLink>
                 </PaginationItem>
