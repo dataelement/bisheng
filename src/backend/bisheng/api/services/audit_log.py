@@ -763,7 +763,9 @@ class AuditLogService:
         with NamedTemporaryFile() as tmp_file:
             wb.save(tmp_file.name)
             tmp_file.seek(0)
-            minio_client.upload_minio_file_io(tmp_object_name, tmp_file, minio_client.tmp_bucket)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
 
         share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
         return minio_client.clear_minio_share_host(share_url)
