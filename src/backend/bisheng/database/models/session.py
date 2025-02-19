@@ -10,7 +10,7 @@ from sqlmodel import Field, Column, DateTime, text, select
 class ReviewStatus(Enum):
     DEFAULT = 1  # 未审查
     PASS = 2  # 通过
-    REJECT = 3  # 违规
+    VIOLATIONS = 3  # 违规
     FAILED = 4  # 审查失败
 
 

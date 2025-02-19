@@ -301,6 +301,13 @@ class LLMService:
         return cls.get_bisheng_llm(model_id=evaluation_llm.model_id)
 
     @classmethod
+    def get_audit_llm_object(cls) -> BaseChatModel:
+        audit_llm = cls.get_audit_llm()
+        if not audit_llm.model_id:
+            raise Exception('未配置审计模型')
+        return cls.get_bisheng_llm(model_id=audit_llm.model_id)
+
+    @classmethod
     def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
         """ 获取评测功能的默认模型配置 """
         class_object = import_by_type(_type='llms', name='BishengLLM')
@@ -358,7 +365,7 @@ class LLMService:
         return data
 
     @classmethod
-    def get_audit_llm(cls, request: Request, login_user: UserPayload) -> EvaluationLLMConfig:
+    def get_audit_llm(cls) -> EvaluationLLMConfig:
         """ 获取审计的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_LLM)

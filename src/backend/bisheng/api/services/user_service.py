@@ -1,7 +1,7 @@
 import functools
 import json
 from base64 import b64decode
-from typing import List
+from typing import List, Dict
 
 import rsa
 from bisheng.api.errcode.base import UnAuthorizedError
@@ -13,8 +13,9 @@ from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
-from bisheng.database.models.role import AdminRole
+from bisheng.database.models.role import AdminRole, RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -34,6 +35,8 @@ class UserPayload:
             roles = UserRoleDao.get_user_roles(self.user_id)
             self.user_role = [one.role_id for one in roles]
         self.user_name = kwargs.get('user_name')
+        self.group_cache = {}
+        self.role_cache = {}
 
     def is_admin(self):
         if self.user_role == 'admin':
@@ -106,6 +109,44 @@ class UserPayload:
             if one.is_group_admin and one.group_id in group_ids:
                 return True
         return False
+
+    def get_user_groups(self, user_id: int) -> List[Dict]:
+        """ 查询用户的角色列表 """
+        user_groups = UserGroupDao.get_user_group(user_id)
+        user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
+        res = []
+        for i in range(len(user_group_ids) - 1, -1, -1):
+            if self.group_cache.get(user_group_ids[i]):
+                res.append(self.group_cache.get(user_group_ids[i]))
+                del user_group_ids[i]
+        # 将没有缓存的角色信息查询数据库
+        if user_group_ids:
+            group_list = GroupDao.get_group_by_ids(user_group_ids)
+            for group_info in group_list:
+                self.group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
+                res.append(self.group_cache.get(group_info.id))
+        return res
+
+    def get_user_roles(self, user_id: int) -> List[Dict]:
+        """ 查询用户的角色列表 """
+        user_roles = UserRoleDao.get_user_roles(user_id)
+        user_role_ids: List[int] = [one_role.role_id for one_role in user_roles]
+        res = []
+        for i in range(len(user_role_ids) - 1, -1, -1):
+            if self.role_cache.get(user_role_ids[i]):
+                res.append(self.role_cache.get(user_role_ids[i]))
+                del user_role_ids[i]
+        # 将没有缓存的角色信息查询数据库
+        if user_role_ids:
+            role_list = RoleDao.get_role_by_ids(user_role_ids)
+            for role_info in role_list:
+                self.role_cache[role_info.id] = {
+                    "id": role_info.id,
+                    "group_id": role_info.group_id,
+                    "name": role_info.role_name
+                }
+                res.append(self.role_cache.get(role_info.id))
+        return res
 
 
 class UserService:

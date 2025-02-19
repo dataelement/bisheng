@@ -26,13 +26,10 @@ from bisheng.api.utils import get_request_ip
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
-                                               get_assistant_list_by_access, get_admin_user, UserService)
+                                               get_admin_user, UserService)
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, CreateUserReq
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow
-from bisheng.database.models.group import GroupDao
-from bisheng.database.models.knowledge import Knowledge
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate, AdminRole, DefaultRole
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
@@ -270,12 +267,10 @@ async def list_user(*,
 
     users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
     res = []
-    role_dict = {}
-    group_dict = {}
     for one in users:
         one_data = one.model_dump()
-        user_roles = get_user_roles(one, role_dict)
-        user_groups = get_user_groups(one, group_dict)
+        user_roles = login_user.get_user_roles(one.user_id)
+        user_groups = login_user.get_user_groups(one.user_id)
         # 如果不是超级管理，则需要将数据过滤, 不能看到非他管理的用户组内的角色和用户组列表
         if user_admin_groups:
             for i in range(len(user_roles) - 1, -1, -1):
@@ -289,46 +284,6 @@ async def list_user(*,
         res.append(one_data)
 
     return resp_200({'data': res, 'total': total_count})
-
-
-def get_user_roles(user: User, role_cache: Dict) -> List[Dict]:
-    # 查询用户的角色列表
-    user_roles = UserRoleDao.get_user_roles(user.user_id)
-    user_role_ids: List[int] = [one_role.role_id for one_role in user_roles]
-    res = []
-    for i in range(len(user_role_ids) - 1, -1, -1):
-        if role_cache.get(user_role_ids[i]):
-            res.append(role_cache.get(user_role_ids[i]))
-            del user_role_ids[i]
-    # 将没有缓存的角色信息查询数据库
-    if user_role_ids:
-        role_list = RoleDao.get_role_by_ids(user_role_ids)
-        for role_info in role_list:
-            role_cache[role_info.id] = {
-                "id": role_info.id,
-                "group_id": role_info.group_id,
-                "name": role_info.role_name
-            }
-            res.append(role_cache.get(role_info.id))
-    return res
-
-
-def get_user_groups(user: User, group_cache: Dict) -> List[Dict]:
-    # 查询用户的角色列表
-    user_groups = UserGroupDao.get_user_group(user.user_id)
-    user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
-    res = []
-    for i in range(len(user_group_ids) - 1, -1, -1):
-        if group_cache.get(user_group_ids[i]):
-            res.append(group_cache.get(user_group_ids[i]))
-            del user_group_ids[i]
-    # 将没有缓存的角色信息查询数据库
-    if user_group_ids:
-        group_list = GroupDao.get_group_by_ids(user_group_ids)
-        for group_info in group_list:
-            group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
-            res.append(group_cache.get(group_info.id))
-    return res
 
 
 @router.post('/user/update', status_code=201)

@@ -159,7 +159,7 @@ def get_audit_llm(
         login_user: UserPayload = Depends(get_login_user),
 ) -> UnifiedResponseModel[EvaluationLLMConfig]:
     """ 获取审计相关的模型配置 """
-    ret = LLMService.get_audit_llm(request, login_user)
+    ret = LLMService.get_audit_llm()
     return resp_200(data=ret)
 
 

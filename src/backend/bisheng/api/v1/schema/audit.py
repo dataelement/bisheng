@@ -13,7 +13,7 @@ class DayCron(Enum):
     Sat: str = 'Sat'  # 每周六
     Sun: str = 'Sun'  # 每周日
 
-class AuditSessionConfig(BaseModel):
+class ReviewSessionConfig(BaseModel):
     flag: Optional[bool] = Field(default=False, description='是否开启违规审查策略')
     prompt: Optional[str] = Field(default='', description='违规审查的prompt')
     day_cron: Optional[str] = Field(default='', description='每天还是每周')

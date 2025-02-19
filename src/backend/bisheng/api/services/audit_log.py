@@ -2,9 +2,14 @@ import json
 from typing import Any, List, Optional
 from uuid import UUID
 
+from langchain_core.language_models import BaseChatModel
+from loguru import logger
+
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.knowledge_imp import extract_code_blocks
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schema.audit import AuditSessionConfig
+from bisheng.api.v1.schema.audit import ReviewSessionConfig
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.assistant import AssistantDao, Assistant
@@ -14,12 +19,11 @@ from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.database.models.message import MessageDao
+from bisheng.database.models.message import MessageDao, ChatMessageDao
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, ReviewStatus
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
-from loguru import logger
 
 
 class AuditLogService:
@@ -396,15 +400,15 @@ class AuditLogService:
                         ObjectType.NONE, '', '')
 
     @classmethod
-    def get_session_config(cls, user: UserPayload) -> AuditSessionConfig:
+    def get_session_config(cls) -> ReviewSessionConfig:
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.REVIEW_SESSION_CONFIG)
         if config:
             ret = json.loads(config.value)
-        return AuditSessionConfig(**ret)
+        return ReviewSessionConfig(**ret)
 
     @classmethod
-    def update_session_config(cls, user: UserPayload, data: AuditSessionConfig) -> AuditSessionConfig:
+    def update_session_config(cls, user: UserPayload, data: ReviewSessionConfig) -> ReviewSessionConfig:
         ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.REVIEW_SESSION_CONFIG.value, value=json.dumps(data.dict())))
         return data
 
@@ -475,7 +479,6 @@ class AuditLogService:
             res_flows.append(one['flow_id'])
             res_chats.append(one['chat_id'])
         user_list = UserDao.get_user_by_ids(res_users)
-        user_groups = UserGroupDao.get_users_group(res_users)
         flow_list = FlowDao.get_flow_by_ids(res_flows)
         assistant_list = AssistantDao.get_assistants_by_ids(res_flows)
         session_list = MessageSessionDao.filter_session(chat_ids=res_chats)
@@ -484,11 +487,6 @@ class AuditLogService:
         flow_map = {flow.id: flow for flow in flow_list}
         assistant_map = {assistant.id: assistant for assistant in assistant_list}
         flow_map.update(assistant_map)
-        user_groups_map = {}
-        for one in user_groups:
-            if one.user_id not in user_groups_map:
-                user_groups_map[one.user_id] = []
-            user_groups_map[one.user_id].append(one.group_id)
         session_map = {one.chat_id: one for one in session_list}
 
         result = []
@@ -497,7 +495,7 @@ class AuditLogService:
                 continue
             result.append(AppChatList(**one,
                                       user_name=user_map.get(one['user_id'], one['user_id']),
-                                      user_groups=user_groups_map.get(one['user_id'], []),
+                                      user_groups=user.get_user_groups(one['user_id']),
                                       flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one[
                                           'flow_id'],
                                       flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else
@@ -508,3 +506,105 @@ class AuditLogService:
                           )
 
         return result, total
+
+    @classmethod
+    def review_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
+                            feedback, review_status):
+        """ 重新审查符合条件的会话 """
+        page = 1
+        page_size = 10
+        while True:
+            res, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
+                                              review_status, page, page_size)
+            if res.len() == 0:
+                break
+            for one in res:
+                cls.review_one_session(one['chat_id'], all_message=True)
+
+        return cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, review_status,
+                                    1, 10)
+
+    @classmethod
+    def review_one_session(cls, chat_id: str, all_message: bool = False):
+        """ 重新审查一个会话内的消息
+        params:
+            chat_id: 会话ID
+            all_message: 是否审查所有消息，默认为False，会过滤掉已审查过的消息
+        """
+        logger.info(f"act=review_one_session chat_id={chat_id} all_message={all_message}")
+        # 审查配置
+        review_config = cls.get_session_config()
+        if not review_config.flag:
+            logger.info(f"act=review flag is close, skip session:{chat_id}")
+            return
+        # 审查模型
+        review_llm = LLMService.get_audit_llm_object()
+
+        all_message = ChatMessageDao.get_msg_by_chat_id(chat_id)
+        # 审查通过的消息列表 {id: 1}
+        update_pass_messages = []
+        # 违规的消息列表 {id: 1, review_reason: []}
+        update_reject_messages = []
+        # 审查失败的消息列表 {id: 1, review_reason: []}
+        update_failed_messages = []
+
+        message_list = []
+        message_content_len = 0
+        # 大于1000个字符则去请求模型审查
+        max_message_len = 1000
+        session_status = ReviewStatus.PASS.value
+        for one in all_message:
+            if all_message or one.review_status == ReviewStatus.DEFAULT.value:
+                # 需要审查的消息, 内容为空的消息默认通过审查
+                message_content = one.message if one.message else one.intermediate_steps
+                if not message_content:
+                    update_pass_messages.append(one.id)
+                    continue
+                message_content_len += message_content.__len__()
+                message_list.append({
+                    'id': one.id,
+                    'message': message_content
+                })
+                if message_content_len > max_message_len:
+                    a, b, c = cls.review_some_message(review_llm, review_config, message_list)
+                    update_pass_messages.extend(a)
+                    update_reject_messages.extend(b)
+                    update_failed_messages.extend(c)
+                    message_list = []
+                    message_content_len = 0
+
+    @classmethod
+    def review_some_message(cls, review_llm: BaseChatModel, review_config: ReviewSessionConfig,
+                            message_list: List[dict]) -> (List[int], List[int], List[dict]):
+        try:
+            llm_prompt = review_config.prompt
+            llm_prompt += f'\n{json.dumps(message_list, ensure_ascii=False, indent=2)}'
+
+            llm_result = review_llm.invoke(llm_prompt)
+            logger.debug(f'review message result: {llm_result.content}')
+
+            # 解析模型的输出
+            result = extract_code_blocks(llm_result.content)
+            if result:
+                result = json.loads(result[0])
+            else:
+                result = json.loads(llm_result.content)
+
+            # 判断有哪些消息审查失败了
+            reject_messages = {}
+            for one in result.get('messages', []):
+                if one.get('message_id') and one.get('violations'):
+                    reject_messages[one['message_id']] = {
+                        'id': one['message_id'],
+                        'reason': one['violations']
+                    }
+            pass_message = []
+            for one in message_list:
+                if one['id'] not in reject_messages:
+                    pass_message.append({
+                        'id': one['id']
+                    })
+            return pass_message, list(reject_messages.values()), []
+        except Exception as e:
+            logger.exception(f'review_some_message {message_list} error')
+            return [], [], [{'id': one['id'], 'reason': str(e)[-100:]} for one in message_list]
