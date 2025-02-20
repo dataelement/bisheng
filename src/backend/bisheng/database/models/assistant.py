@@ -237,7 +237,7 @@ class AssistantDao(AssistantBase):
             ))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement.order_by(Assistant.update_time.desc())
+        statement = statement.order_by(Assistant.update_time.desc())
 
         with session_getter() as session:
             result = session.exec(statement).all()
