@@ -100,7 +100,9 @@ class MessageDao(MessageBase):
             start_date: datetime = None,
             end_date: datetime = None,
             feedback: str = None,
-            exclude_flow_ids: List[str] = None
+            exclude_flow_ids: List[str] = None,
+            chat_ids: List[str] = None,
+            exclude_chat_ids: List[str] = None,
     ) -> Tuple[List[Dict], int]:
         with session_getter() as session:
             count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
@@ -129,6 +131,12 @@ class MessageDao(MessageBase):
             if end_date:
                 count_stat = count_stat.where(ChatMessage.create_time <= end_date)
                 sql = sql.where(ChatMessage.create_time <= end_date)
+            if chat_ids:
+                count_stat = count_stat.where(ChatMessage.chat_id.in_(chat_ids))
+                sql = sql.where(ChatMessage.chat_id.in_(chat_ids))
+            if exclude_chat_ids:
+                count_stat = count_stat.where(ChatMessage.chat_id.not_in(exclude_chat_ids))
+                sql = sql.where(ChatMessage.chat_id.not_in(exclude_chat_ids))
             if feedback == 'like':
                 count_stat = count_stat.where(ChatMessage.liked == 1)
                 sql = sql.where(ChatMessage.liked == 1)

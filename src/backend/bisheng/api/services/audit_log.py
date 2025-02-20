@@ -484,25 +484,21 @@ class AuditLogService:
         flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
         if not flag:
             return [], 0
-        exclude_flow_ids = []
+        exclude_chat_ids = []
+        filter_chat_ids = []
         if review_status:
             # 未审查状态的，目前的实现需要采用过滤的形式来搜索，目前在表里的都是未审查的
             if review_status == ReviewStatus.DEFAULT.value:
                 session_list = MessageSessionDao.filter_session()
-                exclude_flow_ids = [one.flow_id for one in session_list]
+                exclude_chat_ids = [one.chat_id for one in session_list]
             else:
                 session_list = MessageSessionDao.filter_session(review_status=[review_status])
                 if not session_list:
                     return [], 0
-                if filter_flow_ids:
-                    filter_flow_ids = list(set(filter_flow_ids) & set([one.flow_id for one in session_list]))
-                    if not filter_flow_ids:
-                        return [], 0
-                else:
-                    filter_flow_ids = [one.flow_id for one in session_list]
+                filter_chat_ids = [one.chat_id for one in session_list]
 
         res, total = MessageDao.app_list_group_by_chat_id(page_size, page, filter_flow_ids, user_ids, None, start_date,
-                                                          end_date, feedback, exclude_flow_ids)
+                                                          end_date, feedback, None, filter_chat_ids, exclude_chat_ids)
 
         res_users = []
         res_flows = []
@@ -668,7 +664,8 @@ class AuditLogService:
                                              flow_type=chat_flow_type,
                                              flow_name=chat_flow_name,
                                              user_id=chat_user_id,
-                                             create_time=chat_create_time)
+                                             create_time=chat_create_time,
+                                             review_status=session_status)
         MessageSessionDao.insert_one(message_session)
         logger.info(f"act=review_one_session_over chat_id={chat_id} all_message={all_message}")
         return
