@@ -46,7 +46,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
     description: str = Field(default='', description="工具类别的描述")
     server_host: Optional[str] = Field(default='', description="自定义工具的访问根地址，必须以http或者https开头")
     auth_method: Optional[int] = Field(default=0, description="工具类别的鉴权方式")
-    api_key: Optional[str] = Field(default='', description="工具鉴权的api_key",sa_column=Column(String(length=2048)))
+    api_key: Optional[str] = Field(default='', description="工具鉴权的api_key",sa_column=Column(String(length=2048)),max_length=1000)
     auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="工具鉴权的鉴权方式")
     is_preset: Optional[int] = Field(default=0, description="是否是预置工具类别")
     user_id: Optional[int] = Field(index=True, description='创建用户ID， null表示系统创建')
