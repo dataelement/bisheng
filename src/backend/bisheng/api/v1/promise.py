@@ -27,7 +27,9 @@ async def get_business_promise(request: Request, login_user: UserPayload = Depen
 @router.post('/business/user', response_model=UnifiedResponseModel)
 async def write_business_promise(request: Request, login_user: UserPayload = Depends(get_login_user),
                                  business_id: str = Body(..., embed=True, description='业务唯一标识'),
-                                 promise_id: str = Body(..., embed=True, description='文件ID')):
+                                 business_name: str = Body(..., embed=True, description='业务名称'),
+                                 promise_id: str = Body(..., embed=True, description='文件ID'),
+                                 promise_name: str = Body(..., embed=True, description='文件名称')):
     """ 用户签署承诺书 """
-    ret = PromiseService.user_write_promise(login_user, business_id, promise_id)
+    ret = PromiseService.user_write_promise(login_user, business_id, business_name, promise_id, promise_name)
     return resp_200(data=ret)

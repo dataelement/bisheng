@@ -28,6 +28,8 @@ class Promise(PromiseBase, table=True):
 class UserPromise(PromiseBase, table=True):
     """ 记录用户签署了哪些承诺书 """
     __tablename__ = 'user_promise'
+    business_name: str = Field(default=None, description='签署时的业务名称')
+    promise_name: str = Field(default=None, description='签署时的承诺书名称')
     user_id: str = Field(default=None, index=True, description='签署用户的唯一ID')
     user_name: str = Field(default=None, description='签署时用户的用户名')
 
