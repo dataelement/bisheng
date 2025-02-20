@@ -659,7 +659,12 @@ export async function setCommitmentApi(business_id: string, promise_id: string):
 
 // 获取应用的承诺书
 export async function getCommitmentApi(business_id: string): Promise<any> {
-  return await axios.get(`/api/v1/promise/business`, { params: { business_id } })
+  return await axios.get(`/api/v1/promise/business`, { params: { business_id } }).then(res => {
+    return res.map(item => {
+      item.write = item.promise_id ? item.write : true
+      return item
+    })
+  })
 }
 /***************************
  * ************ 溯源 ************ 

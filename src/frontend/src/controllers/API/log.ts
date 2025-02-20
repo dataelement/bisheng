@@ -1,5 +1,21 @@
 import axios from "../request";
 
+const paramsSerializer = (params) => {
+    return Object.keys(params)
+        .map(key => {
+            const value = params[key];
+            if (value === undefined) {
+                return null; // 只返回非undefined的值
+            }
+            if (Array.isArray(value)) {
+                return value.map(val => `${key}=${val}`).join('&');
+            }
+            return `${key}=${value}`;
+        })
+        .filter(item => item !== null) // 过滤掉值为null的项
+        .join('&');
+}
+
 // 获取操作过组下资源的所有用户
 export async function getOperatorsApi(): Promise<[]> {
     return await axios.get('/api/v1/audit/operators')
@@ -190,7 +206,10 @@ export async function updateChatAnalysisConfigApi(formData: { reviewEnabled: boo
 
 // 获取会话的统计数据
 export async function getChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
-    return await axios.get('/api/v1/audit/session/chart', { params })
+    return await axios.get('/api/v1/audit/session/chart', {
+        params,
+        paramsSerializer
+    })
 }
 
 // 获取报告下载链接
@@ -210,7 +229,9 @@ export async function getAuditAppListApi(params: {
     page,
     page_size
 }) {
-    return await axios.get('/api/v1/audit/session', { params })
+    return await axios.get('/api/v1/audit/session', {
+        params, paramsSerializer
+    })
 }
 
 

@@ -7,7 +7,7 @@ import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { locationContext } from '@/contexts/locationContext';
 import { userContext } from '@/contexts/userContext';
 import { getCommitmentApi, signCommitmentApi } from '@/controllers/API';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 
 const loadCommitments = async () => {
     try {
@@ -56,8 +56,12 @@ const CommitmentDialog = ({ id }) => {
             // 获取用户在当前应用是否已经签署过承诺 res
             const [data, res] = await Promise.all([loadCommitments(), getCommitmentApi(id)]);
             if (res.length === 0) return setFinished(true)
-            setFinished(res[0].write)
             const currentData = data.find(el => el.id === res[0].promise_id)
+            if (!currentData) {
+                console.error('未找到对应的承诺书')
+                return setFinished(true)
+            }
+            setFinished(res[0].write)
             setCommitmentsData(currentData);
             // 初始化checkedItems的长度与commitments长度一致
             if (currentData.commitments.length > 0) {
@@ -72,7 +76,7 @@ const CommitmentDialog = ({ id }) => {
     if (finished) return null;
 
     return (
-        <div className="absolute top-0 left-0 w-full h-full z-50 bg-[rgba(0,0,0,0.1)] flex items-center justify-center">
+        <div className="absolute top-0 left-0 w-full h-full z-20 bg-[rgba(0,0,0,0.1)] flex items-center justify-center">
             <div className="w-[660px] max-w-[80%] bg-background-login shadow-md p-6 rounded-md">
                 <div className="p-5 max-w-3xl mx-auto">
                     {/* 显示标题 */}
@@ -135,12 +139,15 @@ export const SelectCommitment = ({ value, onChange }) => {
     const { appConfig } = useContext(locationContext)
     const [options, setOptions] = useState([])
 
+    const _value = useMemo(() => value || 'x', [value])
+
     useEffect(() => {
         const fetchData = async () => {
             const data = await loadCommitments()
-            setOptions(data.map(el => ({ label: el.title, value: el.id })))
+            const _options = data.map(el => ({ label: el.title, value: el.id }))
+            setOptions([{ label: '无', value: 'x' }, ..._options])
             if (!value) {
-                onChange(data[0].id)
+                onChange('')
             }
         };
         appConfig.securityCommitment && options.length === 0 && fetchData();
@@ -148,7 +155,7 @@ export const SelectCommitment = ({ value, onChange }) => {
 
     if (!appConfig.securityCommitment) return null
 
-    return <Select value={value} onValueChange={(v) => onChange(v)}>
+    return <Select value={_value} onValueChange={(v) => onChange(v === 'x' ? '' : v)}>
         <SelectTrigger >
             <SelectValue />
         </SelectTrigger>

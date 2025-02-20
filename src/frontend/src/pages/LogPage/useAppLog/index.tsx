@@ -2,6 +2,7 @@ import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByA
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
+import { ThunmbIcon } from "@/components/bs-icons";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
@@ -52,6 +53,19 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         }
     }, [initFilter])
 
+    const resetClick = () => {
+        const param = {
+            appName: [],
+            userName: [],
+            userGroup: '',
+            dateRange: [],
+            feedback: '',
+            result: ''
+        }
+        setFilters(param)
+        filterData(param)
+    }
+
     const [showReviewResult, setShowReviewResult] = useState(true); // State to control the visibility of the review result column
     useEffect(() => {
         // On initial load, fetch the latest configuration and set it to formData
@@ -86,9 +100,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     // Function to determine the class based on review result
     const getResultClass = (result) => {
         switch (result) {
-            case 1: return 'text-green-500'; // 通过
-            case 2: return 'text-red-500';   // 违规
-            case 3: return 'text-gray-500';  // 未审查
+            case 1: return 'text-gray-500';  // 未审查
+            case 2: return 'text-green-500'; // 通过
+            case 3: return 'text-red-500';   // 违规
             case 4: return 'text-orange-500';// 审查失败
             default: return '';
         }
@@ -149,9 +163,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </SelectTrigger>
                             <SelectContent className="max-w-[200px] break-all">
                                 <SelectGroup>
-                                    <SelectItem value={'1'}>通过</SelectItem>
-                                    <SelectItem value={'2'}>违规</SelectItem>
-                                    <SelectItem value={'3'}>未审查</SelectItem>
+                                    <SelectItem value={'1'}>未审查</SelectItem>
+                                    <SelectItem value={'2'}>通过</SelectItem>
+                                    <SelectItem value={'3'}>违规</SelectItem>
                                     <SelectItem value={'4'}>审查失败</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
@@ -159,6 +173,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                     </div>
                     {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
                         {auditing && <LoadIcon className="mr-1" />}手动审查</Button>}
+                    <Button onClick={resetClick} variant="outline">重置</Button>
                 </div>
                 <Table>
                     <TableHeader>
@@ -167,6 +182,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead>{t('log.userName')}</TableHead>
                             <TableHead>{t('system.userGroup')}</TableHead>
                             <TableHead>{t('createTime')}</TableHead>
+                            <TableHead>{t('log.userFeedback')}</TableHead>
                             {showReviewResult && <TableHead>审查结果</TableHead>} {/* Conditionally render the review result column */}
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
@@ -181,12 +197,34 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>{el.user_groups.map(el => el.name).join(',')}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-
+                                <TableCell className="break-all flex gap-2">
+                                    <div className="text-center text-xs relative">
+                                        <ThunmbIcon
+                                            type='like'
+                                            className={`cursor-pointer ${el.like_count && 'text-primary hover:text-primary'}`}
+                                        />
+                                        <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
+                                    </div>
+                                    <div className="text-center text-xs relative">
+                                        <ThunmbIcon
+                                            type='unLike'
+                                            className={`cursor-pointer ${el.dislike_count && 'text-primary hover:text-primary'}`}
+                                        />
+                                        <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
+                                    </div>
+                                    <div className="text-center text-xs relative">
+                                        <ThunmbIcon
+                                            type='copy'
+                                            className={`cursor-pointer ${el.copied_count && 'text-primary hover:text-primary'}`}
+                                        />
+                                        <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
+                                    </div>
+                                </TableCell>
                                 {showReviewResult && (
                                     <TableCell className={getResultClass(el.review_status)}>
-                                        {el.review_status === 1 && '通过'}
-                                        {el.review_status === 2 && '违规'}
-                                        {el.review_status === 3 && '未审查'}
+                                        {el.review_status === 1 && '未审查'}
+                                        {el.review_status === 2 && '通过'}
+                                        {el.review_status === 3 && '违规'}
                                         {el.review_status === 4 && '审查失败'}
                                     </TableCell>
                                 )}

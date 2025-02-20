@@ -23,6 +23,7 @@ customAxios.interceptors.response.use(function (response) {
     }
     // 无权访问
     if (response.data.status_code === 403) {
+        console.error('无权接口', response.config.url);
         location.href = __APP_ENV__.BASE_URL + '/403'
         return Promise.reject(errorMessage);
     }
