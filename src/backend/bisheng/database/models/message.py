@@ -325,7 +325,7 @@ class ChatMessageDao(MessageBase):
         sql = select(
             ChatMessage.flow_id,
             func.min(ChatMessage.user_id),
-            func.count(ChatMessage.chat_id).label('session_num'),
+            func.count(func.distinct(ChatMessage.chat_id)).label('session_num'),
             func.sum(case((ChatMessage.category == 'question', 1), else_=0)).label('input_num'),
             func.sum(case((ChatMessage.category != 'question', 1), else_=0)).label('output_num'),
             func.sum(case((ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1), else_=0)).label(
