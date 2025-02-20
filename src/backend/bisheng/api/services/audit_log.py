@@ -614,7 +614,7 @@ class AuditLogService:
                 # 需要审查的消息, 内容为空的消息默认通过审查
                 message_content = one.message if one.message else one.intermediate_steps
                 if not message_content:
-                    update_pass_messages.append(one.id)
+                    update_pass_messages.append({'id': one.id})
                     continue
                 message_content_len += message_content.__len__()
                 message_list.append({
