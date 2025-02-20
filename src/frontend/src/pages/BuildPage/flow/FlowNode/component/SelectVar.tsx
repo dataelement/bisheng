@@ -75,6 +75,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
     const [vars, setVars] = useState([])
     const currentMenuRef = useRef(null)
     const getGlobalChild = (item) => {
+        console.log('111 :>> ', 111);
         // start节点 preset_question#0(中文)
         // input节点 key
         // agent xxx#0
@@ -108,6 +109,12 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                     _vars.push({
                         label: param.key,
                         value: param.key
+                    })
+                } else if (param.global === 'index') {
+                    _vars.push({
+                        param,
+                        label: `${param.key}`,
+                        value: `${param.key}`
                     })
                 } else if (param.global && param.global.indexOf('=') !== -1) {
                     const [key, value] = param.global.split('=')
