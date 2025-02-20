@@ -274,7 +274,10 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                     {t('processOrchestration')}
                 </Button>
                 <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
-                    onClick={() => { setTabType('api'); onTabChange('api') }}>
+                    onClick={() => {
+                        setTabType('api');
+                        onTabChange('api');
+                    }}>
                     {t('externalRelease')}
                 </Button>
             </div>
@@ -370,11 +373,12 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
             <ChatTest ref={testRef} />
             {/* 修改应用弹窗 flow&assistant */}
             <CreateApp ref={updateAppModalRef} onSave={(base) => {
-                f.name = base.name
-                f.description = base.description
-                f.logo = base.logo
-                setFlow({ ...f, ...base })
-                onlineWorkflow(f)
+                captureAndAlertRequestErrorHoc(onlineWorkflow(f).then(res => {
+                    f.name = base.name
+                    f.description = base.description
+                    f.logo = base.logo
+                    setFlow({ ...f, ...base })
+                }))
             }} />
             {/* 上线不可修改提示 */}
             <Dialog open={!!modelVersionId}>
@@ -426,7 +430,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </header>
+        </header >
     );
 };
 
@@ -658,7 +662,7 @@ const useVersion = (flow) => {
         versions,
         version,
         isOnlineVersion: version?.id === onlineVid,
-        isOnlineVersionFun: () => version.id === onlineVid,
+        isOnlineVersionFun: () => version?.id === onlineVid,
         lastVersionIndexRef,
         setCurrentVersion(versionId) {
             const currentV = versions.find(el => el.id === versionId)

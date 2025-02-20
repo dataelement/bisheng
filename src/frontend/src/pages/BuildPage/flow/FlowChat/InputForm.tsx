@@ -1,10 +1,11 @@
 import { Button } from "@/components/bs-ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import MultiSelect from "@/components/bs-ui/select/multi";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import InputComponent from "@/components/inputComponent";
 import InputFileComponent from "@/components/inputFileComponent";
 import { WorkflowNodeParam } from "@/types/flow";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const enum FormItemType {
@@ -22,7 +23,11 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
     }, {}))
 
     const handleChange = (item, value) => {
-        formDataRef.current[item.key].value = value
+        if (item.type === FormItemType.File) {
+            formDataRef.current[item.key].value = Array.isArray(value) ? value : [value]
+        } else {
+            formDataRef.current[item.key].value = value
+        }
     }
 
     const updataFileName = (item, fileName) => {
@@ -54,6 +59,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
         onSubmit([valuesObject, stringObject])
     }
 
+    const [multiVal, setMultiVal] = useState([])
     return <div className="flex flex-col gap-6 rounded-xl p-4 ">
         <div className="max-h-[520px] overflow-y-auto">
             {
@@ -77,20 +83,39 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                         )
                                     case FormItemType.Select:
                                         return (
-                                            <Select onValueChange={(val) => handleChange(item, val)}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectGroup>
-                                                        {item.options.map(el => (
-                                                            <SelectItem key={el.text} value={el.text}>
-                                                                {el.text}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectGroup>
-                                                </SelectContent>
-                                            </Select>
+                                            item.multiple ?
+                                                <MultiSelect
+                                                    multiple
+                                                    className={''}
+                                                    value={multiVal}
+                                                    options={
+                                                        item.options.map(el => ({
+                                                            label: el.text,
+                                                            value: el.text
+                                                        }))
+                                                    }
+                                                    placeholder={'请选择'}
+                                                    onChange={(v) => {
+                                                        setMultiVal(v);
+                                                        handleChange(item, v.join(','))
+                                                    }}
+                                                >
+                                                    {/* {children?.(reload)} */}
+                                                </MultiSelect>
+                                                : <Select onValueChange={(val) => handleChange(item, val)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            {item.options.map(el => (
+                                                                <SelectItem key={el.text} value={el.text}>
+                                                                    {el.text}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
                                         )
                                     case FormItemType.File:
                                         return (
@@ -99,6 +124,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                                 disabled={false}
                                                 placeholder={t('report.fileRequired')}
                                                 value={''}
+                                                multiple={item.multiple}
                                                 onChange={(name) => updataFileName(item, name)}
                                                 fileTypes={["png", "jpg", "jpeg", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "md", "html", "pdf"]}
                                                 suffixes={['xxx']}

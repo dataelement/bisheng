@@ -4,6 +4,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import useFlowStore from "../../flowStore";
 import NodeLogo from "../NodeLogo";
+import cloneDeep from "lodash-es/cloneDeep";
 
 const isMatch = (obj, expression) => {
     // 临时关闭 file类型表单变量
@@ -13,6 +14,28 @@ const isMatch = (obj, expression) => {
     const fn = new Function('value', `return ${expression}`);
     return fn(obj.value);
 };
+
+// 特殊结构提取变量
+const getSpecialVar = (obj, type) => {
+    switch (type) {
+        case 'item:form_input':
+            return obj.value.reduce((res, item) => {
+                if (item.type === 'file') {
+                    // res.push({ label: item.key, value: item.key })
+                    res.push({ label: item.file_content, value: item.file_content })
+                    res.push({ label: item.file_path, value: item.file_path })
+                } else {
+                    res.push({ label: item.key, value: item.key })
+                }
+                return res
+            }, [])
+        case 'item:input_list':
+            const param = cloneDeep(obj)
+            param.value = param.value.map(item => ({ label: item.value, value: item.key }))
+            return [{ param, label: obj.key, value: obj.key }]
+    }
+    return []
+}
 
 /**
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
@@ -69,24 +92,22 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                 if (param.global.indexOf('code') === 0) {
                     let result = isMatch(param, param.global.replace('code:', ''));
                     // 没值 key补
-                    if (!result.length && param.key === 'output') {
+                    if (!result.length && param.key.startsWith('output')) {
                         result = [{
                             label: param.key,
                             value: param.key
                         }]
                     }
                     _vars = [..._vars, ...result]
+                    // 特殊变量(getSpecialVar前端策略)
+                } else if (param.global.startsWith('item')) {
+                    const result = getSpecialVar(param, param.global)
+                    _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {
                     _vars.push({
                         label: param.key,
                         value: param.key
-                    })
-                } else if (param.global === 'index') {
-                    _vars.push({
-                        param,
-                        label: `${param.key}`,
-                        value: `${param.key}`
                     })
                 } else if (param.global && param.global.indexOf('=') !== -1) {
                     const [key, value] = param.global.split('=')
