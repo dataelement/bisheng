@@ -642,10 +642,10 @@ class AuditLogService:
                                                 session_status, '')
         if update_violations_messages:
             for one in update_violations_messages:
-                ChatMessageDao.update_review_status([one['id']], ReviewStatus.VIOLATIONS.value, json.dumps(one['reason'], ensure_ascii=False))
+                ChatMessageDao.update_review_status([one['id']], ReviewStatus.VIOLATIONS.value, ','.join(one['reason']))
         if update_failed_messages:
             for one in update_failed_messages:
-                ChatMessageDao.update_review_status([one['id']], ReviewStatus.FAILED.value, json.dumps(one['reason'], ensure_ascii=False))
+                ChatMessageDao.update_review_status([one['id']], ReviewStatus.FAILED.value, ','.join(one['reason']))
 
         # 更新会话的状态
         if update_violations_messages or old_violations_messages:
