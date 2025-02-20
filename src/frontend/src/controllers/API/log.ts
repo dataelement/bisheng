@@ -5,6 +5,11 @@ export async function getOperatorsApi(): Promise<[]> {
     return await axios.get('/api/v1/audit/operators')
 }
 
+// 获取用户所管理的用户组内的应用
+export async function getGroupsApi(params: { keyword, page, page_size }): Promise<[]> {
+    return await axios.get('/api/v1/group/manage/resources', { params })
+}
+
 // 分页获取审计列表
 export async function getLogsApi({ page, pageSize, userIds, groupId = '', start, end, moduleId = '', action = '' }: {
     page: number,
@@ -153,8 +158,7 @@ export async function getMarkStatusApi({ chat_id, task_id }) {
 
 // 获取会话分析策略配置
 export async function getChatAnalysisConfigApi(): Promise<any> {
-    return await axios.get('/api/v1/chat/analysis').then(res => {
-        console.log('res :>> ', res);
+    return await axios.get('/api/v1/audit/session/config').then(res => {
         const formData = {
             reviewEnabled: res.flag,          // Map flag to reviewEnabled
             reviewKeywords: res.prompt,      // Map prompt to reviewKeywords
@@ -181,5 +185,44 @@ export async function updateChatAnalysisConfigApi(formData: { reviewEnabled: boo
         hour_cron: formData.reviewTime,      // Map reviewTime to hour_cron
     };
 
-    return await axios.post('/api/v1/mark/mark', backendData)
+    return await axios.post('/api/v1/audit/session/config', backendData)
+}
+
+// 获取会话的统计数据
+export async function getChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
+    return await axios.get('/api/v1/audit/session/chart', { params })
+}
+
+// 获取报告下载链接
+export async function getReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
+    return await axios.get('/api/v1/audit/session/chart/export', { params })
+}
+
+// 获取审计应用列表
+export async function getAuditAppListApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status,
+    page,
+    page_size
+}) {
+    return await axios.get('/api/v1/audit/session', { params })
+}
+
+
+// 手动审查应用使用情况
+export async function auditApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status
+}): Promise<[]> {
+    return await axios.get('/api/v1/audit/session/review', { params })
 }

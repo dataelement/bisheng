@@ -96,7 +96,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                     <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
                 </div>
             </div>
-            <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4"/> 违规情况: 泄露天机</Badge>
+            {data.review_status === 2 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
                     {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">

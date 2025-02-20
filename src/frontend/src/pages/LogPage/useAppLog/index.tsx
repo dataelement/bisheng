@@ -1,26 +1,36 @@
-import { useState, useEffect } from "react";
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
 import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUser from "@/components/bs-comp/filterTableDataComponent/FilterByUser";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
-import { ThunmbIcon } from "@/components/bs-icons";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { SearchInput } from "@/components/bs-ui/input";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { getChatLabelsApi } from "@/controllers/API/log";
+import { auditApi, getAuditAppListApi, getChatAnalysisConfigApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { Button } from "@/components/bs-ui/button";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { getStrTime } from "../StatisticsReport";
 
-export default function AppUseLog() {
+export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
-    const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) =>
-        getChatLabelsApi(param).then(res => ({ ...res, data: res.list }))
-    );
+    const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
+        const [start_date, end_date] = getStrTime(param.dateRange || [])
+        return getAuditAppListApi({
+            page: page,
+            page_size: param.pageSize,
+            flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
+            user_ids: param.userName?.[0] || undefined,
+            group_ids: param.userGroup || undefined,
+            start_date,
+            end_date,
+            feedback: param.feedback || undefined,
+            review_status: param.result || undefined,
+        })
+    });
 
     const [filters, setFilters] = useState({
         appName: [],
@@ -30,8 +40,25 @@ export default function AppUseLog() {
         feedback: '',
         result: ''
     });
+    useEffect(() => {
+        if (initFilter) {
+            setFilters({
+                ...filters,
+                appName: [{ label: initFilter.name, value: initFilter.flow_id }],
+                userGroup: initFilter.group_info[0].id,
+                result: '2'
+            })
+            clearFilter()
+        }
+    }, [initFilter])
 
     const [showReviewResult, setShowReviewResult] = useState(true); // State to control the visibility of the review result column
+    useEffect(() => {
+        // On initial load, fetch the latest configuration and set it to formData
+        getChatAnalysisConfigApi().then(config => {
+            setShowReviewResult(config.reviewEnabled);
+        });
+    }, []);
 
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
@@ -59,21 +86,32 @@ export default function AppUseLog() {
     // Function to determine the class based on review result
     const getResultClass = (result) => {
         switch (result) {
-            case 'a': return 'text-green-500'; // 通过
-            case 'b': return 'text-red-500';   // 违规
-            case 'c': return 'text-gray-500';  // 未审查
-            case 'd': return 'text-orange-500';// 审查失败
+            case 1: return 'text-green-500'; // 通过
+            case 2: return 'text-red-500';   // 违规
+            case 3: return 'text-gray-500';  // 未审查
+            case 4: return 'text-orange-500';// 审查失败
             default: return '';
         }
     };
 
+    const [auditing, setAuditing] = useState(false);
     const handleRunClick = () => {
         bsConfirm({
             title: t('prompt'),
             desc: '会话批量审查可能需要较长耗时，确认进行审查？',
             okTxt: t('confirm'),
             onOk(next) {
-                // filters
+                const [start_date, end_date] = getStrTime(filters.dateRange || [])
+                setAuditing(true)
+                auditApi({
+                    flow_ids: filters.appName?.map(el => el.value) || undefined,
+                    user_ids: filters.userName?.[0] || undefined,
+                    group_ids: filters.userGroup || undefined,
+                    start_date,
+                    end_date,
+                    feedback: filters.feedback || undefined,
+                    review_status: filters.result || undefined,
+                })
                 next()
             }
         })
@@ -97,29 +135,30 @@ export default function AppUseLog() {
                             </SelectTrigger>
                             <SelectContent className="max-w-[200px] break-all">
                                 <SelectGroup>
-                                    <SelectItem value={'a'}>赞</SelectItem>
-                                    <SelectItem value={'b'}>踩</SelectItem>
-                                    <SelectItem value={'c'}>复制</SelectItem>
+                                    <SelectItem value={'like'}>赞</SelectItem>
+                                    <SelectItem value={'dislike'}>踩</SelectItem>
+                                    <SelectItem value={'copied'}>复制</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
                     </div>
                     <div className="w-[200px] relative">
-                        <Select onValueChange={(value) => handleFilterChange('result', value)}>
+                        <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="审查结果" />
                             </SelectTrigger>
                             <SelectContent className="max-w-[200px] break-all">
                                 <SelectGroup>
-                                    <SelectItem value={'a'}>通过</SelectItem>
-                                    <SelectItem value={'b'}>违规</SelectItem>
-                                    <SelectItem value={'c'}>未审查</SelectItem>
-                                    <SelectItem value={'d'}>审查失败</SelectItem>
+                                    <SelectItem value={'1'}>通过</SelectItem>
+                                    <SelectItem value={'2'}>违规</SelectItem>
+                                    <SelectItem value={'3'}>未审查</SelectItem>
+                                    <SelectItem value={'4'}>审查失败</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
                     </div>
-                    <Button onClick={handleRunClick}>手动审查</Button>
+                    {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
+                        {auditing && <LoadIcon className="mr-1" />}手动审查</Button>}
                 </div>
                 <Table>
                     <TableHeader>
@@ -140,15 +179,15 @@ export default function AppUseLog() {
                                     <div className=" truncate-multiline">{el.flow_name}</div>
                                 </TableCell>
                                 <TableCell>{el.user_name}</TableCell>
-                                <TableCell>{el.user_name}</TableCell>
+                                <TableCell>{el.user_groups.map(el => el.name).join(',')}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
 
                                 {showReviewResult && (
-                                    <TableCell className={getResultClass('b')}>
-                                        {el.review_result === 'a' && '通过'}
-                                        {'b' === 'b' && '违规'}
-                                        {el.review_result === 'c' && '未审查'}
-                                        {el.review_result === 'd' && '审查失败'}
+                                    <TableCell className={getResultClass(el.review_status)}>
+                                        {el.review_status === 1 && '通过'}
+                                        {el.review_status === 2 && '违规'}
+                                        {el.review_status === 3 && '未审查'}
+                                        {el.review_status === 4 && '审查失败'}
                                     </TableCell>
                                 )}
 

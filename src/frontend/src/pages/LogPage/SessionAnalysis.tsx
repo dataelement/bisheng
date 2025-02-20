@@ -94,7 +94,7 @@ export default function SessionAnalysisStrategy({ onBack }) {
             ...prev,
             reviewFrequency: val,
             reviewTime: val === 'daily' ? '09:00' : prev.reviewTime,
-            reviewDay: val === 'weekly' ? 'Monday' : prev.reviewDay,
+            reviewDay: val === 'weekly' ? 'Mon' : prev.reviewDay,
         }));
     };
 
@@ -156,13 +156,13 @@ export default function SessionAnalysisStrategy({ onBack }) {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectGroup>
-                                                <SelectItem value="Monday">周一</SelectItem>
-                                                <SelectItem value="Tuesday">周二</SelectItem>
-                                                <SelectItem value="Wednesday">周三</SelectItem>
-                                                <SelectItem value="Thursday">周四</SelectItem>
-                                                <SelectItem value="Friday">周五</SelectItem>
-                                                <SelectItem value="Saturday">周六</SelectItem>
-                                                <SelectItem value="Sunday">周日</SelectItem>
+                                                <SelectItem value="Mon">周一</SelectItem>
+                                                <SelectItem value="Tue">周二</SelectItem>
+                                                <SelectItem value="Wed">周三</SelectItem>
+                                                <SelectItem value="Thu">周四</SelectItem>
+                                                <SelectItem value="Fri">周五</SelectItem>
+                                                <SelectItem value="Sat">周六</SelectItem>
+                                                <SelectItem value="Sun">周日</SelectItem>
                                             </SelectGroup>
                                         </SelectContent>
                                     </Select>

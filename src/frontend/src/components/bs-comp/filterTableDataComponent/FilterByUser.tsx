@@ -44,7 +44,7 @@ const useUsers = () => {
     // Search users from the API
     const searchUser = async (name: string) => {
         try {
-            const res = await getOperatorsApi({ search: name });
+            const res = await getOperatorsApi({ keyword: name });
             const options = res.map((u: any) => ({
                 label: u.user_name,
                 value: u.user_id,

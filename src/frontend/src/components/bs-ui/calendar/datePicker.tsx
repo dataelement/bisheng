@@ -15,7 +15,8 @@ import { cname } from "../utils"
 export function DatePicker({
     value,
     placeholder = '',
-    onChange
+    onChange,
+    ...props
 }) {
     const [date, setDate] = React.useState<Date>(value)
 
@@ -37,7 +38,7 @@ export function DatePicker({
                         !date && "text-muted-foreground"
                     )}
                 >
-                    <CalendarDays className="mr-2 h-4 w-4" />
+                    <CalendarDays {...props} className="mr-2 h-4 w-4" />
                     {dateStr || <span>{placeholder}</span>}
                 </Button>
             </PopoverTrigger>

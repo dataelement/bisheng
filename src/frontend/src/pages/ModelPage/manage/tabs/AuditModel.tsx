@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModelSelect } from "./KnowledgeModel";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { setAuditDefaultModel, updateAuditDefaultModel } from "@/controllers/API/finetune";
 
 export default function AuditModelConfig({ llmOptions, onBack }) {
     const { t } = useTranslation('model')
@@ -15,10 +16,10 @@ export default function AuditModelConfig({ llmOptions, onBack }) {
 
     useEffect(() => {
         setLoading(true);
-        // getAuditModelConfig().then(res => {
-        //     setSelectedModel(res.model_id);
-        setLoading(false);
-        // });
+        setAuditDefaultModel().then(res => {
+            setSelectedModel(res.model_id);
+            setLoading(false);
+        });
     }, []);
 
     const { message } = useToast();
@@ -30,9 +31,9 @@ export default function AuditModelConfig({ llmOptions, onBack }) {
         const data = {
             model_id: selectedModel
         };
-        // captureAndAlertRequestErrorHoc(updateAuditModelConfig(data).then(res => {
-        //     message({ variant: 'success', description: t('model.saveSuccess') });
-        // }));
+        captureAndAlertRequestErrorHoc(updateAuditDefaultModel(data).then(res => {
+            message({ variant: 'success', description: t('model.saveSuccess') });
+        }));
     };
 
     if (loading) return (
@@ -44,7 +45,7 @@ export default function AuditModelConfig({ llmOptions, onBack }) {
     return (
         <div className="max-w-[520px] mx-auto">
             <div className="mt-10">
-                <Label className="bisheng-label">{t('model.auditModel')}<span className="text-red-500 text-xs">*</span></Label>
+                {/* <Label className="bisheng-label">{t('model.auditModel')}<span className="text-red-500 text-xs">*</span></Label> */}
                 <Label className="bisheng-label">违规审查模型<span className="text-red-500 text-xs">*</span></Label>
                 <ModelSelect
                     label={''}

@@ -1,9 +1,8 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getOperatorsApi } from "@/controllers/API/log";
-import { useState, useRef } from "react";
-
+import { getGroupsApi } from "@/controllers/API/log";
+import { useRef, useState } from "react";
 export default function FilterByApp({ value, onChange }) {
-    const { apps, loadApps, searchApp } = useApps();
+    const { apps, loadApps, searchApp, loadMoreApps } = useApps();
 
     return (
         <div className="w-[200px] relative">
@@ -15,6 +14,7 @@ export default function FilterByApp({ value, onChange }) {
                 placeholder="应用名称"
                 onLoad={loadApps}
                 onSearch={searchApp}
+                onScrollLoad={loadMoreApps}
                 onChange={onChange}
             />
         </div>
@@ -23,43 +23,49 @@ export default function FilterByApp({ value, onChange }) {
 
 const useApps = () => {
     const [apps, setApps] = useState<any[]>([]);
-    const appRef = useRef<any[]>([]);
+    const [page, setPage] = useState(1);
+    const hasMoreRef = useRef(true);
 
     // Load apps from the API and store in state
-    const loadApps = async () => {
+    const loadApps = async (name: string) => {
         try {
-            const res = await getOperatorsApi();
-            const options = res.map((a: any) => ({
-                label: a.app_name, // Changed to 'app_name'
-                value: a.app_id,   // Changed to 'app_id'
+            const res = await getGroupsApi({ keyword: name, page: 1, page_size: 50 });
+            const options = res.data.map((a: any) => ({
+                label: a.name,
+                value: a.id,
             }));
-            appRef.current = options;
             setApps(options);
+            setPage(1);
+            hasMoreRef.current = res.data.length > 0;
         } catch (error) {
             console.error("Error loading apps:", error);
             // Optionally, you can set apps to an empty array or show an error message
         }
     };
 
-    // Search apps from the API
-    const searchApp = async (name: string) => {
+    // Load more apps when scrolling
+    const loadMoreApps = async () => {
+        if (!hasMoreRef.current) return;
+
         try {
-            const res = await getOperatorsApi({ search: name });
-            const options = res.map((a: any) => ({
-                label: a.app_name, // Changed to 'app_name'
-                value: a.app_id,   // Changed to 'app_id'
+            const nextPage = page + 1;
+            const res = await getGroupsApi({ page: nextPage, page_size: 10 });
+            const options = res.data.map((a: any) => ({
+                label: a.name,
+                value: a.id,
             }));
-            appRef.current = options;
-            setApps(options);
+            setApps((prevApps) => [...prevApps, ...options]);
+            setPage(nextPage);
+            hasMoreRef.current = res.data.length > 0;
         } catch (error) {
-            console.error("Error searching apps:", error);
-            // Optionally, handle the error by clearing the list or showing a message
+            console.error("Error loading more apps:", error);
         }
     };
 
     return {
         apps,
         loadApps,
-        searchApp,
+        searchApp: loadApps,
+        loadMoreApps
     };
 };

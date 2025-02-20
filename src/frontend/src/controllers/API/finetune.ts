@@ -193,6 +193,18 @@ export async function setLlmDefaultModel(data: { model_id: string }): Promise<an
 export async function getLlmDefaultModel(): Promise<any> {
     return await axios.get(`/api/v1/llm/workflow`)
 }
+/**
+ * 审计默认模型
+ */
+export async function setAuditDefaultModel(): Promise<any> {
+    return await axios.get(`/api/v1/llm/audit`)
+}
+/**
+ * 更新审计默认模型
+ */
+export async function updateAuditDefaultModel(data: { model_id: string }): Promise<any> {
+    return await axios.post(`/api/v1/llm/audit`, data)
+}
 
 // 获取助手模型可选列表
 export const getAssistantModelList = async (): Promise<any> => {

@@ -16,11 +16,12 @@ export default function Index() {
         setShowPage(page);
     };
 
+    const [reportFilter, setReportFilter] = useState(null)
     if (showPage === 'sessionAnalysis') {
         return <SessionAnalysis onBack={() => setShowPage(null)} />;
     }
     if (showPage === 'statisticsReport') {
-        return <StatisticsReport onBack={() => setShowPage(null)}/>;
+        return <StatisticsReport onBack={() => setShowPage(null)} onJump={setReportFilter}/>;
     }
 
     return (
@@ -52,7 +53,7 @@ export default function Index() {
                     <TabsTrigger value="system">{t('log.systemOperations')}</TabsTrigger>
                 </TabsList>
                 <TabsContent value="app">
-                    <AppUseLog />
+                    <AppUseLog initFilter={reportFilter} clearFilter={() => setReportFilter(null)} />
                 </TabsContent>
                 <TabsContent value="system">
                     <SystemLog />

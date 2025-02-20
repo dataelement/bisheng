@@ -1,17 +1,15 @@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { getUserGroupsApi } from "@/controllers/API/user";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function FilterByUsergroup({ value, onChange }) {
     const { t } = useTranslation()
     const { groups, loadData } = useGroups()
-
-
     return <div className="w-[200px] relative">
-        <Select onOpenChange={loadData} value={value} onValueChange={onChange}>
+        <Select value={value} onValueChange={onChange}>
             <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="用户组" />
+                {value ? <span>{groups.find(g => g.id == value)?.group_name}</span> : <SelectValue placeholder="用户组" />}
             </SelectTrigger>
             <SelectContent className="max-w-[200px] break-all">
                 <SelectGroup>
@@ -28,5 +26,9 @@ const useGroups = () => {
     const loadData = () => {
         getUserGroupsApi().then((res: any) => setGroups(res.records))
     }
+
+    useEffect(() => {
+        loadData()
+    }, [])
     return { groups, loadData }
 }

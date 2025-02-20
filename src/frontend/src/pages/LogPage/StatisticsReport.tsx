@@ -6,70 +6,85 @@ import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { ArrowLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { getChatStatisticsApi, getReportDownloadLinkApi } from "@/controllers/API/log";
+import { useTable } from "@/util/hook";
+import { downloadFile, formatDate } from "@/util/utils";
+import { ArrowLeft, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { useState } from "react";
 
-export default function StatisticsReport({ onBack }) {
-    const [filters, setFilters] = useState({
-        userGroup: '',
-        appName: '',
-        dateRange: [],  // TODO 默认值  -7  -1
-    });
-    const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [total, setTotal] = useState(0);
-    const [page, setPage] = useState(1);
-    const [pageSize] = useState(20);
-    const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
+export const getStrTime = (date) => {
+    const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
+    const end_date = date[1] && (formatDate(date[1], 'yyyy-MM-dd') + ' 23:59:59')
+    return [start_date, end_date]
+}
 
-    useEffect(() => {
-        fetchReportData();
-    }, [filters, page, sortConfig]);
-
-    const fetchReportData = async () => {
-        setLoading(true);
-        const params = {
-            ...filters,
-            page,
-            pageSize,
-            sortKey: sortConfig.key,
-            sortDirection: sortConfig.direction
-        };
-        const res = await getStatisticsReportData(params);
-        setData(res.data);
-        setTotal(res.total);
-        setLoading(false);
-    };
-
-    const handleSearch = () => {
-        setPage(1);
-        fetchReportData();
-    };
-
-    const handleReset = () => {
-        setFilters({
+export default function StatisticsReport({ onBack, onJump }) {
+    const [filters, setFilters] = useState(() => {
+        const now = new Date();
+        const now2 = new Date();
+        return {
             userGroup: '',
-            appName: '',
-            startDate: '',
-            endDate: ''
-        });
-        setPage(1);
-        fetchReportData();
+            appName: [],
+            dateRange: [new Date(now.setDate(now.getDate() - 7)), new Date(now2.setDate(now2.getDate() - 1))],
+        }
+    });
+
+
+    const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
+    const { page, pageSize, data: datalist, loading, total, setPage, reload, filterData } = useTable({}, (param) => {
+        const [start_date, end_date] = getStrTime(filters.dateRange)
+        return getChatStatisticsApi({
+            flow_ids: filters.appName.map(el => el.value),
+            group_ids: filters.userGroup || undefined,
+            start_date,
+            end_date,
+            page: param.page,
+            page_size: param.pageSize,
+            order_field: sortConfig.key,
+            order_type: sortConfig.direction
+        })
+    });
+
+    const handleSearch = (params) => {
+        setSortConfig({ key: '', direction: 'asc' });
+        reload();
+    }
+    const handleReset = () => {
+        setSortConfig({ key: '', direction: 'asc' });
+        setFilters(() => {
+            const now = new Date();
+            const now2 = new Date();
+            return {
+                userGroup: '',
+                appName: [],
+                dateRange: [new Date(now.setDate(now.getDate() - 7)), new Date(now2.setDate(now2.getDate() - 1))],
+            }
+        })
+        setTimeout(reload, 0);
     };
 
     const handleExport = () => {
-        // TODO 导出excle
-        exportStatisticsReport(filters).then(() => {
-            // handle success or show toast
-        });
+        const [start_date, end_date] = getStrTime(filters.dateRange)
+        const params = {
+            flow_ids: filters.appName.map(el => el.value),
+            group_ids: filters.userGroup || undefined,
+            start_date,
+            end_date,
+        };
+        getReportDownloadLinkApi(params).then(res => {
+            downloadFile(res.url, '统计报表.xlsx')
+        })
     };
 
     const handleSort = (column) => {
         let direction = 'asc';
-        if (sortConfig.key === column && sortConfig.direction === 'asc') {
-            direction = 'desc';
+        if (sortConfig.key === column) {
+            direction = sortConfig.direction === 'asc' ? 'desc' : 'asc'; // Toggle direction
+        } else {
+            direction = 'asc'; // Default to ascending for new column
         }
-        setSortConfig({ key: column, direction });
+        setSortConfig({ key: column, direction }); // Set the current column and direction
+        setTimeout(reload, 0);
     };
 
     return (
@@ -90,7 +105,7 @@ export default function StatisticsReport({ onBack }) {
                 <div className="flex flex-wrap gap-4 mb-6">
                     <FilterByApp value={filters.appName} onChange={(value) => setFilters({ ...filters, appName: value })} />
                     <FilterByUsergroup value={filters.userGroup} onChange={(value) => setFilters({ ...filters, userGroup: value })} />
-                    <FilterByDate value={filters.dateRange} onChange={(value) => setFilters({ ...filters, dateRange: [] })} />
+                    <FilterByDate value={filters.dateRange} onChange={(value) => setFilters({ ...filters, dateRange: value })} />
 
                     <div className="flex gap-4">
                         <Button onClick={handleSearch}>查询</Button>
@@ -105,29 +120,58 @@ export default function StatisticsReport({ onBack }) {
                         <TableRow>
                             <TableHead>用户组</TableHead>
                             <TableHead>应用名称</TableHead>
-                            <TableHead onClick={() => handleSort('sessionCount')}>会话数</TableHead>
-                            <TableHead onClick={() => handleSort('userInputCount')}>用户输入消息数</TableHead>
+                            <TableHead onClick={() => handleSort('session_num')}>
+                                <div className="flex items-center gap-x-1">
+                                    会话数
+                                    {sortConfig.key === 'session_num' ? (
+                                        <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
+                                    ) : (
+                                        <ChevronsUpDown size={18} />
+                                    )}
+                                </div>
+                            </TableHead>
+                            <TableHead onClick={() => handleSort('input_num')}>
+                                <div className="flex items-center gap-x-1">
+                                    用户输入消息数
+                                    {sortConfig.key === 'input_num' ? (
+                                        <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
+                                    ) : (
+                                        <ChevronsUpDown size={18} />
+                                    )}
+                                </div>
+                            </TableHead>
                             <TableHead>应用输出消息数</TableHead>
-                            <TableHead onClick={() => handleSort('violationCount')}>违规消息数</TableHead>
+                            <TableHead onClick={() => handleSort('violations_num')}>
+                                <div className="flex items-center gap-x-1">
+                                    违规消息数
+                                    {sortConfig.key === 'violations_num' ? (
+                                        <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
+                                    ) : (
+                                        <ChevronsUpDown size={18} />
+                                    )}
+                                </div>
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
 
                     <TableBody>
-                        {data.length === 0 ? (
+                        {datalist.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={6} className="text-center">暂无数据</TableCell>
                             </TableRow>
                         ) : (
-                            data.map((row, idx) => (
+                            datalist.map((row, idx) => (
                                 <TableRow key={idx}>
-                                    <TableCell>{row.userGroup}</TableCell>
-                                    <TableCell>{row.appName}</TableCell>
-                                    <TableCell>{row.sessionCount}</TableCell>
-                                    <TableCell>{row.userInputCount}</TableCell>
-                                    <TableCell>{row.appOutputCount}</TableCell>
+                                    <TableCell>{row.group_info.map(el => el.group_name).join(',')}</TableCell>
+                                    <TableCell>{row.name}</TableCell>
+                                    <TableCell>{row.session_num}</TableCell>
+                                    <TableCell>{row.input_num}</TableCell>
+                                    <TableCell>{row.output_num}</TableCell>
                                     <TableCell>
-                                        {/* TODO 跳转到上一页,填充应用 用户名 违规,然后查询 */}
-                                        <a href="#">{row.violationCount}</a>
+                                        <a className="cursor-pointer" onClick={() => {
+                                            onJump(row)
+                                            onBack()
+                                        }}>{row.violations_num}</a>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -149,35 +193,7 @@ export default function StatisticsReport({ onBack }) {
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
 
-
-
-const mockData = [
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 1', appName: '应用 A', sessionCount: 150, userInputCount: 2000, appOutputCount: 1800, violationCount: 20 },
-    { userGroup: '用户组 2', appName: '应用 B', sessionCount: 100, userInputCount: 1200, appOutputCount: 1100, violationCount: 5 }
-];
-
-export const getStatisticsReportData = async (params) => {
-    // Simulate an API call
-    return {
-        data: mockData,
-        total: mockData.length
-    };
-};
-
-export const exportStatisticsReport = async (filters) => {
-    console.log('Exporting data with filters:', filters);
-    return true;
-};
