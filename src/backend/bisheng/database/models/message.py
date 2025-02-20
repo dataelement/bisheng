@@ -96,6 +96,7 @@ class MessageDao(MessageBase):
             page_num: int,
             flow_ids: Optional[list[str]] = None,
             user_ids: Optional[list[int]] = None,
+            mark_user_ids: Optional[list[int]] = None,
             start_date: datetime = None,
             end_date: datetime = None,
             feedback: str = None,
@@ -112,20 +113,22 @@ class MessageDao(MessageBase):
             if flow_ids:
                 count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
                 sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
-            if user_ids:
+            if mark_user_ids:
                 count_stat = count_stat.where(or_(
-                    ChatMessage.mark_user.in_(user_ids),
+                    ChatMessage.mark_user.in_(mark_user_ids),
                     ChatMessage.mark_status == 1,
                 ))
-                sql = sql.where(or_(ChatMessage.mark_user.in_(user_ids),
+                sql = sql.where(or_(ChatMessage.mark_user.in_(mark_user_ids),
                                     ChatMessage.mark_status == 1))
-            if start_date and end_date:
-                count_stat = count_stat.where(ChatMessage.create_time >= start_date).where(
-                    ChatMessage.create_time <= end_date
-                )
-                sql = sql.where(ChatMessage.create_time >= start_date).where(
-                    ChatMessage.create_time <= end_date
-                )
+            if user_ids:
+                count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
+                sql = sql.where(ChatMessage.user_id.in_(user_ids))
+            if start_date:
+                count_stat = count_stat.where(ChatMessage.create_time >= start_date)
+                sql = sql.where(ChatMessage.create_time >= start_date)
+            if end_date:
+                count_stat = count_stat.where(ChatMessage.create_time <= end_date)
+                sql = sql.where(ChatMessage.create_time <= end_date)
             if feedback == 'like':
                 count_stat = count_stat.where(ChatMessage.liked == 1)
                 sql = sql.where(ChatMessage.liked == 1)
@@ -331,9 +334,12 @@ class ChatMessageDao(MessageBase):
         if flow_ids:
             sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
             count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
-        if start_date and end_date:
-            sql = sql.where(ChatMessage.create_time > start_date, ChatMessage.create_time < end_date)
-            count_stat = count_stat.where(ChatMessage.create_time > start_date, ChatMessage.create_time < end_date)
+        if start_date:
+            sql = sql.where(ChatMessage.create_time >= start_date)
+            count_stat = count_stat.where(ChatMessage.create_time >= start_date)
+        if end_date:
+            sql = sql.where(ChatMessage.create_time <= end_date)
+            count_stat = count_stat.where(ChatMessage.create_time <= end_date)
 
         sql = sql.group_by(ChatMessage.flow_id)
         if order_field and order_type:

@@ -423,7 +423,7 @@ class AuditLogService:
                 'hour': hour,
                 'minute': minute
             }
-            if day_of_week:=data.get_celery_crontab_week() is not None:
+            if day_of_week := data.get_celery_crontab_week() is not None:
                 schedule['day_of_week'] = day_of_week
             beat_task = RedBeatSchedulerEntry(name='review_session_message',
                                               task='bisheng.worker.audit.tasks.review_session_message',
@@ -456,7 +456,10 @@ class AuditLogService:
         # 获取分组下所有的应用ID
         group_flows = []
         if group_admins:
-            group_flows = GroupResourceDao.get_groups_resource(group_admins)
+            group_flows = GroupResourceDao.get_groups_resource(group_admins,
+                                                               resource_types=[ResourceTypeEnum.FLOW,
+                                                                               ResourceTypeEnum.WORK_FLOW,
+                                                                               ResourceTypeEnum.ASSISTANT])
             # 用户管理下的用户组没有资源
             if not group_flows:
                 return False, []
@@ -497,7 +500,7 @@ class AuditLogService:
                 else:
                     filter_flow_ids = [one.flow_id for one in session_list]
 
-        res, total = MessageDao.app_list_group_by_chat_id(page_size, page, filter_flow_ids, user_ids, start_date,
+        res, total = MessageDao.app_list_group_by_chat_id(page_size, page, filter_flow_ids, user_ids, None, start_date,
                                                           end_date, feedback, exclude_flow_ids)
 
         res_users = []

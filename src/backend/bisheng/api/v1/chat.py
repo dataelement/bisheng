@@ -141,7 +141,7 @@ def get_app_chat_list(*,
     res, count = MessageDao.app_list_group_by_chat_id(page_size=page_size,
                                                       page_num=page_num,
                                                       flow_ids=flow_ids,
-                                                      user_ids=user_ids)
+                                                      mark_user_ids=user_ids)
     # 补齐中文
     user_ids = [one.get('user_id') for one in res]
     flow_ids = [one.get('flow_id') for one in res]
