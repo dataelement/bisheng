@@ -89,6 +89,9 @@ class BaseNode(ABC):
         """ 返回用户需要输入的表单描述信息 """
         return None
 
+    def get_milvus_collection_name(self, embedding_model_id: str) -> str:
+        return f"{self.tmp_collection_name}_{embedding_model_id}"
+
     def handle_input(self, user_input: dict) -> Any:
         # 将用户输入的数据更新到节点数里
         self.node_params.update(user_input)

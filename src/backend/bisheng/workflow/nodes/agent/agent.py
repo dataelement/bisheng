@@ -133,7 +133,7 @@ class AgentNode(BaseNode):
                 vector_client = self.init_knowledge_milvus(knowledge_info)
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
-                file_metadata = self.graph_state.get_variable_by_str(f'{knowledge_id}_file_metadata')
+                file_metadata = self.graph_state.get_variable_by_str(f'{knowledge_id}')
                 if not file_metadata:
                     raise Exception(f'未找到对应的临时文件数据：{knowledge_id}')
 
@@ -174,7 +174,7 @@ class AgentNode(BaseNode):
             raise Exception('没有配置默认的embedding模型')
         file_ids = [file_metadata['file_id']]
         params = {
-            'collection_name': self.tmp_collection_name,
+            'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
             'partition_key': self.workflow_id,
             'embedding': embeddings,
             'metadata_expr': f'file_id in {file_ids}'

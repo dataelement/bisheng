@@ -192,14 +192,14 @@ class RagNode(BaseNode):
                 raise Exception('没有配置默认的embedding模型')
             file_ids = []
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
+                file_metadata = self.graph_state.get_variable_by_str(f'{one}')
                 if not file_metadata:
                     raise Exception(f'未找到对应的临时文件数据：{one}')
                 file_ids.append(file_metadata['file_id'])
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'
             params = {
-                'collection_name': self.tmp_collection_name,
+                'collection_name': self.get_milvus_collection_name(getattr(embeddings, 'model_id')),
                 'partition_key': self.workflow_id,
                 'embedding': embeddings,
                 'metadata_expr': f'file_id in {file_ids}'
@@ -223,7 +223,7 @@ class RagNode(BaseNode):
         else:
             file_ids = []
             for one in self._knowledge_value:
-                file_metadata = self.graph_state.get_variable_by_str(f'{one}_file_metadata')
+                file_metadata = self.graph_state.get_variable_by_str(f'{one}')
                 file_ids.append(file_metadata['file_id'])
             node_type = 'ElasticKeywordsSearch'
             params = {
