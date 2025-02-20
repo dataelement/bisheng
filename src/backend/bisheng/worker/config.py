@@ -9,3 +9,5 @@ timezone = 'Asia/Shanghai'
 enable_utc = False
 beat_scheduler = 'redbeat.RedBeatScheduler'
 redbeat_redis_url = settings.celery_redis_url
+redbeat_lock_key = None
+redbeat_lock_timeout = 10
