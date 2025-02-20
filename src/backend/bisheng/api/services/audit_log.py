@@ -436,6 +436,7 @@ class AuditLogService:
     @classmethod
     def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str]) -> (bool, List):
         """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 """
+        flow_ids = [UUID(one).hex for one in flow_ids]
         group_admins = []
         if not user.is_admin():
             user_groups = UserGroupDao.get_user_admin_group(user.user_id)
@@ -468,7 +469,7 @@ class AuditLogService:
         # 获取最终的技能ID限制列表
         filter_flow_ids = []
         if flow_ids and group_flows:
-            filter_flow_ids = list(set(group_admins) & set(flow_ids))
+            filter_flow_ids = list(set(group_flows) & set(flow_ids))
             if not filter_flow_ids:
                 return False, []
         elif flow_ids:
