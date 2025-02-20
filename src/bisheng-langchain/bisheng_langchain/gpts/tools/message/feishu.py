@@ -91,6 +91,8 @@ class FeishuMessageTool(BaseModel):
         url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
         params = {"app_id":self.app_id , "app_secret": self.app_secret}
         response = requests.post(url,json=params)
+        if response.json()["code"] != 0:
+            raise Exception("app_id or app_secret error")
         return response.json()["tenant_access_token"]
 
 

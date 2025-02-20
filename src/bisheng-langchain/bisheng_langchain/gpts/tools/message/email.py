@@ -70,27 +70,21 @@ class EmailMessageTool(APIToolBase):
         #             )
         #             msg.attach(part)
 
-        try:
             # 创建SMTP连接
-            if self.smtp_port == 465:
-                # SSL连接
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
-            else:
-                # TLS连接
-                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-                server.starttls()
+        if self.smtp_port == 465:
+            # SSL连接
+            server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
+        else:
+            # TLS连接
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
 
-            # 登录邮箱
-            server.login(self.email_account, self.email_password)
+        # 登录邮箱
+        server.login(self.email_account, self.email_password)
 
-            # 发送邮件
-            server.sendmail(self.email_account, receiver.split(","), msg.as_string())
-            return "发送成功"
-        except Exception as e:
-            print(f"发送失败: {str(e)}")
-            return (f"发送失败: {str(e)}")
-        finally:
-            server.quit()
+        # 发送邮件
+        server.sendmail(self.email_account, receiver.split(","), msg.as_string())
+        return "发送成功"
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "EmailMessageTool":
