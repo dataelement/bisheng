@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlmodel import Field, Column, DateTime, text, select, delete
+from sqlmodel import Field, Column, DateTime, text, select, delete, String
 
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.base import session_getter
@@ -28,8 +28,8 @@ class Promise(PromiseBase, table=True):
 class UserPromise(PromiseBase, table=True):
     """ 记录用户签署了哪些承诺书 """
     __tablename__ = 'user_promise'
-    business_name: str = Field(default=None, description='签署时的业务名称')
-    promise_name: str = Field(default=None, description='签署时的承诺书名称')
+    business_name: str = Field(default=None, sa_column=Column(String(length=1024)), description='签署时的业务名称')
+    promise_name: str = Field(default=None, sa_column=Column(String(length=1024)), description='签署时的承诺书名称')
     user_id: str = Field(default=None, index=True, description='签署用户的唯一ID')
     user_name: str = Field(default=None, description='签署时用户的用户名')
 
