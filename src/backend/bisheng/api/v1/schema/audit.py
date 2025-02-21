@@ -4,7 +4,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 class DayCron(Enum):
-    Day: str = 'Day'  # 每天
+    Day: str = 'day'  # 每天
     Mon: str = 'Mon'  # 每周一
     Tue: str = 'Tue'  # 每周二
     Wed: str = 'Wed'  # 每周三
