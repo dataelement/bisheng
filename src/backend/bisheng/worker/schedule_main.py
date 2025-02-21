@@ -77,7 +77,12 @@ def catch_task():
 
 schedule.every(1).minute.do(catch_task)
 
-while True:
-    schedule.run_pending()
-    time.sleep(30)
-    print("I'm sleeping...")
+def main():
+    logger.info('start schedule')
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+
+
+if __name__ == '__main__':
+    main()
