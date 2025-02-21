@@ -425,10 +425,19 @@ class AuditLogService:
             }
             if day_of_week := data.get_celery_crontab_week() is not None:
                 schedule['day_of_week'] = day_of_week
+            # todo 排查celery的beat为什么在linux上固定使用utc时间, 有8小时的时差
+            hour = hour - 8
+            if hour < 0:
+                hour = 24 + hour
+                if schedule.get('day_of_week'):
+                    schedule['day_of_week'] = 6 if schedule[day_of_week] - 1 < 0 else schedule[day_of_week] - 1
+            schedule['hour'] = hour
+
             beat_task = RedBeatSchedulerEntry(name='review_session_message',
                                               task='bisheng.worker.audit.tasks.review_session_message',
                                               schedule=crontab(**schedule),
                                               app=bisheng_celery)
+            beat_task.delete()
             beat_task.save()
         ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.REVIEW_SESSION_CONFIG.value, value=json.dumps(data.dict())))
         return data
@@ -591,6 +600,9 @@ class AuditLogService:
         chat_user_id = None
         chat_create_time = None
         for one in all_message:
+            # 过滤掉工作流的输入事件
+            if one.category in ['user_input', 'input']:
+                continue
             if chat_flow_id is None:
                 flow_info = FlowDao.get_flow_by_id(one.flow_id.hex)
                 assistant_info = AssistantDao.get_one_assistant(one.flow_id)
