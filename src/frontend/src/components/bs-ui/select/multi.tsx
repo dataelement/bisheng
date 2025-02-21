@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
 import { cname, useDebounce } from "../utils"
+import { generateUUID } from "@/utils"
 
 const MultiItem: React.FC<
     { active: boolean; children: React.ReactNode; value: string; onClick: (value: string, label: string) => void }
@@ -94,6 +95,7 @@ const MultiSelect = ({
     const [optionFilter, setOptionFilter] = React.useState(options)
     const [created, creatInput] = useState(false)
     const inputRef = useRef(null)
+    const idRef = useRef(generateUUID(4))
 
     useEffect(() => {
         setValues(value)
@@ -165,6 +167,7 @@ const MultiSelect = ({
         })
         setOptionFilter(newValues)
         onSearch?.(inputRef.current?.value || '')
+        document.getElementById(idRef.current)?.scrollTo(0, 0)
     }, 500, false)
 
     // scroll laod
@@ -178,7 +181,8 @@ const MultiSelect = ({
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     // console.log('div is in the viewport!');
-                    onScrollLoad?.(inputRef.current?.value || '')
+                    const scrollTop = document.getElementById(idRef.current)?.scrollTop || 0;
+                    scrollTop && onScrollLoad?.(inputRef.current?.value || '')
                 }
             });
         }, {
@@ -191,7 +195,7 @@ const MultiSelect = ({
         observer.observe(footerRef.current);
 
         return () => observer.unobserve(footerRef.current);
-    }, [created])
+    }, [created, options])
 
     const handleClearClick = () => {
         setValues([])
@@ -246,6 +250,7 @@ const MultiSelect = ({
             />}
         </SelectTrigger>
         <SelectContent
+            id={idRef.current}
             className={contentClassName + ' overflow-visible'}
             headNode={
                 <div className="p-2">

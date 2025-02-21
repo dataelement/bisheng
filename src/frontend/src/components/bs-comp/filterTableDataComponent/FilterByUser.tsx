@@ -31,7 +31,7 @@ const useUsers = () => {
     // Load users from the API and store in state
     const loadUsers = async (name: string) => {
         try {
-            const res = await getUsersApi({ name, page, pageSize: 50 });
+            const res = await getUsersApi({ name, page: 1, pageSize: 50 });
             const options = res.data.map((u: any) => ({
                 label: u.user_name,
                 value: u.user_id,

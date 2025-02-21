@@ -128,7 +128,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     clearMsgs() {
         setTimeout(() => {
             set({ hisMessages: [], messages: [], historyEnd: true })
-        }, 0);
+        }, 100);
     },
     destory() {
         set({ chatId: '', messages: [] })

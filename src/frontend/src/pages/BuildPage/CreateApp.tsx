@@ -83,7 +83,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             // 承诺书
             if (appConfig.securityCommitment) {
                 getCommitmentApi(flow.id).then(res => {
-                    setCommitmentId(res[0].promise_id);
+                    setCommitmentId(res.length ? res[0].promise_id : '');
                 })
             }
         },

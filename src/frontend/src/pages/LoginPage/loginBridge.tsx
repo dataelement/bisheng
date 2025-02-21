@@ -16,7 +16,7 @@ export default function LoginBridge({ onHasLdap }) {
     useEffect(() => {
         getSSOurlApi().then((urls: any) => {
             setSsoUrl(urls.sso)
-            setWxUrl(urls.wx)
+            setWxUrl(__APP_ENV__.BASE_URL + urls.wx)
             urls.ldap && onHasLdap(true)
         })
     }, [])
