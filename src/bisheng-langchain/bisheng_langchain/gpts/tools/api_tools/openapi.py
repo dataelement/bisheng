@@ -101,13 +101,13 @@ class OpenApiTools(APIToolBase):
         method = self.get_request_method()
 
         if method == 'get':
-            resp = self.client.get(path, params=params, **extra,headers=self.headers)
+            resp = self.client.get(path, params=params, **extra)
         elif method == 'post':
-            resp = self.client.post(path, params=params, json=json_data, **extra,headers=self.headers)
+            resp = self.client.post(path, params=params, json=json_data, **extra)
         elif method == 'put':
-            resp = self.client.put(path, params=params, json=json_data, **extra,headers=self.headers)
+            resp = self.client.put(path, params=params, json=json_data, **extra)
         elif method == 'delete':
-            resp = self.client.delete(path, params=params, json=json_data, **extra,headers=self.headers)
+            resp = self.client.delete(path, params=params, json=json_data, **extra)
         else:
             raise Exception(f'http method is not support: {method}')
         if resp.status_code != 200:
@@ -127,13 +127,13 @@ class OpenApiTools(APIToolBase):
         method = self.get_request_method()
 
         if method == 'get':
-            resp = await self.async_client.aget(path, params=params, **extra,headers=self.headers)
+            resp = await self.async_client.aget(path, params=params, **extra)
         elif method == 'post':
-            resp = await self.async_client.apost(path, params=params, json=json_data, **extra,headers=self.headers)
+            resp = await self.async_client.apost(path, params=params, json=json_data, **extra)
         elif method == 'put':
-            resp = await self.async_client.aput(path, params=params, json=json_data, **extra,headers=self.headers)
+            resp = await self.async_client.aput(path, params=params, json=json_data, **extra)
         elif method == 'delete':
-            resp = await self.async_client.adelete(path, params=params, json=json_data, **extra,headers=self.headers)
+            resp = await self.async_client.adelete(path, params=params, json=json_data, **extra)
         else:
             raise Exception(f'http method is not support: {method}')
         return resp

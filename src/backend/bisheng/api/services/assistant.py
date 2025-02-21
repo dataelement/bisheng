@@ -481,7 +481,7 @@ class AssistantService(BaseService, AssistantUtils):
         if req.name.__len__() > 30 or req.name.__len__() == 0:
             return resp_500(message="名字不符合规范：最少一个字符，不能超过30个字符")
 
-        # 判断工具类别名称是否重复
+        #  判断工具类别名称是否重复
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
