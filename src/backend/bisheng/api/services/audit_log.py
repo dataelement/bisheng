@@ -593,9 +593,6 @@ class AuditLogService:
         chat_user_id = None
         chat_create_time = None
         for one in all_message:
-            # 过滤掉工作流的输入事件
-            if one.category in ['user_input', 'input']:
-                continue
             if chat_flow_id is None:
                 flow_info = FlowDao.get_flow_by_id(one.flow_id.hex)
                 assistant_info = AssistantDao.get_one_assistant(one.flow_id)
@@ -611,7 +608,9 @@ class AuditLogService:
                 else:
                     logger.debug(f'not found flow info: {one.flow_id.hex}')
                     return
-
+            # 过滤掉工作流的输入事件
+            if one.category in ['user_input', 'input']:
+                continue
             if all_message or one.review_status == ReviewStatus.DEFAULT.value:
                 # 需要审查的消息, 内容为空的消息默认通过审查
                 message_content = one.message if one.message else one.intermediate_steps
