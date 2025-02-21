@@ -550,7 +550,7 @@ class AuditLogService:
             if len(res) == 0:
                 break
             for one in res:
-                cls.review_one_session(one.chat_id, all_message=True)
+                cls.review_one_session(one.chat_id, True)
             page += 1
 
         return cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback, review_status,
