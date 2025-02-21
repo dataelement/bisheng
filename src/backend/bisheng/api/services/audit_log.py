@@ -557,13 +557,13 @@ class AuditLogService:
                                     1, 10)
 
     @classmethod
-    def review_one_session(cls, chat_id: str, all_message: bool = False):
+    def review_one_session(cls, chat_id: str, check_all_message: bool = False):
         """ 重新审查一个会话内的消息
         params:
             chat_id: 会话ID
             all_message: 是否审查所有消息，默认为False，会过滤掉已审查过的消息
         """
-        logger.debug(f"act=review_one_session chat_id={chat_id} all_message={all_message}")
+        logger.debug(f"act=review_one_session chat_id={chat_id} all_message={check_all_message}")
         # 审查配置
         review_config = cls.get_session_config()
         if not review_config.flag:
@@ -613,7 +613,7 @@ class AuditLogService:
                 if one.review_status == ReviewStatus.DEFAULT.value:
                     update_pass_messages.append({'id': one.id})
                 continue
-            if all_message or one.review_status == ReviewStatus.DEFAULT.value:
+            if check_all_message or one.review_status == ReviewStatus.DEFAULT.value:
                 # 需要审查的消息, 内容为空的消息默认通过审查
                 message_content = one.message if one.message else one.intermediate_steps
                 if not message_content:
@@ -673,7 +673,7 @@ class AuditLogService:
                                              create_time=chat_create_time,
                                              review_status=session_status)
         MessageSessionDao.insert_one(message_session)
-        logger.debug(f"act=review_one_session_over chat_id={chat_id}")
+        logger.debug(f"act=review_one_session_over chat_id={chat_id} {all_message}")
         return
 
     @classmethod
