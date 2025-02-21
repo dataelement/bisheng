@@ -563,7 +563,7 @@ class AuditLogService:
             chat_id: 会话ID
             all_message: 是否审查所有消息，默认为False，会过滤掉已审查过的消息
         """
-        logger.info(f"act=review_one_session chat_id={chat_id} all_message={all_message}")
+        logger.debug(f"act=review_one_session chat_id={chat_id} all_message={all_message}")
         # 审查配置
         review_config = cls.get_session_config()
         if not review_config.flag:
@@ -673,12 +673,13 @@ class AuditLogService:
                                              create_time=chat_create_time,
                                              review_status=session_status)
         MessageSessionDao.insert_one(message_session)
-        logger.info(f"act=review_one_session_over chat_id={chat_id} all_message={all_message}")
+        logger.debug(f"act=review_one_session_over chat_id={chat_id}")
         return
 
     @classmethod
     def review_some_message(cls, review_llm: BaseChatModel, review_config: ReviewSessionConfig,
                             message_list: List[dict]) -> (List[int], List[int], List[dict]):
+        logger.debug(f'start review_some_message {message_list}')
         try:
             llm_prompt = review_config.prompt
             llm_prompt += f'\n{json.dumps(message_list, ensure_ascii=False, indent=2)}'
