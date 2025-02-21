@@ -525,7 +525,7 @@ class AuditLogService:
             if not flow_map.get(one['flow_id']):
                 continue
             result.append(AppChatList(**one,
-                                      user_name=user_map.get(one['user_id'], one['user_id']),
+                                      user_name=user_map.get(int(one['user_id']), one['user_id']),
                                       user_groups=user.get_user_groups(one['user_id']),
                                       flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one[
                                           'flow_id'],
