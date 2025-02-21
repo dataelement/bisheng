@@ -68,6 +68,8 @@ export const testToolApi = async (data: {
     auth_type: string
     api_key: string
     request_params: Object
+    api_location: string
+    parameter_name: string
 }): Promise<any> => {
     return await axios({
         method: 'post',

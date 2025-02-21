@@ -24,10 +24,12 @@ const TestDialog = forwardRef((props: any, ref) => {
     const toolRef = useRef<any>({})
     const formRef = useRef<any>({})
     const formRuleRef = useRef<any>({})
+    const formStateRef = useRef<any>({})
 
     useImperativeHandle(ref, () => ({
-        open: (item, tool) => {
+        open: (item, tool, formState) => {
             toolRef.current = tool
+            formStateRef.current = formState
             setResult('')
             setApiData(item)
             setTestShow(true)
@@ -74,7 +76,9 @@ const TestDialog = forwardRef((props: any, ref) => {
             auth_method,
             auth_type,
             api_key,
-            request_params: formRef.current
+            request_params: formRef.current,
+            api_location: formStateRef.current.apiLocation,
+            parameter_name: formStateRef.current.parameter
         }).then(setResult))
         setLoading(false)
     }
@@ -467,11 +471,11 @@ const EditTool = forwardRef((props: any, ref) => {
                                         name="apiLocation"
                                         defaultValue={formState.apiLocation}
                                         className="flex mt-2 gap-4"
-                                        onValueChange={(value) => setFormState(prevState =>{
-                                            console.log('prevState :>> ', prevState, value);
-                                            return  ({ ...prevState, apiLocation: value })
+                                        onValueChange={(value) => setFormState(prevState => {
+                                            // console.log('prevState :>> ', prevState, value);
+                                            return ({ ...prevState, apiLocation: value })
                                         }
-                                    )}
+                                        )}
                                     >
                                         <div className="flex items-center space-x-2">
                                             <RadioGroupItem value="header" id="r7" />
@@ -536,7 +540,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                                     size="sm"
                                                     variant="outline"
                                                     className="dark:bg-[#666]"
-                                                    onClick={() => testDialogRef.current.open(item, fromDataRef.current)}
+                                                    onClick={() => testDialogRef.current.open(item, fromDataRef.current, formState)}
                                                 >{t('test.test')}</Button>
                                             </TableCell>
                                         </TableRow>
