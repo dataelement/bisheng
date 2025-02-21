@@ -9,6 +9,8 @@ from .base import APIToolBase, Field, MultArgsSchemaTool
 
 class OpenApiTools(APIToolBase):
 
+    api_key: str
+
     def get_real_path(self, path_params: dict|None):
         path = self.params['path']
         if path_params:
@@ -37,7 +39,7 @@ class OpenApiTools(APIToolBase):
             else:
                 params[k] = v
         if self.params['api_location'] == "query":
-            params.update({self.params['parameter_name']:self.params['api_key']})
+            params.update({self.params['parameter_name']:self.api_key})
         return params, json_data, path_params
 
     def parse_args_schema(self):

@@ -485,7 +485,7 @@ class AssistantService(BaseService, AssistantUtils):
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
-        #判断是否有更新权限
+        # 判断是否有更新权限
         if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):
             return UnAuthorizedError.return_resp()
 
