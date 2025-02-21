@@ -425,13 +425,6 @@ class AuditLogService:
             }
             if day_of_week := data.get_celery_crontab_week() is not None:
                 schedule['day_of_week'] = day_of_week
-            # todo 排查celery的beat为什么在linux上固定使用utc时间, 有8小时的时差
-            hour = hour - 8
-            if hour < 0:
-                hour = 24 + hour
-                if schedule.get('day_of_week'):
-                    schedule['day_of_week'] = 6 if schedule[day_of_week] - 1 < 0 else schedule[day_of_week] - 1
-            schedule['hour'] = hour
 
             beat_task = RedBeatSchedulerEntry(name='review_session_message',
                                               task='bisheng.worker.audit.tasks.review_session_message',
