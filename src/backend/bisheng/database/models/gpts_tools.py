@@ -16,6 +16,7 @@ class AuthMethod(Enum):
 class AuthType(Enum):
     BASIC = "basic"
     BEARER = "bearer"
+    CUSTOM= "custom"
 
 
 class GptsToolsBase(SQLModelSerializable):

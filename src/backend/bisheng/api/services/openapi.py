@@ -1,6 +1,6 @@
 import json
 
-from bisheng.database.models.gpts_tools import AuthMethod
+from bisheng.database.models.gpts_tools import AuthMethod, AuthType
 
 
 class OpenApiSchema:
@@ -85,6 +85,15 @@ class OpenApiSchema:
         headers = {}
         if auth_method == AuthMethod.API_KEY.value:
             headers = {'Authorization': f'{auth_type} {api_key}'}
+            if auth_type == AuthType.CUSTOM.value:
+                extra_json = json.loads(extra)
+                location = extra_json["api_location"]
+                parameter_name= extra_json["parameter_name"]
+                if location == "header":
+                    headers = {parameter_name: api_key}
+                else:
+                    server_host = f'{server_host}?{parameter_name}={api_key}'
+
 
         # 返回初始化 openapi所需的入参
         params = {
