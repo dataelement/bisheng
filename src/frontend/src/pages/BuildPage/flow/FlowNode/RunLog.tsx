@@ -80,8 +80,10 @@ export default function RunLog({ node, children }) {
             if (nodeId !== node.id && nodeId !== '*') return
 
             if (data) {
+                // hack
+                const _data = data.length && Array.isArray(data[0]) ? data.flat() : data
                 // newData  key: {id: value}
-                const newData = data.reduce((res, item) => {
+                const newData = _data.reduce((res, item) => {
                     if (item.type === 'variable') {
                         const key = item.key.split('.')
                         res[key[key.length - 1]] = { type: item.type, value: item.value }
