@@ -164,7 +164,7 @@ class AssistantAgent(AssistantUtils):
             raise Exception(f'获取工具类型失败，tool_type_id: {tool.type}')
         extra_json = json.loads(tool.extra)
         extra_json.update(json.loads(tool_type_info.extra))
-        return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, extra_json.dumps(),
+        return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, json.dumps(extra_json),
                                                        tool_type_info.server_host,
                                                        tool_type_info.auth_method,
                                                        tool_type_info.auth_type,
