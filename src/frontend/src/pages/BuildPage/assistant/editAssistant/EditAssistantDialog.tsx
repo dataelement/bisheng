@@ -12,7 +12,7 @@ import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // TODO 合并到createapp组件
-export default function EditAssistantDialog({ id, logo, name, desc, onSave }) {
+export default function EditAssistantDialog({ id, logo, online, name, desc, onSave }) {
     const { appConfig } = useContext(locationContext)
     const { t } = useTranslation()
     // State for form fields
@@ -88,7 +88,7 @@ export default function EditAssistantDialog({ id, logo, name, desc, onSave }) {
         })
 
         onSave(formData)
-        appConfig.securityCommitment && setCommitmentApi(id, commitmentId)
+        !online && appConfig.securityCommitment && setCommitmentApi(id, commitmentId)
     };
 
     const uploadAvator = (file) => {

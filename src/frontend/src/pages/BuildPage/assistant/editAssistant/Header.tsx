@@ -54,6 +54,7 @@ export default function Header({ onSave, onLine, onTabChange }) {
                         logo={assistantState.logo || ''}
                         name={assistantState.name}
                         desc={assistantState.desc}
+                        online={assistantState.status === 2}
                         onSave={handleEditSave}></EditAssistantDialog>
                 }
             </Dialog>

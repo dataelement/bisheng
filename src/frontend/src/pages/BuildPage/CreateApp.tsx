@@ -43,6 +43,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
 
     // 应用id (edit)
     const appidRef = useRef<string>('');
+    const onlineRef = useRef(false);
     // State for errors
     const [errors, setErrors] = useState<any>({});
 
@@ -78,6 +79,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setOpen(true);
             tempDataRef.current = null;
             appidRef.current = flow.id;
+            onlineRef.current = flow.status === 2
             // 承诺书
             if (appConfig.securityCommitment) {
                 getCommitmentApi(flow.id).then(res => {
@@ -160,7 +162,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setLoading(false);
             setOpen(false);
 
-            appConfig.securityCommitment && setCommitmentApi(appidRef.current, commitmentId)
+            !onlineRef.current && appConfig.securityCommitment && setCommitmentApi(appidRef.current, commitmentId)
             // 修改成功
             return onSave({
                 name: formData.name,

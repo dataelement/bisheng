@@ -120,6 +120,7 @@ export default function l2Edit() {
 
         await saveFlow({ ...flow, name, description, guide_word: guideWords, logo })
         setLoading(false)
+        flow.status === 1 && appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId)
         navigate('/skill/' + id, { replace: true })
     }
 
@@ -138,7 +139,7 @@ export default function l2Edit() {
             });
             setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
         }
-        appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId)
+        flow.status === 1 && appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId)
     }
 
     // 表单收缩
