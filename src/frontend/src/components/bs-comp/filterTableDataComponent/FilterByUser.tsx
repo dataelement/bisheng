@@ -1,9 +1,9 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getOperatorsApi } from "@/controllers/API/log";
-import { useState, useRef } from "react";
+import { getUsersApi } from "@/controllers/API/user";
+import { useRef, useState } from "react";
 
 export default function FilterByUser({ value, onChange }) {
-    const { users, loadUsers, searchUser } = useUsers();
+    const { users, loadUsers, searchUser, loadMoreUsers } = useUsers();
 
     return (
         <div className="w-[200px] relative">
@@ -14,6 +14,7 @@ export default function FilterByUser({ value, onChange }) {
                 placeholder="用户名"
                 onLoad={loadUsers}
                 onSearch={searchUser}
+                onScrollLoad={loadMoreUsers}
                 onChange={onChange}
             />
         </div>
@@ -22,44 +23,56 @@ export default function FilterByUser({ value, onChange }) {
 
 const useUsers = () => {
     const [users, setUsers] = useState<any[]>([]);
-    const userRef = useRef<any[]>([]);
-    const selectedRef = useRef<any[]>([]);
+    const [page, setPage] = useState(1);
+    const hasMoreRef = useRef(true);
+    const loadLock = useRef(false); // Prevent multiple simultaneous requests
+    const keyWordRef = useRef("");
 
     // Load users from the API and store in state
-    const loadUsers = async () => {
+    const loadUsers = async (name: string) => {
         try {
-            const res = await getOperatorsApi();
-            const options = res.map((u: any) => ({
+            const res = await getUsersApi({ name, page, pageSize: 50 });
+            const options = res.data.map((u: any) => ({
                 label: u.user_name,
                 value: u.user_id,
             }));
-            userRef.current = options;
+            keyWordRef.current = name;
             setUsers(options);
+            setPage(1);
+            hasMoreRef.current = res.data.length > 0;
+
+            setTimeout(() => {
+                loadLock.current = false;
+            }, 500);
         } catch (error) {
             console.error("Error loading users:", error);
             // Optionally, you can set users to an empty array or show an error message
         }
     };
 
-    // Search users from the API
-    const searchUser = async (name: string) => {
+    // Load more apps when scrolling
+    const loadMoreUsers = async () => {
+        if (!hasMoreRef.current) return;
+        if (loadLock.current) return;
         try {
-            const res = await getOperatorsApi({ keyword: name });
-            const options = res.map((u: any) => ({
-                label: u.user_name,
-                value: u.user_id,
+            const nextPage = page + 1;
+            const res = await getUsersApi({ name: keyWordRef.current, page: nextPage, pageSize: 50 });
+            const options = res.data.map((a: any) => ({
+                label: a.user_name,
+                value: a.user_id,
             }));
-            userRef.current = options;
-            setUsers(options);
+            setUsers((prevApps) => [...prevApps, ...options]);
+            setPage(nextPage);
+            hasMoreRef.current = res.data.length > 0;
         } catch (error) {
-            console.error("Error searching users:", error);
-            // Optionally, handle the error by clearing the list or showing a message
+            console.error("Error loading more apps:", error);
         }
     };
 
     return {
         users,
         loadUsers,
-        searchUser,
+        searchUser: loadUsers,
+        loadMoreUsers
     };
 };

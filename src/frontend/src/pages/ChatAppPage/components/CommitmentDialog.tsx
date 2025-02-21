@@ -22,7 +22,7 @@ const loadCommitments = async () => {
     }
 };
 
-const CommitmentDialog = ({ id }) => {
+const CommitmentDialog = ({ id, name }) => {
     const [checkedItems, setCheckedItems] = useState(Array(10).fill(false));
     const [finalCheck, setFinalCheck] = useState(false);
     const [commitmentsData, setCommitmentsData] = useState({ id: '', title: '', commitments: [] });
@@ -43,7 +43,12 @@ const CommitmentDialog = ({ id }) => {
 
     const handleSubmit = () => {
         setFinished(true);
-        signCommitmentApi(id, commitmentsData.id)
+        signCommitmentApi({
+            business_id: id,
+            business_name: name,
+            promise_id: commitmentsData.id,
+            promise_name: commitmentsData.title
+        })
         message({
             description: '签署成功',
             variant: 'success',

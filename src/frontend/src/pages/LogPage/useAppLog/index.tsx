@@ -24,7 +24,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             page: page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
-            user_ids: param.userName?.[0] || undefined,
+            user_ids: param.userName?.[0]?.value || undefined,
             group_ids: param.userGroup || undefined,
             start_date,
             end_date,
@@ -43,15 +43,20 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     });
     useEffect(() => {
         if (initFilter) {
-            setFilters({
+            const param = {
                 ...filters,
                 appName: [{ label: initFilter.name, value: initFilter.flow_id }],
                 userGroup: initFilter.group_info[0].id,
-                result: '2'
-            })
-            clearFilter()
+                result: '3'
+            }
+            setFilters(param)
+            filterData(param)
         }
     }, [initFilter])
+
+    const searchClick = () => {
+        filterData(filters);
+    }
 
     const resetClick = () => {
         const param = {
@@ -65,6 +70,10 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         setFilters(param)
         filterData(param)
     }
+    const handleFilterChange = (filterType, value) => {
+        const updatedFilters = { ...filters, [filterType]: value };
+        setFilters(updatedFilters);
+    };
 
     const [showReviewResult, setShowReviewResult] = useState(true); // State to control the visibility of the review result column
     useEffect(() => {
@@ -89,14 +98,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         }
     }, []);
 
-    const handleFilterChange = (filterType, value) => {
-        const updatedFilters = { ...filters, [filterType]: value };
-        setFilters(updatedFilters);
-
-        // Send the updated filters to the filterData function
-        filterData(updatedFilters);
-    };
-
     // Function to determine the class based on review result
     const getResultClass = (result) => {
         switch (result) {
@@ -119,13 +120,16 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                 setAuditing(true)
                 auditApi({
                     flow_ids: filters.appName?.map(el => el.value) || undefined,
-                    user_ids: filters.userName?.[0] || undefined,
+                    user_ids: filters.userName?.[0]?.value || undefined,
                     group_ids: filters.userGroup || undefined,
                     start_date,
                     end_date,
                     feedback: filters.feedback || undefined,
                     review_status: filters.result || undefined,
+                }).then(res => {
+                    setAuditing(false)
                 })
+
                 next()
             }
         })
@@ -136,14 +140,14 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>}
-            <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
+            <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
                 <div className="flex flex-wrap gap-4">
                     <FilterByApp value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
                     <FilterByUser value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
                     <FilterByUsergroup value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
                     <div className="w-[200px] relative">
-                        <Select onValueChange={(value) => handleFilterChange('feedback', value)}>
+                        <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="用户反馈" />
                             </SelectTrigger>
@@ -156,23 +160,26 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="w-[200px] relative">
-                        <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
-                            <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="审查结果" />
-                            </SelectTrigger>
-                            <SelectContent className="max-w-[200px] break-all">
-                                <SelectGroup>
-                                    <SelectItem value={'1'}>未审查</SelectItem>
-                                    <SelectItem value={'2'}>通过</SelectItem>
-                                    <SelectItem value={'3'}>违规</SelectItem>
-                                    <SelectItem value={'4'}>审查失败</SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
-                        {auditing && <LoadIcon className="mr-1" />}手动审查</Button>}
+                    {showReviewResult && <>
+                        <div className="w-[200px] relative">
+                            <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
+                                <SelectTrigger className="w-[200px]">
+                                    <SelectValue placeholder="审查结果" />
+                                </SelectTrigger>
+                                <SelectContent className="max-w-[200px] break-all">
+                                    <SelectGroup>
+                                        <SelectItem value={'1'}>未审查</SelectItem>
+                                        <SelectItem value={'2'}>通过</SelectItem>
+                                        <SelectItem value={'3'}>违规</SelectItem>
+                                        <SelectItem value={'4'}>审查失败</SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={handleRunClick} disabled={auditing}>
+                            {auditing && <LoadIcon className="mr-1" />}手动审查</Button>
+                    </>}
+                    <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                 </div>
                 <Table>

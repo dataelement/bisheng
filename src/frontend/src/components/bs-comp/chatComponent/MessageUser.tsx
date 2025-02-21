@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
 import { Badge } from "@/components/bs-ui/badge";
 
-export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
+export default function MessageUser({ audit, mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const { t } = useTranslation()
     const msg = data.message[data.chatKey]
 
@@ -38,9 +38,9 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                 </div>
                 {useName && <p className="text-gray-600 text-sm">{useName}</p>}
             </div>
-            <div className="text-right">
+            {audit && <div className="text-right">
                 {data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
-            </div>
+            </div>}
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
                     <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{msg}</div>

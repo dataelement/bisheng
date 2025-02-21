@@ -15,7 +15,7 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
+export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -100,11 +100,12 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                     case 'user_input':
                         return null
                     case 'question':
-                        return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />;
+                        return <MessageUser audit={audit} mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />;
                     case 'guide_word':
                     case 'output_msg':
                     case 'stream_msg':
                         return <MessageBs
+                            audit={audit}
                             mark={mark}
                             logo={logo}
                             key={msg.message_id}

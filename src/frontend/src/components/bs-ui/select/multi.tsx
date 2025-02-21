@@ -211,7 +211,7 @@ const MultiSelect = ({
     >
         <SelectTrigger className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
-                !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
+                !multiple && (values.length ? <span className="text-gray-800">{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
             {
                 multiple && (values.length ? (

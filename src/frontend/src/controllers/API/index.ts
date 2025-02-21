@@ -642,11 +642,8 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
 /**
  * 记录用户签署承诺
  */
-export async function signCommitmentApi(business_id: string, promise_id: string): Promise<any> {
-  return await axios.post(`/api/v1/promise/business/user`, {
-    business_id,
-    promise_id
-  })
+export async function signCommitmentApi(data: { business_id: string, business_name: string, promise_id: string, promise_name: string }): Promise<any> {
+  return await axios.post(`/api/v1/promise/business/user`, data)
 }
 
 // 设置应用的承诺书

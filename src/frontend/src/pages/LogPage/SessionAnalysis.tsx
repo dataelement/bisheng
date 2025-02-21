@@ -159,7 +159,7 @@ export default function SessionAnalysisStrategy({ onBack }) {
                                                 <SelectItem value="Mon">周一</SelectItem>
                                                 <SelectItem value="Tue">周二</SelectItem>
                                                 <SelectItem value="Wed">周三</SelectItem>
-                                                <SelectItem value="Thu">周四</SelectItem>
+                                                <SelectItem value="Thur">周四</SelectItem>
                                                 <SelectItem value="Fri">周五</SelectItem>
                                                 <SelectItem value="Sat">周六</SelectItem>
                                                 <SelectItem value="Sun">周日</SelectItem>

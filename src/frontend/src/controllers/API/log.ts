@@ -214,7 +214,7 @@ export async function getChatStatisticsApi(params: { flow_ids, group_ids, start_
 
 // 获取报告下载链接
 export async function getReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
-    return await axios.get('/api/v1/audit/session/chart/export', { params })
+    return await axios.get('/api/v1/audit/session/chart/export', { params, paramsSerializer })
 }
 
 // 获取审计应用列表
@@ -245,5 +245,5 @@ export async function auditApi(params: {
     feedback,
     review_status
 }): Promise<[]> {
-    return await axios.get('/api/v1/audit/session/review', { params })
+    return await axios.get('/api/v1/audit/session/review', { params, paramsSerializer })
 }

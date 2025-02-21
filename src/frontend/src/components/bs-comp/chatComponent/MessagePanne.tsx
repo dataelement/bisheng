@@ -10,7 +10,7 @@ import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => {} }) {
+export default function MessagePanne({ mark = false, audit = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => { } }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -109,9 +109,10 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
 
                 switch (type) {
                     case 'user':
-                        return <MessageUser mark={mark} key={msg.id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
+                        return <MessageUser audit={audit} mark={mark} key={msg.id} useName={useName} data={msg} onMarkClick={() => onMarkClick('question', msg.id, findQa(messagesList, index))} />;
                     case 'llm':
                         return <MessageBs
+                            audit={audit}
                             mark={mark}
                             logo={logo}
                             key={msg.id}

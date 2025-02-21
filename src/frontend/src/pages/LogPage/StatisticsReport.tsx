@@ -47,20 +47,20 @@ export default function StatisticsReport({ onBack, onJump }) {
 
     const handleSearch = (params) => {
         setSortConfig({ key: '', direction: 'asc' });
-        reload();
+        setPage(1)
     }
     const handleReset = () => {
         setSortConfig({ key: '', direction: 'asc' });
-        setFilters(() => {
-            const now = new Date();
-            const now2 = new Date();
-            return {
-                userGroup: '',
-                appName: [],
-                dateRange: [new Date(now.setDate(now.getDate() - 7)), new Date(now2.setDate(now2.getDate() - 1))],
-            }
-        })
-        setTimeout(reload, 0);
+        const now = new Date();
+        const now2 = new Date();
+        const param = {
+            userGroup: '',
+            appName: [],
+            dateRange: [new Date(now.setDate(now.getDate() - 7)), new Date(now2.setDate(now2.getDate() - 1))],
+        }
+        setFilters(param)
+
+        setTimeout(() => setPage(1), 0);
     };
 
     const handleExport = () => {
@@ -84,7 +84,7 @@ export default function StatisticsReport({ onBack, onJump }) {
             direction = 'asc'; // Default to ascending for new column
         }
         setSortConfig({ key: column, direction }); // Set the current column and direction
-        setTimeout(reload, 0);
+        setTimeout(() => setPage(1), 0);
     };
 
     return (
@@ -168,7 +168,7 @@ export default function StatisticsReport({ onBack, onJump }) {
                                     <TableCell>{row.input_num}</TableCell>
                                     <TableCell>{row.output_num}</TableCell>
                                     <TableCell>
-                                        <a className="cursor-pointer" onClick={() => {
+                                        <a className="cursor-pointer text-primary" onClick={() => {
                                             onJump(row)
                                             onBack()
                                         }}>{row.violations_num}</a>
