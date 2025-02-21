@@ -58,8 +58,8 @@ const Log = ({ type, name, data }) => {
                         <X size={18} className="cursor-pointer" onClick={() => setOpen(false)} />
                     </div>
                     <div className="">
-                        {Object.keys(data).map(key => data[key].type === 'file' ?
-                            <ResultFile title={key} name={name} fileUrl={data[key].value} key={key} />
+                        {Object.keys(data).map(key => data[key]?.type === 'file' || (typeof data[key] === 'string' && data[key].startsWith('/tmp-dir')) ?
+                            <ResultFile title={key} name={name} fileUrl={data[key]} key={key} />
                             : <ResultText title={key} value={data[key]} key={key} />)}
                     </div>
                 </div>

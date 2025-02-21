@@ -160,7 +160,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </SelectContent>
                         </Select>
                     </div>
-                    {showReviewResult && <>
+                    {showReviewResult &&
                         <div className="w-[200px] relative">
                             <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
                                 <SelectTrigger className="w-[200px]">
@@ -176,11 +176,11 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <Button onClick={handleRunClick} disabled={auditing}>
-                            {auditing && <LoadIcon className="mr-1" />}手动审查</Button>
-                    </>}
+                    }
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
+                    {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
+                        {auditing && <LoadIcon className="mr-1" />}手动审查</Button>}
                 </div>
                 <Table>
                     <TableHeader>
