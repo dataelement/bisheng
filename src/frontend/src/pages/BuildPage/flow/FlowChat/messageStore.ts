@@ -72,6 +72,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
             isSend: !is_bot,
             message,
             thought: intermediate_steps,
+            reasoning_log: message.reasoning_content,
             noAccess: true
         }
     })

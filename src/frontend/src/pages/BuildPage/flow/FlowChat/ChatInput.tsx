@@ -343,6 +343,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }
     // restart
     const handleRestartClick = () => {
+        sendWsMsg({ "action": "stop" });
         wsRef.current?.close()
         wsRef.current = null
         stop.show && insetSeparator(t('chat.chatEndMessage'))
