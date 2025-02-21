@@ -561,7 +561,7 @@ class AuditLogService:
         """ 重新审查一个会话内的消息
         params:
             chat_id: 会话ID
-            all_message: 是否审查所有消息，默认为False，会过滤掉已审查过的消息
+            check_all_message: 是否审查所有消息，默认为False，会过滤掉已审查过的消息
         """
         logger.debug(f"act=review_one_session chat_id={chat_id} all_message={check_all_message}")
         # 审查配置
