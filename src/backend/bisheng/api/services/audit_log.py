@@ -610,6 +610,8 @@ class AuditLogService:
                     return
             # 过滤掉工作流的输入事件
             if one.category in ['user_input', 'input']:
+                if one.review_status == ReviewStatus.DEFAULT.value:
+                    update_pass_messages.append({'id': one.id})
                 continue
             if all_message or one.review_status == ReviewStatus.DEFAULT.value:
                 # 需要审查的消息, 内容为空的消息默认通过审查
