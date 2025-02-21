@@ -36,7 +36,7 @@ rsa = "4.9"
 pydantic = "^1.10.18"
 numexpr = "^2.8.6"
 pypinyin = "0.50.0"
-celery = { extras = ["redis"], version = "^4.4.7" }
+celery = { extras = ["redis"], version = "^5.0.0" }
 redis = "^5.0.0"
 jieba = "^0.42.1"
 PyMuPDF = "^1.23.8"
@@ -93,7 +93,7 @@ bisheng-ragas = { version = "^1.0.1", source = "dataelem-index" }
 qianfan = "^0.4.4"
 dashscope = "^1.20.3"
 blobfile = "^3.0.0"
-celery-redbeat = "2.0.0"
+celery-redbeat = "2.2.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
