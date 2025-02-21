@@ -36,6 +36,8 @@ class OpenApiTools(APIToolBase):
                     json_data[k] = v
             else:
                 params[k] = v
+        if self.params['api_location'] == "query":
+            params.update({self.params['parameter_name']:self.params['api_key']})
         return params, json_data, path_params
 
     def parse_args_schema(self):
@@ -116,9 +118,6 @@ class OpenApiTools(APIToolBase):
         extra = {}
         if 'proxy' in kwargs:
             extra['proxy'] = kwargs.pop('proxy')
-
-        print("lllllllllllll",kwargs)
-        print("lllllllllllll",self)
 
         params, json_data, path_params = self.get_params_json(**kwargs)
         path = self.get_real_path(path_params)

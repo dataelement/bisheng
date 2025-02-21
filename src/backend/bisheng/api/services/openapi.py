@@ -84,21 +84,21 @@ class OpenApiSchema:
         # 拼接请求头
         headers = {}
         if auth_method == AuthMethod.API_KEY.value:
-            headers = {'Authorization': f'{auth_type} {api_key}'}
             if auth_type == AuthType.CUSTOM.value:
                 extra_json = json.loads(extra)
                 location = extra_json["api_location"]
                 parameter_name= extra_json["parameter_name"]
                 if location == "header":
                     headers = {parameter_name: api_key}
-                else:
-                    server_host = f'{server_host}?{parameter_name}={api_key}'
+            else:
+                headers = {'Authorization': f'{auth_type} {api_key}'}
 
 
         # 返回初始化 openapi所需的入参
         params = {
             'params': json.loads(extra),
             'headers': headers,
+            'api_key': api_key,
             'url': server_host,
             'description': name + description if description else name
         }
