@@ -1,7 +1,4 @@
-import datetime
-import functools
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
-import inspect
 
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
@@ -42,13 +39,15 @@ class BishengLLM(BaseChatModel):
         # 官方api服务
         LLMServerType.OPENAI.value: 'ChatOpenAI',
         LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
-        LLMServerType.QWEN.value: 'ChatOpenAI',
+        LLMServerType.QWEN.value: 'ChatTongyi',
         LLMServerType.QIAN_FAN.value: 'ChatWenxin',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
         LLMServerType.MINIMAX.value: 'ChatOpenAI',
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
         LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
         LLMServerType.SPARK.value: 'ChatOpenAI',
+        LLMServerType.TENCENT.value: 'ChatOpenAI',
+        LLMServerType.MOONSHOT.value: 'ChatOpenAI',
     }
 
     # bisheng强相关的业务参数
@@ -102,6 +101,7 @@ class BishengLLM(BaseChatModel):
             params.update(server_info.config)
         if model_info.config:
             params.update(model_info.config)
+            params.pop('enable_web_search')
 
         params.update({
             'model_name': model_info.model_name,
@@ -121,11 +121,33 @@ class BishengLLM(BaseChatModel):
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
                                   LLMServerType.VLLM.value]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
+        elif server_info.type == LLMServerType.MINIMAX.value:
+            params['model'] = params.pop('model_name')
+            params['minimax_api_key'] = params.pop('openai_api_key')
+            params.pop('openai_api_base')
+        elif server_info.type == LLMServerType.QWEN.value:
+            params['dashscope_api_key'] = params.pop('openai_api_key')
+            params.pop('openai_api_base')
+        elif server_info.type == LLMServerType.TENCENT.value:
+            params['extra_body'] = {'enable_enhancement': self.model_info.config.get('enable_web_search', False)}
         return params
 
     @property
     def _llm_type(self):
         return self.llm._llm_type
+
+    def parse_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        if self.server_info.type == LLMServerType.MINIMAX.value:
+            if self.model_info.config.get('enable_web_search'):
+                if 'tools' not in kwargs:
+                    kwargs.update({
+                        'tools': [{'type': 'web_search'}],
+                    })
+                else:
+                    kwargs['tools'].append({
+                        'type': 'web_search',
+                    })
+        return kwargs
 
     @wrapper_bisheng_model_limit_check
     def _generate(
@@ -137,6 +159,7 @@ class BishengLLM(BaseChatModel):
             **kwargs: Any,
     ) -> ChatResult:
         try:
+            kwargs = self.parse_kwargs(kwargs)
             ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
@@ -154,6 +177,7 @@ class BishengLLM(BaseChatModel):
             **kwargs: Any,
     ) -> ChatResult:
         try:
+            kwargs = self.parse_kwargs(kwargs)
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
