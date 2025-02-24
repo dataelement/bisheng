@@ -81,13 +81,13 @@ const CommitmentDialog = ({ id, name }) => {
     if (finished) return null;
 
     return (
-        <div className="absolute top-0 left-0 w-full h-full z-20 bg-[rgba(0,0,0,0.1)] flex items-center justify-center">
-            <div className="w-[660px] max-w-[80%] bg-background-login shadow-md p-6 rounded-md">
+        <div className="absolute top-0 left-0 w-full h-full z-20 bg-[rgba(0,0,0,0.1)] flex items-center justify-center px-4">
+            <div className="w-full max-w-[660px] bg-background-login shadow-md rounded-md sm:p-6">
                 <div className="p-5 max-w-3xl mx-auto">
-                    {/* 显示标题 */}
-                    <h2 className="text-2xl font-bold mb-6 text-center">《{commitmentsData.title}》</h2>
+                    {/* Display Title */}
+                    <h2 className="sm:text-2xl text-base font-bold mb-6 text-center">{`《${commitmentsData.title}》`}</h2>
 
-                    {/* 渲染承诺列表，添加滚动条 */}
+                    {/* Commitment List with Scroll */}
                     <div className="max-h-[50vh] overflow-y-auto mb-6 bg-gray-100 p-4">
                         {commitmentsData.commitments.map((commitment, index) => (
                             <div key={id + index} className="mb-4">
@@ -104,13 +104,13 @@ const CommitmentDialog = ({ id, name }) => {
                         ))}
                     </div>
 
-                    {/* 承诺人和承诺时间 */}
+                    {/* Commitment Person and Time */}
                     <div className="mb-4">
                         <p className="text-gray-700">承诺人：<span className="font-semibold">{user.user_name}</span></p>
                         <p className="text-gray-700">承诺时间：<span className="font-semibold">{currentTime}</span></p>
                     </div>
 
-                    {/* 最终确认复选框 */}
+                    {/* Final Confirmation Checkbox */}
                     <div className="mb-6 flex items-center">
                         <Checkbox
                             key={id}
@@ -121,11 +121,12 @@ const CommitmentDialog = ({ id, name }) => {
                         <Label htmlFor='agreet' className="text-gray-600">本人已认真阅读《{commitmentsData.title}》并承诺落实全部安全事项。</Label>
                     </div>
 
-                    {/* 提交按钮 */}
+                    {/* Submit Button */}
                     <div className="text-center">
                         <Button
                             onClick={handleSubmit}
                             disabled={!checkedItems.every(item => item) || !finalCheck}
+                            className="w-full sm:w-auto"
                         >
                             确认签署
                         </Button>

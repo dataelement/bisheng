@@ -373,7 +373,12 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
             <ChatTest ref={testRef} />
             {/* 修改应用弹窗 flow&assistant */}
             <CreateApp ref={updateAppModalRef} onSave={(base) => {
-                captureAndAlertRequestErrorHoc(onlineWorkflow(f).then(res => {
+                captureAndAlertRequestErrorHoc(onlineWorkflow({
+                    ...f,
+                    name: base.name,
+                    description: base.description,
+                    logo: base.logo
+                }).then(res => {
                     f.name = base.name
                     f.description = base.description
                     f.logo = base.logo

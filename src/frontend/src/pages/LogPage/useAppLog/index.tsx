@@ -18,7 +18,7 @@ import { getStrTime } from "../StatisticsReport";
 
 export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
-    const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
+    const { page, pageSize, data: datalist, total, loading, setPage, filterData, reload } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
         return getAuditAppListApi({
             page: page,
@@ -128,6 +128,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                     review_status: filters.result || undefined,
                 }).then(res => {
                     setAuditing(false)
+                    reload()
                 })
 
                 next()

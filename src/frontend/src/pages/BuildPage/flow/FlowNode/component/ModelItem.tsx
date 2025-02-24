@@ -31,7 +31,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             });
 
             setOptions(llmOptions)
-            agent && onChange(llmOptions[0].children[0].value)
+            agent && !data.value && onChange(llmOptions[0].children[0].value)
             // return { llmOptions, embeddings }
         })
 
