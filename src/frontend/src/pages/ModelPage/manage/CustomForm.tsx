@@ -254,6 +254,42 @@ const modelProviders = {
             required: true,
             key: "host_base_url",
         }
+    ],
+    tencent: [
+        {
+            label: "Base URL",
+            type: "text",
+            placeholder: "格式示例：http://ip:8000/v1",
+            default: "",
+            required: true,
+            key: "base_url",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: false,
+            key: "api_key",
+        },
+    ],
+    moonshot: [
+        {
+            label: "Base URL",
+            type: "text",
+            placeholder: "格式示例：http://ip:8000/v1",
+            default: "",
+            required: true,
+            key: "base_url",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: false,
+            key: "api_key",
+        },
     ]
 };
 
