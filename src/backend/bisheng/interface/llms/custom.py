@@ -1,7 +1,4 @@
-import datetime
-import functools
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
-import inspect
 
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
@@ -28,7 +25,7 @@ class BishengLLM(BaseChatModel):
     streaming: bool = Field(default=True, description="是否使用流式输出", alias="stream")
     temperature: float = Field(default=0.3, description="模型生成的温度")
     top_p: float = Field(default=1, description="模型生成的top_p")
-    cache: bool = Field(default=True, description="是否使用缓存")
+    cache: bool = Field(default=False, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
     llm_node_type = {
