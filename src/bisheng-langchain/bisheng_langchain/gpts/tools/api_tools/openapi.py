@@ -92,8 +92,6 @@ class OpenApiTools(APIToolBase):
         extra = {}
         if 'proxy' in kwargs:
             extra['proxy'] = kwargs.pop('proxy')
-        print("lllllllllllll",kwargs)
-        print("lllllllllllll",self)
 
         params, json_data, path_params = self.get_params_json(**kwargs)
         path = self.get_real_path(path_params)
