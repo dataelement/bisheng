@@ -103,3 +103,33 @@ class OpenApiSchema:
             'description': name + description if description else name
         }
         return params
+
+    @staticmethod
+    def parse_openapi_tool_params_test(name: str,
+                                  description: str,
+                                  extra: str,
+                                  server_host: str,
+                                  auth_method: int,
+                                  auth_type: str = None,
+                                  api_key: str = None,
+                                  location: str = None,
+                                  parameter_name: str = None):
+        # 拼接请求头
+        headers = {}
+        if auth_method == AuthMethod.API_KEY.value:
+            if auth_type == AuthType.CUSTOM.value:
+                if location == "header":
+                    headers = {parameter_name: api_key}
+            else:
+                headers = {'Authorization': f'{auth_type} {api_key}'}
+
+
+        # 返回初始化 openapi所需的入参
+        params = {
+            'params': json.loads(extra),
+            'headers': headers,
+            'api_key': api_key,
+            'url': server_host,
+            'description': name + description if description else name
+        }
+        return params

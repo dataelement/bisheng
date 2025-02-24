@@ -320,6 +320,8 @@ class TestToolReq(BaseModel):
     auth_method: int = Field(default=AuthMethod.NO.value, description='认证类型')
     auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description='Auth Type')
     api_key: Optional[str] = Field(default='', description='api key')
+    api_location: Optional[str] = Field(default='', description='api location')
+    parameter_name: Optional[str] = Field(default='', description='parameter_name')
 
     request_params: Dict = Field(default=None, description='用户填写的请求参数')
 
