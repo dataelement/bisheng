@@ -34,7 +34,7 @@ class WorkflowClient(BaseClient):
 
     async def close(self):
         # 非会话模式关闭workflow执行
-        if self.workflow and not self.chat_id:
+        if self.workflow:
             self.workflow.set_workflow_stop()
         self.workflow = None
 
