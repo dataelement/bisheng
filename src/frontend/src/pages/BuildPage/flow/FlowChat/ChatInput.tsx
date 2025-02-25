@@ -24,6 +24,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const [inputForm, setInputForm] = useState(null) // input表单
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
+    const restartTaskRef = useRef({}) // 重启任务列表
 
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, streamWsMsg, insetSeparator, destory, insetNodeRun, setShowGuideQuestion } = useMessageStore()
     console.log('ui messages :>> ', messages);
@@ -64,7 +65,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
         currentChatIdRef.current = chatId
         // changeChatedRef.current = true
-        // setFormShow(false)
+        setInputForm(false)
         createWebSocket().then(() => {
             // 切换会话默认发送一条空消息(action, input)
             const wsMsg = onBeforSend((messages.length === 0 && hisMessages.length === 0) || chatId.startsWith('test') ? 'init_data' : 'check_status', {})
@@ -176,6 +177,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                         setStop({ show: true, disable: false })
                     } else if (data.type === 'close') {
                         setStop({ show: false, disable: false })
+                        // 停止会话后,有重启标识会话自动开启会话
+                        if (restartTaskRef.current[data.chat_id]) {
+                            createWebSocket().then(() => {
+                                sendWsMsg(onBeforSend('init_data', {}))
+                            })
+                        }
                     }
 
                     // const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
@@ -370,15 +377,24 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         sendWsMsg({ "action": "stop" });
     }
     // restart
+    const [disableRestart, setDisableRestart] = useState(false)
     const handleRestartClick = () => {
-        wsRef.current?.close()
-        wsRef.current = null
-        stop.show && insetSeparator('本轮会话已结束')
+        setInputForm(null)
+        setInputLock({ locked: true, reason: '' })
+        sendWsMsg({ "action": "stop" });
+        restartTaskRef.current[currentChatIdRef.current] = true
+        setDisableRestart(true)
         setTimeout(() => {
-            createWebSocket().then(() => {
-                sendWsMsg(onBeforSend('init_data', {}))
-            })
-        }, 300);
+            setDisableRestart(false)
+        }, 6000);
+        // wsRef.current?.close()
+        // wsRef.current = null
+        // stop.show && insetSeparator(t('chat.chatEndMessage'))
+        // setTimeout(() => {
+        //     createWebSocket().then(() => {
+        //         sendWsMsg(onBeforSend('init_data', {}))
+        //     })
+        // }, 300);
     }
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
@@ -399,7 +415,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Button className="rounded-full" variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
+                <Button className="rounded-full" variant="ghost" size="icon" disabled={disableRestart} onClick={handleRestartClick}><RefreshCw size={18} /></Button>
             </div>
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
