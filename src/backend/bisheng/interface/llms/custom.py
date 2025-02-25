@@ -123,10 +123,6 @@ class BishengLLM(BaseChatModel):
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
                                   LLMServerType.VLLM.value]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
-        elif server_info.type == LLMServerType.MINIMAX.value:
-            params['model'] = params.pop('model_name')
-            params['minimax_api_key'] = params.pop('openai_api_key')
-            params.pop('openai_api_base')
         elif server_info.type == LLMServerType.QWEN.value:
             params['dashscope_api_key'] = params.pop('openai_api_key')
             params.pop('openai_api_base')
