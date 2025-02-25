@@ -91,7 +91,10 @@ class RedisCallback(BaseCallback):
 
     def get_workflow_stop(self) -> bool | None:
         """ 为了可以及时停止workflow，不做内存的缓存 """
-        return self.redis_client.get(self.workflow_stop_key) == 1
+        flag = self.redis_client.get(self.workflow_stop_key) == 1
+        if flag:
+            self.redis_client.delete(self.workflow_stop_key)
+        return flag
 
     def send_chat_response(self, chat_response: ChatResponse):
         """ 发送聊天消息 """
