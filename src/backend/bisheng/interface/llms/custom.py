@@ -101,6 +101,8 @@ class BishengLLM(BaseChatModel):
         if model_info.config:
             params.update(model_info.config)
             params.pop('enable_web_search')
+            if params.get('max_tokens', None) and params.get('max_tokens') <= 0:
+                params.pop('max_tokens')
 
         params.update({
             'model_name': model_info.model_name,
