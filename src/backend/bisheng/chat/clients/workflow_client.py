@@ -188,6 +188,9 @@ class WorkflowClient(BaseClient):
                     elif status_info['reason'].find('-- node params is error') != -1:
                         await self.send_response('error', 'over',
                                                  {'code': WorkFlowNodeUpdateError.Code, 'message': status_info['reason'].split('--')[0]})
+                    elif status_info['reason'].find('workflow stop by user') != -1:
+                        # 用户自己停止的无需抛出错误信息
+                        pass
                     else:
                         await self.send_response('error', 'over', {'code': 500, 'message': status_info['reason']})
                 await self.send_response('processing', 'close', '')
