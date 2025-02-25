@@ -130,16 +130,21 @@ class BishengLLM(BaseChatModel):
             params['dashscope_api_key'] = params.pop('openai_api_key')
             params.pop('openai_api_base')
         elif server_info.type == LLMServerType.TENCENT.value:
-            params['extra_body'] = {'enable_enhancement': self.model_info.config.get('enable_web_search', False)}
+            params['extra_body'] = {'enable_enhancement': self.get_model_info_config().get('enable_web_search', False)}
         return params
 
     @property
     def _llm_type(self):
         return self.llm._llm_type
 
+    def get_model_info_config(self):
+        if self.model_info.config:
+            return self.model_info.config
+        return {}
+
     def parse_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
         if self.server_info.type == LLMServerType.MINIMAX.value:
-            if self.model_info.config.get('enable_web_search'):
+            if self.get_model_info_config().get('enable_web_search'):
                 if 'tools' not in kwargs:
                     kwargs.update({
                         'tools': [{'type': 'web_search'}],
@@ -149,7 +154,7 @@ class BishengLLM(BaseChatModel):
                         'type': 'web_search',
                     })
         elif self.server_info.type == LLMServerType.MOONSHOT.value:
-            if self.model_info.config.get('enable_web_search'):
+            if self.get_model_info_config().get('enable_web_search'):
                 if 'tools' not in kwargs:
                     kwargs.update({
                         'tools': [{
