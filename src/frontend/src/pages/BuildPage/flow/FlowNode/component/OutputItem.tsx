@@ -20,7 +20,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
     }, [data.options]);
 
     // 根据交互类型切换不同的展示
-    const renderContent = () => {
+    const renderContent = (error) => {
         switch (interactionType) {
             case "none":
                 return null;
@@ -54,6 +54,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
                             </Badge>
                         </div>
                         <VarInput
+                            error={error}
                             placeholder={t("userInputPlaceholder")}
                             nodeId={nodeId}
                             itemKey={data.key}
@@ -87,6 +88,10 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
                 if (interactionType === "choose" && !data.options.length) {
                     setError(true);
                     return t("optionsCannotBeEmpty"); // 选项不可为空
+                }
+                if (interactionType === "input" && !data.value.value?.trim()) {
+                    setError(true);
+                    return '展示内容不可为空'; // 输入不可为空
                 }
                 setError(false);
                 return false;
@@ -129,8 +134,8 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
             </RadioGroup>
 
             <div className="interaction-content mt-4 nodrag">
-                {renderContent()}
-                {error && (
+                {renderContent(error)}
+                {error && interactionType === "choose" && (
                     <div className="text-red-500 text-sm mt-2">
                         {t("optionsCannotBeEmpty")} {/* 选项不可为空 */}
                     </div>

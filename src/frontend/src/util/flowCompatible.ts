@@ -8,6 +8,7 @@ export const flowVersionCompatible = (flow) => {
         switch (node.data.type) {
             case 'start': comptibleStart(node.data); break;
             case 'input': comptibleInput(node.data); break;
+            case 'agent': comptibleAgent(node.data); break;
         }
     })
     return flow
@@ -51,6 +52,13 @@ const comptibleInput = (node) => {
             return item
         })
 
+        node.v = 1
+    }
+}
+
+const comptibleAgent = (node) => {
+    if (!node.v && node.group_params[1].params[0].type === 'bisheng_model') {
+        node.group_params[1].params[0].type = 'agent_model'
         node.v = 1
     }
 }

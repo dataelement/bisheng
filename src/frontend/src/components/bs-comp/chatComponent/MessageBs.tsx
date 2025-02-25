@@ -14,6 +14,7 @@ import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
 import { ChevronDown } from "lucide-react";
 import { cname } from "@/components/bs-ui/utils";
+import { ToastIcon } from "@/components/bs-icons";
 
 // 颜色列表
 const colorList = [
@@ -38,12 +39,15 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     return <div className="py-1">
         <div className="rounded-sm border">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
-                <div className="flex items-center font-bold gap-2 text-sm">
-                    {
-                        loading && <LoadIcon className="text-primary duration-300" />
-                    }
-                    <span>深度思考</span>
+                {loading ? <div className="flex items-center font-bold gap-2 text-sm">
+                    <LoadIcon className="text-primary duration-300" />
+                    <span>思考中</span>
                 </div>
+                    : <div className="flex items-center font-bold gap-2 text-sm">
+                        <ToastIcon type="success" />
+                        <span>已深度思考</span>
+                    </div>
+                }
                 <ChevronDown className={open && 'rotate-180'} />
             </div>
             <div className={cname('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>

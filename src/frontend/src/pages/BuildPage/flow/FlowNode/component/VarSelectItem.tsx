@@ -4,9 +4,9 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { isVarInFlow } from "@/util/flowUtils";
 import { ChevronDown, X } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
-import { useTranslation } from "react-i18next";
 
 const valueToOutput = (newValues, varZh) => {
     return newValues.map(el => {
@@ -74,8 +74,11 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
         let error = ''
         const _errorKeys = []
         value.map(key => {
-            error = isVarInFlow(nodeId, flow.nodes, key, data.varZh?.[key]);
-            error && _errorKeys.push(key)
+            const _error = isVarInFlow(nodeId, flow.nodes, key, data.varZh?.[key]);
+            if (_error) {
+                _errorKeys.push(key)
+                error = _error
+            }
         })
         setErrorKeys(_errorKeys)
         return Promise.resolve(error);
@@ -101,7 +104,7 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
                         onPointerDown={(e) => e.stopPropagation()}
                         key={item}
                         className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] ${errorKeys.includes(item) && 'bg-red-100 border-red-600'}`}>
-                        {data.varZh[item]}
+                        {data.varZh?.[item]}
                         <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
                     ) : <span className="text-gray-400 mt-0.5">{data.placeholder}</span>}

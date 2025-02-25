@@ -51,7 +51,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* Email Account */}
             <InputField
                 required
-                label="发件人邮箱账号"
+                label="email_account（发件人邮箱账号）"
                 type="text"
                 id="email_account"
                 name="email_account"
@@ -64,7 +64,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* Email Password */}
             <InputField
                 required
-                label="发件人邮箱密码"
+                label="email_password（发件人邮箱密码）"
                 type="password"
                 id="email_password"
                 name="email_password"
@@ -77,7 +77,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* SMTP Server */}
             <InputField
                 required
-                label="发信 SMTP 服务器地址"
+                label="smtp_server（发信 服务器地址SMTP）"
                 type="text"
                 id="smtp_server"
                 name="smtp_server"
@@ -90,7 +90,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* SMTP Port */}
             <InputField
                 required
-                label="发信 SMTP 服务器端口"
+                label="smtp_port（发信 服务器端口SMTP）"
                 type="text"
                 id="smtp_port"
                 name="smtp_port"
@@ -103,7 +103,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* Encrypt Method */}
             <SelectField
                 required
-                label="发信 服务器加密方式"
+                label="encrypt_method（发信 服务器加密方式）"
                 id="encrypt_method"
                 name="encrypt_method"
                 value={localFormData.encrypt_method}

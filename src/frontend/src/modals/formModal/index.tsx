@@ -212,7 +212,7 @@ export default function FormModal({
 
     // deepseek
     let message = ''
-    let reasoning_log = data.message.reasoning_content
+    let reasoning_log = data.message.reasoning_content || ''
     if (typeof data.message !== 'string' && data.message && 'reasoning_content' in data.message) {
       message = (data.message.content || '')
       reasoning_log = (data.message.reasoning_content || '')

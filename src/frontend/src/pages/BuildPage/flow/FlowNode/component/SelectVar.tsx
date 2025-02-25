@@ -29,6 +29,7 @@ const getSpecialVar = (obj, type) => {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
                 if (item.type === 'file') {
+                    if (item.multiple) return res
                     // res.push({ label: item.key, value: item.key })
                     res.push({ label: item.file_content, value: item.file_content })
                     res.push({ label: item.file_path, value: item.file_path })

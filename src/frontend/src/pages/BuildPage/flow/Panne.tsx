@@ -206,10 +206,11 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         (params: Connection) => {
             takeSnapshot()
             let _nodes = []
-            setNodes((x) => {
-                _nodes = x
-                return cloneDeep(x)
-            });
+            // 触发此方法时，避免克隆节点。因为节点已经在组件内部被闭包捕获，直接更新节点会导致更新的是旧的节点，而不是最新的节点
+            // setNodes((x) => {
+            //     _nodes = x
+            //     return cloneDeep(x)
+            // });
             setEdges((eds) => {
                 // 校验
                 const _eds = filterUselessFlow(_nodes, eds)

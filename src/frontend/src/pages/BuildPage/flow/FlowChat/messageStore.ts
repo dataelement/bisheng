@@ -72,7 +72,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
             isSend: !is_bot,
             message,
             thought: intermediate_steps,
-            reasoning_log: message.reasoning_content,
+            reasoning_log: message.reasoning_content || '',
             noAccess: true
         }
     })
@@ -122,7 +122,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
         const currentMsg = messages[currentMessageIndex]
         if (!currentMsg) return get().createWsMsg(
-            { ...data, message: data.message.msg, reasoning_log: reasoning_content, message_id: unique_id + output_key }
+            { ...data, message: data.message.msg, reasoning_log: reasoning_content || '', message_id: unique_id + output_key }
         )
         // append
         const newCurrentMessage = {

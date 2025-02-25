@@ -1,4 +1,3 @@
-import { QuestionMarkIcon } from "@/components/bs-icons"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
@@ -246,48 +245,35 @@ const EditTool = forwardRef((props: any, ref) => {
     // 发送数据给后端保存
     const handleSave = () => {
         // console.log("保存数据:", formState, fromDataRef.current);
+        const errors = [];
+
         if (!formState.toolName) {
-            return message({
-                description: '工具名称不能为空',
-                variant: "warning"
-            })
+            errors.push('工具名称不能为空');
         }
         if (!formState.schemaContent) {
-            return message({
-                description: 'schema不能为空',
-                variant: "warning"
-            })
+            errors.push('schema不能为空');
         }
-        if (formState.authMethod === "apikey" && !formState.apiKey) {
+        if (formState.authMethod === "apikey") {
             if (!formState.apiKey) {
-                return message({
-                    description: 'API Key不可为空',
-                    variant: "warning"
-                });
+                errors.push('API Key不可为空');
+            } else if (formState.apiKey.length > 1000) {
+                errors.push('API Key不可大于1000字符');
             }
 
-            if (formState.apiKey.length > 1000) {
-                return message({
-                    description: 'API Key不可大于1000字符',
-                    variant: "warning"
-                });
+            if (formState.authType === 'custom') {
+                if (!formState.parameter) {
+                    errors.push('Parameter name 不可为空');
+                } else if (formState.parameter.length > 1000) {
+                    errors.push('Parameter name 不可大于1000字符');
+                }
             }
         }
 
-        if (formState.authMethod === "apikey" && formState.authType === 'custom') {
-            if (!formState.parameter) {
-                return message({
-                    description: 'Parameter name 不可为空',
-                    variant: "warning"
-                });
-            }
-
-            if (formState.parameter.length > 1000) {
-                return message({
-                    description: 'Parameter name 不可大于1000字符',
-                    variant: "warning"
-                });
-            }
+        if (errors.length > 0) {
+            return message({
+                description: errors,
+                variant: "warning"
+            });
         }
 
 
@@ -495,7 +481,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                         id="parameter"
                                         name="parameter"
                                         className="mt-2"
-                                        placeholder="请输入自定义API key的参数名"
+                                        placeholder="请输入自定义 API key 参数名"
                                         value={formState.parameter}
                                         onChange={handleInputChange}
                                     />
@@ -508,7 +494,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                     id="apiKey"
                                     name="apiKey"
                                     className="mt-2"
-                                    placeholder="请输入自定义API key的参数名"
+                                    placeholder="请输入自定义 API key 参数值"
                                     value={formState.apiKey}
                                     onChange={handleInputChange}
                                 />

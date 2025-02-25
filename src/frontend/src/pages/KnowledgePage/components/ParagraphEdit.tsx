@@ -244,7 +244,7 @@ const ParagraphEdit = ({
                         <div className="flex justify-end gap-4">
                             {edit && <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>}
                             {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
-                            {!edit && <X className="cursor-pointer size-5 text-gray-500" />}
+                            {!edit && <X className="cursor-pointer size-5 text-gray-500" onClick={onClose} />}
                         </div>
                     </div>
                     {/* file view */}
