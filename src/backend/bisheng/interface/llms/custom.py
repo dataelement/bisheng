@@ -239,8 +239,9 @@ class BishengLLM(BaseChatModel):
             raise e
         return ret
 
-    async def moonshot_agenerate(self,
-                                 messages: List[BaseMessage],
+    async def moonshot_agenerate(
+            self,
+            messages: List[BaseMessage],
             stop: Optional[List[str]] = None,
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
             **kwargs: Any,
