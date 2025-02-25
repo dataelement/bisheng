@@ -1,18 +1,17 @@
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 
+from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
+from bisheng.interface.importing import import_by_type
+from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import Field
-from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
-from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
-
-from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
-from bisheng.interface.importing import import_by_type
-from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
 
 
 class BishengLLM(BaseChatModel):
@@ -147,6 +146,24 @@ class BishengLLM(BaseChatModel):
                     kwargs['tools'].append({
                         'type': 'web_search',
                     })
+        elif self.server_info.type == LLMServerType.MOONSHOT.value:
+            if self.model_info.config.get('enable_web_search'):
+                if 'tools' not in kwargs:
+                    kwargs.update({
+                        'tools': [{
+                            "type": "builtin_function",
+                            "function": {
+                                "name": "$web_search",
+                            },
+                        }],
+                    })
+                else:
+                    kwargs['tools'].append({
+                        "type": "builtin_function",
+                        "function": {
+                            "name": "$web_search",
+                        },
+                    })
         return kwargs
 
     @wrapper_bisheng_model_limit_check
@@ -155,17 +172,50 @@ class BishengLLM(BaseChatModel):
             messages: List[BaseMessage],
             stop: Optional[List[str]] = None,
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
-            stream: Optional[bool] = None,
             **kwargs: Any,
     ) -> ChatResult:
         try:
             kwargs = self.parse_kwargs(kwargs)
-            ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+            if self.server_info.type == LLMServerType.MOONSHOT.value:
+                ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
+            else:
+                ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
             self._update_model_status(1, str(e))
             raise e
         return ret
+
+    def moonshot_generate(
+            self,
+            messages: List[BaseMessage],
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            result = None
+            finish_reason = None
+            while finish_reason is None or finish_reason == 'tool_calls':
+                result = self.llm._generate(messages, stop, run_manager, **kwargs)
+                result_message = result.generations[0][0].message
+                finish_reason = result_message.response_metadata['finish_reason']
+                for tool_call in result_message.tool_calls:
+                    tool_call_name = tool_call['name']
+                    if tool_call_name == "$web_search":
+                        messages[0].append(result_message)
+                        messages[0].append(ToolMessage(
+                            tool_call_id=tool_call['id'],
+                            name=tool_call_name,
+                            content=json.dumps(tool_call['args'], ensure_ascii=False),
+                        ))
+                    else:
+                        break
+            self._update_model_status(0)
+        except Exception as e:
+            self._update_model_status(1, str(e))
+            raise e
+        return result
 
     @wrapper_bisheng_model_limit_check_async
     async def _agenerate(
@@ -178,7 +228,10 @@ class BishengLLM(BaseChatModel):
     ) -> ChatResult:
         try:
             kwargs = self.parse_kwargs(kwargs)
-            ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            if self.server_info.type == LLMServerType.MOONSHOT.value:
+                ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
+            else:
+                ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
             self._update_model_status(1, str(e))
@@ -186,14 +239,44 @@ class BishengLLM(BaseChatModel):
             raise e
         return ret
 
+    async def moonshot_agenerate(self,
+                                 messages: List[BaseMessage],
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            result = None
+            finish_reason = None
+            while finish_reason is None or finish_reason == 'tool_calls':
+                result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+                result_message = result.generations[0][0].message
+                finish_reason = result_message.response_metadata['finish_reason']
+                for tool_call in result_message.tool_calls:
+                    tool_call_name = tool_call['name']
+                    if tool_call_name == "$web_search":
+                        messages[0].append(result_message)
+                        messages[0].append(ToolMessage(
+                            tool_call_id=tool_call['id'],
+                            name=tool_call_name,
+                            content=json.dumps(tool_call['args'], ensure_ascii=False),
+                        ))
+                    else:
+                        break
+            self._update_model_status(0)
+        except Exception as e:
+            self._update_model_status(1, str(e))
+            raise e
+        return result
+
     def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
         # todo 接入到异步任务模块
         LLMDao.update_model_status(self.model_id, status, remark)
 
     def bind_tools(
-        self,
-        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
-        **kwargs: Any,
+            self,
+            tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+            **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         return self.llm.bind_tools(tools, **kwargs)
