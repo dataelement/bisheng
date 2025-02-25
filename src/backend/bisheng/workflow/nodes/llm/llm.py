@@ -66,7 +66,7 @@ class LLMNode(BaseNode):
             one_ret = [
                 {"key": "system_prompt", "value": self._system_prompt_list[index], "type": "params"},
                 {"key": "user_prompt", "value": self._user_prompt_list[index], "type": "params"},
-                {"key": "思考过程", "value": self._log_reasoning_content[index], "type": "params"},
+                {"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"},
                 {"key": f'{self.id}.{k}', "value": v, "type": "variable"}
             ]
             if self._batch_variable_list:
