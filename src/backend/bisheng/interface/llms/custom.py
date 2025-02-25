@@ -1,3 +1,4 @@
+import json
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
@@ -6,7 +7,7 @@ from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
@@ -205,13 +206,13 @@ class BishengLLM(BaseChatModel):
             finish_reason = None
             while finish_reason is None or finish_reason == 'tool_calls':
                 result = self.llm._generate(messages, stop, run_manager, **kwargs)
-                result_message = result.generations[0][0].message
-                finish_reason = result_message.response_metadata['finish_reason']
+                result_message = result.generations[0].message
+                finish_reason = result.generations[0].generation_info.get('finish_reason')
                 for tool_call in result_message.tool_calls:
                     tool_call_name = tool_call['name']
                     if tool_call_name == "$web_search":
-                        messages[0].append(result_message)
-                        messages[0].append(ToolMessage(
+                        messages.append(result_message)
+                        messages.append(ToolMessage(
                             tool_call_id=tool_call['id'],
                             name=tool_call_name,
                             content=json.dumps(tool_call['args'], ensure_ascii=False),
@@ -258,13 +259,13 @@ class BishengLLM(BaseChatModel):
             finish_reason = None
             while finish_reason is None or finish_reason == 'tool_calls':
                 result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
-                result_message = result.generations[0][0].message
-                finish_reason = result_message.response_metadata['finish_reason']
+                result_message = result.generations[0].message
+                finish_reason = result.generations[0].generation_info.get('finish_reason')
                 for tool_call in result_message.tool_calls:
                     tool_call_name = tool_call['name']
                     if tool_call_name == "$web_search":
-                        messages[0].append(result_message)
-                        messages[0].append(ToolMessage(
+                        messages.append(result_message)
+                        messages.append(ToolMessage(
                             tool_call_id=tool_call['id'],
                             name=tool_call_name,
                             content=json.dumps(tool_call['args'], ensure_ascii=False),
