@@ -127,6 +127,9 @@ class WorkflowClient(BaseClient):
                 send_message = self.latest_history.to_dict()
                 send_message['message'] = json.loads(send_message['message'])
                 await self.send_json(send_message)
+        elif status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
+            # 说明workflow已经运行完成, 直接运行新的工作流即可
+            return True, unique_id
 
         await self.send_response('processing', 'begin', '')
         logger.debug('init workflow over, continue run workflow')
