@@ -104,14 +104,14 @@ const modelProviders = {
         },
     ],
     qwen: [
-        {
-            label: "Base URL",
-            type: "text",
-            default: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            placeholder: "",
-            required: true,
-            key: "openai_api_base",
-        },
+        // {
+        //     label: "Base URL",
+        //     type: "text",
+        //     default: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        //     placeholder: "",
+        //     required: true,
+        //     key: "openai_api_base",
+        // },
         {
             label: "API Key",
             type: "password",
