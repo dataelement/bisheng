@@ -29,11 +29,13 @@ class WorkflowClient(BaseClient):
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
 
-    async def close(self):
-        # 非会话模式关闭workflow执行
-        if self.workflow and not self.chat_id:
-            self.workflow.set_workflow_stop()
-        self.workflow = None
+    async def close(self, force_stop = False):
+        # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
+        if self.workflow:
+            if force_stop or not self.chat_id:
+                self.workflow.set_workflow_stop()
+        else:
+            await self.send_response('processing', 'close', '')
 
     async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
         if not self.chat_id:
@@ -71,8 +73,8 @@ class WorkflowClient(BaseClient):
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
-            await self.close()
-            await self.stop_handle_message(message)
+            await self.close(force_stop=True)
+            # await self.stop_handle_message(message)
         else:
             logger.warning('not support action: %s', message.get('action'))
 
