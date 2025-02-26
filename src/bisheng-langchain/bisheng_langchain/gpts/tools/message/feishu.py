@@ -64,25 +64,28 @@ class FeishuMessageTool(BaseModel):
         container_id_type: str,
         start_time: str,
         end_time: str,
+        page_size: int ,
         # page_token: str,
         sort_type: str = "ByCreateTimeAsc",
-        page_size: Optional[int] = 20,
     ) -> str:
         """获取聊天记录"""
         url = f"{self.API_BASE_URL}/im/v1/messages"
         headers = {"Content-Type": "application/json","Authorization":f"Bearer {self.get_access_token()}"}
+        params={
+            "container_id": container_id,
+            "container_id_type": container_id_type,
+            "start_time": start_time,
+            "end_time": end_time,
+            "sort_type": sort_type,
+            # "page_token": page_token,
+        }
+        if page_size:
+            params["page_size"] = page_size
+
         response = requests.get(
             url=url,
             headers=headers,
-            params={
-                "container_id": container_id,
-                "container_id_type": container_id_type,
-                "start_time": start_time,
-                "end_time": end_time,
-                "sort_type": sort_type,
-                # "page_token": page_token,
-                "page_size": page_size,
-            }
+            params=params
         )
 
         return response.json()["data"]

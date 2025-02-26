@@ -134,6 +134,8 @@ class OpenApiSchema:
         params = {
             'params': json.loads(extra),
             'headers': headers,
+            'api_location': location,
+            'parameter_name': parameter_name,
             'api_key': api_key,
             'url': server_host,
             'description': name + description if description else name
