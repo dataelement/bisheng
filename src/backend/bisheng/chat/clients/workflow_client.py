@@ -163,6 +163,10 @@ class WorkflowClient(BaseClient):
         async for event in self.workflow.get_response_until_break():
             await self.send_json(event)
 
+        if not self.workflow:
+            logger.warning('workflow is over by other task')
+            return
+
         status_info = self.workflow.get_workflow_status()
         if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
@@ -179,7 +183,7 @@ class WorkflowClient(BaseClient):
             return
         status_info = self.workflow.get_workflow_status(user_cache=False)
         if status_info['status'] != WorkflowStatus.INPUT.value:
-            logger.warning('workflow is not input status')
+            logger.warning(f'workflow is not input status: {status_info}')
             return
         user_input = {}
         message_id = None
