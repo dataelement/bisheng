@@ -146,9 +146,11 @@ class RagNode(BaseNode):
                 {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
                 {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
                 {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
-                {'key': '思考内容', 'value': self._log_reasoning_content[key], "type": "params"},
-                {'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'}
             ]
+            if self._log_reasoning_content[key]:
+                one_ret.append({'key': '思考内容', 'value': self._log_reasoning_content[key], "type": "params"})
+            one_ret.append({'key': f'{self.id}.{key}', 'value': val, 'type': 'variable'})
+
             index += 1
             ret.append(one_ret)
         return ret

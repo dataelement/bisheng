@@ -278,7 +278,8 @@ class AgentNode(BaseNode):
 
             # 处理工具调用日志
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
-            one_ret.append({"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"})
+            if self._log_reasoning_content[index]:
+                one_ret.append({"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             ret.append(one_ret)
             index += 1
