@@ -116,7 +116,7 @@ class BaseNode(ABC):
         :return:
         """
         if self.stop_flag:
-            raise IgnoreException('stop by user')
+            raise IgnoreException('workflow stop by user')
         if self.current_step >= self.max_steps:
             raise IgnoreException(f'{self.name} -- has run more than the maximum number of times.')
 
