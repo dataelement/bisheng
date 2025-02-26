@@ -29,7 +29,7 @@ def file_copy_celery(param: json) -> str:
     logger.info('file_copy_celery start source_id={} target_id={}', source_knowledge_id, target_id)
     minio_client = MinioClient()
     page_size = 20
-    page_num = 0
+    page_num = 1
     source_knowledge = KnowledgeDao.query_by_id(source_knowledge_id)
     target_knowledge = KnowledgeDao.query_by_id(target_id)
 
