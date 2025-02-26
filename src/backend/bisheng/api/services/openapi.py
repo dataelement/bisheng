@@ -64,7 +64,7 @@ class OpenApiSchema:
                             for param_name, param_info in schema['properties'].items():
                                 param = {
                                     'name': param_name,
-                                    'description': param_name,
+                                    'description': param_info.get('description', ''),
                                     'in': 'body',
                                     'required': param_name in schema.get('required', []),
                                     'schema': {
