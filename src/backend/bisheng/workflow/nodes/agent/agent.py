@@ -138,14 +138,16 @@ class AgentNode(BaseNode):
                 vector_client = self.init_knowledge_milvus(knowledge_info)
                 es_client = self.init_knowledge_es(knowledge_info)
             else:
-                file_metadata = self.get_other_node_variable(knowledge_id)
-                if not file_metadata:
+                file_metadata_list = self.get_other_node_variable(knowledge_id)
+                if not file_metadata_list:
                     # 没有上传文件，则不去检索
                     continue
 
-                name = f'{knowledge_id.replace(".", "").replace("#", "")}_knowledge_{index}'
-                description = f'{file_metadata.get("source")}:{file_metadata.get("title")}'
-
+                name = f'{knowledge_id.split(".")[-1].replace("#", "")}_knowledge_{index}'
+                description = ''
+                for one in file_metadata_list:
+                    description += f'<{one.get("source")}>:<{one.get("title")}>'
+                file_metadata = file_metadata_list[0]
                 vector_client = self.init_file_milvus(file_metadata)
                 es_client = self.init_file_es(file_metadata)
 

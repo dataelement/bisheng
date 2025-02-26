@@ -96,7 +96,7 @@ class InputNode(BaseNode):
                                         embeddings)
 
         # 3、解析文件
-        metadatas = []
+        all_metadata = []
         texts = []
         filepath = ''
         file_id = md5_hash(f'{key}:{value[0]}')
@@ -126,9 +126,10 @@ class InputNode(BaseNode):
             es_client.add_texts(texts=texts, metadatas=metadatas)
 
             logger.info(f'workflow_record_file_metadata file={key} file_name={file_name}')
+            all_metadata.append(metadatas[0])
         # 记录文件metadata，其他节点根据metadata数据去检索对应的文件
         return {
-            key_info['key']: metadatas[0],
+            key_info['key']: all_metadata,
             key_info['file_content']: "\n".join(texts),
             key_info['file_path']: filepath
         }

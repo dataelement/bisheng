@@ -214,7 +214,7 @@ class RagNode(BaseNode):
                 if not file_metadata:
                     # 未找到对应的临时文件数据, 用户未上传文件
                     continue
-                file_ids.append(file_metadata['file_id'])
+                file_ids.append(file_metadata[0]['file_id'])
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'
             params = {
@@ -245,7 +245,7 @@ class RagNode(BaseNode):
                 file_metadata = self.get_other_node_variable(one)
                 if not file_metadata:
                     continue
-                file_ids.append(file_metadata['file_id'])
+                file_ids.append(file_metadata[0]['file_id'])
             node_type = 'ElasticKeywordsSearch'
             params = {
                 'index_name': self.tmp_collection_name,
