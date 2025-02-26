@@ -40,7 +40,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.OPENAI.value: 'ChatOpenAI',
         LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
         LLMServerType.QWEN.value: 'ChatTongyi',
-        LLMServerType.QIAN_FAN.value: 'ChatWenxin',
+        LLMServerType.QIAN_FAN.value: 'QianfanChatEndpoint',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
         LLMServerType.MINIMAX.value: 'ChatOpenAI',
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
@@ -115,10 +115,14 @@ class BishengLLM(BaseChatModel):
         })
         if server_info.type == LLMServerType.OLLAMA.value:
             params['model'] = params.pop('model_name')
+            if params.get('max_tokens'):
+                params['num_ctx'] = params.pop('max_tokens')
         elif server_info.type == LLMServerType.AZURE_OPENAI.value:
             params['azure_deployment'] = params.pop('model_name')
         elif server_info.type == LLMServerType.QIAN_FAN.value:
             params['model'] = params.pop('model_name')
+            params['qianfan_ak'] = params.pop('wenxin_api_key')
+            params['qianfan_sk'] = params.pop('wenxin_secret_key')
         elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
@@ -128,7 +132,8 @@ class BishengLLM(BaseChatModel):
             params['dashscope_api_key'] = params.pop('openai_api_key')
             params.pop('openai_api_base')
             params['model_kwargs'] = {'enable_search': enable_web_search}
-
+            if params.get('max_tokens'):
+                params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
         elif server_info.type == LLMServerType.TENCENT.value:
             params['extra_body'] = {'enable_enhancement': enable_web_search}
         return params
