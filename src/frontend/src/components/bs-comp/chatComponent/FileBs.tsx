@@ -25,7 +25,7 @@ export default function FileBs({ data }) {
 
     // download file
     const handleDownloadFile = (file) => {
-        const url = file?.file_url
+        const url = __APP_ENV__.BASE_URL + file?.file_url
         url && downloadFile(checkSassUrl(url), file?.file_name)
     }
 

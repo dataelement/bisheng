@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import useFlowStore from "../flowStore"
 
 // 引导词推荐
 const GuideQuestions = forwardRef(({ locked, chatId, onClick }, ref) => {
@@ -31,13 +32,12 @@ const GuideQuestions = forwardRef(({ locked, chatId, onClick }, ref) => {
     }, [questions])
 
     if (locked || !words.length) return null
-
     return (
         <div className="relative">
             <div className="absolute left-0 bottom-0">
-                <p className="text-gray-950 text-sm mb-2 bg-[rgba(255,255,255,0.8)] rounded-md w-fit px-2 py-1">
+                {window.workflow_flow?.name === 'AI助手' ? null : <p className="text-gray-950 text-sm mb-2 bg-[rgba(255,255,255,0.8)] rounded-md w-fit px-2 py-1">
                     {t('chat.recommendationQuestions')}
-                </p>
+                </p>}
                 {
                     words.map((question, index) => (
                         <div

@@ -1,9 +1,9 @@
 {
-  "title": "文擎毕昇",
+  "title": "智慧中英",
   "prompt": "提示",
   "login": {
     "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
-    "bottomText": "文擎毕昇",
+    "bottomText": "智慧中英",
     "account": "用户名",
     "password": "密码",
     "confirmPassword": "确认密码",
@@ -185,7 +185,7 @@
     "chooseOne": "选择一个",
     "dialogue": "对话",
     "start": "开始",
-    "wenqingruijian": "文擎睿见",
+    "wenqingruijian": "智慧中英",
     "inputPlaceholder": "请输入问题",
     "uploadFileTooltip": "上传文件",
     "sendTooltip": "发送",

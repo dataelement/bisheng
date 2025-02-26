@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
-function ModelItem({ data, onDelete, onInput, onConfig }) {
+function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
     const [model, setModel] = useState(data)
     const [error, setError] = useState('')
@@ -105,23 +105,23 @@ function ModelItem({ data, onDelete, onInput, onConfig }) {
                         </SelectContent>
                     </Select>
                 </div>
-                {model.model_type === 'llm' && (
-                    <>
-                        <div className="flex gap-2 items-center">
-                            <Label className="bisheng-label">是否启用联网搜索</Label>
-                            <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
-                        </div>
-                        <div>
-                            <Label className="bisheng-label">max_tokens</Label>
-                            <Input
-                                type="number"
-                                value={maxTokens}
-                                onChange={handleMaxTokensChange}
-                                className="h-8"
-                            />
-                        </div>
-                    </>
+                {model.model_type === 'llm' && ['qwen', 'tencent', 'moonshot'].includes(type) && (
+                    <div className="flex gap-2 items-center">
+                        <Label className="bisheng-label">联网搜索</Label>
+                        <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
+                    </div>
                 )}
+                <div>
+                    <Label className="bisheng-label">
+                        {type === 'qianfan' ? 'max_output_tokens' : (type === 'ollama' ? 'num_ctx' : 'max_tokens')}
+                    </Label>
+                    <Input
+                        type="number"
+                        value={maxTokens}
+                        onChange={handleMaxTokensChange}
+                        className="h-8"
+                    />
+                </div>
             </div>
         </div>
     )
@@ -357,6 +357,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         {
                             formData.models.map((m, i) => <ModelItem
                                 data={m}
+                                type={formData.type}
                                 onInput={(name, type) => handleModelChange(name, type, i)}
                                 onConfig={(config) => handleModelConfig(config, i)}
                                 key={m.name}

@@ -2,16 +2,18 @@ import { useEffect } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 
-export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '' }: { autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
+export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '', test = false }: { autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
     const { changeChatId } = useMessageStore()
 
     useEffect(() => {
-        changeChatId(chatId)
+        chatId.startsWith('test') && changeChatId(chatId)
     }, [chatId])
 
     const getMessage = (action, { nodeId, msg, category, extra, source, message_id }) => {
+        
+        const _flow = window.workflow_flow || flow
         if (action === 'getInputForm') {
-            const node = flow.nodes.find(node => node.id === nodeId)
+            const node = _flow.nodes.find(node => node.id === nodeId)
             if (node.data.tab.value === 'input') return null
             let form = null
             node.data.group_params.some(group => group.params.some(param => {
@@ -24,7 +26,7 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '' }: 
             return form
         }
         if (action === 'input') {
-            const node = flow.nodes.find(node => node.id === nodeId)
+            const node = _flow.nodes.find(node => node.id === nodeId)
             const tab = node.data.tab.value
             let variable = ''
             node.data.group_params.some(group =>
@@ -56,8 +58,8 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '' }: 
         return {
             action,
             chat_id: chatId.startsWith('test') ? undefined : chatId,
-            flow_id: flow.id,
-            data: flow
+            flow_id: _flow.id,
+            data: _flow
         }
     }
 

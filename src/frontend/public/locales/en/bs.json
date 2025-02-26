@@ -1,5 +1,5 @@
 {
-  "title": "BISHENG",
+  "title": "Aviva-Cofco Intelligence",
   "prompt": "Confirmation",
   "login": {
     "slogen": "Convenient, Flexible, Reliable Enterprise-Level Large Model Application Development Platform",
@@ -188,7 +188,7 @@
     "chooseOne": "Choose a ",
     "dialogue": "Conversation ",
     "start": "to start with ",
-    "wenqingruijian": "Wen Qingrui Jian",
+    "wenqingruijian": "Aviva-Cofco Intelligence",
     "inputPlaceholder": "Enter your question",
     "uploadFileTooltip": "Upload File",
     "sendTooltip": "Send",

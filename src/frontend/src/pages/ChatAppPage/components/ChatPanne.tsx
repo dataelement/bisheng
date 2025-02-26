@@ -95,9 +95,10 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
 
             const { data, ...f } = _flow
             const { nodes, edges, viewport } = data
-
+            const newflow = { ...f, nodes, edges, viewport }
+            window.workflow_flow = newflow
             setTimeout(() => { // holding change autorun
-                setWorkflow({ ...f, nodes, edges, viewport })
+                setWorkflow(newflow)
                 changeFlowChatId(chatId)
                 version === 'v2' && setAutoRun(true)
             }, 100);
@@ -215,7 +216,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
             {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
         </p> */}
-        {
+        {/* {
             !customWsHost && <div
                 className="relative z-50 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
                 onClick={() => {
@@ -224,7 +225,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 <span className="block my-auto ml-[4px]"><NewApplicationIcon /></span>
                 <span className="mr-[28px]">{t('chat.newChat')}</span>
             </div>
-        }
+        } */}
     </div>
 
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >

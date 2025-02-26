@@ -60,7 +60,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
     }
 
     const [multiVal, setMultiVal] = useState([])
-    return <div className="flex flex-col gap-6 rounded-xl p-4 ">
+    return <div className="flex flex-col gap-6 rounded-xl p-4 select-none">
         <div className="max-h-[520px] overflow-y-auto">
             {
                 data.value.map((item, i) => (
@@ -126,8 +126,8 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                                 value={''}
                                                 multiple={item.multiple}
                                                 onChange={(name) => updataFileName(item, name)}
-                                                fileTypes={["png", "jpg", "jpeg", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "md", "html", "pdf"]}
-                                                suffixes={['xxx']}
+                                                suffixes={[".png", ".jpg", ".jpeg", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".txt", ".md", ".html", ".pdf"]}
+                                                // suffixes={['xxx']}
                                                 onFileChange={(val) => handleChange(item, val)}
                                             />
                                         )

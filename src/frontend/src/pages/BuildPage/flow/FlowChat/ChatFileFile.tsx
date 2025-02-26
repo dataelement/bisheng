@@ -7,7 +7,16 @@ export default function ChatFile({ fileName, filePath }) {
 
     // download file
     const handleDownloadFile = (filePath) => {
-        filePath && downloadFile(checkSassUrl(filePath), fileName)
+        const map = {
+            "个人因私预定指引.pdf": "https://dev.aviva-cofco.com.cn/AI-FIN/grys.pdf",
+            "通信费报销标准.pdf": "https://dev.aviva-cofco.com.cn/AI-FIN/txbxbz.pdf",
+            "通信费报销手册.pdf": "https://dev.aviva-cofco.com.cn/AI-FIN/txbxsc.pdf",
+            "协议酒店品牌介绍.pdf": "https://dev.aviva-cofco.com.cn/AI-FIN/xyjd.pdf",
+            "协议酒店品牌介绍及个人因私预订指引.pdf": "https://dev.aviva-cofco.com.cn/AI-FIN/xyjdysyd.pdf",
+            "美团收货地址明细.xlsx": "https://dev.aviva-cofco.com.cn/AI-FIN/mtsh.xlsx"
+        }
+        const url = map[fileName] ? map[fileName] : __APP_ENV__.BASE_URL + filePath
+        filePath && downloadFile(map[fileName] ? url : checkSassUrl(url), fileName)
     }
 
     return <div

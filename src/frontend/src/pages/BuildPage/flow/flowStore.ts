@@ -17,7 +17,10 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
     flow: null,
     fitView: false,
     notifications: [], // 消息队列
-    setFlow: (newFlow) => set({ flow: newFlow }),
+    setFlow: (newFlow) => {
+        set({ flow: newFlow })
+        console.log('newFlow :>> ', newFlow);
+    },
     setFitView: () => set((state) => ({ fitView: !state.fitView })),
     uploadFlow(file?: File) {
         const input = document.createElement("input");
