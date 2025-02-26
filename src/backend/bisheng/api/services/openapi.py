@@ -10,11 +10,8 @@ class OpenApiSchema:
         self.version = contents['openapi']
         self.info = contents['info']
         self.title = self.info['title']
+        self.auth_type = 'basic'
         self.description = self.info.get('description', '')
-        self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apikey' else 'basic'
-        self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
-        self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
-
         self.default_server = ''
         self.apis = []
 
@@ -30,7 +27,10 @@ class OpenApiSchema:
         else:
             self.default_server = servers['url']
 
-        auth = self.contents['components']['securitySchemes']['ApiKeyAuth']
+        if self.contents.get('components') and self.contents['components'].get('securitySchemes') is not None:
+            self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 'basic'
+            self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
+            self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
         return self.default_server
 
     def parse_paths(self) -> list[dict]:
