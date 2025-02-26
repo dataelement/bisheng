@@ -119,6 +119,10 @@ class WorkflowClient(BaseClient):
                 # 让前端终止上一次的运行
                 await self.send_response('processing', 'close', '')
             return True, unique_id
+
+        # 每次建立链接，都重新运行workflow
+        return True, unique_id
+
         # 说明会话还在运行中
         if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
             # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
