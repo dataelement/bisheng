@@ -36,6 +36,8 @@ class WorkflowClient(BaseClient):
         # 非会话模式关闭workflow执行
         if self.workflow:
             self.workflow.set_workflow_stop()
+        else:
+            await self.send_response('processing', 'close', '')
 
     async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
         if not self.chat_id:
