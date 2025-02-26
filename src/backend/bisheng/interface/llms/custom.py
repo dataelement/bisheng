@@ -101,9 +101,10 @@ class BishengLLM(BaseChatModel):
             params.update(server_info.config)
         if model_info.config:
             params.update(model_info.config)
-            params.pop('enable_web_search')
             if params.get('max_tokens', None) and params.get('max_tokens') <= 0:
                 params.pop('max_tokens')
+
+        enable_web_search = params.pop('enable_web_search') if 'enable_web_search' in params else False
 
         params.update({
             'model_name': model_info.model_name,
@@ -126,8 +127,10 @@ class BishengLLM(BaseChatModel):
         elif server_info.type == LLMServerType.QWEN.value:
             params['dashscope_api_key'] = params.pop('openai_api_key')
             params.pop('openai_api_base')
+            params['model_kwargs'] = {'enable_search': enable_web_search}
+
         elif server_info.type == LLMServerType.TENCENT.value:
-            params['extra_body'] = {'enable_enhancement': self.get_model_info_config().get('enable_web_search', False)}
+            params['extra_body'] = {'enable_enhancement': enable_web_search}
         return params
 
     @property
