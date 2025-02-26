@@ -79,7 +79,7 @@ class KnowledgeService(KnowledgeUtils):
         for one in knowledge_list:
             res.append(KnowledgeRead(**one.model_dump(),
                                      user_name=db_user_dict.get(one.user_id, one.user_id),
-                                     copiable=login_user.copiable_check(one.user_id)))
+                                     copiable=login_user.access_check(one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE)))
         return res
 
     @classmethod
