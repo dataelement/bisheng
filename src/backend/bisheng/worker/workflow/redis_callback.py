@@ -55,8 +55,8 @@ class RedisCallback(BaseCallback):
             self.redis_client.delete(self.workflow_input_key)
 
     def get_workflow_status(self, user_cache: bool = True) -> dict | None:
-        if user_cache and self.workflow_cache.get(self.workflow_status_key):
-            return self.workflow_cache.get(self.workflow_status_key)
+        # if user_cache and self.workflow_cache.get(self.workflow_status_key):
+        #     return self.workflow_cache.get(self.workflow_status_key)
         workflow_status = self.redis_client.get(self.workflow_status_key)
         self.workflow_cache.setdefault(self.workflow_status_key, workflow_status)
         return workflow_status
