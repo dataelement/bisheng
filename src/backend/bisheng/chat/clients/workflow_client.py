@@ -75,7 +75,7 @@ class WorkflowClient(BaseClient):
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
             await self.close()
-            await self.stop_handle_message(message)
+            # await self.stop_handle_message(message)
         else:
             logger.warning('not support action: %s', message.get('action'))
 
