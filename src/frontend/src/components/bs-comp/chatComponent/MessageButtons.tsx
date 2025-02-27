@@ -1,6 +1,7 @@
 import { FlagIcon } from "@/components/bs-icons";
 import { ThunmbIcon } from "@/components/bs-icons/thumbs";
 import { Button } from "@/components/bs-ui/button";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { copyTrackingApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +16,7 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
+    const { message } = useToast()
 
     const handleClick = (type: ThumbsState) => {
         if (mark) return
@@ -36,6 +38,10 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
         }, 2000);
 
         copyTrackingApi(id)
+        message({
+            variant: 'success',
+            description: '已复制'
+        })
     }
 
     return <div className="flex gap-1">

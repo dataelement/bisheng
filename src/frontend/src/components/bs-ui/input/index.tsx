@@ -126,6 +126,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps & { boxClas
                         "flex min-h-[80px] w-full rounded-md border border-input bg-search-input px-3 py-2 text-sm text-[#111] dark:text-gray-50 shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                         className
                     )}
+                    enterkeyhint="send"
                     ref={ref}
                     defaultValue={defaultValue}
                     maxLength={maxLength}

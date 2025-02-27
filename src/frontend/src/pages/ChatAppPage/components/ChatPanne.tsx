@@ -33,7 +33,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // console.log('data :>> ', flow);
     const build = useBuild()
     const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
-    const { loadHistoryMsg: loadFlowHistoryMsg, changeChatId: changeFlowChatId } = useFlowMessageStore()
+    const { chatId: flowChatId, loadHistoryMsg: loadFlowHistoryMsg, changeChatId: changeFlowChatId } = useFlowMessageStore()
 
     useEffect(() => {
         return destroy
@@ -97,8 +97,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             const { nodes, edges, viewport } = data
             const newflow = { ...f, nodes, edges, viewport }
             window.workflow_flow = newflow
+            setWorkflow(newflow)
             setTimeout(() => { // holding change autorun
-                setWorkflow(newflow)
                 changeFlowChatId(chatId)
                 version === 'v2' && setAutoRun(true)
             }, 100);
@@ -283,7 +283,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
                 <CommitmentDialog id={workflow.id} name={workflow.name} />
             </div>
         }

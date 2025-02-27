@@ -72,7 +72,7 @@ export default function StatisticsReport({ onBack, onJump }) {
             end_date,
         };
         getReportDownloadLinkApi(params).then(res => {
-            downloadFile(res.url, '统计报表.xlsx')
+            downloadFile(__APP_ENV__.BASE_URL + res.url, '统计报表.xlsx')
         })
     };
 

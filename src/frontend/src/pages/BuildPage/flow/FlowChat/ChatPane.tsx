@@ -10,8 +10,8 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '', te
     }, [chatId])
 
     const getMessage = (action, { nodeId, msg, category, extra, source, message_id }) => {
-        
-        const _flow = window.workflow_flow || flow
+
+        const _flow = flow
         if (action === 'getInputForm') {
             const node = _flow.nodes.find(node => node.id === nodeId)
             if (node.data.tab.value === 'input') return null

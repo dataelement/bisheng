@@ -283,8 +283,14 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         }
 
         if (data.type === 'close') {
-            setDisableRestart(false)
             insetSeparator('本轮会话已结束')
+            setInputLock({ locked: true, reason: '' })
+            setInputForm(null)
+            // 重启会话按钮,接收close确认后端处理结束后重启会话
+            if (restartCallBackRef.current[data.chat_id]) {
+                restartCallBackRef.current[data.chat_id]()
+                restartCallBackRef.current[data.chat_id] = null
+            }
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
@@ -396,21 +402,18 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         sendWsMsg({ "action": "stop" });
     }
     // restart
-    const [disableRestart, setDisableRestart] = useState(false)
+    const restartCallBackRef = useRef({})
+    const [restarted, setRestarted] = useState(false)
     const handleRestartClick = () => {
-        setInputForm(null)
-        setInputLock({ locked: true, reason: '' })
         sendWsMsg({ "action": "stop" });
-        restartTaskRef.current[currentChatIdRef.current] = true
-        setDisableRestart(true)
-        // wsRef.current?.close()
-        // wsRef.current = null
-        // stop.show && insetSeparator(t('chat.chatEndMessage'))
-        // setTimeout(() => {
-        //     createWebSocket().then(() => {
-        //         sendWsMsg(onBeforSend('init_data', {}))
-        //     })
-        // }, 300);
+        setRestarted(true)
+        const chatId = currentChatIdRef.current.startsWith('test') ? '' : currentChatIdRef.current
+        restartCallBackRef.current[chatId] = () => {
+            createWebSocket().then(() => {
+                setRestarted(false)
+                sendWsMsg(onBeforSend('init_data', {}))
+            })
+        }
     }
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
@@ -432,12 +435,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Button className="rounded-full" variant="ghost" size="icon" disabled={disableRestart} onClick={handleRestartClick}><RefreshCw size={18} /></Button>
+                <Button className="rounded-full" variant="ghost" size="icon" disabled={restarted} onClick={handleRestartClick}><RefreshCw size={18} /></Button>
             </div>
             {/* form switch */}
             <div className="flex absolute left-12 top-4 z-10">
                 {
-                    inputForm && <div
+                    inputForm && !formShow && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => setFormShow(!formShow)}
                     ><FormIcon></FormIcon></div>
@@ -472,7 +475,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
-                placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
+                placeholder={inputForm ? '      点击刷新按钮可开启新对话' : (inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder'))}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {

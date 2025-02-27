@@ -20,7 +20,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const [model, setModel] = useState(data)
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
-    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens || '')
+    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -40,7 +40,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         // Reset states when model_type changes
         setIsWebSearchEnabled(false)  // Reset web search toggle to false
         setMaxTokens('')  // Reset max tokens input
-        onConfig(null)
+        // onConfig(null)
     }
 
     const handleDelClick = () => {
@@ -199,6 +199,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const handleModelChange = (name, type, index) => {
         const models = formData.models.map((el, i) => index === i ? {
             ...el,
+            config: type === 'llm' ? el.config : null,
             model_name: name,
             model_type: type
         } : el)
