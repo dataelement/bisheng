@@ -1,12 +1,13 @@
+import { locationContext } from "@/contexts/locationContext";
 import { FileSearch2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
-import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { uploadFile } from "../../controllers/API";
 import { uploadFileWithProgress } from "../../modals/UploadModal/upload";
 import { FileComponentType } from "../../types/components";
 import { LoadIcon } from "../bs-icons/loading";
 import { Button } from "../bs-ui/button";
+import { useToast } from "../bs-ui/toast/use-toast";
 
 export default function InputFileComponent({
   value,
@@ -22,7 +23,6 @@ export default function InputFileComponent({
 }: FileComponentType) {
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
-  const { setErrorData } = useContext(alertContext);
   const { flow } = useContext(TabsContext);
   useEffect(() => {
     if (disabled) {
@@ -45,6 +45,20 @@ export default function InputFileComponent({
     setMyValue(value);
   }, [value]);
 
+  const { appConfig } = useContext(locationContext)
+  const { toast } = useToast()
+  const checkFileSize = (file) => {
+    const maxSize = (appConfig.uploadFileMaxSize || 50) * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({
+        variant: 'error',
+        description: `上传文件大小不能超过 ${appConfig.uploadFileMaxSize} MB`
+      })
+      setLoading(false);
+      return true
+    }
+  }
+
   const handleButtonClick = () => {
     if (multiple) return batchUpload()
     // Create a file input element
@@ -59,13 +73,16 @@ export default function InputFileComponent({
 
       // Get the selected file
       const file = (e.target as HTMLInputElement).files?.[0];
-
+      if (checkFileSize(file)) return
       // Check if the file type is correct
       // if (file && checkFileType(file.name)) {
       // Upload the file
       isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
         setLoading(false);
-        if (typeof res === 'string') return setErrorData({ title: "Error", list: [res] })
+        if (typeof res === 'string') return toast({
+          variant: 'error',
+          description: res
+        })
         const { file_path } = res;
         setMyValue(file.name);
         onChange(file.name);
@@ -89,15 +106,6 @@ export default function InputFileComponent({
           console.error("Error occurred while uploading file");
           setLoading(false);
         });
-      // } else {
-      //   // Show an error if the file type is not allowed
-      //   setErrorData({
-      //     title:
-      //       "请选择有效文件。只允许使用这些文件类型：",
-      //     list: fileTypes,
-      //   });
-      //   setLoading(false);
-      // }
     };
 
     // Trigger the file selection dialog
@@ -121,6 +129,9 @@ export default function InputFileComponent({
       if (files && files.length > 0) {
         const fileNames = Array.from(files).map(file => file.name); // Extract file names
         const filePaths = []; // This will hold the file paths after successful upload
+        for (let i = 0; i < files.length; i++) {
+          if (checkFileSize(files[i])) return
+        }
 
         // Perform the upload for each file
         const uploadPromises = Array.from(files).map(file => {
@@ -128,7 +139,10 @@ export default function InputFileComponent({
             ? uploadFileWithProgress(file, (progress) => { }) // Adjust upload method if needed
               .then(res => {
                 if (typeof res === 'string') {
-                  setErrorData({ title: "Error", list: [res] });
+                  toast({
+                    variant: 'error',
+                    description: res
+                  })
                   setLoading(false);
                   throw new Error(res); // Exit the upload if error occurs
                 }
@@ -157,10 +171,10 @@ export default function InputFileComponent({
             setLoading(false); // Hide loading state if an error occurs
           });
       } else {
-        setErrorData({
-          title: "请选择文件",
-          list: ["没有选择文件"],
-        });
+        toast({
+          variant: 'error',
+          description: '没有选择文件'
+        })
         setLoading(false); // Hide loading state if no files were selected
       }
     };

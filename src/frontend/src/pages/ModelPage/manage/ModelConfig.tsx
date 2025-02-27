@@ -20,7 +20,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const [model, setModel] = useState(data)
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
-    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens || 0)
+    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens || '')
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -40,6 +40,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         // Reset states when model_type changes
         setIsWebSearchEnabled(false)  // Reset web search toggle to false
         setMaxTokens('')  // Reset max tokens input
+        onConfig(null)
     }
 
     const handleDelClick = () => {
@@ -105,23 +106,25 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                         </SelectContent>
                     </Select>
                 </div>
-                {model.model_type === 'llm' && ['qwen', 'tencent', 'moonshot'].includes(type) && (
-                    <div className="flex gap-2 items-center">
-                        <Label className="bisheng-label">联网搜索</Label>
-                        <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
-                    </div>
+                {model.model_type === 'llm' && (
+                    <>
+                        {['qwen', 'tencent', 'moonshot'].includes(type) && <div className="flex gap-2 items-center">
+                            <Label className="bisheng-label">联网搜索</Label>
+                            <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
+                        </div>}
+                        <div>
+                            <Label className="bisheng-label">
+                                {type === 'qianfan' ? 'max_output_tokens' : (type === 'ollama' ? 'num_ctx' : 'max_tokens')}
+                            </Label>
+                            <Input
+                                type="number"
+                                value={maxTokens}
+                                onChange={handleMaxTokensChange}
+                                className="h-8"
+                            />
+                        </div>
+                    </>
                 )}
-                <div>
-                    <Label className="bisheng-label">
-                        {type === 'qianfan' ? 'max_output_tokens' : (type === 'ollama' ? 'num_ctx' : 'max_tokens')}
-                    </Label>
-                    <Input
-                        type="number"
-                        value={maxTokens}
-                        onChange={handleMaxTokensChange}
-                        className="h-8"
-                    />
-                </div>
             </div>
         </div>
     )

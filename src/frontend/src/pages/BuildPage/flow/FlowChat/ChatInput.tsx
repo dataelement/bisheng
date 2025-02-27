@@ -252,6 +252,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         if (data.category === 'error') {
             const { code, message } = data.message
             if (10527 === code) {
+                setInputForm(false)
                 return createWebSocket().then(() => {
                     // 超时重启
                     const wsMsg = onBeforSend('init_data', {})
