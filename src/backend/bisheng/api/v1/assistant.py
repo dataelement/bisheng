@@ -231,7 +231,7 @@ async def get_tool_schema(*,
         logger.exception(f'openapi schema parse error {e}')
         return resp_500(message=f'openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}')
 
-    # 解析openapi schema转为助手工具的格式
+    #  解析openapi schema转为助手工具的格式
     try:
         schema = OpenApiSchema(res)
         schema.parse_server()
