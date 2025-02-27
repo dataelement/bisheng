@@ -276,7 +276,7 @@ class AgentNode(BaseNode):
             ]
             if self._batch_variable_list:
                 one_ret.insert(0,
-                               {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "params"})
+                               {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "variable"})
 
             # 处理工具调用日志
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))

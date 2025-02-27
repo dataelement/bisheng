@@ -71,7 +71,7 @@ class LLMNode(BaseNode):
                 one_ret.append({"key": "思考内容", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             if self._batch_variable_list:
-                one_ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "params"})
+                one_ret.insert(0, {"key": f"{self.id}.batch_variable", "value": self._batch_variable_list[index], "type": "variable"})
             index += 1
             ret.append(one_ret)
         return ret
