@@ -154,9 +154,15 @@ class BishengLLM(BaseChatModel):
                         'tools': [{'type': 'web_search'}],
                     })
                 else:
-                    kwargs['tools'].append({
-                        'type': 'web_search',
-                    })
+                    tool_exists = False
+                    for tool in kwargs['tools']:
+                        if tool.get('type') == 'web_search':
+                            tool_exists = True
+                            break
+                    if not tool_exists:
+                        kwargs['tools'].append({
+                            'type': 'web_search',
+                        })
         elif self.server_info.type == LLMServerType.MOONSHOT.value:
             if self.get_model_info_config().get('enable_web_search'):
                 if 'tools' not in kwargs:
@@ -169,12 +175,18 @@ class BishengLLM(BaseChatModel):
                         }],
                     })
                 else:
-                    kwargs['tools'].append({
-                        "type": "builtin_function",
-                        "function": {
-                            "name": "$web_search",
-                        },
-                    })
+                    tool_exists = False
+                    for tool in kwargs['tools']:
+                        if tool.get('type') == 'builtin_function':
+                            tool_exists = True
+                            break
+                    if not tool_exists:
+                        kwargs['tools'].append({
+                            "type": "builtin_function",
+                            "function": {
+                                "name": "$web_search",
+                            },
+                        })
         return kwargs
 
     @wrapper_bisheng_model_limit_check
