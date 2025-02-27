@@ -51,7 +51,6 @@ class EmailMessageTool(APIToolBase):
             # 创建邮件对象
             msg = MIMEMultipart()
             msg["From"] = self.email_account
-            # msg["To"] = ", ".join(receiver) if isinstance(receiver, list) else receiver
             msg["To"] = receiver
             msg["Subject"] = subject
 
@@ -86,9 +85,9 @@ class EmailMessageTool(APIToolBase):
             # 发送邮件
             server.sendmail(self.email_account, receiver.split(","), msg.as_string())
         except smtplib.SMTPAuthenticationError:
-            return "用户名或密码错误，请检查您的凭据。"
+            return "用户名或密码错误。"
         except Exception as e:
-            return f"发送邮件时发生错误: {e}"
+            return f"发送邮件失败: {e}"
 
         return "发送成功"
 
