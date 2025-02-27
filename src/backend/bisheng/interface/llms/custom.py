@@ -122,6 +122,8 @@ class BishengLLM(BaseChatModel):
             params['model'] = params.pop('model_name')
             params['qianfan_ak'] = params.pop('wenxin_api_key')
             params['qianfan_sk'] = params.pop('wenxin_secret_key')
+            if params.get('max_tokens'):
+                params['model_kwargs'] = {"max_tokens": params.pop('max_tokens')}
         elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
