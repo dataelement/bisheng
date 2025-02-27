@@ -123,7 +123,7 @@ def get_app_chat_list(*,
         if flows:
             flow_ids = [flow.id for flow in flows]
         if assistants:
-            flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
+            flow_ids.extend([assistant.id for assistant in assistants])
         if user_ids:
             user_ids = [user.user_id for user in users]
         # 检索内容为空

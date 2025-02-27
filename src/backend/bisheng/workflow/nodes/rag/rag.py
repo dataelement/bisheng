@@ -128,7 +128,7 @@ class RagNode(BaseNode):
         user_question_list = self.init_user_question()
         # 判断检索结果是否超出一定的长度, 原因是ws发送的消息超过一定的长度会报错
         source_documents = [[d.page_content for d in one] for one in self._log_source_documents.values()]
-        tmp_retrieved_type = 'params'
+        tmp_retrieved_type = 'variable'
         tmp_retrieved_result = json.dumps(source_documents, indent=2, ensure_ascii=False)
         if len(tmp_retrieved_result.encode('utf-8')) >= 50 * 1024:  # 大于50kb的日志数据存文件
             tmp_retrieved_type = 'file'
@@ -142,8 +142,8 @@ class RagNode(BaseNode):
                 tmp_retrieved_result = json.dumps([one.page_content for one in self._log_source_documents[key]],
                                                   indent=2, ensure_ascii=False)
             one_ret = [
-                {'key': 'user_question', 'value': user_question_list[index], "type": "params"},
-                {'key': 'retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
+                {'key': f'{self.id}.user_question', 'value': user_question_list[index], "type": "variable"},
+                {'key': f'{self.id}.retrieved_result', 'value': tmp_retrieved_result, "type": tmp_retrieved_type},
                 {'key': 'system_prompt', 'value': self._log_system_prompt[0], "type": "params"},
                 {'key': 'user_prompt', 'value': self._log_user_prompt[0], "type": "params"},
             ]

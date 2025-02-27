@@ -90,7 +90,7 @@ class KnowledgeService(KnowledgeUtils):
             filter_knowledge = []
             for one in db_knowledge:
                 # 判断用户是否有权限
-                if login_user.access_check(one.user_id, str(knowledge_id), AccessType.KNOWLEDGE):
+                if login_user.access_check(one.user_id, str(one.id), AccessType.KNOWLEDGE):
                     filter_knowledge.append(one)
         if not filter_knowledge:
             return []
