@@ -170,7 +170,9 @@ class WorkflowClient(BaseClient):
         status_info = self.workflow.get_workflow_status()
         if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
+            self.workflow.clear_workflow_status()
             self.workflow = None
+
         # 说明运行到了待输入状态
         elif status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning(f'workflow status is unknown: {status_info}')

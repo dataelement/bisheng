@@ -71,6 +71,8 @@ async def invoke_workflow(request: Request,
             event_list.append(workflow_stream.data)
             yield f'data: {workflow_stream.json()}\n\n'
         tmp_status_info = workflow.get_workflow_status()
+        if tmp_status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
+            workflow.clear_workflow_status()
         if tmp_status_info['status'] == WorkflowStatus.SUCCESS.value:
             workflow_stream = WorkflowStream(session_id=session_id,
                                              data=WorkflowEvent(event=WorkflowEventType.Close.value))
