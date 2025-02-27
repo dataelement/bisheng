@@ -100,7 +100,8 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
             group.params.some(param => {
                 if (param.type === 'input_list' && varName.indexOf('preset_question') !== -1) {
                     const questionId = varName.split('#')[1]
-                    return param.value.some(item => item.key === questionId)
+                    const quwstionStr = varNameCn?.split('/')[1] || ''
+                    return param.value.some(item => item.key === questionId && item.value === quwstionStr) // id and name 必须一致
                 } else if ((param.type === 'var' && Array.isArray(param.value) && param.value.length) || param.type === 'code_output') {
                     return param.value.some(item => `${node.id}.${item.key}` === varName)
                 } else if (param.tab && param.tab !== node.data.tab.value) {

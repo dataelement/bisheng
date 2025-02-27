@@ -207,7 +207,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                                 description: event.reason
                             });
                         }
-                        setInputLock({ locked: false, reason: '' })
+                        setInputLock({ locked: true, reason: '' })
                     }
                 };
                 ws.onerror = (ev) => {
@@ -223,6 +223,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                             t('chat.networkErrorList3')
                         ]
                     });
+                    setInputLock({ locked: true, reason: '' })
                 };
             } catch (err) {
                 console.error('创建链接异常', err);
@@ -236,6 +237,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
             const { code, message } = data.message
+            setInputLock({ locked: true, reason: '' })
             return toast({
                 variant: 'error',
                 description: code == 500 ? message : t(`errors.${code}`, { type: message })
@@ -266,6 +268,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
         if (data.type === 'close') {
             insetSeparator(t('chat.chatEndMessage'))
+            setInputLock({ locked: true, reason: '' })
+            // 重启会话按钮,接收close确认后端处理结束后重启会话
+            if (restartCallBackRef.current[data.chat_id]) {
+                restartCallBackRef.current[data.chat_id]()
+                restartCallBackRef.current[data.chat_id] = null
+            }
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
@@ -342,16 +350,26 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         sendWsMsg({ "action": "stop" });
     }
     // restart
+    const restartCallBackRef = useRef({})
+    const [restarted, setRestarted] = useState(false)
     const handleRestartClick = () => {
         sendWsMsg({ "action": "stop" });
-        wsRef.current?.close()
-        wsRef.current = null
-        stop.show && insetSeparator(t('chat.chatEndMessage'))
-        setTimeout(() => {
+        setRestarted(true)
+        const chatId = currentChatIdRef.current.startsWith('test') ? '' : currentChatIdRef.current
+        restartCallBackRef.current[chatId] = () => {
             createWebSocket().then(() => {
+                setRestarted(false)
                 sendWsMsg(onBeforSend('init_data', {}))
             })
-        }, 300);
+        }
+        // wsRef.current?.close()
+        // wsRef.current = null
+        // stop.show && insetSeparator(t('chat.chatEndMessage'))
+        // setTimeout(() => {
+        //     createWebSocket().then(() => {
+        //         sendWsMsg(onBeforSend('init_data', {}))
+        //     })
+        // }, 300);
     }
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
@@ -372,7 +390,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Button className="rounded-full" variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
+                <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
             </div>
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
@@ -404,6 +422,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     : <Button
                         className="rounded-full"
                         variant="outline"
+                        disabled={restarted}
                         onClick={handleRestartClick}>
                         <RefreshCw className="mr-1" size={16} />
                         {t('chat.runNewWorkflow')}

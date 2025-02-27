@@ -96,11 +96,10 @@ export default function VarInput({
         let error = '';
         const html = encodeHTMLEntities(input)
             .replace(/{{#(.*?)#}}/g, (a, part) => {
-                if (validate) {
-                    error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) || error;
-                }
+                const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) : ''
+                error = _error || error;
                 const msgZh = flowNode.varZh?.[part] || part;
-                return `<span class=${error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
+                return `<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
             })
             .replace(/\n/g, '<br>');
         return [html, error];
@@ -218,7 +217,7 @@ export default function VarInput({
                                     onChange={(val) => {
                                         textareaRef.current.innerHTML = parseToHTML(val || '')[0];
                                         handleBlur();
-                                        onChange(val)
+                                        handleInput();
                                     }}
                                 >
                                 </VarInput>

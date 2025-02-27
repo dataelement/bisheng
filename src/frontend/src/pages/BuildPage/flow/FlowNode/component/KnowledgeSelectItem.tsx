@@ -62,6 +62,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         const files = []
         flow.nodes.forEach(node => {
             if (node.data.type !== 'input') return
+            if (node.data.tab.value === "dialog_input") return
             node.data.group_params.forEach(group => {
                 group.params.forEach(param => {
                     if (param.key === 'form_input') {
@@ -121,7 +122,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     useEffect(() => {
         // data.required && onValidate(() => {
         onValidate(() => {
-            if (data.required &&!data.value.value.length) {
+            if (data.required && !data.value.value.length) {
                 setError(true)
                 return data.label + ' ' + t('required')
             }
@@ -151,8 +152,8 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
                         nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
                         varNameCn: ''
                     });
+                    error && _errorKeys.push(el.value);
                 }
-                error && _errorKeys.push(el.value);
                 setErrorKeys(_errorKeys);
             }
             return error;

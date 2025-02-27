@@ -70,6 +70,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
 
         return msg
             .replaceAll('$$', '$') // latex
+            .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
             .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
     }, [data.message])
 
@@ -90,7 +91,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                                 children[0] = children[0].replace("▍", "▍");
                             }
                         }
-
+                        // className 区分代码语言 python json js 
                         const match = /language-(\w+)/.exec(className || "");
 
                         return !inline ? (

@@ -150,14 +150,14 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
-
+        
         // save cache
         const cacheData = inputs.reduce((res, input) => {
             res[input.key] = input.value
             return res
         }, {})
         setRunCache(node.id, cacheData)
-
+        
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
@@ -169,6 +169,7 @@ export const RunTest = forwardRef((props, ref) => {
                 node
             ).then(res => {
                 const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
+                setCurrentIndex(0)
                 setResults(result)
             })
         );

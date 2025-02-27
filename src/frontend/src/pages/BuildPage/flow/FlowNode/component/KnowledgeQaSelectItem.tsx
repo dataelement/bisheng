@@ -76,8 +76,8 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
                     nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
                     varNameCn: ''
                 });
+                error && _errorKeys.push(el.value);
             }
-            error && _errorKeys.push(el.value);
             setErrorKeys(_errorKeys);
         }
         return error;

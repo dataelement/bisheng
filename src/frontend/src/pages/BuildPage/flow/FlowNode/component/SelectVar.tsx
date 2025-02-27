@@ -53,6 +53,7 @@ const getSpecialVar = (obj, type) => {
 const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
+    const [select, setSelect] = useState(['', ''])
 
     const inputOpenRef = useRef(false)
     useImperativeHandle(ref, () => ({
@@ -282,8 +283,9 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                 <div className="w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
-                            className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                            className={`${select[0] === item.id && 'bg-[#EBF0FF]'} relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`}
                             onMouseEnter={() => {
+                                setSelect([item.id, ''])
                                 currentMenuRef.current = item;
                                 setVars(item.data)
                                 setQuestions([])
@@ -299,13 +301,16 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                 {!!vars.length && <div className="w-36 border-l first:border-none">
                     {vars.map(v =>
                         <div
-                            className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                            className={`${select[1] === v.value && 'bg-[#EBF0FF]'} relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`}
                             onClick={() => {
                                 if (v.param) return
                                 onSelect(currentMenuRef.current, v, inputOpenRef.current)
                                 !multip && setOpen(false)
                             }}
-                            onMouseEnter={() => v.param ? handleShowQuestions(v.param) : setQuestions([])}>
+                            onMouseEnter={() => {
+                                v.param ? handleShowQuestions(v.param) : setQuestions([])
+                                setSelect((old) => [old[0], v.value])
+                            }}>
                             {onCheck && <Checkbox
                                 checked={checkKeys[`${currentMenuRef.current.id}.${v.value}`]}
                                 className="mr-1"

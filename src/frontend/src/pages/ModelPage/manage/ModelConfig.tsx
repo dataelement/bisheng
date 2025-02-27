@@ -26,9 +26,9 @@ function ModelItem({ data, onDelete, onInput }) {
         const repeated = onInput(value, model.model_type)
 
         setError('')
+        if (repeated) setError(t('model.modelNameDuplicate'))
         if (!value) setError(t('model.modelNameEmpty'))
         if (value.length > 100) setError(t('model.modelNameLength'))
-        if (repeated) setError(t('model.modelNameDuplicate'))
     }
 
     const handleSelectChange = (val) => {
@@ -271,7 +271,12 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <span>{t('model.serviceProviderName')}</span>
                     <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
                 </Label>
-                <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}></Input>
+                <Input value={formData.name} onChange={(e) => {
+                    const name = e.target.value
+                    setFormData({ ...formData, name })
+                    document.getElementById('model_provider_name_error').style.display = !name || name.length > 100 ? 'block' : 'none'
+                }}></Input>
+                <span id="model_provider_name_error" style={{ display: 'none' }} className="text-red-500 text-xs">{t('model.duplicateServiceProviderNameValidation')}</span>
             </div>
             <CustomForm
                 ref={formRef}

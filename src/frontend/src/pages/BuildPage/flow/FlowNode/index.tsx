@@ -138,10 +138,10 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     const [nodeError, setNodeError] = useBorderColor(node)
-    const { paramValidateEntities, varValidateEntities, validateParams } = useEventMaster(node, setNodeError)
-    const handleRun = () => {
+    const { paramValidateEntities, varValidateEntities, validateAll } = useEventMaster(node, setNodeError)
+    const handleRun = async () => {
         // vilidate node
-        const errors = validateParams(true)
+        const errors = await validateAll()
 
         if (errors.length) return message({
             description: errors,
@@ -300,7 +300,7 @@ const useEventMaster = (node, setNodeError) => {
             if (param.tab && node.tab && node.tab.value !== param.tab) return;
 
             const msg = await validate(); // 获取验证结果
-            if (msg) errors.push(msg); 
+            if (msg) errors.push(msg);
         });
 
         await Promise.all(promises);
@@ -339,6 +339,7 @@ const useEventMaster = (node, setNodeError) => {
 
     return {
         validateParams,
+        validateAll,
         paramValidateEntities,
         varValidateEntities
     }

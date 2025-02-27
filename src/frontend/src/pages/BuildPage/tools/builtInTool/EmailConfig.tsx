@@ -77,7 +77,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* SMTP Server */}
             <InputField
                 required
-                label="smtp_server（发信 服务器地址SMTP）"
+                label="smtp_server（发信 SMTP 服务器地址）"
                 type="text"
                 id="smtp_server"
                 name="smtp_server"
@@ -90,7 +90,7 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             {/* SMTP Port */}
             <InputField
                 required
-                label="smtp_port（发信 服务器端口SMTP）"
+                label="smtp_port（发信 SMTP 服务器端口）"
                 type="text"
                 id="smtp_port"
                 name="smtp_port"

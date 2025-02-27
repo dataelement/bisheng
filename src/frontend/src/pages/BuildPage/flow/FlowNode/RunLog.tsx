@@ -35,48 +35,45 @@ export default function RunLog({ node, children }) {
                 const newData = data.reduce((res, item) => {
                     if (item.type === 'variable') {
                         const key = item.key.split('.')
-                        res[key[key.length - 1]] = { type: item.type, value: item.value }
+                        res.set(key[key.length - 1], { type: item.type, label: '', value: item.value });
                     } else {
-                        res[item.key] = { type: item.type, value: item.value }
+                        res.set(item.key, { type: item.type, label: '', value: item.value });
                     }
-                    return res
-                }, {})
-                let result = {};
-                let hasKeys = []
+                    return res;
+                }, new Map()); // 使用 Map 保持插入顺序
 
+                let hasKeys = [];
                 // 根据node params替换newData的key值 替换为name
-                // "当前时间": {type: "param", value: "2023-11-20 16:00:00"}
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
-                        if (Array.isArray(param.value) && param.value.some(el => newData[el.key])) {
-                            // 尝试去value中匹配 (input-form; preset-quesitons)
+                        // 尝试去value中匹配 (input-form; preset-quesitons)
+                        if (Array.isArray(param.value) && param.value.some(el => newData.has(el.key))) {
                             param.value.forEach(value => {
-                                if (!newData[value.key]) return
-                                result[value.label || value.key] = newData[value.key];
-                                hasKeys.push(value.key)
-                            })
-                        } else if (newData[param.key] !== undefined) {
-                            result[param.label || param.key] = newData[param.key];
-                            hasKeys.push(param.key)
+                                if (!newData.has(value.key)) return;
+                                newData.get(value.key)['label'] = value.label || value.key;
+                                hasKeys.push(value.key);
+                            });
+                        } else if (newData.has(param.key)) {
+                            newData.get(param.key)['label'] = param.label || param.key;
+                            hasKeys.push(param.key);
                         } else if (param.key === 'tool_list') {
                             // tool
                             param.value.some(p => {
-                                if (newData[p.tool_key] !== undefined) {
-                                    result[p.label] = newData[p.tool_key];
-                                    hasKeys.push(p.tool_key)
-                                    return true
+                                if (newData.has(p.tool_key)) {
+                                    newData.get(p.tool_key)['label'] = p.label;
+                                    hasKeys.push(p.tool_key);
+                                    return true;
                                 }
-                            })
+                            });
                         }
                     });
                 });
 
-                for (let key in newData) {
-                    if (!hasKeys.includes(key)) {
-                        result[key] = newData[key];
-                    }
-                }
-                return result
+                return Array.from(newData.entries()).map(([key, value]) => ({
+                    label: value.type === 'variable' && !key.startsWith('output_') ? key : value.label,
+                    type: value.type,
+                    value: value.value,
+                }))
             }
         }
 
@@ -133,8 +130,9 @@ const Log = ({ type, name, data }) => {
     const ref = useRef(null);
     const { t } = useTranslation('flow')
     const [currentIndex, setCurrentIndex] = useState(0)
+    // key
     const currentData = useMemo(() =>
-        data[currentIndex] || {}, [data, currentIndex]
+        data[currentIndex] || [], [data, currentIndex]
     )
 
     const handleClickOutside = (event) => {
@@ -190,9 +188,9 @@ const Log = ({ type, name, data }) => {
                         </Select>
                     </div>}
                     <div className="">
-                        {Object.keys(currentData).map(key => currentData[key].type === 'file' ?
-                            <ResultFile title={key} name={name} fileUrl={currentData[key].value} key={key + currentIndex} />
-                            : <ResultText title={key} value={currentData[key].value} key={key + currentIndex} />)}
+                        {currentData.map((item) => item.type === 'file' ?
+                            <ResultFile title={item.label} name={name} fileUrl={item.value} key={item.label + currentIndex} />
+                            : <ResultText title={item.label} value={item.value} key={item.label + currentIndex} />)}
                     </div>
                 </div>
             )}

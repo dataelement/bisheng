@@ -256,7 +256,7 @@ export default function KnowledgeFile() {
                                     window.libname = [el.name, el.description];
                                 }}>
                                     <Link to={`/filelib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                    {(user.role === 'admin' || user.user_id === el.user_id) && (el.state === 1
+                                    {(el.copiable || user.role === 'admin') && (el.state === 1
                                         ? <Button variant="link" className="px-0 pl-2" onClick={() => handleCopy(el)}>{t('lib.copy')}</Button>
                                         : <Button variant="link" className="px-0 pl-2" disabled>{t('lib.copying')}</Button>)}
                                     {el.copiable ?

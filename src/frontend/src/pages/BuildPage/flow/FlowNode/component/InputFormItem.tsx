@@ -144,7 +144,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filecontent.length > 50) {
                 newErrors.filecontent = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.key === formData.filecontent) &&
+                existingOptions?.some(opt => opt.file_content === formData.filecontent) &&
                 formData.filecontent !== oldVarNameRef.current
             ) {
                 newErrors.filecontent = t("variableNameExists");
@@ -158,7 +158,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filepath.length > 50) {
                 newErrors.filepath = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.key === formData.filepath) &&
+                existingOptions?.some(opt => opt.file_path === formData.filepath) &&
                 formData.filepath !== oldVarNameRef.current
             ) {
                 newErrors.filepath = t("variableNameExists");
