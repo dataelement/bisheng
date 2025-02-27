@@ -46,7 +46,8 @@ class DingdingMessageTool(BaseModel):
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "DingdingMessageTool":
         attr_name = name.split("_", 1)[-1]
-        class_method = getattr(cls, attr_name)
+        c = DingdingMessageTool(**kwargs)
+        class_method = getattr(c, attr_name)
 
         return MultArgsSchemaTool(
             name=name,
