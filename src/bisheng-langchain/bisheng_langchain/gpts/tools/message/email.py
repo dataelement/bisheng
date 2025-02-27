@@ -46,44 +46,50 @@ class EmailMessageTool(APIToolBase):
         port : int - 端口号（SSL一般465，TLS用587）
         """
 
-        content_type = "plain"
-        # 创建邮件对象
-        msg = MIMEMultipart()
-        msg["From"] = self.email_account
-        # msg["To"] = ", ".join(receiver) if isinstance(receiver, list) else receiver
-        msg["To"] = receiver
-        msg["Subject"] = subject
+        try:
+            content_type = "plain"
+            # 创建邮件对象
+            msg = MIMEMultipart()
+            msg["From"] = self.email_account
+            # msg["To"] = ", ".join(receiver) if isinstance(receiver, list) else receiver
+            msg["To"] = receiver
+            msg["Subject"] = subject
 
-        # 添加正文
-        body = MIMEText(content, content_type, "utf-8")
-        msg.attach(body)
+            # 添加正文
+            body = MIMEText(content, content_type, "utf-8")
+            msg.attach(body)
 
-        # 添加附件
-        # if attachments:
-        #     for file_path in attachments:
-        #         with open(file_path, "rb") as f:
-        #             part = MIMEApplication(f.read())
-        #             part.add_header(
-        #                 "Content-Disposition",
-        #                 "attachment",
-        #                 filename=os.path.basename(file_path),
-        #             )
-        #             msg.attach(part)
+            # 添加附件
+            # if attachments:
+            #     for file_path in attachments:
+            #         with open(file_path, "rb") as f:
+            #             part = MIMEApplication(f.read())
+            #             part.add_header(
+            #                 "Content-Disposition",
+            #                 "attachment",
+            #                 filename=os.path.basename(file_path),
+            #             )
+            #             msg.attach(part)
 
-            # 创建SMTP连接
-        if self.smtp_port == 465:
-            # SSL连接
-            server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
-        else:
-            # TLS连接
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.starttls()
+                # 创建SMTP连接
+            if self.smtp_port == 465:
+                # SSL连接
+                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port)
+            else:
+                # TLS连接
+                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.starttls()
 
-        # 登录邮箱
-        server.login(self.email_account, self.email_password)
+            # 登录邮箱
+            server.login(self.email_account, self.email_password)
 
-        # 发送邮件
-        server.sendmail(self.email_account, receiver.split(","), msg.as_string())
+            # 发送邮件
+            server.sendmail(self.email_account, receiver.split(","), msg.as_string())
+        except smtplib.SMTPAuthenticationError:
+            return "用户名或密码错误，请检查您的凭据。"
+        except Exception as e:
+            return f"发送邮件时发生错误: {e}"
+
         return "发送成功"
 
     @classmethod
