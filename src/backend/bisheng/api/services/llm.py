@@ -198,8 +198,8 @@ class LLMService:
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        exist_server.config = server.config
-
+        # 需要判断下敏感的key是否需要更新
+        exist_server.config = server.merge_config(exist_server.config)
         db_server = LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
 
         return cls.get_one_llm(request, login_user, db_server.id)

@@ -383,6 +383,23 @@ class LLMServerCreateReq(BaseModel):
     config: Optional[dict] = Field(default=None, description='服务提供方配置')
     models: Optional[List[LLMModelCreateReq]] = Field(default=[], description='服务提供方下的模型列表')
 
+    def merge_config(self, old_config: dict) -> dict:
+        """ update old config secret key """
+        new_config = {}
+        for k, v in old_config.items():
+            # 如果值为空 保留原有的secret key。说明不需要更新
+            if k in ['openai_api_key', 'anthropic_api_key', 'api_key', 'api_secret', 'wenxin_api_key', 'wenxin_secret_key']:
+                new_v = self.config.pop(k)
+                if new_v:
+                    v = new_v
+            else:
+                if k in self.config:
+                    v = self.config.pop(k)
+            new_config[k] = v
+        # 将剩下的key补充到新的config中
+        new_config.update(self.config)
+        return new_config
+
 
 class LLMModelInfo(LLMModelBase):
     id: Optional[int]
@@ -391,6 +408,23 @@ class LLMModelInfo(LLMModelBase):
 class LLMServerInfo(LLMServerBase):
     id: Optional[int]
     models: List[LLMModelInfo] = Field(default=[], description='模型列表')
+
+    @root_validator
+    def hide_secret_field(cls, values):
+        if not values['config']:
+            return values
+        cls.hide_one_filed(values['config'], 'openai_api_key')
+        cls.hide_one_filed(values['config'], 'anthropic_api_key')
+        cls.hide_one_filed(values['config'], 'api_key')
+        cls.hide_one_filed(values['config'], 'api_secret')
+        cls.hide_one_filed(values['config'], 'wenxin_api_key')
+        cls.hide_one_filed(values['config'], 'wenxin_secret_key')
+        return values
+
+    @staticmethod
+    def hide_one_filed(values: dict, field_key: str):
+        if values.get(field_key):
+            values[field_key] = "******"
 
 
 class KnowledgeLLMConfig(BaseModel):
