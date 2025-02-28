@@ -246,6 +246,7 @@ async def get_tool_schema(*,
                                       api_location = schema.api_location,
                                       parameter_name = schema.parameter_name,
                                       auth_type = schema.auth_type,
+                                      auth_method = schema.auth_method,
                                       children=[])
         # 解析获取所有的api
         schema.parse_paths()

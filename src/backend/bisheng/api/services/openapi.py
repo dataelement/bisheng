@@ -11,6 +11,7 @@ class OpenApiSchema:
         self.info = contents['info']
         self.title = self.info['title']
         self.auth_type = 'basic'
+        self.auth_method = 0 
         self.description = self.info.get('description', '')
         self.default_server = ''
         self.apis = []
@@ -29,6 +30,7 @@ class OpenApiSchema:
 
         if self.contents.get('components') and self.contents['components'].get('securitySchemes') is not None:
             self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 'basic'
+            self.auth_method= 1 if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 0
             self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
             self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
         return self.default_server
