@@ -18,6 +18,8 @@ class InputArgs(BaseModel):
     # page_token: Optional[str] = Field(description="page_token")
     container_id_type: Optional[str] = Field(description="container_id_type")
     page_size: Optional[int] = Field(default=20,description="page_size")
+    page_token: Optional[str] = Field(description="page_token")
+    sort_type: Optional[str] = Field(description="sort_type",default="ByCreateTimeAsc")
 
 
 class FeishuMessageTool(BaseModel):
@@ -66,7 +68,7 @@ class FeishuMessageTool(BaseModel):
         end_time: Optional[str],
         page_size: Optional[int] ,
         page_token: Optional[str],
-        sort_type: str = "ByCreateTimeAsc",
+        sort_type: Optional[str] = "ByCreateTimeAsc",
     ) -> str:
         """获取聊天记录"""
         url = f"{self.API_BASE_URL}/im/v1/messages"
