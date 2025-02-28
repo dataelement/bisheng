@@ -68,7 +68,7 @@ class FeishuMessageTool(BaseModel):
         end_time: Optional[str],
         page_size: Optional[int] ,
         page_token: Optional[str],
-        sort_type: Optional[str] = "ByCreateTimeAsc",
+        sort_type: Optional[str],
     ) -> str:
         """获取聊天记录"""
         url = f"{self.API_BASE_URL}/im/v1/messages"
@@ -78,12 +78,12 @@ class FeishuMessageTool(BaseModel):
             "container_id_type": container_id_type,
             "start_time": start_time,
             "end_time": end_time,
-            "sort_type": sort_type,
             "page_token": page_token,
         }
         if page_size:
             params["page_size"] = page_size
-
+        if sort_type:
+            params["sort_type"] = sort_type 
         try:
             response = requests.get(
                 url=url,
