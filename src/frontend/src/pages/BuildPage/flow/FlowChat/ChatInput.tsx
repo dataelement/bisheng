@@ -4,7 +4,7 @@ import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
@@ -209,7 +209,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })
                     if ([1005, 1008, 1009].includes(event.code)) {
-                        setInputLock({ locked: true, reason: event.reason })
+                        setInputLock({ locked: true, reason: event.reason || '' })
                     } else {
                         if (event.reason) {
                             toast({
@@ -416,6 +416,14 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         }
     }
 
+    const placholder = useMemo(() => {
+        if (inputForm) {
+            return '      点击刷新按钮可开启新对话'
+        }
+        const reason = inputLock.reason || ' '
+        return inputLock.locked ? reason : t('chat.inputPlaceholder')
+    }, [inputForm, inputLock])
+
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
             {/* form */}
@@ -475,7 +483,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
-                placeholder={inputForm ? '      点击刷新按钮可开启新对话' : (inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder'))}
+                placeholder={placholder}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {

@@ -74,8 +74,8 @@ const NoLoginLink = ({ type, noLogin = false }) => {
 
   const [embed, setEmbed] = useState(false)
   const url = useMemo(() => {
-    const loginUrl = `${location.origin}/chat/${type}/auth/${id}`
-    const noLoginUrl = `${location.origin}/chat/${type === API_TYPE.SKILL ? '' : type+'/'}${id}`
+    const loginUrl = `${location.origin}${__APP_ENV__.BASE_URL}/chat/${type}/auth/${id}`
+    const noLoginUrl = `${location.origin}${__APP_ENV__.BASE_URL}/chat/${type === API_TYPE.SKILL ? '' : type+'/'}${id}`
     return noLogin ? noLoginUrl : loginUrl;
   }, [type, noLogin])
 
@@ -85,8 +85,8 @@ const NoLoginLink = ({ type, noLogin = false }) => {
   id="chatbot-iframe-script"
   data-bot-src="${url}"
   data-drag="true"
-  data-open-icon="${location.origin}/user.png"
-  data-close-icon="${location.origin}/logo-small-dark.png"
+  data-open-icon="${location.origin}${__APP_ENV__.BASE_URL}/user.png"
+  data-close-icon="${location.origin}${__APP_ENV__.BASE_URL}/logo-small-dark.png"
   defer
 ></script>
 <script>console.log("chat ready")</script>

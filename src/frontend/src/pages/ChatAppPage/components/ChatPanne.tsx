@@ -98,9 +98,9 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             const newflow = { ...f, nodes, edges, viewport }
             window.workflow_flow = newflow
             setWorkflow(newflow)
+            version === 'v2' && setAutoRun(true)
             setTimeout(() => { // holding change autorun
                 changeFlowChatId(chatId)
-                version === 'v2' && setAutoRun(true)
             }, 100);
         }
     }

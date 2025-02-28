@@ -62,8 +62,8 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
         const value = e.target.value
         setMaxTokens(value)
 
-        if (value === '' || parseInt(value, 10) === 0) {
-            onConfig({ enable_web_search: isWebSearchEnabled, max_tokens: 0 })
+        if (value === '') {
+            onConfig({ enable_web_search: isWebSearchEnabled })
         } else {
             onConfig({ enable_web_search: isWebSearchEnabled, max_tokens: parseInt(value, 10) })
         }

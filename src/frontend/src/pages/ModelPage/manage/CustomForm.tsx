@@ -287,7 +287,7 @@ const modelProviders = {
             type: "password",
             placeholder: "",
             default: "",
-            required: false,
+            required: true,
             key: "api_key",
         },
     ]
@@ -317,7 +317,6 @@ const FormField = ({ showDefault, field, value, onChange }) => {
 const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     const [form, setForm] = useState(formData);
     const fields = modelProviders[provider] || [];
-    console.log('form :>> ', form);
 
     const handleChange = (key, value) => {
         setForm((prevData) => ({
@@ -329,7 +328,12 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     useImperativeHandle(ref, () => ({
         getData() {
             const errorObj = fields.find(field => field.required && !form[field.key]);
-            return [form, errorObj ? errorObj.label : ''];
+            // 星星转空给后台
+            const newForm = Object.keys(form).reduce((map, key) => {
+                map[key] = form[key].indexOf('******') === -1 ? form[key] : '';
+                return map;
+            }, {})
+            return [newForm, errorObj ? errorObj.label : ''];
         }
     }))
 
