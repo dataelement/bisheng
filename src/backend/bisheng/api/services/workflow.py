@@ -87,7 +87,7 @@ class WorkFlowService(BaseService):
 
         resource_tag_dict = TagDao.get_tags_by_resource(None, resource_ids)
 
-        #  增加额外的信息
+        #增加额外的信息
         for one in data:
             one['user_name'] = user_dict.get(one['user_id'], one['user_id'])
             one['write'] = True if user.is_admin() or user.user_id == one['user_id'] else False

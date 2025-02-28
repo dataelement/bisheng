@@ -40,8 +40,11 @@ class OpenApiTools(APIToolBase):
                     json_data[k] = v
             else:
                 params[k] = v
-        if self.params['api_location'] == "query":
-            params.update({self.params['parameter_name']:self.api_key})
+        if self.params['api_location'] == "query" or self.api_location == "query":
+            if self.parameter_name:
+                params.update({self.parameter_name:self.api_key})
+            else:
+                params.update({self.params['parameter_name']:self.api_key})
         return params, json_data, path_params
 
     def parse_args_schema(self):
