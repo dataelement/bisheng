@@ -84,10 +84,8 @@ class EmailMessageTool(APIToolBase):
 
             # 发送邮件
             server.sendmail(self.email_account, receiver.split(","), msg.as_string())
-        except smtplib.SMTPAuthenticationError:
-            return "用户名或密码错误。"
         except Exception as e:
-            return f"发送邮件失败: {e}"
+            raise Exception(f"邮件发送失败：{e}")
 
         return "发送成功"
 

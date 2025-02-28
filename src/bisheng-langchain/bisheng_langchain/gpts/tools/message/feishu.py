@@ -62,10 +62,10 @@ class FeishuMessageTool(BaseModel):
         self,
         container_id: str,
         container_id_type: str,
-        start_time: str,
-        end_time: str,
-        page_size: int ,
-        # page_token: str,
+        start_time: Optional[str],
+        end_time: Optional[str],
+        page_size: Optional[int] ,
+        page_token: Optional[str],
         sort_type: str = "ByCreateTimeAsc",
     ) -> str:
         """获取聊天记录"""
@@ -77,16 +77,22 @@ class FeishuMessageTool(BaseModel):
             "start_time": start_time,
             "end_time": end_time,
             "sort_type": sort_type,
-            # "page_token": page_token,
+            "page_token": page_token,
         }
         if page_size:
             params["page_size"] = page_size
 
-        response = requests.get(
-            url=url,
-            headers=headers,
-            params=params
-        )
+        try:
+            response = requests.get(
+                url=url,
+                headers=headers,
+                params=params
+            )
+        except requests.exceptions.RequestException as e:
+            return f"获取消息失败: {str(e)}"
+
+        if response.json()["code"] != 0:
+            return f"获取消息失败: {response.json()}"
 
         return response.json()["data"]
 
