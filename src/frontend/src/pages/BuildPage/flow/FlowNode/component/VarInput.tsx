@@ -1,10 +1,10 @@
 import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { isVarInFlow } from "@/util/flowUtils";
 import { Expand, UploadCloud } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
@@ -64,7 +64,7 @@ export default function VarInput({
     onChange,
     onVarEvent = undefined,
 }) {
-    const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
+    const { textareaRef, handleFocus, handleBlur, removePlaceholder } = usePlaceholder(placeholder);
     const valueRef = useRef(value || '');
     const [fullVarInputValue, setFullVarInputValue] = useState(value || '');
     const selectVarRef = useRef(null);
@@ -84,12 +84,15 @@ export default function VarInput({
         return () => onVarEvent && onVarEvent(() => { });
     }, [flowNode]);
 
+    const printPyRef = useRef(false); // 正在输入pyin
     const handleInput = () => {
+        if (printPyRef.current) return;
         const value = parseToValue(textareaRef.current.innerHTML, flowNode);
         // console.log('textarea value :>> ', value);
         valueRef.current = value;
         setFullVarInputValue(value)
         onChange(value);
+        removePlaceholder()
     };
 
     function parseToHTML(input, validate = false) {
@@ -234,6 +237,11 @@ export default function VarInput({
                 onPaste={handlePaste}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
+                onCompositionStart={() => printPyRef.current = true}
+                onCompositionEnd={() => {
+                    printPyRef.current = false
+                    handleInput()
+                }}
                 onKeyDown={(e) => {
                     // 唤起插入变量
                     if (e.key === '{') {
@@ -322,6 +330,10 @@ function usePlaceholder(placeholder) {
         }
     };
 
+    const removePlaceholder = () => {
+        divRef.current.classList.remove("placeholder");
+    }
+
     useEffect(() => {
         if (!placeholder) return
         if (divRef.current) {
@@ -339,7 +351,7 @@ function usePlaceholder(placeholder) {
         }
     }, [placeholder]);
 
-    return { textareaRef: divRef, handleFocus, handleBlur };
+    return { textareaRef: divRef, handleFocus, handleBlur, removePlaceholder };
 }
 
 

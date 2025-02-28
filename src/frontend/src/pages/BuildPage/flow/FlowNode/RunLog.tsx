@@ -33,7 +33,7 @@ export default function RunLog({ node, children }) {
                  * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
                  */
                 const newData = data.reduce((res, item) => {
-                    if (item.type === 'variable') {
+                    if (['file', 'variable'].includes(item.type)) {
                         const key = item.key.split('.')
                         res.set(key[key.length - 1], { type: item.type, label: '', value: item.value });
                     } else {
@@ -70,7 +70,7 @@ export default function RunLog({ node, children }) {
                 });
 
                 return Array.from(newData.entries()).map(([key, value]) => ({
-                    label: value.type === 'variable' && !key.startsWith('output_') ? key : value.label,
+                    label: ['file', 'variable'].includes(value.type) && !key.startsWith('output_') ? key : value.label || key,
                     type: value.type,
                     value: value.value,
                 }))

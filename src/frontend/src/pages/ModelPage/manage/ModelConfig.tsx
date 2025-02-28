@@ -276,7 +276,9 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     setFormData({ ...formData, name })
                     document.getElementById('model_provider_name_error').style.display = !name || name.length > 100 ? 'block' : 'none'
                 }}></Input>
-                <span id="model_provider_name_error" style={{ display: 'none' }} className="text-red-500 text-xs">{t('model.duplicateServiceProviderNameValidation')}</span>
+                <span id="model_provider_name_error" style={{ display: 'none' }} className="text-red-500 text-xs">{
+                    formData.name ? '最多 100 个字符' : '不可为空'
+                }</span>
             </div>
             <CustomForm
                 ref={formRef}

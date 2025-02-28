@@ -439,6 +439,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
     };
 
     // 提交表单数据，添加或更新表单项
+    const scrollRef = useRef(null);
     const handleSubmit = (_data) => {
         const {
             allowMultiple,
@@ -472,6 +473,9 @@ export default function InputFormItem({ data, onChange, onValidate }) {
                 file_path,
                 options,
             });
+            setTimeout(() => {
+                scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
+            }, 0);
         }
         onChange(data.value);
         setFoucsUpdate(!foucsUpdate);
@@ -512,6 +516,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             {data.value.length > 0 && (
                 <DragOptions
                     scroll
+                    ref={scrollRef}
                     options={data.value.map((el) => ({
                         key: el.key,
                         text: el.type === FormType.File && !el.multiple ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,

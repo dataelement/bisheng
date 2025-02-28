@@ -12,7 +12,7 @@ export default function InputFileComponent({
   value,
   onChange,
   disabled,
-  suffixes,
+  suffixes = [],
   fileTypes,
   placeholder = 'The current file is empty',
   onFileChange,

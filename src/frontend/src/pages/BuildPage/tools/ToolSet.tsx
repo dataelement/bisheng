@@ -105,7 +105,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <SiliconFlowApiKeyForm formData={formData} onSubmit={handleSubmit} />;
             case '发送邮件':
                 return <EmailConfigForm formData={formData} onSubmit={handleSubmit} />;
-            case '飞书发送消息':
+            case '飞书消息':
                 return <FeishuConfigForm formData={formData} onSubmit={handleSubmit} />;
             case 'Bing web搜索':
                 return <BingToolForm formData={formData} onSubmit={handleSubmit} />;

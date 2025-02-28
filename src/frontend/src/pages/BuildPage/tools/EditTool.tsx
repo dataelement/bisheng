@@ -215,7 +215,11 @@ const EditTool = forwardRef((props: any, ref) => {
             const fetchedSchema = res.openapi_schema; // 替换为后端返回的Schema
             setFormState(prevState => ({
                 ...prevState,
-                schemaContent: fetchedSchema
+                schemaContent: fetchedSchema,
+                authMethod: res.auth_method === 1 ? 'apikey' : 'none',
+                authType: res.auth_type,
+                apiLocation: res.api_location,
+                parameter: res.parameter_name
             }))
 
             setTableData(res.children)
@@ -234,7 +238,11 @@ const EditTool = forwardRef((props: any, ref) => {
             const fetchedSchema = res.openapi_schema; // 替换为后端返回的Schema
             setFormState(prevState => ({
                 ...prevState,
-                schemaContent: fetchedSchema
+                schemaContent: fetchedSchema,
+                authMethod: res.auth_method === 1 ? 'apikey' : 'none',
+                authType: res.auth_type,
+                apiLocation: res.api_location,
+                parameter: res.parameter_name
             }));
 
             setTableData(res.children)
@@ -399,7 +407,7 @@ const EditTool = forwardRef((props: any, ref) => {
                             <RadioGroup
                                 id="authMethod"
                                 name="authMethod"
-                                defaultValue={formState.authMethod}
+                                value={formState.authMethod}
                                 className="flex mt-2 gap-4"
                                 onValueChange={(value) => setFormState(prevState => ({ ...prevState, authMethod: value }))}
                             >
@@ -425,7 +433,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                 <RadioGroup
                                     id="authType"
                                     name="authType"
-                                    defaultValue={formState.authType}
+                                    value={formState.authType}
                                     className="flex mt-2 gap-4"
                                     onValueChange={(value) => setFormState(prevState => ({ ...prevState, authType: value }))}
                                 >
@@ -455,7 +463,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                     <RadioGroup
                                         id="apiLocation"
                                         name="apiLocation"
-                                        defaultValue={formState.apiLocation}
+                                        value={formState.apiLocation}
                                         className="flex mt-2 gap-4"
                                         onValueChange={(value) => setFormState(prevState => {
                                             // console.log('prevState :>> ', prevState, value);

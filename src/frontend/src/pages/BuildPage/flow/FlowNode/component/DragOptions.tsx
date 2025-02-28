@@ -4,7 +4,7 @@ import { generateUUID } from '@/components/bs-ui/utils';
 import { Handle, Position } from '@xyflow/react';
 import i18next from "i18next";
 import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
@@ -28,7 +28,7 @@ const itemNames = {
     'text': i18next.t('dropdown', { ns: 'flow' })
 }
 
-export default function DragOptions({ edges = false, edit = false, scroll = false, options, onEditClick, onChange }: Iprops) {
+const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, options, onEditClick, onChange }: Iprops, ref) => {
     const { t } = useTranslation('flow'); // 使用国际化
     const [items, setItems] = useState([]); // 初始默认选项
     const [inputValue, setInputValue] = useState("");
@@ -101,7 +101,7 @@ export default function DragOptions({ edges = false, edit = false, scroll = fals
     };
 
     return (
-        <div className={`${scroll && 'nowheel overflow-y-auto max-h-80'} mt-2`}>
+        <div ref={ref} className={`${scroll && 'nowheel overflow-y-auto max-h-80'} mt-2`}>
             <DragDropContext onDragEnd={handleDragEnd} usePortal>
                 <Droppable droppableId="options-list">
                     {(provided) => (
@@ -171,7 +171,9 @@ export default function DragOptions({ edges = false, edit = false, scroll = fals
             </div>}
         </div>
     );
-}
+});
+
+export default DragOptions;
 
 
 const Option = ({ item, count, edit, onEditClick, onDelete, onChange }) => {
