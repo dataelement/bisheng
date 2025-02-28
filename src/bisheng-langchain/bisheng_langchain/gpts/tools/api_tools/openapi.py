@@ -10,6 +10,8 @@ from .base import APIToolBase, Field, MultArgsSchemaTool
 class OpenApiTools(APIToolBase):
 
     api_key: str
+    api_location: str
+    parameter_name: str
 
     def get_real_path(self, path_params: dict|None):
         path = self.params['path']
