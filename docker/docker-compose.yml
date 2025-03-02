@@ -111,7 +111,7 @@ services:
     image: docker.io/bitnami/elasticsearch:8.12.0
     user: root
     ports:
-      - "9200:9200"
+      - "9201:9200"
       - "9300:9300"
     environment:
       TZ: Asia/Shanghai
@@ -178,8 +178,8 @@ services:
       timeout: 20s
       retries: 3
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "19531:19530"
+      - "9092:9091"
     depends_on:
       - etcd
       - minio
