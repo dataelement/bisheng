@@ -86,7 +86,7 @@ async def invoke_workflow(request: Request,
             pass
         return resp_200(data={
             'session_id': session_id,
-            'data': res
+            'events': res
         })
     try:
         return StreamingResponse(handle_workflow_event(res), media_type='text/event-stream')
