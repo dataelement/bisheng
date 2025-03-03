@@ -35,9 +35,9 @@ class WorkflowClient(BaseClient):
         if self.workflow:
             if force_stop or not self.chat_id:
                 self.workflow.set_workflow_stop()
-            workflow_over = False
-            while not workflow_over:
-                workflow_over = await self.workflow_run()
+                workflow_over = False
+                while not workflow_over:
+                    workflow_over = await self.workflow_run()
         else:
             await self.send_response('processing', 'close', '')
 
