@@ -132,7 +132,7 @@ class OpenApiTools(APIToolBase):
 
         params, json_data, path_params = self.get_params_json(**kwargs)
         path = self.get_real_path(path_params)
-        logger.info('api_call url={}', path)
+        logger.info('api_call url={} extra={}', path, **extra)
         method = self.get_request_method()
 
         if method == 'get':
