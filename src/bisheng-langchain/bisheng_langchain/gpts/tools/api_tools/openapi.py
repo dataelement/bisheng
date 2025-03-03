@@ -40,7 +40,8 @@ class OpenApiTools(APIToolBase):
                     json_data[k] = v
             else:
                 params[k] = v
-        if self.params['api_location'] == "query" or self.api_location == "query":
+        if ('api_location' in self.params and self.params['api_location'] == "query") or \
+            (hasattr(self, 'api_location') and self.api_location == "query"):
             if self.parameter_name:
                 params.update({self.parameter_name:self.api_key})
             else:
