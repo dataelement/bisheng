@@ -393,9 +393,8 @@
     "complete": "Complete",
     "setSplitSize": "Please set the file split size",
     "selectFileToUpload": "Please select a file to upload first",
-    "fileSizeExceedsLimit": "File size cannot exceed 50MB,removed",
     "file": "File",
-    "sizeExceedsLimit": "Size exceeds 50MB",
+    "sizeExceedsLimit": "Size exceeds {{size}}MB",
     "editDictionary": "Edit Dictionary",
     "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page).",
     "chunkOverlap": "Chunk Overlap"
