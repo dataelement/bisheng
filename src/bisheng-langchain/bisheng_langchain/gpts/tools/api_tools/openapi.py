@@ -44,7 +44,7 @@ class OpenApiTools(APIToolBase):
             (hasattr(self, 'api_location') and self.api_location == "query"):
             if self.parameter_name:
                 params.update({self.parameter_name:self.api_key})
-            else:
+            elif self.params['parameter_name']:
                 params.update({self.params['parameter_name']:self.api_key})
         return params, json_data, path_params
 
