@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from typing import Dict, Optional
@@ -34,6 +35,9 @@ class WorkflowClient(BaseClient):
         if self.workflow:
             if force_stop or not self.chat_id:
                 self.workflow.set_workflow_stop()
+            workflow_over = False
+            while not workflow_over:
+                workflow_over = await self.workflow_run()
         else:
             await self.send_response('processing', 'close', '')
 
@@ -165,18 +169,20 @@ class WorkflowClient(BaseClient):
 
         if not self.workflow:
             logger.warning('workflow is over by other task')
-            return
+            return True
 
         status_info = self.workflow.get_workflow_status()
         if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
             self.workflow.clear_workflow_status()
             self.workflow = None
+            return True
 
         # 说明运行到了待输入状态
         elif status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning(f'workflow status is unknown: {status_info}')
         logger.debug('workflow run over until break')
+        return False
 
     async def handle_user_input(self, data: dict):
         logger.info(f'get user input: {data}')
