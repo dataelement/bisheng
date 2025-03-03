@@ -28,15 +28,34 @@ class OpenApiSchema:
         else:
             self.default_server = servers['url']
 
-        if self.contents.get('components') and self.contents['components'].get('securitySchemes') is not None:
-            self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 'basic'
-            s = self.contents['components']['securitySchemes']['ApiKeyAuth']['schema']
-            if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'http':
-                self.auth_type = s
+        # if self.contents.get('components') and self.contents['components'].get('securitySchemes') is not None:
+        #     self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 'basic'
+        #     s = self.contents['components']['securitySchemes']['ApiKeyAuth']['schema']
+        #     if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'http':
+        #         self.auth_type = s
+        #
+        #     self.auth_method= 1 if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' or 'http' else 0
+        #     self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
+        #     self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
 
-            self.auth_method= 1 if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' or 'http' else 0
-            self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
-            self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
+        security_schemes = self.contents.get('components', {}).get('securitySchemes', {})
+        api_key_auth = security_schemes.get('ApiKeyAuth', {})
+
+        # 获取认证类型
+        auth_type = api_key_auth.get('type')
+        if auth_type == 'apiKey':
+            self.auth_type = 'custom'
+        elif auth_type == 'http':
+            self.auth_type = api_key_auth.get('schema')
+        else:
+            self.auth_type = 'basic'
+
+        # 设置认证方法
+        self.auth_method = 1 if auth_type in ('apiKey', 'http') else 0
+
+        # 获取 API 位置和参数名
+        self.api_location = api_key_auth.get('in')
+        self.parameter_name = api_key_auth.get('name')
         return self.default_server
 
     def parse_paths(self) -> list[dict]:
