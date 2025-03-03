@@ -95,8 +95,7 @@ class WorkFlowService(BaseService):
             one['group_ids'] = resource_group_dict.get(one['id'], [])
             one['tags'] = resource_tag_dict.get(one['id'], [])
             one['logo'] = cls.get_logo_share_link(one['logo'])
-            if one['flow_type'] != FlowType.ASSISTANT.value:
-                one['id'] = UUID(one['id'])
+            one['id'] = UUID(one['id'])
 
         return data, total
 
