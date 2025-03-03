@@ -22,7 +22,7 @@ export const InputField = ({ label, type = "text", id, name, required = false, p
             onChange={onChange}
             min="0"
         />
-        {error && <p className="bisheng-tip mt-1">{label} 不能为空</p>}
+        {error && <p className="bisheng-tip mt-1">{typeof error === 'string' ? error : label + ' 不能为空'}</p>}
     </div>
 };
 

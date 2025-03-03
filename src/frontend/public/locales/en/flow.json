@@ -157,7 +157,7 @@
     "copy": "Copy",
     "cannotBeEmpty": "{{label}} cannot be empty",
     "editReportTemplate": "Edit Report Template",
-    "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid, possibly because the related node has been deleted or replaced. Please reassign the variable.",
+    "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid.",
     "required": "Required",
     "isRequired": "Is Required",
     "documentKnowledgeBase": "Document Knowledge",

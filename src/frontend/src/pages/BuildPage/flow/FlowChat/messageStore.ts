@@ -151,6 +151,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }))
     },
     insetSeparator(text) {
+        const messages = get().messages
+        // 避免重复提示会话结束
+        if (messages[messages.length - 1]?.category === 'separator') return
         set((state) => ({
             messages: [...state.messages, {
                 ...bsMsgItem,

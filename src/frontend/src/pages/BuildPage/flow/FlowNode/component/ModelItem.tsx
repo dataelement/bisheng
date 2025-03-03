@@ -77,7 +77,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             {data.required && <span className="text-red-500">*</span>}
             {data.label}
         </Label>
-        {defaultValue ? <Cascader
+        {defaultValue?.length ? <Cascader
             error={error}
             placholder={data.placeholder}
             defaultValue={defaultValue}

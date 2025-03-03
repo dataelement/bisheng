@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField, SelectField } from "./InputField";
 
+// Default values for the form
 const defaultValues = {
     email_account: '',
     email_password: '',
@@ -17,28 +18,64 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
     const [localFormData, setLocalFormData] = useState(() => ({ ...defaultValues, ...formData }));
     const [errors, setErrors] = useState({});
 
+    // Handle input changes
     const handleChange = (e) => {
         const { name, value } = e.target;
         setLocalFormData((prev) => ({ ...prev, [name]: value }));
     };
 
+    // Handle select field changes
     const handleSelectChange = (name, value) => {
         setLocalFormData((prev) => ({ ...prev, [name]: value }));
     };
 
+    // Validate the form inputs
     const validateForm = () => {
         const formErrors = {};
         let isValid = true;
-        ['email_account', 'email_password', 'smtp_server', 'smtp_port', 'encrypt_method'].forEach((field) => {
-            if (!localFormData[field]) {
-                formErrors[field] = true;
-                isValid = false;
-            }
-        });
+
+        // Email account validation
+        const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!localFormData.email_account) {
+            formErrors.email_account = true;
+            isValid = false;
+        } else if (!emailRegex.test(localFormData.email_account)) {
+            formErrors.email_account = '请输入有效的邮箱地址';
+            isValid = false;
+        }
+
+        // SMTP server validation (check for valid domain or IP address)
+        const smtpServerRegex = /^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,6}$|^(?:\d{1,3}\.){3}\d{1,3}$/;
+        // This regex allows valid domain names (e.g., smtp.example.com) or valid IPv4 addresses (e.g., 192.168.1.1)
+        if (!localFormData.smtp_server) {
+            formErrors.smtp_server = true;
+            isValid = false;
+        } else if (!smtpServerRegex.test(localFormData.smtp_server)) {
+            formErrors.smtp_server = '请输入有效的SMTP服务器地址';
+            isValid = false;
+        }
+
+        // SMTP port validation (must be a number between 1 and 65535)
+        const smtpPort = parseInt(localFormData.smtp_port);
+        if (!localFormData.smtp_port) {
+            formErrors.smtp_port = true;
+            isValid = false;
+        } else if (isNaN(smtpPort) || smtpPort < 1 || smtpPort > 65535) {
+            formErrors.smtp_port = '请输入有效的端口号';
+            isValid = false;
+        }
+
+        // Encrypt method validation
+        if (!localFormData.encrypt_method) {
+            formErrors.encrypt_method = true;
+            isValid = false;
+        }
+
         setErrors(formErrors);
         return isValid;
     };
 
+    // Handle form submit
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {

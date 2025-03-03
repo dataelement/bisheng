@@ -71,11 +71,12 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
         for (const el of value) {
             // If not found, check against effectiveKnowledges
             if (!effectiveKnowledges.some(base => base.id === el.value)) {
-                error = t('nodeErrorMessage', {
-                    ns: 'flow',
-                    nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
-                    varNameCn: ''
-                });
+                // error = t('nodeErrorMessage', {
+                //     ns: 'flow',
+                //     nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
+                //     varNameCn: ''
+                // });
+                error = `${flow.nodes.find(node => node.id === nodeId).data.name}节点错误：${el.label}不存在.`
                 error && _errorKeys.push(el.value);
             }
             setErrorKeys(_errorKeys);

@@ -181,7 +181,7 @@ export default function EvaluationPage() {
                     <TableCell>
                       {el.create_time.replace("T", " ") || "--"}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="flex justify-end">
                       <div className="flex">
                         <Button
                           variant="link"

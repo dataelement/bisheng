@@ -219,7 +219,9 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
                         valueSet
                     );
                     Object.assign(acc, nestedKeys);
-                    if (checkedCountL2 === itemL2.param.value.length - 1) checkedCountL1++;
+                    // if (checkedCountL2 === itemL2.param.value.length - 1) checkedCountL1++;
+                    // question半选按选中计算
+                    if (checkedCountL2 > 0) checkedCountL1++;
                 } else {
                     // 处理普通二级菜单
                     const isChecked = valueSet.has(keyL2);
