@@ -96,7 +96,7 @@ class RedisCallback(BaseCallback):
             files=files,
         )
 
-    def parse_workflow_failed(self, status_info: dict) -> ChatResponse:
+    def parse_workflow_failed(self, status_info: dict) -> ChatResponse | None:
         if status_info['reason'].find('-- has run more than the maximum number of times') != -1:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                             {'code': WorkFlowNodeRunMaxTimesError.Code,
@@ -112,7 +112,8 @@ class RedisCallback(BaseCallback):
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                             {'code': WorkFlowVersionUpdateError.Code,
                                              'message': status_info['reason'].split('--')[0]})
-
+        elif status_info['reason'].find('stop by user') != -1:
+            return None
         else:
             return self.build_chat_response(WorkflowEventType.Error.value, 'over',
                                             {'code': 500, 'message': status_info['reason']})
@@ -133,7 +134,9 @@ class RedisCallback(BaseCallback):
                         break
                     yield chat_response
                 if status_info['status'] == WorkflowStatus.FAILED.value:
-                    yield self.parse_workflow_failed(status_info)
+                    error_resp = self.parse_workflow_failed(status_info)
+                    if error_resp:
+                        yield error_resp
                 break
             elif status_info['status'] == WorkflowStatus.INPUT.value:
                 while True:
