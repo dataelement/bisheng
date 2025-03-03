@@ -38,6 +38,7 @@ class WorkflowClient(BaseClient):
                 workflow_over = False
                 while not workflow_over:
                     workflow_over = await self.workflow_run()
+                    await asyncio.sleep(0.5)
         else:
             await self.send_response('processing', 'close', '')
 
