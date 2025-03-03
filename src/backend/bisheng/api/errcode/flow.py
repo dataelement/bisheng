@@ -70,3 +70,8 @@ class WorkFlowNodeUpdateError(BaseErrorCode):
 class WorkFlowVersionUpdateError(BaseErrorCode):
     Code: int = 10532
     Msg: str = '工作流版本已升级，请联系创建者重新编排'
+
+
+class WorkFlowTaskBusyError(BaseErrorCode):
+    Code: int = 10540
+    Msg: str = '服务器线程数已满，请稍候再试'
