@@ -68,6 +68,7 @@ class RedisCallback(BaseCallback):
 
     def clear_workflow_status(self):
         self.redis_client.delete(self.workflow_status_key)
+        self.redis_client.delete(self.workflow_stop_key)
 
     def insert_workflow_response(self, event: dict):
         self.redis_client.rpush(self.workflow_event_key, json.dumps(event), expiration=self.workflow_expire_time)
