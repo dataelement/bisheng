@@ -5,7 +5,7 @@ import uuid
 from typing import AsyncIterator
 
 from bisheng.api.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
-    WorkFlowNodeUpdateError, WorkFlowVersionUpdateError
+    WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
@@ -69,6 +69,7 @@ class RedisCallback(BaseCallback):
     def clear_workflow_status(self):
         self.redis_client.delete(self.workflow_status_key)
         self.redis_client.delete(self.workflow_stop_key)
+        self.redis_client.delete(self.workflow_data_key)
 
     def insert_workflow_response(self, event: dict):
         self.redis_client.rpush(self.workflow_event_key, json.dumps(event), expiration=self.workflow_expire_time)
@@ -145,6 +146,12 @@ class RedisCallback(BaseCallback):
                     if not chat_response:
                         break
                     yield chat_response
+                break
+            elif status_info['status'] == WorkflowStatus.WAITING.value and time.time() - status_info['time'] > 10:
+                # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
+                self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
+                yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
+                                               {'code': WorkFlowTaskBusyError.Code, 'message': WorkFlowTaskBusyError.Msg})
                 break
             elif time.time() - status_info['time'] > 86400:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
