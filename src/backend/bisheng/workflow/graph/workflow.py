@@ -33,6 +33,18 @@ class Workflow:
                                         max_steps=max_steps,
                                         callback=callback)
 
+    def save_user_input_history(self, input_data: dict | None):
+        if not input_data:
+            return
+        user_input_str = ''
+        for _, msg in input_data.items():
+            # 会话输入特殊处理下，将key去掉
+            if len(msg) == 1 and 'user_input' in msg:
+                user_input_str += msg['user_input']
+                continue
+            user_input_str += '\n' + json.dumps(msg, ensure_ascii=False)
+        self.graph_engine.graph_state.save_context(content=user_input_str, msg_sender='human')
+
     def run(self, input_data: dict = None) -> (str, str):
         """
         params:
@@ -41,8 +53,7 @@ class Workflow:
         """
         # 执行workflow
         if input_data is not None:
-            user_input_str = ' '.join([json.dumps(msg, ensure_ascii=False) for _, msg in input_data.items()])
-            self.graph_engine.graph_state.save_context(content=user_input_str, msg_sender='human')
+            self.save_user_input_history(input_data)
             self.graph_engine.continue_run(input_data)
         else:
             # 首次运行时间
@@ -60,8 +71,6 @@ class Workflow:
         """
         # 执行workflow
         if input_data is not None:
-            user_input_str = ' '.join([json.dumps(msg, ensure_ascii=False) for _, msg in input_data.items()])
-            self.graph_engine.graph_state.save_context(content=user_input_str, msg_sender='human')
             await self.graph_engine.acontinue_run(input_data)
         else:
             # 首次运行时间
