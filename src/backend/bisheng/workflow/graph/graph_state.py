@@ -19,6 +19,8 @@ class GraphState(BaseModel):
         因为不是1对1，所以重写 buffer_as_str"""
         if not count:
             count = self.history_memory.k
+        if count == 0:
+            return ''
         messages = self.history_memory.chat_memory.messages[-count:]
         return get_buffer_string(
             messages,

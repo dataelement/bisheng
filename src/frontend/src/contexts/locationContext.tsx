@@ -80,7 +80,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         isPro: !!res.pro,
         chatPrompt: !!res.application_usage_tips,
         noFace: !res.show_github_and_help,
-        register: !!res.enable_registration
+        register: !!res.enable_registration,
+        uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
       })
       // backend version
       res.version && console.log(

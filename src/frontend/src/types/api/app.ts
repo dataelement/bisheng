@@ -12,4 +12,6 @@ export type AppConfig = {
     version: string;
     /** 注册入口 */
     enable_registration: boolean;
+    /** 最大上传文件大小 mb */
+    uploaded_files_maximum_size: number;
 };

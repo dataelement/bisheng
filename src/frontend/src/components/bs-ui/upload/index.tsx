@@ -79,7 +79,7 @@ const Upload = forwardRef(({
         });
         errorFile.length && message({
             title: t('prompt'),
-            description: errorFile.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit')}`),
+            description: errorFile.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit', { size })}`),
         });
         if (!files.length) return
         // if (acceptedFiles.length === 1 && acceptedFiles[0].type !== 'application/pdf') {
