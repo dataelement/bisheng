@@ -15,6 +15,7 @@ import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
 import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
+import Watermark from "./Watermark";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -218,6 +219,8 @@ export default function App() {
       </div>
       {/* 新弹窗 */}
       <Toaster></Toaster>
+
+      {user && <Watermark text={user.user_name}/>}
     </div>
   );
 }
