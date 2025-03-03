@@ -121,7 +121,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     const [error, setError] = useState(false)
     useEffect(() => {
         // data.required && onValidate(() => {
-        onValidate(() => {
+        onValidate((config) => {
             if (data.required && !data.value.value.length) {
                 setError(true)
                 return data.label + ' ' + t('required')
@@ -129,6 +129,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
                 return 'input_file'
             }
+
             setError(false)
             return false
         })
@@ -138,9 +139,14 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     // 校验变量是否可用
     const [errorKeys, setErrorKeys] = useState<string[]>([])
-    const validateVarAvailable = async () => {
+    const validateVarAvailable = async (config) => {
         if (!value.length) return ''
         let error = '';
+        // 单节点运行校验临时文件
+        if (config?.tmp && data.value.value.length && data.value.type === 'tmp') {
+            setError(true)
+            return '单节点运行不支持临时文件'
+        }
         const _errorKeys = [];
         if (typeof value[0].value === 'number') {
             const effectiveKnowledges = await getKnowledgeDetailApi(value.map(el => el.value));

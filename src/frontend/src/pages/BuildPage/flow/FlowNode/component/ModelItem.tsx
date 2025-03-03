@@ -51,6 +51,9 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             if (model) {
                 _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
                 return true
+            } else {
+                const firstOp = options[0]
+                _defaultValue = [{ value: firstOp.value, label: firstOp.label }, { value: firstOp.children[0].value, label: firstOp.children[0].label }]
             }
         })
         // 无对应选项自动清空旧值

@@ -270,7 +270,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         </div>
         <div>
             <Label className="bisheng-label">{t("options")}</Label>
-            <DragOptions scroll options={formData.options} onChange={updateOptions} />
+            <DragOptions edit scroll options={formData.options} onChange={updateOptions} />
             {errors.options && <p className="text-red-500 text-sm">{errors.options}</p>}
         </div>
         <div className="flex items-center space-x-2">

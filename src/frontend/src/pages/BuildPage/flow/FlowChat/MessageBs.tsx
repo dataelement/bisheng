@@ -61,7 +61,7 @@ const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ mark = false, logo, data, onUnlike = () => { }, disableBtn = false, onSource, onMarkClick }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -167,14 +167,14 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                             message,
                         })}
                     />
-                    {/* <MessageButtons
+                    {!disableBtn && <MessageButtons
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                    ></MessageButtons> */}
+                    ></MessageButtons>}
                 </div>
             }
         </div>

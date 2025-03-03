@@ -141,7 +141,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     const { paramValidateEntities, varValidateEntities, validateAll } = useEventMaster(node, setNodeError)
     const handleRun = async () => {
         // vilidate node
-        const errors = await validateAll()
+        const errors = await validateAll({ tmp: true })
 
         if (errors.length) return message({
             description: errors,
@@ -288,7 +288,7 @@ const useEventMaster = (node, setNodeError) => {
         return errors
     }
 
-    const validateAll = async () => {
+    const validateAll = async (config) => {
         // item
         const errors = validateParams(false);
 
@@ -299,7 +299,7 @@ const useEventMaster = (node, setNodeError) => {
             // 如果 param.tab 存在且不匹配，则跳过当前项
             if (param.tab && node.tab && node.tab.value !== param.tab) return;
 
-            const msg = await validate(); // 获取验证结果
+            const msg = await validate(config); // 获取验证结果
             if (msg) errors.push(msg);
         });
 

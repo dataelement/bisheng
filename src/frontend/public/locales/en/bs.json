@@ -921,7 +921,8 @@
     "10527": "Workflow waits for user input timeout",
     "10528": "{{type}}node execution exceeds maximum number of times",
     "10531": "{{type}} has been upgraded. You need to delete it and drag it in again.",
-    "10532": "The workflow version has been upgraded, please contact the creator to rearrange it"
+    "10532": "The workflow version has been upgraded, please contact the creator to rearrange it",
+    "10540": "Server thread pool is full, please try again later"
   },
   "all": "All",
   "confirmButton": "Confirm",
