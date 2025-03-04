@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -9,9 +9,9 @@ from .base import APIToolBase, Field, MultArgsSchemaTool
 
 class OpenApiTools(APIToolBase):
 
-    api_key: str
-    api_location: str
-    parameter_name: str
+    api_key: Optional[str]
+    api_location: Optional[str]
+    parameter_name: Optional[str]
 
     def get_real_path(self, path_params: dict|None):
         path = self.params['path']
