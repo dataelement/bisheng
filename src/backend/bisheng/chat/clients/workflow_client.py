@@ -206,6 +206,6 @@ class WorkflowClient(BaseClient):
                 message_id = node_info.get('message_id')
                 new_message = node_info.get('message')
                 break
-            self.workflow.set_user_input(user_input, message_id=message_id, new_message=new_message)
+            self.workflow.set_user_input(user_input, message_id=message_id, message_content=new_message)
             self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         # await self.workflow_run()
