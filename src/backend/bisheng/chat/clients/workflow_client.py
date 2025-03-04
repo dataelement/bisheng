@@ -132,6 +132,7 @@ class WorkflowClient(BaseClient):
                                                 WorkflowEventType.OutputWithChoose.value]:
                 send_message = self.latest_history.to_dict()
                 send_message['message'] = json.loads(send_message['message'])
+                send_message['message_id'] = send_message.pop('id')
                 await self.send_json(send_message)
 
         await self.send_response('processing', 'begin', '')
