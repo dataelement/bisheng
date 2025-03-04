@@ -35,10 +35,6 @@ class WorkflowClient(BaseClient):
         if self.workflow:
             if force_stop or not self.chat_id:
                 self.workflow.set_workflow_stop()
-                workflow_over = False
-                while not workflow_over:
-                    workflow_over = await self.workflow_run()
-                    await asyncio.sleep(0.5)
         else:
             await self.send_response('processing', 'close', '')
 
@@ -162,8 +158,13 @@ class WorkflowClient(BaseClient):
             await self.send_response('error', 'over', {'code': 500, 'message': str(e)})
             return
 
-
     async def workflow_run(self):
+        workflow_over = False
+        while not workflow_over:
+            workflow_over = await self._workflow_run()
+            await asyncio.sleep(0.5)
+
+    async def _workflow_run(self):
         # 需要不断从redis中获取workflow返回的消息
         async for event in self.workflow.get_response_until_break():
             await self.send_json(event)
@@ -182,7 +183,6 @@ class WorkflowClient(BaseClient):
         # 说明运行到了待输入状态
         elif status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning(f'workflow status is unknown: {status_info}')
-        logger.debug('workflow run over until break')
         return False
 
     async def handle_user_input(self, data: dict):
@@ -203,4 +203,4 @@ class WorkflowClient(BaseClient):
                 break
             self.workflow.set_user_input(user_input, message_id=message_id)
             self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
-        await self.workflow_run()
+        # await self.workflow_run()
