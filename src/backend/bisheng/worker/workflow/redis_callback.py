@@ -166,16 +166,16 @@ class RedisCallback(BaseCallback):
                     continue
                 yield chat_response
 
-    def set_user_input(self, data: dict, message_id: int = None):
+    def set_user_input(self, data: dict, message_id: int = None, message_content: str = None):
         if self.chat_id and message_id:
             message_db = ChatMessageDao.get_message_by_id(message_id)
             if message_db:
-                self.update_old_message(data, message_db)
+                self.update_old_message(data, message_db, message_content)
         # 通知异步任务用户输入
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
-    def update_old_message(self, user_input: dict, message_db: ChatMessage):
+    def update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str):
         # 更新输出待输入消息里用户的输入和选择
         old_message = json.loads(message_db.message)
         if message_db.category == WorkflowEventType.OutputWithInput.value:
@@ -184,8 +184,12 @@ class RedisCallback(BaseCallback):
             old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
         elif message_db.category == WorkflowEventType.UserInput.value:
             user_input = user_input[old_message['node_id']]
+
+            # 前端传了用户输入内容则使用前端的内容
+            if message_content:
+                user_input_message = message_content
             # 说明是表单输入
-            if old_message['input_schema']['tab'] == 'form_input':
+            elif old_message['input_schema']['tab'] == 'form_input':
                 user_input_message = ''
                 for key_info in old_message['input_schema']['value']:
                     user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"

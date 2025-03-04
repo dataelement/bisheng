@@ -199,11 +199,13 @@ class WorkflowClient(BaseClient):
         else:
             user_input = {}
             message_id = None
+            new_message = None
             # 目前支持一个输入节点
             for node_id, node_info in data.items():
                 user_input[node_id] = node_info['data']
                 message_id = node_info.get('message_id')
+                new_message = node_info.get('message')
                 break
-            self.workflow.set_user_input(user_input, message_id=message_id)
+            self.workflow.set_user_input(user_input, message_id=message_id, new_message=new_message)
             self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         # await self.workflow_run()
