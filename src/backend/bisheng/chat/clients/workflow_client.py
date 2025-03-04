@@ -3,16 +3,17 @@ import json
 import uuid
 from typing import Dict, Optional
 
-from bisheng.database.models.flow import FlowDao, FlowStatus
 from fastapi import Request, WebSocket, status
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow
@@ -30,7 +31,7 @@ class WorkflowClient(BaseClient):
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
 
-    async def close(self, force_stop = False):
+    async def close(self, force_stop=False):
         # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
         if self.workflow:
             if force_stop or not self.chat_id:
@@ -123,7 +124,9 @@ class WorkflowClient(BaseClient):
         # 说明会话还在运行中
         if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
             # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
-            if self.latest_history.category in ['user_input', 'output_choose_msg', 'output_input_msg']:
+            if self.latest_history.category in [WorkflowEventType.UserInput.value,
+                                                WorkflowEventType.OutputWithInput.value,
+                                                WorkflowEventType.OutputWithChoose.value]:
                 send_message = self.latest_history.to_dict()
                 send_message['message'] = json.loads(send_message['message'])
                 await self.send_json(send_message)
