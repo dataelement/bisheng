@@ -193,14 +193,14 @@ class WorkflowClient(BaseClient):
         status_info = self.workflow.get_workflow_status(user_cache=False)
         if status_info['status'] != WorkflowStatus.INPUT.value:
             logger.warning(f'workflow is not input status: {status_info}')
-            return
-        user_input = {}
-        message_id = None
-        # 目前支持一个输入节点
-        for node_id, node_info in data.items():
-            user_input[node_id] = node_info['data']
-            message_id = node_info.get('message_id')
-            break
-        self.workflow.set_user_input(user_input, message_id=message_id)
-        self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+        else:
+            user_input = {}
+            message_id = None
+            # 目前支持一个输入节点
+            for node_id, node_info in data.items():
+                user_input[node_id] = node_info['data']
+                message_id = node_info.get('message_id')
+                break
+            self.workflow.set_user_input(user_input, message_id=message_id)
+            self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         await self.workflow_run()
