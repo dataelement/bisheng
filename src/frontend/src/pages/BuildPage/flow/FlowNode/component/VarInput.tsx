@@ -200,7 +200,7 @@ export default function VarInput({
                     )}
                     {!full && <Dialog >
                         <DialogTrigger asChild>
-                            <Button className="text-muted-foreground absolute right-0 top-6 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
+                            <Button className="text-muted-foreground absolute right-2 top-6 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
                         </DialogTrigger>
                         <DialogContent className="lg:max-w-[800px]">
                             {/* <DialogHeader>

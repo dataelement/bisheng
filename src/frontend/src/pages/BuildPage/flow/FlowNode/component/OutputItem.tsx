@@ -93,10 +93,10 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
                     setError(true);
                     return t("optionsCannotBeEmpty"); // 选项不可为空
                 }
-                if (interactionType === "input" && !data.value.value?.trim()) {
-                    setError(true);
-                    return '展示内容不可为空'; // 输入不可为空
-                }
+                // if (interactionType === "input" && !data.value.value?.trim()) {
+                //     setError(true);
+                //     return '展示内容不可为空'; // 输入不可为空
+                // }
                 setError(false);
                 return false;
             });

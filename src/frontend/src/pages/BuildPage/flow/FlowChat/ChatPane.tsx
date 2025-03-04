@@ -3,11 +3,11 @@ import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 
 export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '' }: { autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
-    const { changeChatId } = useMessageStore()
+    // const { changeChatId } = useMessageStore()
 
-    useEffect(() => {
-        changeChatId(chatId)
-    }, [chatId])
+    // useEffect(() => {
+    //     changeChatId(chatId)
+    // }, [chatId])
 
     const getMessage = (action, { nodeId, msg, category, extra, source, message_id }) => {
         if (action === 'getInputForm') {
