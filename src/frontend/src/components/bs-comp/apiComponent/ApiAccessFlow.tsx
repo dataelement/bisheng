@@ -89,7 +89,7 @@ print(response.text)# 输出工作流的响应`
                     <div className='w-[700px] mx-auto'><img src="/assets/api/flow.png" className='size-full' alt="" /></div>
                     <p className='bisheng-label pb-2'>如时序图所示，在对接工作流 API 时，一般会经历以下步骤：</p>
                     <p className="bisheng-label pb-2"><span className="font-semibold">1. 第一步：</span>发起工作流执行。通过/invoke 接口让工作流从开始节点开始运行：</p>
-                    <div className='relative'>
+                    <div className='relative  max-w-[80vw]'>
                         <button
                             className="absolute right-0 flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                             onClick={() => copyToClipboard(firstCode)}
@@ -97,7 +97,7 @@ print(response.text)# 输出工作流的响应`
                             {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
                         </button>
                         <SyntaxHighlighter
-                            className="w-full max-w-[80vw] overflow-auto custom-scroll text-sm"
+                            className="w-full overflow-auto custom-scroll text-sm"
                             language={'json'}
                             style={oneDark}
                         >
@@ -594,7 +594,7 @@ print(response.text)# 输出工作流的响应`
                     <div className="mb-6">
                         <p className="bisheng-label py-2">处理逻辑：</p>
                         <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
-                            <li className='mt-2 leading-6'>解析<code className="bg-gray-200 p-1 rounded">input_schema.value</code> 中的表单元素，渲染出</li>
+                            <li className='mt-2 leading-6'>解析<code className="bg-gray-200 p-1 rounded">input_schema.value</code> 中的表单元素，在前端渲染表单样式</li>
                             <li className='mt-2 leading-6'>如果有文件类型，调用毕昇文件上传接口获取到文件url，示例如下：</li>
                         </ul>
                     </div>
@@ -929,8 +929,8 @@ def upload_file(local_path: str):
                     <div className="mb-6">
                         <p className="bisheng-label py-2">处理逻辑</p>
                         <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
-                            <li className='mt-2 leading-6'><code className="bg-gray-200 p-1 rounded">status="end"</code>代表流式输出完成，此时根据 node_execution_id 和 output_schema.output_key 找到对应的消息</li>
-                            <li className='mt-2 leading-6'>可停止对应消息的“打字机”效果，并使用message内容覆盖之前流式的结果，从而显示完整答案</li>
+                            <li className='mt-2 leading-6'>1. <code className="bg-gray-200 p-1 rounded">status="end"</code>代表流式输出完成，此时根据 node_execution_id 和 output_schema.output_key 找到对应的<code className="bg-gray-200 p-1 rounded">message</code></li>
+                            <li className='mt-2 leading-6'>2. 使用 <code className="bg-gray-200 p-1 rounded">message</code> 内容覆盖之前流式输出的结果，显示最终完整答案</li>
                         </ul>
                     </div>
 

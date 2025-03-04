@@ -30,8 +30,11 @@ class WorkflowClient(BaseClient):
 
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
+        self.ws_closed = False
 
     async def close(self, force_stop=False):
+        if not force_stop:
+            self.ws_closed = True
         # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
         if self.workflow:
             if force_stop or not self.chat_id:
@@ -164,6 +167,8 @@ class WorkflowClient(BaseClient):
     async def workflow_run(self):
         workflow_over = False
         while not workflow_over:
+            if self.ws_closed:
+                break
             workflow_over = await self._workflow_run()
             await asyncio.sleep(0.5)
 

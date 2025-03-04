@@ -98,10 +98,11 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             let newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id, reasoning_log } = data
             // 删除与历史消息中message_id相同的消息,则删除
+            const messageId = message_id || (category === "guide_word" ? generateUUID(4) : '') // 后端没给,临时生成一个
             newChat = newChat.filter((item => !(item.message_id === message_id && item.his)))
             newChat.push({
                 category, flow_id, chat_id,
-                message_id: message_id,
+                message_id: messageId,
                 files, is_bot,
                 message, receiver, source, user_id,
                 liked: !!liked,

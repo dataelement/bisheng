@@ -145,7 +145,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         // 单节点运行校验临时文件
         if (config?.tmp && data.value.value.length && data.value.type === 'tmp') {
             setError(true)
-            return '单节点运行不支持临时文件'
+            return '临时知识库不支持单节点调试'
         }
         const _errorKeys = [];
         if (typeof value[0].value === 'number') {

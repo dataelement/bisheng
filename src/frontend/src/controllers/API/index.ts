@@ -459,7 +459,7 @@ export const getChatsApi = (page) => {
   return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res => {
     const result = res?.filter((el, i) => el.chat_id) || []
     return result.map(el => {
-      const { intermediate_steps, message } = el.latest_message
+      const { intermediate_steps, message } = el.latest_message || { intermediate_steps: '', message: '' }
       const _message = (function () {
         if (intermediate_steps) return intermediate_steps;
         if (isJsonSerializable(message)) {

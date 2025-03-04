@@ -4,7 +4,7 @@ import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";

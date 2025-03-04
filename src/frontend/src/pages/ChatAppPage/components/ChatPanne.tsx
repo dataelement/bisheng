@@ -33,7 +33,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // console.log('data :>> ', flow);
     const build = useBuild()
     const { messages, loadHistoryMsg, loadMoreHistoryMsg, changeChatId, clearMsgs } = useMessageStore()
-    const { loadHistoryMsg: loadFlowHistoryMsg, changeChatId: changeFlowChatId } = useFlowMessageStore()
+    const { chatId: flowChatId, loadHistoryMsg: loadFlowHistoryMsg, changeChatId: changeFlowChatId } = useFlowMessageStore()
 
     useEffect(() => {
         return destroy
@@ -82,6 +82,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         } else {
             setAssistant(null)
             setFlow(null)
+            flowRef.current = null
+            setWorkflow(null)
             const _flow = await getFlowApi(id, version)
 
             if (isV1) {
@@ -282,7 +284,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={chatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
             </div>
         }
     </div>

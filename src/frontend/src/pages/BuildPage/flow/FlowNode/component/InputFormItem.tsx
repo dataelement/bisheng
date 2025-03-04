@@ -45,6 +45,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     const oldFormTypeRef = useRef('')
 
     const oldVarNameRef = useRef("");
+    const oldcontentNameRef = useRef("");
+    const oldPathNameRef = useRef("");
     useEffect(() => {
         editRef.current = false
         if (initialData) {
@@ -72,6 +74,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             editRef.current = true
             oldFormTypeRef.current = formType
             oldVarNameRef.current = variableName;
+            oldcontentNameRef.current = filecontent;
+            oldPathNameRef.current = filepath;
         }
     }, [initialData]);
 
@@ -144,8 +148,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filecontent.length > 50) {
                 newErrors.filecontent = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.file_content === formData.filecontent) &&
-                formData.filecontent !== oldVarNameRef.current
+                existingOptions?.some(opt => !opt.multiple && opt.file_content === formData.filecontent) &&
+                formData.filecontent !== oldcontentNameRef.current
             ) {
                 newErrors.filecontent = t("variableNameExists");
             }
@@ -158,8 +162,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filepath.length > 50) {
                 newErrors.filepath = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.file_path === formData.filepath) &&
-                formData.filepath !== oldVarNameRef.current
+                existingOptions?.some(opt => !opt.multiple && opt.file_path === formData.filepath) &&
+                formData.filepath !== oldPathNameRef.current
             ) {
                 newErrors.filepath = t("variableNameExists");
             }

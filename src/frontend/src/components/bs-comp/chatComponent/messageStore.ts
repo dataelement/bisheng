@@ -203,11 +203,10 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         } else {
             message = currentMessage.message + (wsdata.message || '')
         }
-
         const newCurrentMessage = {
             ...currentMessage,
             ...wsdata,
-            id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
+            id: currentMessage.id || (isRunLog ? wsdata.extra : wsdata.messageId), // 每条消息必唯一
             message,
             reasoning_log,
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
