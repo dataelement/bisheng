@@ -40,7 +40,7 @@ export default function tabTools({ select = null, onSelect }) {
 
     const hasSet = (name) => {
         if (user.role !== 'admin') return false
-        return ['Dalle3绘画', 'Bing web搜索', '天眼查'].includes(name)
+        return ['Dalle3绘画', 'Bing web搜索', '天眼查', 'Firecrawl', 'Jina AI', 'SiliconFlow', '发送邮件', '飞书消息'].includes(name)
     }
 
     const toolsetRef = useRef(null)
@@ -116,6 +116,7 @@ export default function tabTools({ select = null, onSelect }) {
                 }}
                 ref={editRef}
             />
+            {/* 内置工具设置 */}
             <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
         </div>
     );

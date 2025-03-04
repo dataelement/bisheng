@@ -12,6 +12,7 @@ import { RefreshCw } from "lucide-react";
 import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
+import useFlowStore from "../flowStore";
 
 export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
     const { toast } = useToast()
@@ -21,6 +22,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const [inputLock, setInputLock] = useState({ locked: true, reason: '' })
     const questionsRef = useRef(null)
     const inputNodeIdRef = useRef('') // 当前输入框节点id
+    const messageIdRef = useRef('') // 当前输入框节点messageId
     const [inputForm, setInputForm] = useState(null) // input表单
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
@@ -104,7 +106,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             msg: value,
             category: "question",
             extra: '',
-            message_id: '',
+            message_id: messageIdRef.current,
             source: 0
         })
         // msg to store
@@ -131,7 +133,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 [inputNodeIdRef.current]: {
                     data,
                     message: msg,
-                    message_id: '',
+                    message_id: messageIdRef.current,
                     category: 'question',
                     extra: '',
                     source: 0
@@ -183,9 +185,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
                     // // 拦截会话串台
                     if (data.chat_id && currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
-                    if (data.category === 'node_run') {
-                        inputNodeIdRef.current = data.message.node_id
-                    }
                     handleWsMessage(data);
                     ['begin', 'close'].includes(data.type) && onLoad()
                     // if ('close' === data.type) {
@@ -208,7 +207,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                                 description: event.reason
                             });
                         }
-                        setInputLock({ locked: false, reason: '' })
+                        setInputLock({ locked: true, reason: '' })
                     }
                 };
                 ws.onerror = (ev) => {
@@ -224,6 +223,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                             t('chat.networkErrorList3')
                         ]
                     });
+                    setInputLock({ locked: true, reason: '' })
                 };
             } catch (err) {
                 console.error('创建链接异常', err);
@@ -232,71 +232,51 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         })
     }
 
+    const setRunCache = useFlowStore(state => state.setRunCache)
     // 接受 ws 消息
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
             const { code, message } = data.message
+            setInputLock({ locked: true, reason: '' })
             return toast({
                 variant: 'error',
                 description: code == 500 ? message : t(`errors.${code}`, { type: message })
             });
-        }
-        if (data.category === 'node_run') {
+        } else if (data.category === 'node_run') {
+            inputNodeIdRef.current = data.message.node_id
+            // 缓存运行结果,用于[单节点运行]自动填写参数
+            if (data.type === 'end' && data.message.input_data) {
+                setRunCache(data.message.node_id
+                    , data.message.input_data)
+            }
             insetNodeRun(data)
             return sendNodeLogEvent(data)
-        }
-        if (data.category === 'user_input') {
+        } else if (data.category === "guide_word") {
+            data.message.msg = data.message.guide_word
+        } else if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
+            messageIdRef.current = data.message_id
             // 待用户输入
-            input_schema.tab === 'form' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
+            input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
             return
         } else if (data.category === 'guide_question') {
-            return questionsRef.current.updateQuestions(data.message.filter(q => q))
+            return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
         }
 
         if (data.type === 'close') {
-            insetSeparator('本轮会话已结束')
+            insetSeparator(t('chat.chatEndMessage'))
+            setInputLock({ locked: true, reason: '' })
+            // 重启会话按钮,接收close确认后端处理结束后重启会话
+            if (restartCallBackRef.current[data.chat_id]) {
+                restartCallBackRef.current[data.chat_id]()
+                restartCallBackRef.current[data.chat_id] = null
+            }
         } else if (data.type === 'over') {
             createWsMsg(data)
         }
-
-        // if (Array.isArray(data) && data.length) return
-        // if (data.type === 'start') {
-        //     msgClosedRef.current = false
-        //     // 非continue时，展示stop按钮
-        //     !continueRef.current && setStop({ show: true, disable: false })
-        //     createWsMsg(data)
-        // } else if (data.type === 'stream') {
-        //     //@ts-ignore
-        //     updateCurrentMessage({
-        //         chat_id: data.chat_id,
-        //         message: data.message,
-        //         thought: data.intermediate_steps
-        //     })
-        // } else if (['end', 'end_cover'].includes(data.type)) {
-        //     if (msgClosedRef.current && !['tool', 'flow', 'knowledge'].includes(data.category)) {
-        //         // 无未闭合的消息，先创建（补一条start）  工具类除外
-        //         console.log('重复end,新建消息 :>> ');
-        //         createWsMsg(data)
-        //     }
-        //     updateCurrentMessage({
-        //         ...data,
-        //         end: true,
-        //         thought: data.intermediate_steps || '',
-        //         messageId: data.message_id,
-        //         noAccess: false,
-        //         liked: 0,
-        //         update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-        //     }, data.type === 'end_cover')
-
-        //     if (!msgClosedRef.current) msgClosedRef.current = true
-        // } else if (data.type === "close") {
-        //     setStop({ show: false, disable: false })
-        //     setInputLock({ locked: false, reason: '' })
-        // }
     }
 
     // 日志广播->nodes
@@ -307,7 +287,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             detail: {
                 nodeId: node_id,
                 action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
-                data: isError ? { 'error': data.message.reason } : data.message.log_data
+                data: isError ? { 'error': data.message.reason } : data.message.log_data // 缓存TODO
             }
         })
         window.dispatchEvent(event)
@@ -370,15 +350,26 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         sendWsMsg({ "action": "stop" });
     }
     // restart
+    const restartCallBackRef = useRef({})
+    const [restarted, setRestarted] = useState(false)
     const handleRestartClick = () => {
-        wsRef.current?.close()
-        wsRef.current = null
-        stop.show && insetSeparator('本轮会话已结束')
-        setTimeout(() => {
+        sendWsMsg({ "action": "stop" });
+        setRestarted(true)
+        const chatId = currentChatIdRef.current.startsWith('test') ? '' : currentChatIdRef.current
+        restartCallBackRef.current[chatId] = () => {
             createWebSocket().then(() => {
+                setRestarted(false)
                 sendWsMsg(onBeforSend('init_data', {}))
             })
-        }, 300);
+        }
+        // wsRef.current?.close()
+        // wsRef.current = null
+        // stop.show && insetSeparator(t('chat.chatEndMessage'))
+        // setTimeout(() => {
+        //     createWebSocket().then(() => {
+        //         sendWsMsg(onBeforSend('init_data', {}))
+        //     })
+        // }, 300);
     }
 
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
@@ -399,14 +390,14 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Button className="rounded-full" variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
+                <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
             </div>
             {/* form switch */}
             <div className="flex absolute left-3 top-4 z-10">
                 {
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                        onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
+                    // onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
                     ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
                 }
             </div>
@@ -431,6 +422,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     : <Button
                         className="rounded-full"
                         variant="outline"
+                        disabled={restarted}
                         onClick={handleRestartClick}>
                         <RefreshCw className="mr-1" size={16} />
                         {t('chat.runNewWorkflow')}
@@ -446,7 +438,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
                 placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
+                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#131415] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();

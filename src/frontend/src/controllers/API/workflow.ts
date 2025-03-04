@@ -78,6 +78,25 @@ export const runWorkflowNodeApi = async (node_input, data): Promise<any> => {
     });
 }
 
+/**
+ * 复制报告模板
+ */
+export const copyReportTemplate = async (nodeData): Promise<any> => {
+    // console.log('nodeData :>> ', nodeData);
+    if (nodeData.type === 'report') {
+        const { version_key } = nodeData.group_params[0].params[0].value
+        if (version_key) {
+            return axios.post(`/api/v1/workflow/report/copy`, {
+                version_key
+            }).then(res => {
+                nodeData.group_params[0].params[0].value.version_key = res.version_key
+                console.warn('REPORT:使用旧KEY :>> ', version_key);
+                console.warn('REPORT:获取新KEY :>> ', res.version_key);
+            })
+        }
+    }
+    return Promise.resolve('ok')
+}
 
 /**
  * 工作流节点模板
@@ -88,6 +107,7 @@ const workflowTemplate = [
         "name": "开始",
         "description": "工作流运行的起始节点。",
         "type": "start",
+        "v": "1",
         "group_params": [
             {
                 "name": "开场引导",
@@ -128,7 +148,7 @@ const workflowTemplate = [
                     {
                         "key": "preset_question",
                         "label": "预置问题列表",
-                        "global": "index",
+                        "global": "item:input_list",
                         "type": "input_list",
                         "value": [],
                         "placeholder": "输入批量预置问题",
@@ -143,18 +163,19 @@ const workflowTemplate = [
         "name": "输入",
         "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
         "type": "input",
+        "v": "1",
         "tab": {
-            "value": "input",
+            "value": "dialog_input",
             "options": [
                 {
                     "label": "对话框输入",
-                    "key": "input",
-                    "help": "接收用户从对话框输入的内容。!(input)"
+                    "key": "dialog_input",
+                    "help": "接收用户从对话框输入的内容。"
                 },
                 {
                     "label": "表单输入",
-                    "key": "form",
-                    "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。!(form)"
+                    "key": "form_input",
+                    "help": "将会在用户会话界面弹出一个表单，接收用户从表单提交的内容。"
                 }
             ]
         },
@@ -167,15 +188,15 @@ const workflowTemplate = [
                         "global": "key",
                         "label": "用户输入内容",
                         "type": "var",
-                        "tab": "input"
+                        "tab": "dialog_input"
                     },
                     {
-                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
                         "key": "form_input",
+                        "global": "item:form_input",
                         "label": "+ 添加表单项",
                         "type": "form",
-                        "value": [],
-                        "tab": "form"
+                        "tab": "form_input",
+                        "value": []
                     }
                 ]
             }
@@ -186,6 +207,7 @@ const workflowTemplate = [
         "name": "输出",
         "description": "可向用户发送消息，并且支持进行更丰富的交互，例如请求用户批准进行某项敏感操作、允许用户在模型输出内容的基础上直接修改并提交。",
         "type": "output",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -221,6 +243,7 @@ const workflowTemplate = [
         "name": "大模型",
         "description": "调用大模型回答用户问题或者处理任务。",
         "type": "llm",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -242,6 +265,7 @@ const workflowTemplate = [
                         "label": "批处理变量",
                         "global": "self",
                         "type": "user_question",
+                        "test": "var",
                         "value": [],
                         "required": true,
                         "linkage": "output",
@@ -309,6 +333,7 @@ const workflowTemplate = [
                         "key": "output",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "label": "输出变量",
+                        "help": "模型输出内容将会存储在该变量中。",
                         "type": "var",
                         "value": []
                     }
@@ -319,8 +344,9 @@ const workflowTemplate = [
     {
         "id": "agent_xxx",
         "name": "助手",
-        "description": "AI 自主进行任务规划，选择合适的知识库或工具进行调用。",
+        "description": "AI 自主进行任务规划，选择合适的知识库、数据库或工具进行调用。",
         "type": "agent",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -341,8 +367,9 @@ const workflowTemplate = [
                         "key": "batch_variable",
                         "label": "批处理变量",
                         "required": true,
-                        "global": "self",
                         "type": "user_question",
+                        "test": "var",
+                        "global": "self",
                         "value": [],
                         "linkage": "output",
                         "placeholder": "请选择批处理变量",
@@ -470,6 +497,7 @@ const workflowTemplate = [
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "label": "输出变量",
                         "type": "var",
+                        "help": "模型输出内容将会存储在该变量中。",
                         "value": []
                     }
                 ]
@@ -481,6 +509,7 @@ const workflowTemplate = [
         "name": "QA知识库检索",
         "description": "从 QA 知识库中检索问题以及对应的答案。",
         "type": "qa_retriever",
+        "v": "1",
         "group_params": [
             {
                 "name": "检索设置",
@@ -535,6 +564,7 @@ const workflowTemplate = [
         "name": "文档知识库问答",
         "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
         "type": "rag",
+        "v": "1",
         "group_params": [
             {
                 "name": "知识库检索设置",
@@ -591,7 +621,7 @@ const workflowTemplate = [
                         "key": "system_prompt",
                         "label": "系统提示词",
                         "type": "var_textarea",
-                        "value": "你是一个知识库问答助手： \n1.用中文回答用户问题，并且答案要严谨专业。\n2.你需要依据以上【参考文本】中的内容来回答，当【参考文本】中有明确与用户问题相关的内容时才进行回答，不可根据自己的知识来回答。\n3.由于【参考文本】可能包含多个来自不同信息源的信息，所以根据这些不同的信息源可能得出有差异甚至冲突的答案，当发现这种情况时，这些答案都列举出来；如果没有冲突或差异，则只需要给出一个最终结果。\n4.若【参考文本】中内容与用户问题不相关则回复“没有找到相关内容”。",
+                        "value": "你是一个知识库问答助手：\n1.用中文回答用户问题，并且答案要严谨专业。\n2.你需要依据【参考文本】中的内容来回答，当【参考文本】中有明确与用户问题相关的内容时才进行回答，不可根据自己的知识来回答。\n3.由于【参考文本】可能包含多个来自不同信息源的信息，所以根据这些不同的信息源可能得出有差异甚至冲突的答案，当发现这种情况时，这些答案都列举出来；如果没有冲突或差异，则只需要给出一个最终结果。\n4.若【参考文本】中内容与用户问题不相关则回复“没有找到相关内容”。",
                         "required": true
                     },
                     {
@@ -637,6 +667,7 @@ const workflowTemplate = [
                         "key": "output_user_input",
                         "label": "输出变量",
                         "type": "var",
+                        "help": "模型输出内容将会存储在该变量中。",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "value": []
                     }
@@ -649,6 +680,7 @@ const workflowTemplate = [
         "name": "报告",
         "description": "按照预设的word模板生成报告。",
         "type": "report",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -669,6 +701,7 @@ const workflowTemplate = [
         "name": "代码",
         "description": "自定义需要执行的代码。",
         "type": "code",
+        "v": "1",
         "group_params": [
             {
                 "name": "入参",
@@ -734,6 +767,7 @@ const workflowTemplate = [
         "name": "条件分支",
         "description": "根据条件表达式执行不同的分支。",
         "type": "condition",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -752,6 +786,7 @@ const workflowTemplate = [
         "name": "结束",
         "description": "工作流运行到此结束。",
         "type": "end",
+        "v": "1",
         "group_params": []
     },
 ]
@@ -762,6 +797,7 @@ const workflowTemplateEN = [
         "name": "Start",
         "description": "The starting node of the workflow.",
         "type": "start",
+        "v": "1",
         "group_params": [
             {
                 "name": "Opening Guide",
@@ -802,7 +838,7 @@ const workflowTemplateEN = [
                     {
                         "key": "preset_question",
                         "label": "Preset Question List",
-                        "global": "index",
+                        "global": "item:input_list",
                         "type": "input_list",
                         "value": [],
                         "placeholder": "Enter batch preset questions",
@@ -817,17 +853,18 @@ const workflowTemplateEN = [
         "name": "Input",
         "description": "Receive user input on the session page, supports two forms: dialog input, form input.",
         "type": "input",
+        "v": "1",
         "tab": {
-            "value": "input",
+            "value": "dialog_input",
             "options": [
                 {
                     "label": "Dialog Input",
-                    "key": "input",
+                    "key": "dialog_input",
                     "help": "Receive content entered by the user from the dialog box."
                 },
                 {
                     "label": "Form Input",
-                    "key": "form",
+                    "key": "form_input",
                     "help": "Display a form on the session page to receive content submitted by the user through the form."
                 }
             ]
@@ -841,15 +878,15 @@ const workflowTemplateEN = [
                         "global": "key",
                         "label": "User Input Content",
                         "type": "var",
-                        "tab": "input"
+                        "tab": "dialog_input"
                     },
                     {
-                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
+                        "global": "item:form_input",
                         "key": "form_input",
                         "label": "+ Add Form Item",
                         "type": "form",
                         "value": [],
-                        "tab": "form"
+                        "tab": "form_input"
                     }
                 ]
             }
@@ -860,6 +897,7 @@ const workflowTemplateEN = [
         "name": "Output",
         "description": "Send messages to users and support richer interactions, such as requesting user approval for sensitive operations or allowing users to directly modify and submit model-generated content.",
         "type": "output",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -895,6 +933,7 @@ const workflowTemplateEN = [
         "name": "LLM",
         "description": "Invoke a large language model to answer user questions or process tasks.",
         "type": "llm",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -992,6 +1031,7 @@ const workflowTemplateEN = [
         "name": "Agent",
         "description": "AI autonomously plans tasks and selects appropriate knowledge bases or tools for invocation.",
         "type": "agent",
+        "v": "1",
         "tab": {
             "value": "single",
             "options": [
@@ -1012,8 +1052,8 @@ const workflowTemplateEN = [
                         "key": "batch_variable",
                         "label": "Batch Variable",
                         "required": true,
-                        "global": "self",
                         "type": "user_question",
+                        "global": "self",
                         "value": [],
                         "linkage": "output",
                         "placeholder": "Select batch variable",
@@ -1146,6 +1186,7 @@ const workflowTemplateEN = [
         "name": "QA Retrieval",
         "description": "Retrieve questions and corresponding answers from the QA knowledge base.",
         "type": "qa_retriever",
+        "v": "1",
         "group_params": [
             {
                 "name": "Retrieval Settings",
@@ -1200,6 +1241,7 @@ const workflowTemplateEN = [
         "name": "Document Retrieval",
         "description": "Retrieve relevant content from the knowledge base based on user questions and generate final answers using the retrieved results and a large language model. Supports parallel execution for multiple questions.",
         "type": "rag",
+        "v": "1",
         "group_params": [
             {
                 "name": "Knowledge Base Retrieval Settings",
@@ -1311,6 +1353,7 @@ const workflowTemplateEN = [
         "name": "Report",
         "description": "Generate reports based on pre-defined Word templates.",
         "type": "report",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -1331,6 +1374,7 @@ const workflowTemplateEN = [
         "name": "Condition",
         "description": "Execute different branches based on conditional expressions.",
         "type": "condition",
+        "v": "1",
         "group_params": [
             {
                 "params": [
@@ -1349,6 +1393,7 @@ const workflowTemplateEN = [
         "name": "Code",
         "description": "Customize and execute specific code.",
         "type": "code",
+        "v": "1",
         "group_params": [
             {
                 "name": "Input Parameters",
@@ -1417,5 +1462,3 @@ const workflowTemplateEN = [
         "group_params": []
     }
 ];
-
-

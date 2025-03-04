@@ -1,20 +1,19 @@
 import asyncio
 import json
-import time
 import uuid
 from typing import Dict, Optional
 
-from bisheng.database.models.flow import FlowDao, FlowStatus
 from fastapi import Request, WebSocket, status
 from loguru import logger
 
-from bisheng.api.errcode.flow import WorkFlowWaitUserTimeoutError, WorkFlowNodeRunMaxTimesError, WorkFlowNodeUpdateError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow
@@ -31,12 +30,17 @@ class WorkflowClient(BaseClient):
 
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
+        self.ws_closed = False
 
-    async def close(self):
-        # 非会话模式关闭workflow执行
-        if self.workflow and not self.chat_id:
-            self.workflow.set_workflow_stop()
-        self.workflow = None
+    async def close(self, force_stop=False):
+        if not force_stop:
+            self.ws_closed = True
+        # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
+        if self.workflow:
+            if force_stop or not self.chat_id:
+                self.workflow.set_workflow_stop()
+        else:
+            await self.send_response('processing', 'close', '')
 
     async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
         if not self.chat_id:
@@ -74,8 +78,8 @@ class WorkflowClient(BaseClient):
         elif message.get('action') == 'input':
             await self.handle_user_input(message.get('data'))
         elif message.get('action') == 'stop':
-            await self.close()
-            await self.stop_handle_message(message)
+            await self.close(force_stop=True)
+            # await self.stop_handle_message(message)
         else:
             logger.warning('not support action: %s', message.get('action'))
 
@@ -123,9 +127,12 @@ class WorkflowClient(BaseClient):
         # 说明会话还在运行中
         if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
             # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
-            if self.latest_history.category in ['user_input', 'output_choose_msg', 'output_input_msg']:
+            if self.latest_history.category in [WorkflowEventType.UserInput.value,
+                                                WorkflowEventType.OutputWithInput.value,
+                                                WorkflowEventType.OutputWithChoose.value]:
                 send_message = self.latest_history.to_dict()
                 send_message['message'] = json.loads(send_message['message'])
+                send_message['message_id'] = send_message.pop('id')
                 await self.send_json(send_message)
 
         await self.send_response('processing', 'begin', '')
@@ -158,59 +165,34 @@ class WorkflowClient(BaseClient):
             await self.send_response('error', 'over', {'code': 500, 'message': str(e)})
             return
 
-
     async def workflow_run(self):
+        workflow_over = False
+        while not workflow_over:
+            if self.ws_closed:
+                break
+            workflow_over = await self._workflow_run()
+            await asyncio.sleep(0.5)
+
+    async def _workflow_run(self):
         # 需要不断从redis中获取workflow返回的消息
-        while True:
-            if not self.workflow:
-                break
-            status_info = self.workflow.get_workflow_status()
-            if not status_info:
-                await self.send_response('error', 'over', {'code': 500, 'message': 'workflow status not found'})
-                await self.send_response('processing', 'close', '')
-                return
-            elif status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
-                # 防止有消息未发送，查询下消息队列
-                send_msg = True
-                while send_msg:
-                    chat_response = self.workflow.get_workflow_response()
-                    if chat_response:
-                        await self.send_json(chat_response)
-                    else:
-                        send_msg = False
+        async for event in self.workflow.get_response_until_break():
+            await self.send_json(event)
 
-                if status_info['status'] == WorkflowStatus.FAILED.value:
-                    if status_info['reason'].find('-- has run more than the maximum number of times') != -1:
-                        await self.send_response('error', 'over', {'code': WorkFlowNodeRunMaxTimesError.Code,
-                                                                   'message': status_info['reason'].split('--')[0]})
-                    elif status_info['reason'].find('workflow wait user input timeout') != -1:
-                        await self.send_response('error', 'over', {'code': WorkFlowWaitUserTimeoutError.Code, 'message': ''})
-                    elif status_info['reason'].find('-- node params is error') != -1:
-                        await self.send_response('error', 'over',
-                                                 {'code': WorkFlowNodeUpdateError.Code, 'message': status_info['reason'].split('--')[0]})
-                    else:
-                        await self.send_response('error', 'over', {'code': 500, 'message': status_info['reason']})
-                await self.send_response('processing', 'close', '')
-                self.workflow.clear_workflow_status()
-                logger.debug('clear workflow status')
-                self.workflow = None
-                break
-            elif time.time() - status_info['time'] > 86400:
-                # 保底措施: 如果状态一天未更新，结束workflow，说明异步任务出现问题
-                self.workflow.set_workflow_stop()
-                await self.send_response('error', 'over',
-                                         {'code': 500, 'message': 'workflow status not update over 1 day'})
-                await self.send_response('processing', 'close', '')
-                self.workflow.clear_workflow_status()
-                break
-            else:
-                chat_response = self.workflow.get_workflow_response()
-                if not chat_response:
-                    await asyncio.sleep(1)
-                    continue
-                await self.send_json(chat_response)
+        if not self.workflow:
+            logger.warning('workflow is over by other task')
+            return True
 
-        logger.debug('workflow run over')
+        status_info = self.workflow.get_workflow_status()
+        if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+            await self.send_response('processing', 'close', '')
+            self.workflow.clear_workflow_status()
+            self.workflow = None
+            return True
+
+        # 说明运行到了待输入状态
+        elif status_info['status'] != WorkflowStatus.INPUT.value:
+            logger.warning(f'workflow status is unknown: {status_info}')
+        return False
 
     async def handle_user_input(self, data: dict):
         logger.info(f'get user input: {data}')
@@ -219,22 +201,17 @@ class WorkflowClient(BaseClient):
             return
         status_info = self.workflow.get_workflow_status(user_cache=False)
         if status_info['status'] != WorkflowStatus.INPUT.value:
-            logger.warning('workflow is not input status')
-            return
-        user_input = {}
-        for node_id, node_info in data.items():
-            user_input[node_id] = node_info['data']
-            # 保存用户输入到历史记录
-            if node_info.get('message_id'):
-                # 更新聊天消息
-                await self.update_chat_message(node_info['message_id'], node_info['message'])
-            else:
-                # 插入新的聊天消息
-                await self.save_chat_message(ChatResponse(message=node_info['message'],
-                                                          category='question',
-                                                          is_bot=False,
-                                                          type='end',
-                                                          flow_id=self.client_id,
-                                                          chat_id=self.chat_id,
-                                                          user_id=self.user_id))
-        self.workflow.set_user_input(user_input)
+            logger.warning(f'workflow is not input status: {status_info}')
+        else:
+            user_input = {}
+            message_id = None
+            new_message = None
+            # 目前支持一个输入节点
+            for node_id, node_info in data.items():
+                user_input[node_id] = node_info['data']
+                message_id = node_info.get('message_id')
+                new_message = node_info.get('message')
+                break
+            self.workflow.set_user_input(user_input, message_id=message_id, message_content=new_message)
+            self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+        # await self.workflow_run()

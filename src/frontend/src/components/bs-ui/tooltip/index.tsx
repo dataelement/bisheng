@@ -32,8 +32,8 @@ export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 
 export const QuestionTooltip = ({ className = '', content }) => (
     <TooltipProvider delayDuration={100}>
-        <Tooltip>
-            <TooltipTrigger className={className}>
+        <Tooltip defaultOpen={false}>
+            <TooltipTrigger className={className} tabIndex={-1}>
                 <CircleHelp className="w-3.5 h-3.5" />
             </TooltipTrigger>
             <TooltipContent>

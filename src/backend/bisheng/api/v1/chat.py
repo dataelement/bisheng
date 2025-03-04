@@ -1,27 +1,25 @@
 import json
-import math
 from typing import List, Optional
 from uuid import UUID, uuid1
 
 from bisheng.api.services import chat_imp
-from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.chat_imp import comment_answer
-from bisheng.api.services.flow import FlowService
 from bisheng.api.services.knowledge_imp import delete_es, delete_vector
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.utils import build_flow, build_input_keys_response, get_request_ip
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
+from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
                                     ChatList, FlowGptsOnlineList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.database.base import session_getter
-from bisheng.database.models.assistant import AssistantDao, AssistantStatus
+from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao
@@ -123,7 +121,7 @@ def get_app_chat_list(*,
         if flows:
             flow_ids = [flow.id for flow in flows]
         if assistants:
-            flow_ids = flow_ids.extend([assistant.id for assistant in assistants])
+            flow_ids.extend([assistant.id for assistant in assistants])
         if user_ids:
             user_ids = [user.user_id for user in users]
         # 检索内容为空
@@ -394,7 +392,8 @@ def get_chatlist_list(*,
             pass
     res = chat_list[(page - 1) * limit:page * limit]
     chat_ids = [one.chat_id for one in res]
-    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids)
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,
+                                                                    exclude_category=WorkflowEventType.UserInput.value)
     latest_messages = {one.chat_id: one for one in latest_messages}
 
     for one in res:

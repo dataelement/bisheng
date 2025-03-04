@@ -157,10 +157,13 @@
     "copy": "复制",
     "cannotBeEmpty": "{{label}}不可为空",
     "editReportTemplate": "编辑报告模板",
-    "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效，可能是相关节点已被删除或替换，请重新引用变量。",
+    "nodeErrorMessage": "{{nodeName}}节点错误：{{varNameCn}}已失效.",
     "required": "不可为空",
     "isRequired": "是否必填",
     "documentKnowledgeBase": "文档知识库",
-    "temporarySessionFiles": "临时会话文件",
-    "storeFilesSentInCurrentSession": "存储当前会话中发送的文件"
+    "temporarySessionFiles": "临时知识库",
+    "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
+    "displayNameTooltip": "用户会话页面展示此名称",
+    "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",
+    "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量"
 }

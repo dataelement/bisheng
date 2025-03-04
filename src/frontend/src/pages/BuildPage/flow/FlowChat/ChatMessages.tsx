@@ -15,15 +15,15 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
+export default function ChatMessages({ mark = false, logo, useName, disableBtn = false, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
     // 反馈
     const thumbRef = useRef(null)
-    // 溯源
-    const sourceRef = useRef(null)
-
+    // 溯
+    const sourceRef = useRef(null
+)
     // 自动滚动
     const messagesRef = useRef(null)
     const scrollLockRef = useRef(false)
@@ -31,10 +31,24 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
         scrollLockRef.current = false
         queryLockRef.current = false
     }, [chatId])
+    const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
     useEffect(() => {
-        if (scrollLockRef.current) return
+        if (scrollLockRef.current) return;
+
+        const now = Date.now();
+        const throttleTime = 1200; // 1秒
+
+        // 如果距离上次执行的时间小于 throttleTime，则直接返回
+        if (now - lastScrollTimeRef.current < throttleTime) {
+            return;
+        }
+
+        // 执行滚动操作
         messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }, [messages])
+
+        // 更新上次执行的时间戳
+        lastScrollTimeRef.current = now;
+    }, [messages]);
 
     // 消息滚动加载
     const queryLockRef = useRef(false)
@@ -43,7 +57,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             if (queryLockRef.current) return
             const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
             // 距离底部 600px内，开启自动滚动
-            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 600
+            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400
 
             if (messagesRef.current.scrollTop <= 90) {
                 console.log('请求 :>> ', 1);
@@ -72,13 +86,13 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             let q = ''
             while (index > -1) {
                 const qItem = msgs[--index]
-                if (['question', 'user_input'].includes(qItem?.category)) {
+                if (['question', 'input'].includes(qItem?.category)) {
                     q = qItem.message[qItem.chatKey] || qItem.message
                     break
                 }
             }
             return { q, a }
-        } else if (['question', 'user_input'].includes(item?.category)) {
+        } else if (['question', 'input'].includes(item?.category)) {
             const q = item.message[item.chatKey] || item.message
             let a = ''
             while (msgs[++index]) {
@@ -97,7 +111,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
             messagesList.map((msg, index) => {
                 // output节点特殊msg
                 switch (msg.category) {
-                    case 'user_input':
+                    case 'input':
                         return null
                     case 'question':
                         return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />;
@@ -107,6 +121,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                         return <MessageBs
                             mark={mark}
                             logo={logo}
+                            disableBtn={disableBtn}
                             key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
@@ -115,9 +130,9 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                         />;
                     case 'separator':
                         return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
-                    case 'output_choose_msg':
+                    case 'output_with_choose_msg':
                         return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} />;
-                    case 'output_input_msg':
+                    case 'output_with_input_msg':
                         return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.message_id} data={msg} />;

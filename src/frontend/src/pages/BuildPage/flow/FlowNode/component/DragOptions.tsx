@@ -4,12 +4,13 @@ import { generateUUID } from '@/components/bs-ui/utils';
 import { Handle, Position } from '@xyflow/react';
 import i18next from "i18next";
 import { Edit, GripVertical, Trash2 } from 'lucide-react'; // 图标
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
 interface Iprops {
     edges?: boolean,
+    edit?: boolean,
     options: {
         id: string;
         text: string;
@@ -27,7 +28,7 @@ const itemNames = {
     'text': i18next.t('dropdown', { ns: 'flow' })
 }
 
-export default function DragOptions({ edges = false, scroll = false, options, onEditClick, onChange }: Iprops) {
+const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, options, onEditClick, onChange }: Iprops, ref) => {
     const { t } = useTranslation('flow'); // 使用国际化
     const [items, setItems] = useState([]); // 初始默认选项
     const [inputValue, setInputValue] = useState("");
@@ -100,7 +101,7 @@ export default function DragOptions({ edges = false, scroll = false, options, on
     };
 
     return (
-        <div className={`${scroll && 'nowheel overflow-y-auto max-h-80'} mt-2`}>
+        <div ref={ref} className={`${scroll && 'nowheel overflow-y-auto max-h-80'} mt-2`}>
             <DragDropContext onDragEnd={handleDragEnd} usePortal>
                 <Droppable droppableId="options-list">
                     {(provided) => (
@@ -122,22 +123,13 @@ export default function DragOptions({ edges = false, scroll = false, options, on
                                                 <div {...provided.dragHandleProps} className="flex flex-col justify-center border-r px-1">
                                                     <GripVertical size={20} color="#999" />
                                                 </div>
-                                                <div className="flex-1">
-                                                    <div
-                                                        className="h-9 leading-9 w-[200px] px-2 text-sm text-[#111] dark:text-gray-50 cursor-not-allowed opacity-50 truncate"
-                                                    >{item.text}</div>
-                                                </div>
-                                                <div className='flex gap-1 items-center pr-2'>
-                                                    <span className='text-xs text-muted-foreground group-hover:hidden'>{itemNames[item.type] || item.type}</span>
-                                                    {onEditClick && <Edit size={14} onClick={() => onEditClick(index, item)} className='cursor-pointer text-muted-foreground hover:text-foreground hidden group-hover:block' />}
-                                                    {items.length > 1 && (
-                                                        <Trash2
-                                                            size={14}
-                                                            className="cursor-pointer text-gray-500 hover:text-red-500 transition-colors duration-200 hidden group-hover:block"
-                                                            onClick={() => handleDelete(item.text)}
-                                                        />
-                                                    )}
-                                                </div>
+                                                <Option
+                                                    item={item}
+                                                    count={items.length}
+                                                    edit={edit}
+                                                    onEditClick={() => onEditClick?.(index, item)}
+                                                    onDelete={handleDelete}
+                                                    onChange={(text) => updateItems(items.map((e, i) => i === index ? { ...e, text } : e))} />
                                             </div>
                                             {
                                                 edges && <Handle
@@ -179,4 +171,56 @@ export default function DragOptions({ edges = false, scroll = false, options, on
             </div>}
         </div>
     );
+});
+
+export default DragOptions;
+
+
+const Option = ({ item, count, edit, onEditClick, onDelete, onChange }) => {
+
+    const [editing, setEditing] = useState(false);
+    const inputRef = useRef(null);
+    // const prevText = useRef('');
+
+    const handleEdit = () => {
+        if (edit) {
+            setEditing(true);
+        } else {
+            onEditClick();
+        }
+    }
+
+    const handleChange = () => {
+        const val = inputRef.current.value
+        setEditing(false)
+        val && onChange(val)
+    }
+
+    return <>
+        <div className="flex-1">
+            {editing ?
+                <Input
+                    ref={inputRef}
+                    autoFocus
+                    className='border-none outline-none focus-visible:ring-transparent'
+                    value={item.text}
+                    onBlur={handleChange}
+                    onKeyDown={(e) => e.key === 'Enter' && handleChange()}
+                ></Input>
+                : <div
+                    className="h-9 leading-9 w-[200px] px-2 text-sm text-[#111] dark:text-gray-50 cursor-not-allowed opacity-50 truncate"
+                >{item.text}</div>}
+        </div>
+        <div className='flex gap-1 items-center pr-2'>
+            <span className='text-xs text-muted-foreground group-hover:hidden'>{itemNames[item.type] || item.type}</span>
+            {(onEditClick || edit) && <Edit size={14} onClick={handleEdit} className='cursor-pointer text-muted-foreground hover:text-foreground hidden group-hover:block' />}
+            {count > 1 && (
+                <Trash2
+                    size={14}
+                    className="cursor-pointer text-gray-500 hover:text-red-500 transition-colors duration-200 hidden group-hover:block"
+                    onClick={() => onDelete(item.text)}
+                />
+            )}
+        </div>
+    </>
 }

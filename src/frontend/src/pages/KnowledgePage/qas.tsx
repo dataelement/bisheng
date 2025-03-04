@@ -224,10 +224,11 @@ export default function QasPage() {
     const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
+    const [hasPermission, setHasPermission] = useState(false)
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
-            // setHasPermission(res.writeable)
+            setHasPermission(res.writeable)
             setSelectedItems([]);
             setSelectAll(false);
             return res
@@ -364,10 +365,13 @@ export default function QasPage() {
                                 <TableCell>
                                     <Switch checked={el.status === 1} onCheckedChange={(bln) => handleStatusClick(el.id, bln)} />
                                 </TableCell>
-                                <TableCell className="text-right">
+                                {hasPermission ? <TableCell className="text-right">
                                     <Button variant="link" onClick={() => editRef.current.edit(el)} className="ml-4">{t('update')}</Button>
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button>
-                                </TableCell>
+                                </TableCell> : <TableCell className="text-right">
+                                    <Button variant="link" disabled className="ml-4">{t('update')}</Button>
+                                    <Button variant="link" disabled className="ml-4 text-red-500">{t('delete')}</Button>
+                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>

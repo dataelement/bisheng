@@ -1,31 +1,27 @@
+import asyncio
 import json
 from abc import abstractmethod, ABC
 from typing import Dict, Callable
 from uuid import uuid4
+from queue import Queue, Empty
 
 from loguru import logger
-from fastapi import WebSocket, status, Request
+from fastapi import WebSocket, Request
 
-from bisheng.api.services.assistant_agent import AssistantAgent
-from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
-from bisheng.chat.types import IgnoreException, WorkType
-from bisheng.database.models.assistant import AssistantDao, AssistantStatus
+from bisheng.chat.types import WorkType
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.settings import settings
-from bisheng.api.utils import get_request_ip
-from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
+from bisheng.utils.threadpool import thread_pool
 
 
 class BaseClient(ABC):
     def __init__(self, request: Request, client_key: str, client_id: str, chat_id: str, user_id: int,
                  login_user: UserPayload, work_type: WorkType, websocket: WebSocket, **kwargs):
         self.request = request
-        self.client_key = client_key
-        self.client_id = client_id
+        self.client_key = client_key  # 客户端唯一标识
+        self.client_id = client_id  # 业务的唯一标识，如助手或者技能ID
         self.chat_id = chat_id
         self.user_id = user_id
         self.login_user = login_user
@@ -35,6 +31,11 @@ class BaseClient(ABC):
 
         # 异步任务列表
         self.task_ids = []
+        # ws消息队列, 用于存储发送给客户端的websocket消息
+        self.ws_msg_queue = Queue()
+
+        # 启动消息消费任务, websocket的消息不能再多个协程中发送，否则会出现异常
+        thread_pool.submit(f'websocket_send_json_{self.client_key}', self.consume_message)
 
     async def close(self):
         pass
@@ -44,9 +45,22 @@ class BaseClient(ABC):
 
     async def send_json(self, message: ChatMessage | dict):
         if isinstance(message, dict):
-            await self.websocket.send_json(message)
+            self.ws_msg_queue.put(message)
             return
-        await self.websocket.send_json(message.dict())
+        self.ws_msg_queue.put(message.dict())
+
+    async def consume_message(self):
+        while True:
+            data = None
+            try:
+                data = self.ws_msg_queue.get_nowait()
+                await self.websocket.send_json(data)
+            except Empty:
+                pass
+            except Exception as e:
+                logger.error(f"consume_message error {data} error: {str(e)}")
+                break
+            await asyncio.sleep(0.01)
 
     async def handle_message(self, message: Dict[any, any]):
         """ 处理客户端发过来的信息, 提交到线程池内执行 """

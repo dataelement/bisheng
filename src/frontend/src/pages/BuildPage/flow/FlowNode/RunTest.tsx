@@ -4,6 +4,7 @@ import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { runWorkflowNodeApi } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { WorkflowNode } from "@/types/flow";
@@ -11,13 +12,15 @@ import { copyText } from "@/utils";
 import { Copy, CopyCheck } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
+import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
 
 interface Input {
     key: string,
     required: boolean,
     label: string,
-    value: string
+    value: string,
+    autoFill: boolean
 }
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
@@ -41,12 +44,12 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
         }, 2000)
     }
 
-    return <div className="mb-2 rounded-md border bg-search-input text-sm shadow-sm">
+    return <div className="nowheel nodrag mb-2 rounded-md border bg-search-input text-sm shadow-sm" onKeyDown={e => e.stopPropagation()}>
         <div className="border-b px-2 flex justify-between items-center">
             <p>{title}</p>
             {copyed ? <CopyCheck size={14} /> : <Copy size={14} className="cursor-pointer" onClick={handleCopy} />}
         </div>
-        <textarea defaultValue={text} disabled className="w-full min-h-28 p-2 block text-muted-foreground dark:bg-black " />
+        <textarea defaultValue={text} readOnly className="w-full min-h-28 p-2 block text-muted-foreground bg-gray-100 dark:bg-black outline-none" />
     </div>
 }
 
@@ -58,6 +61,7 @@ export const RunTest = forwardRef((props, ref) => {
     const [node, setNode] = useState<WorkflowNode>(null)
     const { message } = useToast()
     const { t } = useTranslation('flow')
+    const [currentIndex, setCurrentIndex] = useState(0)
 
     useEffect(() => {
         if (!open) {
@@ -66,41 +70,60 @@ export const RunTest = forwardRef((props, ref) => {
         }
     }, [open])
 
+    const runCache = useFlowStore(state => state.runCache)
+    const setRunCache = useFlowStore(state => state.setRunCache)
+
     useImperativeHandle(ref, () => ({
         run: (node: WorkflowNode) => {
             setOpen(true)
             setNode(node)
+
+            // 自动填充
+            const appendAutoFillin = (param) => {
+                // 预置问题自动填充
+                const autoFill = /start_[a-zA-Z0-9]+\.preset_question/.test(param.key)
+                if (autoFill) {
+                    return { ...param, autoFill, value: param.label.split('/')[1] }
+                } else {
+                    const cache = runCache[node.id]
+                    const value = cache?.[param.key] || ''
+                    return { ...param, autoFill, value }
+                }
+            }
+            /**
+             * 遍历当前节点的项,找出要做节点运行入参的input or var的项
+             */
             node.group_params.forEach((group) => {
                 group.params.forEach((param) => {
-                    if (param.test === 'input') {
+                    if (param.test === 'input') { // 遍历value[] ,每一项作为一个test输入
                         if (node.type === "tool") {
                             return setInputs((prev) => {
-                                return [...prev, { key: param.label, required: false, label: param.label, value: '' }]
+                                return [...prev, appendAutoFillin({ key: param.label, required: false, label: param.label, value: '' })]
                             })
                         }
                         // if (param.type === 'code_input') {
                         // code_input类型特殊处理
                         return param.value.forEach(val => {
                             setInputs((prev) => {
-                                return [...prev, { key: val.key, required: false, label: val.key, value: '' }]
+                                return [...prev, appendAutoFillin({ key: val.key, required: false, label: val.key, value: '' })]
                             })
                         })
-                    } else if (param.test === 'var') {
+                    } else if (param.test === 'var') { // 提取value中的变量,每个变量作为一个test输入
                         let allVarInput = []
-                        if (param.type === 'var_textarea') {
+                        if (param.type === 'var_textarea') { // 从textarea提取变量
                             const regex = /{{#(.*?)#}}/g;
                             const parts = param.value.split(regex);
                             allVarInput = parts.reduce((res, part, index) => {
                                 if (index % 2 === 1) {
-                                    res.push({ key: part, required: false, label: param.varZh?.[part] || part, value: '' })
+                                    res.push(appendAutoFillin({ key: part, required: false, label: param.varZh?.[part] || part, value: '' }))
                                 }
                                 return res
                             }, [])
-                        } else if (param.type === 'var_select') {
-                            allVarInput = [{ key: param.value, required: false, label: param.varZh?.[param.value] || param.value, value: '' }]
-                        } else if (param.type === 'user_question') {
+                        } else if (param.type === 'var_select') { // 从变量选择列表提取变量
+                            allVarInput = [appendAutoFillin({ key: param.value, required: false, label: param.varZh?.[param.value] || param.value, value: '' })]
+                        } else if (param.type === 'user_question') { // 从批量问题提取变量
                             allVarInput = param.value.map(part =>
-                                ({ key: part, required: false, label: param.varZh?.[part] || part, value: '' })
+                                (appendAutoFillin({ key: part, required: false, label: param.varZh?.[part] || part, value: '' }))
                             )
                         }
 
@@ -127,6 +150,14 @@ export const RunTest = forwardRef((props, ref) => {
                 return true
             }
         })
+        
+        // save cache
+        const cacheData = inputs.reduce((res, input) => {
+            res[input.key] = input.value
+            return res
+        }, {})
+        setRunCache(node.id, cacheData)
+        
         setLoading(true)
         setResults([])
         await captureAndAlertRequestErrorHoc(
@@ -137,7 +168,8 @@ export const RunTest = forwardRef((props, ref) => {
                 }, {}),
                 node
             ).then(res => {
-                const result = TranslationName(res) // .map(item => ({ title: item.key, text: item.value }))
+                const result = res.map(el => TranslationName(el)) // .map(item => ({ title: item.key, text: item.value }))
+                setCurrentIndex(0)
                 setResults(result)
             })
         );
@@ -204,13 +236,14 @@ export const RunTest = forwardRef((props, ref) => {
                 </SheetHeader>
                 <div className="px-2 pt-2 pb-10 h-[calc(100vh-40px)] overflow-y-auto bg-[#fff] dark:bg-[#303134]">
                     {inputs.map((input) => (
-                        <div className="mb-2" key={input.key}>
+                        input.autoFill ? null : <div className="mb-2" key={input.key}>
                             <Label className="flex items-center bisheng-label mb-2">
                                 {input.required && <span className="text-red-500">*</span>}
                                 {input.label}
                             </Label>
                             <Textarea
                                 className=""
+                                defaultValue={input.value}
                                 onChange={(e) => {
                                     setInputs((prev) =>
                                         prev.map((item) =>
@@ -226,8 +259,23 @@ export const RunTest = forwardRef((props, ref) => {
                         {t('run')}
                     </Button>
                     {results.length !== 0 && <p className="mt-2 mb-3 text-sm font-bold">{t('runResults')}</p>}
-                    {results.map((res) => (
-                        <ResultText key={res.text} title={res.title} value={res.text} />
+                    {results.length > 1 && <div className="mb-2">
+                        <Select value={currentIndex + ""} onValueChange={(val => setCurrentIndex(Number(val)))}>
+                            <SelectTrigger className="w-[180px]">
+                                {/* <SelectValue /> */}
+                                <span>第 {currentIndex + 1} 轮运行结果</span>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {
+                                        results.map((_, index) => <SelectItem key={index} value={index + ""}>第 {index + 1} 轮运行结果</SelectItem>)
+                                    }
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>}
+                    {results[currentIndex]?.map((res, i) => (
+                        <ResultText key={res.text + i} title={res.title} value={res.text} />
                     ))}
                 </div>
                 <SheetFooter>

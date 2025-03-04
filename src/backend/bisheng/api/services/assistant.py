@@ -407,6 +407,10 @@ class AssistantService(BaseService, AssistantUtils):
             if not user.is_admin():
                 one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])
+            if one['extra']:
+                extra = json.loads(one['extra'])
+                one["parameter_name"] = extra.get("parameter_name")
+                one["api_location"] = extra.get("api_location")
 
         return res
 
@@ -477,7 +481,7 @@ class AssistantService(BaseService, AssistantUtils):
         if req.name.__len__() > 30 or req.name.__len__() == 0:
             return resp_500(message="名字不符合规范：最少一个字符，不能超过30个字符")
 
-        # 判断工具类别名称是否重复
+        #  判断工具类别名称是否重复
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
         if tool_type and tool_type.id != exist_tool_type.id:
             return ToolTypeRepeatError.return_resp()
@@ -493,6 +497,8 @@ class AssistantService(BaseService, AssistantUtils):
         exist_tool_type.api_key = req.api_key
         exist_tool_type.auth_type = req.auth_type
         exist_tool_type.openapi_schema = req.openapi_schema
+        tool_extra = {"api_location":req.api_location,"parameter_name":req.parameter_name}
+        exist_tool_type.extra= json.dumps(tool_extra, ensure_ascii=False)
 
         children_map = {}
         for one in req.children:

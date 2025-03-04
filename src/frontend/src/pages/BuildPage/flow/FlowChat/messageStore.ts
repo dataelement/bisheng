@@ -3,6 +3,7 @@ import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
 import { WorkflowMessage } from '@/types/flow';
 import { formatDate } from '@/util/utils';
+import i18next from 'i18next';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
 
@@ -54,7 +55,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/\t/g, '\\t')                  // 转义制表符
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
-    return data.filter(item => ["question", "output_input_msg", "output_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "user_input", "node_run"].includes(item.category)).map(item => {
+    return data.filter(item => ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "input", "node_run"].includes(item.category)).map(item => {
         let { message, files, is_bot, intermediate_steps, category, ...other } = item
         try {
             message = message && message[0] === '{' ? JSON.parse(message) : message || ''
@@ -71,6 +72,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
             isSend: !is_bot,
             message,
             thought: intermediate_steps,
+            reasoning_log: message.reasoning_content || '',
             noAccess: true
         }
     })
@@ -94,12 +96,13 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         console.log('change createWsMsg');
         set((state) => {
             let newChat = cloneDeep(state.messages);
-            const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id } = data
+            const { category, flow_id, chat_id, message_id, files, is_bot, extra, liked, message, receiver, type, source, user_id, reasoning_log } = data
             // 删除与历史消息中message_id相同的消息,则删除
+            const messageId = message_id || (category === "guide_word" ? generateUUID(4) : '') // 后端没给,临时生成一个
             newChat = newChat.filter((item => !(item.message_id === message_id && item.his)))
             newChat.push({
                 category, flow_id, chat_id,
-                message_id: message_id,
+                message_id: messageId,
                 files, is_bot,
                 message, receiver, source, user_id,
                 liked: !!liked,
@@ -107,7 +110,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 sender: '',
                 node_id: message?.node_id || '',
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
-                extra
+                extra,
+                reasoning_log
             })
             return { messages: newChat }
         })
@@ -115,15 +119,18 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     // stream
     streamWsMsg(data) {
         let messages = cloneDeep(get().messages);
-        const { unique_id, output_key, type } = data.message;
+        const { unique_id, output_key, reasoning_content } = data.message;
         const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
         const currentMsg = messages[currentMessageIndex]
-        if (!currentMsg) return get().createWsMsg({ ...data, message: data.message.msg, message_id: unique_id + output_key })
+        if (!currentMsg) return get().createWsMsg(
+            { ...data, message: data.message.msg, reasoning_log: reasoning_content || '', message_id: unique_id + output_key }
+        )
         // append
         const newCurrentMessage = {
             ...currentMsg,
             message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
             message: data.type === 'end' ? data.message.msg : currentMsg.message + data.message.msg,
+            reasoning_log: reasoning_content ? currentMsg.reasoning_log + reasoning_content : currentMsg.reasoning_log,
             update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
             end: data.type === 'end'
@@ -145,6 +152,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }))
     },
     insetSeparator(text) {
+        const messages = get().messages
+        // 避免重复提示会话结束
+        if (messages[messages.length - 1]?.category === 'separator') return
         set((state) => ({
             messages: [...state.messages, {
                 ...bsMsgItem,
@@ -156,7 +166,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }))
     },
     insetNodeRun(data) {
-        if (['input', 'output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
+        if (['output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
         set((state) => {
             let newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
@@ -186,7 +196,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 ...bsMsgItem,
                 category: 'separator',
                 message_id: generateUUID(8),
-                message: '本轮会话已结束',
+                message: i18next.t('chat.chatEndMessage', { ns: 'chat' }),
                 update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             })
         }

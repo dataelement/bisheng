@@ -13,6 +13,7 @@ import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import useFlowStore from "./flowStore";
+import { copyReportTemplate } from "@/controllers/API/workflow";
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };
@@ -21,10 +22,12 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     // 导入自适应布局
     const fitView = useFlowStore(state => state.fitView)
+    const [flowKey, setFlowKey] = useState(1)
     useEffect(() => {
         if (reactFlowInstance) {
             setTimeout(() => {
                 reactFlowInstance.fitView();
+                setFlowKey(Date.now())
             }, 0);
         }
     }, [fitView])
@@ -98,10 +101,14 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                     }, 500); // after init
                 }
             }} />
-            <main className="h-full flex flex-1 bg-gray-50" ref={keyBoardPanneRef}>
+            <main
+                className="h-full flex flex-1 bg-gray-50"
+                tabIndex={-1}
+                ref={keyBoardPanneRef}>
                 <div className="size-full" ref={reactFlowWrapper}>
                     <div className="size-full">
                         <ReactFlow
+                            key={flowKey}
                             nodes={nodes}
                             edges={edges}
                             onInit={setReactFlowInstance}
@@ -201,7 +208,9 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
             let _nodes = []
             setNodes((x) => {
                 _nodes = x
-                return cloneDeep(x)
+                return x
+                // 触发此方法时，避免克隆节点。因为节点已经在组件内部被闭包捕获，直接更新节点会导致更新的是旧的节点，而不是最新的节点
+                // return cloneDeep(x)
             });
             setEdges((eds) => {
                 // 校验
@@ -315,16 +324,18 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         }
 
         // copy
-        const handleCopy = (event) => {
+        const handleCopy = async (event) => {
             const nodeIds = event.detail;
             let nodes = _reactFlowInstance.getNodes();
             // let edges = _reactFlowInstance.getEdges();
-            const newNodes = nodeIds.map(nodeId => {
+
+            const newNodes = await Promise.all(nodeIds.map(async nodeId => {
                 const node = nodes.find(n => n.id === nodeId);
                 const newNodeId = `${node.data.type}_${generateUUID(5)}`
-                // node.id = nodeId
                 // id替换
                 const data = JSON.parse(JSON.stringify(node.data).replaceAll(nodeId, newNodeId))
+                // 复制报告节点中报告模板
+                await copyReportTemplate(data);
                 return {
                     id: newNodeId,
                     type: "flowNode",
@@ -338,16 +349,18 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
                     },
                     selected: false
                 };
-            });
+            }));
+
             // 增加节点
             setNodes((nds) => {
                 const _newNodes = newNodes.map(node => {
                     node.data.name = autoNodeName(nds, node.data.name)
                     return node
-                })
+                });
                 return nds.map((e) => ({ ...e, selected: false })).concat(_newNodes)
             });
         }
+
         // add node by handle
         const handleAddNode = (event) => {
             takeSnapshot()
@@ -450,6 +463,8 @@ const useKeyBoard = (_reactFlowInstance, reactFlowWrapper) => {
                 newNode.data.id = nodeId
                 const newName = autoNodeName(nds, newNode.data.name)
                 newNode.data.name = newName
+                // 复制报告节点中报告模板
+                copyReportTemplate(newNode.data)
                 // newNode.selected = false
 
                 newNode.position = _reactFlowInstance.screenToFlowPosition({

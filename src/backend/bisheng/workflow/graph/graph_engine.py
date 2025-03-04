@@ -48,6 +48,11 @@ class GraphEngine:
         # record how many nodes next to this node
         self.nodes_next_nodes = {}  # node_id: {node_ids}
 
+        # node_id: 1; 表示从start节点到此节点的最长路径
+        self.node_level = {}
+        # 互斥节点列表，包含condition节点和output节点（选择型交互）
+        self.condition_nodes = []
+
         self.edges = None
         self.graph_state = GraphState()
 
@@ -113,39 +118,86 @@ class GraphEngine:
         for node_id, source_ids in self.nodes_fan_in.items():
             if not source_ids or len(source_ids) <= 1:
                 continue
+            # 有多个扇入节点，判断此节点是否需要等待
             wait_nodes, no_wait_nodes = self.parse_fan_in_node(node_id)
+            logger.debug(f'node {node_id} wait nodes {wait_nodes}, no wait nodes {no_wait_nodes}')
             if wait_nodes:
-                logger.debug(f'node {node_id} need wait nodes {wait_nodes}')
                 self.graph_builder.add_edge(wait_nodes, node_id)
             if no_wait_nodes:
                 for one in no_wait_nodes:
-                    logger.debug(f'node {node_id} no need wait nodes {one}')
                     self.graph_builder.add_edge(one, node_id)
 
     def parse_fan_in_node(self, node_id: str):
         source_ids = self.nodes_fan_in.get(node_id)
-        all_next_nodes = self.nodes_next_nodes.get(node_id)
-        wait_nodes = []
-        no_wait_nodes = []
+
+        # 是否所有前驱节点的层级都小于等于此节点
+        all_source_node_prev = True
         for one in source_ids:
-            # output节点有特殊处理逻辑
-            if one.startswith(('output_', 'condition_')):
-                continue
-            if one in all_next_nodes:
-                no_wait_nodes.append(one)
-            else:
-                wait_nodes.append(one)
-        return wait_nodes, no_wait_nodes
+            if self.node_level[one] > self.node_level[node_id]:
+                all_source_node_prev = False
+                break
 
-    def build_nodes(self):
-        nodes = self.workflow_data.get('nodes', [])
-        if not nodes:
-            raise Exception('workflow must have at least one node')
+        # 前驱节点中 包含 此节点的下游节点，则不需要等待，需要排除output和condition节点，因为这两个节点通过条件边已连接到此节点了
+        if not all_source_node_prev:
+            return [], [one for one in source_ids if not one.startswith(('output_', 'condition_'))]
 
+        # 判断是否存在从condition节点或者output节点（选择型交互）到此节点的 两条不重复的路径
+        all_branches = []
+        for one in self.condition_nodes:
+            branches = self.edges.get_all_edges_nodes(one, node_id)
+            for branch in branches:
+                if node_id not in branch:
+                    continue
+                branch.remove(node_id)
+                branch.remove(one)
+                all_branches.append(branch)
+
+        def judge_not_same_branch():
+            # 判断所有边中是否存在两条不重复的路径
+            for i in range(len(all_branches)):
+                for j in range(i + 1, len(all_branches)):
+                    if not (set(all_branches[i]) & set(all_branches[j])):
+                        return True
+            return False
+
+        # 说明是互斥收尾节点，不需要等待
+        if judge_not_same_branch():
+            return [], [one for one in source_ids if not one.startswith(('output_', 'condition_'))]
+
+        # 说明不是互斥收尾节点，需要等待所有前驱节点执行完毕再执行
+        wait_nodes = []
+        for one in source_ids:
+            if one.startswith('output_'):
+                one = f'{one}_fake'
+            wait_nodes.append(one)
+        return wait_nodes, []
+
+    def build_node_level(self, start_node: str):
+        """ 计算所有节点的层级 """
+
+        # 标记节点的层级
+        def mark_node_level(node_id, node_map: dict, level: int):
+            # 已经遍历过的节点不再遍历，说明成环了
+            if node_id in node_map:
+                return
+            self.node_level[node_id] = max(self.node_level.get(node_id, 0), level)
+            node_map[node_id] = True
+            next_nodes = self.edges.get_target_node(node_id)
+            if not next_nodes:
+                return
+
+            for one_node in next_nodes:
+                tmp_node_map = node_map.copy()
+                mark_node_level(one_node, tmp_node_map, level + 1)
+            return
+
+        mark_node_level(start_node, {}, 0)
+
+    def init_nodes(self, nodes):
+        """ return node id """
         start_node = None
         end_nodes = []
         interrupt_nodes = []
-        # init nodes
         for node in nodes:
             node_data = BaseNodeData(**node.get('data', {}))
             if not node_data.id:
@@ -160,6 +212,8 @@ class GraphEngine:
                                                           node_data.id),
                                                       max_steps=self.max_steps,
                                                       callback=self.callback)
+            if node_instance.is_condition_node():
+                self.condition_nodes.append(node_instance.id)
             self.nodes_map[node_data.id] = node_instance
             self.nodes_fan_in[node_instance.id] = self.edges.get_source_node(node_instance.id)
             if node_instance.type not in [NodeType.START.value]:
@@ -186,6 +240,14 @@ class GraphEngine:
                                            type=NodeType.FAKE_OUTPUT.value)
                 self.nodes_map[fake_node.id] = fake_node
                 interrupt_nodes.append(fake_node.id)
+        return start_node, end_nodes, interrupt_nodes
+
+    def build_nodes(self):
+        nodes = self.workflow_data.get('nodes', [])
+        if not nodes:
+            raise Exception('workflow must have at least one node')
+
+        start_node, end_nodes, interrupt_nodes = self.init_nodes(nodes)
 
         if not start_node:
             raise Exception('workflow must have start node')
@@ -194,10 +256,14 @@ class GraphEngine:
             for end_node in end_nodes:
                 self.graph_builder.add_edge(end_node, END)
 
+        # 计算节点的层级
+        self.build_node_level(start_node)
+
         # 将其他节点链接起来
         for node_id, node_instance in self.nodes_map.items():
             self.add_node_edge(node_instance)
 
+        # 处理包含多个扇入节点的节点
         self.build_more_fan_in_node()
 
         # compile langgraph

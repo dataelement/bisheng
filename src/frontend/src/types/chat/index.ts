@@ -24,4 +24,5 @@ export type ChatMessageType = {
   extra?: string;
   create_time: string;
   update_time: string;
+  reasoning_log?: string;
 };

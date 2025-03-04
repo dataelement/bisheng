@@ -3,7 +3,7 @@
   "prompt": "Confirmation",
   "login": {
     "slogen": "Convenient, Flexible, Reliable Enterprise-Level Large Model Application Development Platform",
-    "account": "Account",
+    "account": "Email",
     "password": "Password",
     "confirmPassword": "Confirm Password",
     "noAccountRegister": "Don't have an account? Register",
@@ -87,6 +87,7 @@
     "flowControl": "Overall UserGroup Flow Control",
     "AssistantFlowCtrl": "Assistant Flow Control",
     "SkillFlowCtrl": "Skill Flow Control",
+    "flowCtrl": "workflow Flow Control",
     "createdBy": "CreatedBy",
     "flowCtrlStrategy": "Flow control strategy",
     "limit": "Limit",
@@ -237,7 +238,8 @@
     "searchLabels": "Search labels",
     "confirmed": "Confirmed",
     "confirm": "Confirm",
-    "runNewWorkflow": "Run New Workflow"
+    "runNewWorkflow": "Run New Workflow",
+    "chatEndMessage": "This chat has ended"
   },
   "model": {
     "modelManagement": "Model Management",
@@ -391,9 +393,8 @@
     "complete": "Complete",
     "setSplitSize": "Please set the file split size",
     "selectFileToUpload": "Please select a file to upload first",
-    "fileSizeExceedsLimit": "File size cannot exceed 50MB,removed",
     "file": "File",
-    "sizeExceedsLimit": "Size exceeds 50MB",
+    "sizeExceedsLimit": "Size exceeds {{size}}MB",
     "editDictionary": "Edit Dictionary",
     "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page).",
     "chunkOverlap": "Chunk Overlap"
@@ -858,7 +859,9 @@
     "labeled": "Labeled",
     "unnecessary": "Unnecessary",
     "previousChat": "Previous Chat",
-    "nextChat": "Next Chat"
+    "nextChat": "Next Chat",
+    "selectPlaceholder": "Please select",
+    "searchAppsPlaceholder": "Search for apps"
   },
   "errors": {
     "10400": "Assistant does not exist",
@@ -917,7 +920,9 @@
     "10930": "This issue has been annotated",
     "10527": "Workflow waits for user input timeout",
     "10528": "{{type}}node execution exceeds maximum number of times",
-    "10531": "{{type}} has been upgraded. You need to delete it and drag it in again."
+    "10531": "{{type}} has been upgraded. You need to delete it and drag it in again.",
+    "10532": "The workflow version has been upgraded, please contact the creator to rearrange it",
+    "10540": "Server thread pool is full, please try again later"
   },
   "all": "All",
   "confirmButton": "Confirm",

@@ -49,6 +49,7 @@ class BaseNodeData(BaseModel):
     group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
     tab: Optional[dict] = Field({}, description="tab config")
     tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
+    v: str = Field(default="", description="node version")
 
     def get_variable_info(self, variable_key: str) -> NodeParams | None:
         for group_info in self.group_params:

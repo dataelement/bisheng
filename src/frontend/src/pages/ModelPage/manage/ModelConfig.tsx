@@ -26,9 +26,9 @@ function ModelItem({ data, onDelete, onInput }) {
         const repeated = onInput(value, model.model_type)
 
         setError('')
+        if (repeated) setError(t('model.modelNameDuplicate'))
         if (!value) setError(t('model.modelNameEmpty'))
         if (value.length > 100) setError(t('model.modelNameLength'))
-        if (repeated) setError(t('model.modelNameDuplicate'))
     }
 
     const handleSelectChange = (val) => {
@@ -117,7 +117,6 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     useEffect(() => {
         if (id === -1) return
         getLLmServerDetail(id).then(res => {
-            console.log('res :>> ', res);
             setFormData(res)
         })
     }, [id])
@@ -166,7 +165,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 description: t('model.duplicateServiceProviderName')
             })
         }
-        if (!formData.name || formData.name.length > 30) {
+        if (!formData.name || formData.name.length > 100) {
             return message({
                 variant: 'warning',
                 description: t('model.duplicateServiceProviderNameValidation')
@@ -186,7 +185,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         const error = formData.models.some(model => {
             if (map[model.model_name]) repeat = true
             map[model.model_name] = true
-            return !model.model_name || model.model_name.length > 30
+            return !model.model_name || model.model_name.length > 100
         })
         if (error) {
             return message({
@@ -255,8 +254,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         </div>
         <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px)] overflow-y-auto">
             <div className="mb-2">
-                <Label className="bisheng-label">{t('model.serviceProvider')}</Label>
-                <Select value={formData.type} onValueChange={handleTypeChange}>
+                <Label className="bisheng-label">模型接口格式</Label>
+                <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
                     <SelectTrigger>
                         <SelectValue placeholder="" />
                     </SelectTrigger>
@@ -272,7 +271,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <span>{t('model.serviceProviderName')}</span>
                     <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
                 </Label>
-                <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}></Input>
+                <Input value={formData.name} onChange={(e) => {
+                    const name = e.target.value
+                    setFormData({ ...formData, name })
+                    document.getElementById('model_provider_name_error').style.display = !name || name.length > 100 ? 'block' : 'none'
+                }}></Input>
+                <span id="model_provider_name_error" style={{ display: 'none' }} className="text-red-500 text-xs">{
+                    formData.name ? '最多 100 个字符' : '不可为空'
+                }</span>
             </div>
             <CustomForm
                 ref={formRef}
@@ -287,9 +293,9 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
                         <div className={`flex items-center gap-x-2 ${formData.limit_flag ? '' : 'invisible'}`}>
                             <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                className="w-24 h-8"
+                                className="w-20 h-8"
                             ></Input>
-                            <span>{t('model.timesPerDay')}</span>
+                            <span className="min-w-24">{t('model.timesPerDay')}</span>
                         </div>
                     </div>
                 </div>

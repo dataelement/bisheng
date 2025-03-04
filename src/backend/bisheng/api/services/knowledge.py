@@ -15,6 +15,7 @@ from bisheng.api.services.knowledge_imp import (KnowledgeUtils, decide_vectorsto
                                                 read_chunk_text, retry_files)
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (FileChunk, FileChunkMetadata, FileProcessBase, KnowledgeFileOne,
                                     KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk)
 from bisheng.cache.redis import redis_client
@@ -65,17 +66,36 @@ class KnowledgeService(KnowledgeUtils):
             res = KnowledgeDao.get_all_knowledge(name, knowledge_type, page=page, limit=limit)
             total = KnowledgeDao.count_all_knowledge(name, knowledge_type)
 
-        db_user_ids = {one.user_id for one in res}
+        result = cls.convert_knowledge_read(login_user, res)
+        return result, total
+
+    @classmethod
+    def convert_knowledge_read(cls, login_user: UserPayload, knowledge_list: List[Knowledge]) -> List[KnowledgeRead]:
+        db_user_ids = {one.user_id for one in knowledge_list}
         db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
         db_user_dict = {one.user_id: one.user_name for one in db_user_info}
+        res = []
 
-        result = []
-        for one in res:
-            result.append(
-                KnowledgeRead(**one.model_dump(),
-                              user_name=db_user_dict.get(one.user_id, one.user_id),
-                              copiable=login_user.copiable_check(one.user_id)))
-        return result, total
+        for one in knowledge_list:
+            res.append(KnowledgeRead(**one.model_dump(),
+                                     user_name=db_user_dict.get(one.user_id, one.user_id),
+                                     copiable=login_user.access_check(one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE)))
+        return res
+
+    @classmethod
+    def get_knowledge_info(cls, request: Request, login_user: UserPayload, knowledge_id: List[int]) -> List[KnowledgeRead]:
+        db_knowledge = KnowledgeDao.get_list_by_ids(knowledge_id)
+        filter_knowledge = db_knowledge
+        if not login_user.is_admin():
+            filter_knowledge = []
+            for one in db_knowledge:
+                # 判断用户是否有权限
+                if login_user.access_check(one.user_id, str(one.id), AccessType.KNOWLEDGE):
+                    filter_knowledge.append(one)
+        if not filter_knowledge:
+            return []
+
+        return cls.convert_knowledge_read(login_user, filter_knowledge)
 
     @classmethod
     def create_knowledge(cls, request: Request, login_user: UserPayload,
@@ -458,11 +478,11 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def process_one_file(
-        cls,
-        login_user: UserPayload,
-        knowledge: Knowledge,
-        file_info: KnowledgeFileOne,
-        split_rule: Dict,
+            cls,
+            login_user: UserPayload,
+            knowledge: Knowledge,
+            file_info: KnowledgeFileOne,
+            split_rule: Dict,
     ) -> KnowledgeFile:
         """ 处理上传的文件 """
         minio_client = MinioClient()
@@ -511,7 +531,7 @@ class KnowledgeService(KnowledgeUtils):
                             file_name: str = None,
                             status: int = None,
                             page: int = 1,
-                            page_size: int = 10) -> (List[KnowledgeFile], int, bool):
+                            page_size: int = 10) -> (List[KnowledgeFileResp], int, bool):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
@@ -524,8 +544,41 @@ class KnowledgeService(KnowledgeUtils):
                                                    page_size)
         total = KnowledgeFileDao.count_file_by_filters(knowledge_id, file_name, status)
 
-        return res, total, login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                                   AccessType.KNOWLEDGE_WRITE)
+        # get file title from es
+        finally_res = []
+        file_title_map = {}
+        if res:
+            try:
+                embeddings = FakeEmbedding()
+                es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+                search_data = {
+                    'size': len(res),
+                    'sort': [{
+                        'metadata.chunk_index': {
+                            'order': 'asc',
+                            'missing': 0,
+                            'unmapped_type': 'long'
+                        }
+                    }],
+                    'post_filter': {'terms': {'metadata.file_id': [one.id for one in res]}},
+                    "collapse": {
+                        "field": "metadata.file_id"
+                    },
+                }
+                es_res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
+                for one in es_res['hits']['hits']:
+                    file_title_map[one['_source']['metadata']['file_id']] = one['_source']['metadata']['title']
+            except Exception as e:
+                logger.warning(f'act=get_knowledge_files error={str(e)}')
+                pass
+        for index, one in enumerate(res):
+            finally_res.append(KnowledgeFileResp(**one.model_dump()))
+            if one.status != KnowledgeFileStatus.SUCCESS.value:
+                continue
+            finally_res[index].title = file_title_map.get(one.id, '')
+
+        return finally_res, total, login_user.access_check(db_knowledge.user_id, str(knowledge_id),
+                                                           AccessType.KNOWLEDGE_WRITE)
 
     @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: List[int]):
@@ -584,7 +637,7 @@ class KnowledgeService(KnowledgeUtils):
         search_data = {
             'from': (page - 1) * limit,
             'size':
-            limit,
+                limit,
             'sort': [{
                 'metadata.file_id': {
                     'order': 'desc',
@@ -602,7 +655,7 @@ class KnowledgeService(KnowledgeUtils):
         if file_ids:
             search_data['post_filter'] = {'terms': {'metadata.file_id': file_ids}}
         if keyword:
-            search_data['query'] = {'match': {'text': keyword}}
+            search_data['query'] = {'match_phrase': {'text': keyword}}
         try:
             res = es_client.client.search(index=index_name, body=search_data)
         except Exception as e:
@@ -623,7 +676,7 @@ class KnowledgeService(KnowledgeUtils):
             file_info = file_map.get(file_id, None)
             # 过滤文件名和总结的文档摘要内容
             result.append(
-                FileChunk(text=one['_source']['text'].split(KnowledgeUtils.chunk_split, 1)[-1],
+                FileChunk(text=KnowledgeUtils.split_chunk_metadata(one['_source']['text']),
                           metadata=one['_source']['metadata'],
                           parse_type=file_info.parse_type if file_info else None))
         return result, res['hits']['total']['value']
@@ -636,7 +689,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                       AccessType.KNOWLEDGE):
+                                       AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
 
         index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
@@ -664,7 +717,7 @@ class KnowledgeService(KnowledgeUtils):
             logger.info(f'act=add_vector {knowledge_id}')
             new_metadata = metadata[0]
             new_metadata['bbox'] = bbox
-            text = f"{new_metadata['source']}\n{new_metadata['title']}{KnowledgeUtils.chunk_split}{text}"
+            text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
             res = vector_client.add_texts([text], [new_metadata], timeout=10)
         # delete data
         logger.info(f'act=delete_vector pk={pk}')
@@ -694,7 +747,7 @@ class KnowledgeService(KnowledgeUtils):
                 },
                 'script': {
                     'source':
-                    'ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;',
+                        'ctx._source.text=params.text;ctx._source.metadata.bbox=params.bbox;',
                     'params': {
                         'text': text,
                         'bbox': bbox
@@ -712,7 +765,7 @@ class KnowledgeService(KnowledgeUtils):
             raise NotFoundError.http_exception()
 
         if not login_user.access_check(db_knowledge.user_id, str(knowledge_id),
-                                       AccessType.KNOWLEDGE):
+                                       AccessType.KNOWLEDGE_WRITE):
             raise UnAuthorizedError.http_exception()
 
         index_name = db_knowledge.index_name if db_knowledge.index_name else db_knowledge.collection_name
@@ -776,8 +829,8 @@ class KnowledgeService(KnowledgeUtils):
         return json.loads(new_data.read().decode('utf-8'))
 
     @classmethod
-    def copy_knowledge(cls, background_tasks: BackgroundTasks, login_user: UserPayload,
-                       knowledge: Knowledge) -> int:
+    def copy_knowledge(cls, request, background_tasks: BackgroundTasks, login_user: UserPayload,
+                       knowledge: Knowledge) -> Any:
         knowledge.state = 2
         KnowledgeDao.update_one(knowledge)
         knowldge_dict = knowledge.model_dump()
@@ -797,5 +850,6 @@ class KnowledgeService(KnowledgeUtils):
             'login_user': login_user
         }
         # file_worker.file_copy_celery.delay()
+        cls.create_knowledge_hook(request, login_user, target_knowlege)
         background_tasks.add_task(file_worker.file_copy_celery, params)
-        return knowledge
+        return target_knowlege

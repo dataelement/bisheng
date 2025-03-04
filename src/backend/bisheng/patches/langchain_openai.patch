@@ -1,0 +1,11 @@
+--- base.py	2024-12-18 19:01:22.000000000 +0800
++++ base_modify.py	2025-02-10 11:11:47.899000000 +0800
+@@ -259,6 +259,8 @@
+             ]
+         except KeyError:
+             pass
++    if _dict.get('reasoning_content'):
++        additional_kwargs['reasoning_content'] = _dict['reasoning_content']
+ 
+     if role == "user" or default_class == HumanMessageChunk:
+         return HumanMessageChunk(content=content, id=id_)

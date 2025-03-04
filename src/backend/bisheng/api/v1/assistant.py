@@ -231,7 +231,7 @@ async def get_tool_schema(*,
         logger.exception(f'openapi schema parse error {e}')
         return resp_500(message=f'openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}')
 
-    # 解析openapi schema转为助手工具的格式
+    #  解析openapi schema转为助手工具的格式
     try:
         schema = OpenApiSchema(res)
         schema.parse_server()
@@ -243,6 +243,10 @@ async def get_tool_schema(*,
                                       is_delete=0,
                                       server_host=schema.default_server,
                                       openapi_schema=file_content,
+                                      api_location = schema.api_location,
+                                      parameter_name = schema.parameter_name,
+                                      auth_type = schema.auth_type,
+                                      auth_method = schema.auth_method,
                                       children=[])
         # 解析获取所有的api
         schema.parse_paths()
@@ -290,9 +294,9 @@ def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: 
 @router.post('/tool_test', response_model=UnifiedResponseModel)
 async def test_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
     """ 测试自定义工具 """
-    tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', req.extra,
+    tool_params = OpenApiSchema.parse_openapi_tool_params_test('test', 'test', req.extra,
                                                           req.server_host, req.auth_method,
-                                                          req.auth_type, req.api_key)
+                                                          req.auth_type, req.api_key,req.api_location,req.parameter_name)
 
     openapi_tool = OpenApiTools.get_api_tool('test', **tool_params)
     try:

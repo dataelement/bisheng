@@ -40,7 +40,7 @@ class ToolNode(BaseNode):
             "value": result.get("output", ''),
             "type": "params"
         })
-        return ret
+        return [ret]
 
     def parse_tool_input(self) -> dict:
         ret = {}
@@ -56,6 +56,6 @@ class ToolNode(BaseNode):
         if len(variables) > 0:
             var_map = {}
             for one in variables:
-                var_map[one] = self.graph_state.get_variable_by_str(one)
+                var_map[one] = self.get_other_node_variable(one)
             msg = msg_template.format(var_map)
         return msg

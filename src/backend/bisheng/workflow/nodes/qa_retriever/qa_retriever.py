@@ -41,7 +41,7 @@ class QARetrieverNode(BaseNode):
 
     def _run(self, unique_id: str):
         self._init_retriever()
-        question = self.graph_state.get_variable_by_str(self._user_question)
+        question = self.get_other_node_variable(self._user_question)
         result = self._retriever.invoke({'query': question})
         # qa 结果是document
         if result['result']:
@@ -56,10 +56,10 @@ class QARetrieverNode(BaseNode):
         }
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return [
+        return [[
             {
                 "key": "user_question",
-                "value": self.graph_state.get_variable_by_str(self._user_question),
+                "value": self.get_other_node_variable(self._user_question),
                 "type": "params"
             },
             {
@@ -67,4 +67,4 @@ class QARetrieverNode(BaseNode):
                 "value": result['retrieved_result'],
                 "type": "params"
             }
-        ]
+        ]]

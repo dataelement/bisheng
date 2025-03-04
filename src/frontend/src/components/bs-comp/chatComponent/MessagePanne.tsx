@@ -3,14 +3,14 @@ import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import FileBs from "./FileBs";
-import MessageBs from "./MessageBs";
+import MessageBs, { ReasoningLog } from "./MessageBs";
 import MessageSystem from "./MessageSystem";
 import MessageUser from "./MessageUser";
 import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => {} }) {
+export default function MessagePanne({ mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => { } }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -26,10 +26,24 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
         scrollLockRef.current = false
         queryLockRef.current = false
     }, [chatId])
+    const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
     useEffect(() => {
-        if (scrollLockRef.current) return
+        if (scrollLockRef.current) return;
+
+        const now = Date.now();
+        const throttleTime = 1200; // 1秒
+
+        // 如果距离上次执行的时间小于 throttleTime，则直接返回
+        if (now - lastScrollTimeRef.current < throttleTime) {
+            return;
+        }
+
+        // 执行滚动操作
         messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }, [messages])
+
+        // 更新上次执行的时间戳
+        lastScrollTimeRef.current = now;
+    }, [messages]);
 
     // 消息滚动加载
     const queryLockRef = useRef(false)
@@ -38,7 +52,7 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
             if (queryLockRef.current) return
             const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
             // 距离底部 600px内，开启自动滚动
-            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 600
+            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400
 
             if (messagesRef.current.scrollTop <= 90) {
                 console.log('请求 :>> ', 1);
@@ -105,6 +119,8 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
                     type = 'runLog'
                 } else if (msg.thought) {
                     type = 'system'
+                } else if (msg.category === 'reasoning_answer') {
+                    type = 'reasoning'
                 }
 
                 switch (type) {
@@ -128,6 +144,8 @@ export default function MessagePanne({ mark = false, logo, useName, guideWord, l
                         return <FileBs key={msg.id} data={msg} />;
                     case 'runLog':
                         return <RunLog key={msg.id} data={msg} />;
+                    case 'reasoning':
+                        return <ReasoningLog key={msg.id} loading={false} msg={msg.message} />
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.id}>Unknown message type</div>;
                 }

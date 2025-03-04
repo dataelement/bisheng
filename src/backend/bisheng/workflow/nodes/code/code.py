@@ -37,16 +37,16 @@ class CodeNode(BaseNode):
         return main_ret
 
     def parse_log(self, unique_id: str, result: dict):
-        return [
+        return [[
             {"key": "code_input", "value": self._parse_code_input(), "type": "params"},
             {"key": "code_output", "value": result, "type": "params"}
-        ]
+        ]]
 
     def _parse_code_input(self) -> dict:
         ret = {}
         for one in self._code_input:
             if one["type"] == "ref":
-                ret[one['key']] = self.graph_state.get_variable_by_str(one['value'])
+                ret[one['key']] = self.get_other_node_variable(one['value'])
             else:
                 ret[one['key']] = one['value']
         return ret

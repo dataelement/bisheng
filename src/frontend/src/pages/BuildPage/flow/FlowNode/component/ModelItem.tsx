@@ -31,7 +31,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             });
 
             setOptions(llmOptions)
-            agent && onChange(llmOptions[0].children[0].value)
+            agent && !data.value && onChange(llmOptions[0].children[0].value)
             // return { llmOptions, embeddings }
         })
 
@@ -51,6 +51,9 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             if (model) {
                 _defaultValue = [{ value: option.value, label: option.label }, { value: model.value, label: model.label }]
                 return true
+            } else {
+                const firstOp = options[0]
+                _defaultValue = [{ value: firstOp.value, label: firstOp.label }, { value: firstOp.children[0].value, label: firstOp.children[0].label }]
             }
         })
         // 无对应选项自动清空旧值
@@ -77,7 +80,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             {data.required && <span className="text-red-500">*</span>}
             {data.label}
         </Label>
-        {defaultValue ? <Cascader
+        {defaultValue?.length ? <Cascader
             error={error}
             placholder={data.placeholder}
             defaultValue={defaultValue}

@@ -10,7 +10,7 @@ import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
 import { readTempsDatabase } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant"; // 假设有对应的接口
-import { createWorkflowApi } from "@/controllers/API/workflow";
+import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflow";
 // import { createWorkflowApi, getWorkflowApi, updateWorkflowApi } from "@/controllers/API/workflow"; // 假设有对应的接口
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
@@ -162,6 +162,11 @@ ${t('build.exampleTwo', { ns: 'bs' })}
         if (tempDataRef.current) {
             // 创建by模板
             if (AppType.FLOW === appType) {
+                // 复制报告节点中报告模板
+                for (let i = 0; i < tempDataRef.current.data.nodes.length; i++) {
+                    const node = tempDataRef.current.data.nodes[i];
+                    await copyReportTemplate(node.data)
+                }
                 const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current))
                 if (res) navigate('/flow/' + res.id)
             }

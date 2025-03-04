@@ -2,11 +2,15 @@ import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { ChevronDown, RefreshCcw, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from 'react-i18next';
 import { CustomHandle } from "..";
 import SelectVar from "./SelectVar";
+import useFlowStore from "../../flowStore";
+import { isVarInFlow } from "@/util/flowUtils";
 
 interface Item {
     id: string;  // UUID 类型的字符串
@@ -19,9 +23,8 @@ interface Item {
     del: boolean
 }
 
-import { useTranslation } from 'react-i18next';
 
-const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onDeleteItem }) => {
     const { t } = useTranslation('flow');
 
     const handleCompTypeChange = (newType) => {
@@ -37,6 +40,11 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
         onUpdateItem(index, { ...item, right_value: e.target.value });
     };
 
+    const [leftError, rightError] = useMemo(() => {
+        if (!varErrors) return [false, false];
+        return varErrors;
+    }, [varErrors])
+
     return (
         <div className="flex gap-1 items-center mb-1 hover-reveal">
             {/* key */}
@@ -45,20 +53,22 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                 nodeId={nodeId}
                 itemKey={item.id}
                 onSelect={(E, v) => {
-                    onUpdateItem(index, { ...item, left_label: v.label, left_var: `${E.id}.${v.value}` });
+                    onUpdateItem(index, { ...item, left_label: `${E.name}/${v.label}`, left_var: `${E.id}.${v.value}` });
                 }}
             >
-                <div
-                    className={`${required && !item.left_label && 'border-red-500'
-                        } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
-                >
-                    {item.left_label ? (
-                        <span className="flex items-center">{item.left_label}</span>
-                    ) : (
-                        <span className="text-gray-400 mt-0.5">{t('selectVariable')}</span>
-                    )}
-                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-                </div>
+                <Tip content={item.left_label} side="top">
+                    <div
+                        className={`${(required && !item.left_label || leftError) && 'border-red-500'
+                            } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
+                    >
+                        {item.left_label ? (
+                            <span className="flex items-center">{item.left_label}</span>
+                        ) : (
+                            <span className="text-gray-400 mt-0.5">{t('selectVariable')}</span>
+                        )}
+                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                    </div>
+                </Tip>
             </SelectVar>
             {/* condition */}
             <Select value={item.comparison_operation} onValueChange={handleCompTypeChange}>
@@ -102,19 +112,22 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
                     {/* value */}
                     {item.right_value_type === 'ref' ? (
                         <SelectVar
+                            className="max-w-40"
                             nodeId={nodeId}
                             itemKey={item.id}
                             onSelect={(E, v) => {
-                                onUpdateItem(index, { ...item, right_label: v.label, right_value: `${E.id}.${v.value}` });
+                                onUpdateItem(index, { ...item, right_label: `${E.name}/${v.label}`, right_value: `${E.id}.${v.value}` });
                             }}
                         >
-                            <div
-                                className={`${required && !item.right_label && 'border-red-500'
-                                    } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
-                            >
-                                <span className="flex items-center">{item.right_label}</span>
-                                <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-                            </div>
+                            <Tip content={item.right_label} side="top">
+                                <div
+                                    className={`${(required && !item.right_label || rightError) && 'border-red-500'
+                                        } no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}
+                                >
+                                    <span className="flex items-center">{item.right_label}</span>
+                                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                                </div>
+                            </Tip>
                         </SelectVar>
                     ) : (
                         <Input
@@ -141,7 +154,7 @@ const Item = ({ nodeId, item, index, del, required, onUpdateItem, onDeleteItem }
     );
 };
 
-export default function ConditionItem({ nodeId, node, data, onChange, onValidate }) {
+export default function ConditionItem({ nodeId, node, data, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 获取翻译函数
     const [value, setValue] = useState([]);
     const [required, setRequired] = useState(false);
@@ -225,6 +238,34 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
         return () => onValidate(() => { });
     }, [data.value]);
 
+    // 校验变量是否可用
+    const { flow } = useFlowStore();
+    const [varErrors, setVarErrors] = useState([]);
+    const validateVarAvailble = () => {
+        const newVarErrors = [] // 存储所有验证结果
+        let errorMsg = '';
+        value.forEach((item, index) => {
+            const conditionErrors = []
+            item.conditions.forEach((cds) => {
+                const leftError = isVarInFlow(nodeId, flow.nodes, cds.left_var, cds.left_label)
+                let rightError = ''
+
+                if (cds.right_value_type === 'ref') {
+                    rightError = isVarInFlow(nodeId, flow.nodes, cds.right_value, cds.right_label)
+                }
+                errorMsg = rightError || leftError || errorMsg;
+                conditionErrors.push([!!leftError, !!rightError])
+            })
+            newVarErrors.push(conditionErrors)
+        })
+        setVarErrors(newVarErrors)
+        return Promise.resolve(errorMsg);
+    };
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data, value]);
+
     return (
         <div>
             {value.map((val, vindex) => (
@@ -247,6 +288,7 @@ export default function ConditionItem({ nodeId, node, data, onChange, onValidate
                                 nodeId={nodeId}
                                 item={item}
                                 index={index}
+                                varErrors={varErrors[vindex]?.[index]}
                                 del={val.conditions.length > 1}
                                 onUpdateItem={(index, item) => {
                                     val.conditions[index] = item;

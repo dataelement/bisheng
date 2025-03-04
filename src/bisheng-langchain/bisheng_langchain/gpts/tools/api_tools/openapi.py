@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -8,6 +8,10 @@ from .base import APIToolBase, Field, MultArgsSchemaTool
 
 
 class OpenApiTools(APIToolBase):
+
+    api_key: Optional[str]
+    api_location: Optional[str]
+    parameter_name: Optional[str]
 
     def get_real_path(self, path_params: dict|None):
         path = self.params['path']
@@ -36,6 +40,17 @@ class OpenApiTools(APIToolBase):
                     json_data[k] = v
             else:
                 params[k] = v
+        # if ('api_location' in self.params and self.params['api_location'] == "query") or \
+        #     (hasattr(self, 'api_location') and self.api_location == "query"):
+        #     if self.parameter_name:
+        #         params.update({self.parameter_name:self.api_key})
+        #     elif self.params['parameter_name']:
+        #         params.update({self.params['parameter_name']:self.api_key})
+        api_location = self.params.get('api_location')
+        if (api_location == "query") or (hasattr(self, 'api_location') and self.api_location == "query"):
+            parameter_name = getattr(self, 'parameter_name', None) or self.params.get('parameter_name')
+            if parameter_name:
+                params.update({parameter_name: self.api_key})
         return params, json_data, path_params
 
     def parse_args_schema(self):
@@ -88,6 +103,7 @@ class OpenApiTools(APIToolBase):
         extra = {}
         if 'proxy' in kwargs:
             extra['proxy'] = kwargs.pop('proxy')
+
         params, json_data, path_params = self.get_params_json(**kwargs)
         path = self.get_real_path(path_params)
         logger.info('api_call url={}', path)
@@ -116,7 +132,7 @@ class OpenApiTools(APIToolBase):
 
         params, json_data, path_params = self.get_params_json(**kwargs)
         path = self.get_real_path(path_params)
-        logger.info('api_call url={}', path)
+        logger.info('api_call url={} params={}', path, params)
         method = self.get_request_method()
 
         if method == 'get':
