@@ -148,7 +148,7 @@ class ChatMessageDao(MessageBase):
                 return None
 
     @classmethod
-    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None):
+    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None, exclude_category: str = None):
         """
         获取每个会话最近的一次消息内容
         """
@@ -156,6 +156,8 @@ class ChatMessageDao(MessageBase):
                            func.max(ChatMessage.id)).where(ChatMessage.chat_id.in_(chat_ids))
         if category:
             statement = statement.where(ChatMessage.category == category)
+        if exclude_category:
+            statement = statement.where(ChatMessage.category != exclude_category)
         statement = statement.group_by(ChatMessage.chat_id)
         with session_getter() as session:
             # 获取最新的id列表
