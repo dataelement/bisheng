@@ -19,6 +19,10 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
         }))
     }, [data.options]);
 
+    const nData = useMemo(() => {
+        return { ...data, label: '变量输入', required: false }
+    }, [data])
+
     // 根据交互类型切换不同的展示
     const renderContent = (error) => {
         switch (interactionType) {
@@ -58,7 +62,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
                             placeholder={t("userInputPlaceholder")}
                             nodeId={nodeId}
                             itemKey={data.key}
-                            flowNode={data}
+                            flowNode={nData}
                             value={data.value.value}
                             onChange={(msg) =>
                                 onChange({ type: interactionType, value: msg })

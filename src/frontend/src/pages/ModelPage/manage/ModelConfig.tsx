@@ -254,8 +254,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         </div>
         <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px)] overflow-y-auto">
             <div className="mb-2">
-                <Label className="bisheng-label">{t('model.serviceProvider')}</Label>
-                <Select value={formData.type} onValueChange={handleTypeChange}>
+                <Label className="bisheng-label">模型接口格式</Label>
+                <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
                     <SelectTrigger>
                         <SelectValue placeholder="" />
                     </SelectTrigger>

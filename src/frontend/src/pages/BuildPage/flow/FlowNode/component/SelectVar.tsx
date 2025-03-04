@@ -39,6 +39,7 @@ const getSpecialVar = (obj, type) => {
                 return res
             }, [])
         case 'item:input_list':
+            if (!obj.value.length) return []
             const param = cloneDeep(obj)
             param.value = param.value.map(item => ({ label: item.value, value: item.key }))
             return [{ param, label: obj.key, value: obj.key }]
@@ -47,6 +48,7 @@ const getSpecialVar = (obj, type) => {
 }
 
 /**
+ * 深度定制组件
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
  */
@@ -190,14 +192,13 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
             let checkedCount = 0;
 
             items.forEach((item, index) => {
-                if (index === items.length - 1) return
                 const itemKey = `${parentKey}#${item.value}`;
                 const isChecked = valueSet.has(itemKey);
                 keys[itemKey] = isChecked ? SelectStatus.Check : SelectStatus.Uncheck;
                 if (isChecked) checkedCount++;
             });
 
-            keys[parentKey] = getCheckStatus(checkedCount, items.length - 1);
+            keys[parentKey] = getCheckStatus(checkedCount, items.length);
             return { keys, checkedCount };
         };
 
@@ -244,7 +245,7 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
         // 工具函数：处理预设问题（preset_question）
         const handlePresetQuestion = (data, tasks) => {
             return data.param.value
-                .slice(0, -1) // 排除最后一个元素
+                // .slice(0, -1) // 排除最后一个元素
                 .map((item) => {
                     tasks.push({
                         node: currentNode,

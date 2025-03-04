@@ -655,7 +655,7 @@ class KnowledgeService(KnowledgeUtils):
         if file_ids:
             search_data['post_filter'] = {'terms': {'metadata.file_id': file_ids}}
         if keyword:
-            search_data['query'] = {'match': {'text': keyword}}
+            search_data['query'] = {'match_phrase': {'text': keyword}}
         try:
             res = es_client.client.search(index=index_name, body=search_data)
         except Exception as e:

@@ -169,7 +169,7 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
             const updatedInputs = value.map((val, index) => {
                 return inputs[index] && inputs[index].value === val
                     ? inputs[index] // 如果当前输入项与外部值相同，则保持不变
-                    : { id: generateUUID(6), value: val }; // 否则，创建新的输入项
+                    : { key: generateUUID(6), value: val }; // 否则，创建新的输入项
             });
             setInputs(updatedInputs);
         }, [dict, value]); // 依赖项中包含 value，确保外部 value 更新时同步更新

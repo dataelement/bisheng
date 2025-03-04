@@ -15,15 +15,15 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
+export default function ChatMessages({ mark = false, logo, useName, disableBtn = false, guideWord, loadMore, onMarkClick }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
     // 反馈
     const thumbRef = useRef(null)
-    // 溯源
-    const sourceRef = useRef(null)
-
+    // 溯
+    const sourceRef = useRef(null
+)
     // 自动滚动
     const messagesRef = useRef(null)
     const scrollLockRef = useRef(false)
@@ -121,6 +121,7 @@ export default function ChatMessages({ mark = false, logo, useName, guideWord, l
                         return <MessageBs
                             mark={mark}
                             logo={logo}
+                            disableBtn={disableBtn}
                             key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}

@@ -44,6 +44,11 @@ const EmailConfigForm = ({ formData = {}, onSubmit }) => {
             isValid = false;
         }
 
+        if (!localFormData.email_password) {
+            formErrors.email_password = true;
+            isValid = false;
+        }
+
         // SMTP server validation (check for valid domain or IP address)
         const smtpServerRegex = /^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,6}$|^(?:\d{1,3}\.){3}\d{1,3}$/;
         // This regex allows valid domain names (e.g., smtp.example.com) or valid IPv4 addresses (e.g., 192.168.1.1)
