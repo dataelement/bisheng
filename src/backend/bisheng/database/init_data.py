@@ -94,7 +94,6 @@ def init_default_data():
                     preset_tools = []
                     json_items = json.loads(read_from_conf('data/t_gpts_tools.json'))
                     for item in json_items:
-                        item['api_params'] = json.loads(item['api_params'])
                         preset_tool = GptsTools(**item)
                         preset_tools.append(preset_tool)
                     session.add_all(preset_tools)
@@ -153,7 +152,7 @@ def init_default_data():
             # if the exception involves tables already existing
             # we can ignore it
             if 'already exists' not in str(exc):
-                logger.error(f'Error creating DB and tables: {exc}')
+                logger.exception(f'Error creating DB and tables: {exc}')
                 raise RuntimeError('Error creating DB and tables') from exc
         finally:
             redis_client.delete('init_default_data')
