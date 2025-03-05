@@ -54,7 +54,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v0.4.1.2
+    image: dataelement/bisheng-backend:v1.0.0
     ports:
       - "7860:7860"
     environment:
@@ -94,7 +94,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v0.4.1.2
+    image: dataelement/bisheng-frontend:v1.0.0
     ports:
       - "3001:3001"
     environment:
