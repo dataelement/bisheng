@@ -791,7 +791,7 @@ class AuditLogService:
                 ws.cell(i + 1, j + 1, excel_data[i][j])
 
         minio_client = MinioClient()
-        tmp_object_name = f'/tmp/session/export_{generate_uuid()}'
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
         with NamedTemporaryFile() as tmp_file:
             wb.save(tmp_file.name)
             tmp_file.seek(0)
