@@ -1,0 +1,26 @@
+# LLM 
+model_path: /public/youjiachen/models/Qwen2-7B-Instruct
+adaptor_path: "/public/youjiachen/models/adaptor/ellm_qwen2_7b_instruct_0_2_shot"
+
+# Document IE config
+spliter_config:
+  chunk_size: 4096
+  chunk_overlap: 200
+  separators: ['\n\n', '\n', ' ', '']
+
+generation_config:
+  do_sample: false
+  top_p: null
+  top_k: null
+  temperature: null
+  max_new_tokens: 2000
+
+# OCR server 
+idp_url: http://192.168.106.134:8502
+
+# Ellm v2 server port  
+api_port: 6118
+
+# Gradio
+web_host: 0.0.0.0
+web_port: 7777
