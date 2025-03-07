@@ -51,12 +51,17 @@ class InputNode(BaseNode):
 
     def _run(self, unique_id: str):
         if self.is_dialog_input():
-            return {'user_input': self.node_params['user_input'], "dialog_files_content": self.parse_dialog_files()}
+            res = {'user_input': self.node_params['user_input'], "dialog_files_content": self.parse_dialog_files()}
+            self.graph_state.save_context(content=f'{res["user_input"]}\n{res["dialog_files_content"]}', msg_sender='human')
+            return res
 
         ret = {}
+        # 存到聊天历史记录内
+        human_input = ""
         # 表单形式的需要去处理对应的文件上传
         for key, value in self.node_params.items():
             ret[key] = value
+            human_input += f'{key}:{value}\n'
             key_info = self._node_params_map[key]
             if key_info['type'] == 'file':
                 new_params = self.parse_upload_file(key,key_info, value)
@@ -64,6 +69,7 @@ class InputNode(BaseNode):
                     new_params = {key_info['key']: new_params[key_info['key']]}
                 ret.update(new_params)
 
+        self.graph_state.save_context(content=human_input, msg_sender='human')
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:

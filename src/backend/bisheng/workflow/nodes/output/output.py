@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from bisheng.utils.minio_client import MinioClient
@@ -35,6 +36,7 @@ class OutputNode(BaseNode):
 
     def handle_input(self, user_input: dict) -> Any:
         # 需要存入state，
+        self.graph_state.save_context(content=json.dumps(user_input, ensure_ascii=False), msg_sender='human')
         self._handled_output_result = user_input['output_result']
         self.graph_state.set_variable(self.id, 'output_result', user_input['output_result'])
 
