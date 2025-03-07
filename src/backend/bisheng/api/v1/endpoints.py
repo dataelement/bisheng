@@ -286,7 +286,7 @@ def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[
     if file_supports and file_ext not in file_supports:
         raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
     try:
-        object_name = f'{object_name_prefix}/{generate_uuid()}.png'
+        object_name = f'{object_name_prefix}/{generate_uuid()}.{file_ext}'
         file_path = upload_file_to_minio(file, object_name=object_name, bucket_name=bucket_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)

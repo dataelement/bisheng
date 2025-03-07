@@ -1,13 +1,20 @@
-from typing import Dict, List, Optional
-from uuid import UUID, uuid4
+import json
+import os
+from tempfile import TemporaryDirectory
+from typing import Dict, Optional
+from uuid import UUID
 
+from fastapi import UploadFile
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.base import BaseService
+from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.services.user_service import UserPayload
+from bisheng.cache.redis import redis_client
+from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -15,6 +22,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
@@ -34,7 +42,8 @@ class WorkFlowService(BaseService):
         # 通过tag获取id列表
         flow_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.FLOW, ResourceTypeEnum.WORK_FLOW,
+                                                                ResourceTypeEnum.ASSISTANT])
             if not ret:
                 return [], 0
             flow_ids = [one.resource_id for one in ret]
@@ -45,11 +54,13 @@ class WorkFlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW, AccessType.ASSISTANT_READ])
+            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
+                                                                         AccessType.ASSISTANT_READ])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, page, page_size)
+            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, page,
+                                               page_size)
 
         # 应用ID列表
         resource_ids = []
@@ -115,7 +126,7 @@ class WorkFlowService(BaseService):
                         'key': k,
                         'value': v,
                         'type': 'input'
-                    }for k, v in node_input.items()
+                    } for k, v in node_input.items()
                 ]
             })
         elif node_data.type == NodeType.TOOL.value:
@@ -127,7 +138,7 @@ class WorkFlowService(BaseService):
             for key, val in node_input.items():
                 graph_state.set_variable_by_str(key, val)
 
-        exec_id = uuid4().hex
+        exec_id = generate_uuid()
         result = node._run(exec_id)
         log_data = node.parse_log(exec_id, result)
         ret = []
@@ -179,3 +190,35 @@ class WorkFlowService(BaseService):
         db_flow.status = status
         FlowDao.update_flow(db_flow)
         return
+
+    @classmethod
+    async def process_input_file(cls, login_user: UserPayload, upload_file: UploadFile):
+        """
+        处理工作流对话框输入的文件
+        """
+        file_id = generate_uuid()
+        # 保存文件内容到本地，并解析出文件内容
+        texts = []
+        with TemporaryDirectory() as tmp_dir:
+            file_path = os.path.join(tmp_dir, upload_file.filename)
+            with open(file_path, 'wb') as tmp_file:
+                tmp_file.write(upload_file.file.read())
+            texts, _, _, _ = read_chunk_text(file_path, upload_file.filename,
+                                             ['\n\n', '\n'], ['after', 'after'], 1000, 500)
+            if len(texts) == 0:
+                raise ValueError('文件解析为空')
+        upload_file.file.seek(0)
+        # 文件上传到minio
+        file_path = save_uploaded_file(upload_file.file, 'tmp', file_id)
+
+        # 数据存储到redis内
+        redis_client.set(f"workflow:dialog_file:{file_id}", json.dumps({
+            "path": file_path,
+            "content": "\n".join(texts),
+            "name": upload_file.filename
+        }, ensure_ascii=False))
+        return {
+            'id': file_id,
+            'name': upload_file.filename,
+            'size': upload_file.size,
+        }
