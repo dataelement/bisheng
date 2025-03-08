@@ -87,12 +87,13 @@ class Requests(BaseModel):
                                            **kwargs) as response:
                     yield response
         else:
-            async with self.aiosession.request(method,
-                                               url,
-                                               headers=self.headers,
-                                               auth=self.auth,
-                                               **kwargs) as response:
-                yield response
+            async with self.aiosession:
+                async with self.aiosession.request(method,
+                                                   url,
+                                                   headers=self.headers,
+                                                   auth=self.auth,
+                                                   **kwargs) as response:
+                    yield response
 
     @asynccontextmanager
     async def aget(self, url: str, **kwargs: Any) -> AsyncGenerator[aiohttp.ClientResponse, None]:
