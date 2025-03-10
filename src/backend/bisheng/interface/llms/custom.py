@@ -46,8 +46,9 @@ class BishengLLM(BaseChatModel):
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
         LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
         LLMServerType.SPARK.value: 'ChatOpenAI',
-        LLMServerType.TENCENT.value: 'ChatOpenAI',
+        LLMServerType.TENCENT.value: 'ChatHunyuanOpenai',
         LLMServerType.MOONSHOT.value: 'ChatOpenAI',
+        LLMServerType.VOLCENGINE.value: 'ChatHunyuanOpenai'
     }
 
     # bisheng强相关的业务参数
@@ -86,6 +87,7 @@ class BishengLLM(BaseChatModel):
         params = self._get_llm_params(server_info, model_info)
         try:
             self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
+            logger.debug(f'init_bisheng_llm: {self.llm.__dir__()}')
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
@@ -93,6 +95,7 @@ class BishengLLM(BaseChatModel):
     def _get_llm_class(self, server_type: str) -> BaseLanguageModel:
         node_type = self.llm_node_type[server_type]
         class_object = import_by_type(_type='llms', name=node_type)
+        logger.debug(f'get_llm_class: {class_object}')
         return class_object
 
     def _get_llm_params(self, server_info: LLMServer, model_info: LLMModel) -> dict:

@@ -90,6 +90,7 @@ def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
     from bisheng.interface.llms.base import llm_creator
     if llm in llm_creator.type_to_loader_dict:
+        print(f'import_chat_llm {llm}')
         return llm_creator.type_to_loader_dict[llm]
     return import_class(f'bisheng_langchain.chat_models.{llm}')
 
