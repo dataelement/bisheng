@@ -17,6 +17,7 @@ from sqlmodel.sql.expression import Select, SelectOfScalar
 class KnowledgeTypeEnum(Enum):
     QA = 1
     NORMAL = 0
+    PRIVATE = 2
 
 
 class KnowledgeBase(SQLModelSerializable):
@@ -94,15 +95,16 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(select(Knowledge).where(Knowledge.id.in_(ids))).all()
 
     @classmethod
-    def _user_knowledge_filters(cls,
-                                statement: Any,
-                                user_id: int,
-                                knowledge_id_extra: List[int] = None,
-                                knowledge_type: KnowledgeTypeEnum = None,
-                                name: str = None,
-                                page: int = 0,
-                                limit: int = 0,
-                                filter_knowledge: List[int] = None) -> Union[Select, SelectOfScalar]:
+    def _user_knowledge_filters(
+            cls,
+            statement: Any,
+            user_id: int,
+            knowledge_id_extra: List[int] = None,
+            knowledge_type: KnowledgeTypeEnum = None,
+            name: str = None,
+            page: int = 0,
+            limit: int = 0,
+            filter_knowledge: List[int] = None) -> Union[Select, SelectOfScalar]:
         if knowledge_id_extra:
             statement = statement.where(
                 or_(Knowledge.id.in_(knowledge_id_extra), Knowledge.user_id == user_id))
@@ -112,6 +114,8 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+        else:
+            statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
             statement = statement.where(Knowledge.name.like(f'%{name}%'))
         if page and limit:
@@ -130,7 +134,8 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(Knowledge).where(Knowledge.state > 0)
 
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name, page, limit, filter_knowledge)
+                                                knowledge_type, name, page, limit,
+                                                filter_knowledge)
 
         statement = statement.order_by(Knowledge.update_time.desc())
         with session_getter() as session:
@@ -187,14 +192,14 @@ class KnowledgeDao(KnowledgeBase):
                                                           AccessType.KNOWLEDGE)
 
         # 查询是否包含了用户自己创建的知识库
-        user_knowledge_list = cls.get_user_knowledge(user_info.user_id, filter_knowledge=knowledge_ids)
+        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                     filter_knowledge=knowledge_ids)
         if not role_access_list and not user_knowledge_list:
             return []
 
         finally_knowledge_list = [access.third_id for access in role_access_list]
         finally_knowledge_list.extend([str(one.id) for one in user_knowledge_list])
-        statement = select(Knowledge).where(
-            Knowledge.id.in_(finally_knowledge_list))
+        statement = select(Knowledge).where(Knowledge.id.in_(finally_knowledge_list))
 
         with session_getter() as session:
             return session.exec(statement).all()
@@ -236,6 +241,8 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(Knowledge).where(Knowledge.state > 0)
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+        else:
+            statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
             statement = statement.where(Knowledge.name.like(f'%{name}%'))
         if page and limit:
@@ -251,6 +258,8 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+        else:
+            statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
             statement = statement.where(Knowledge.name.like(f'%{name}%'))
         with session_getter() as session:

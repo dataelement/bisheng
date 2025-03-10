@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError
+from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
+from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
@@ -45,6 +47,11 @@ filetype_load_map = {
     'docx': UnstructuredWordDocumentLoader,
     'pptx': UnstructuredPowerPointLoader,
 }
+
+split_handles = [
+    XlsxSplitHandle(),
+    XlsSplitHandle(),
+]
 
 
 class KnowledgeUtils:
@@ -339,7 +346,8 @@ def add_file_embedding(vector_client,
         if len(one) > 10000:
             raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \n）进行切分')
         # 入库时 拼接文件名和文档摘要
-        texts[index] = f"{metadatas[index]['source']}\n{metadatas[index]['title']}{KnowledgeUtils.chunk_split}{one}"
+        texts[
+            index] = f"{metadatas[index]['source']}\n{metadatas[index]['title']}{KnowledgeUtils.chunk_split}{one}"
 
     db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果
@@ -396,7 +404,7 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         text = part['text']
         for index, bbox in enumerate(bboxes):
             key = f'{pages[index]}-' + '-'.join([str(int(one)) for one in bbox])
-            if index == len(bboxes) -1:
+            if index == len(bboxes) - 1:
                 val = text[indexes[index][0]:]
             else:
                 val = text[indexes[index][0]:indexes[index][1] + 1]
@@ -426,34 +434,48 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
     # 加载文档内容
     logger.info(f'start_file_loader file_name={file_name}')
     parse_type = ParseType.LOCAL.value
-    if not settings.get_knowledge().get('unstructured_api_url'):
-        file_type = file_name.split('.')[-1]
-        if file_type not in filetype_load_map:
-            raise Exception('类型不支持')
-        loader = filetype_load_map[file_type](file_path=input_file)
-        partitions = []
-        documents = loader.load()
+    # excel 文件的处理单独出来
+    file_type = file_name.split('.')[-1]
+    partitions = []
+    texts = []
+    if file_type in ['xls', 'xlsx']:
+        for handle in split_handles:
+            if handle.support(file_name, input_file):
+                result = handle.handle(file_name, separator, False, chunk_size, input_file, None)
+                for content in result:
+                    if content:
+                        for paragraph in content:
+                            texts.append(
+                                Document(page_content=paragraph.get('content'), metadata={}))
+
     else:
-        loader = ElemUnstructuredLoader(
-            file_name,
-            input_file,
-            unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
-        documents = loader.load()
-        parse_type = ParseType.UNS.value
-        partitions = loader.partitions
-        partitions = parse_partitions(partitions)
+        if not settings.get_knowledge().get('unstructured_api_url'):
+            file_type = file_name.split('.')[-1]
+            if file_type not in filetype_load_map:
+                raise Exception('类型不支持')
+            loader = filetype_load_map[file_type](file_path=input_file)
+            documents = loader.load()
+        else:
+            loader = ElemUnstructuredLoader(
+                file_name,
+                input_file,
+                unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
+            documents = loader.load()
+            parse_type = ParseType.UNS.value
+            partitions = loader.partitions
+            partitions = parse_partitions(partitions)
 
-    logger.info(f'start_extract_title file_name={file_name}')
-    if llm:
-        t = time.time()
-        for one in documents:
-            # 配置了相关llm的话，就对文档做总结
-            title = extract_title(llm, one.page_content)
-            one.metadata['title'] = title
-        logger.info('file_extract_title=success timecost={}', time.time() - t)
+        logger.info(f'start_extract_title file_name={file_name}')
+        if llm:
+            t = time.time()
+            for one in documents:
+                # 配置了相关llm的话，就对文档做总结
+                title = extract_title(llm, one.page_content)
+                one.metadata['title'] = title
+            logger.info('file_extract_title=success timecost={}', time.time() - t)
 
-    logger.info(f'start_split_text file_name={file_name}')
-    texts = text_splitter.split_documents(documents)
+        logger.info(f'start_split_text file_name={file_name}')
+        texts = text_splitter.split_documents(documents)
     raw_texts = [t.page_content for t in texts]
     logger.info(f'start_process_metadata file_name={file_name}')
     metadatas = [{
