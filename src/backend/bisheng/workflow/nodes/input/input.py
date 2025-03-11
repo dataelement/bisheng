@@ -52,7 +52,7 @@ class InputNode(BaseNode):
     def _run(self, unique_id: str):
         if self.is_dialog_input():
             res = {'user_input': self.node_params['user_input'], "dialog_files_content": self.parse_dialog_files()}
-            self.graph_state.save_context(content=f'{res["user_input"]}\n{res["dialog_files_content"]}', msg_sender='human')
+            self.graph_state.save_context(content=f'{res["dialog_files_content"]}\n{res["user_input"]}', msg_sender='human')
             return res
 
         ret = {}
@@ -91,6 +91,7 @@ class InputNode(BaseNode):
                 continue
             file_info = json.loads(file_info)
             dialog_files_content += f"[file name]: {file_info['name']}\n[file content begin]\n{file_info['content']}\n[file content end]\n"
+        dialog_files_content = dialog_files_content[:self._dialog_files_length]
         return dialog_files_content
 
     def parse_upload_file(self, key: str, key_info: dict, value: str) -> dict | None:
