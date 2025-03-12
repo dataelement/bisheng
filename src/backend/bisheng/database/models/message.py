@@ -22,13 +22,8 @@ class ChatMessageType(Enum):
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
     source: Optional[int] = Field(index=False, description='是否支持溯源')
-    mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
-    mark_user: Optional[int] = Field(index=False, description='标记用户')
-    mark_user_name: Optional[str] = Field(index=False, description='标记用户')
-    review_status: Optional[int] = Field(index=True, default=ReviewStatus.DEFAULT.value, description='会话审查状态')
-    review_reason: Optional[str] = Field(sa_column=Column(String(length=4096)), description='会话审查原因')
     message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
-    extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
+    extra: Optional[str] = Field(sa_column=Column(Text), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')
     flow_id: UUID = Field(index=True, description='对应的技能id')
@@ -43,6 +38,11 @@ class MessageBase(SQLModelSerializable):
     files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
     remark: Optional[str] = Field(sa_column=Column(String(length=4096)),
                                   description='备注。break_answer: 中断的回复不作为history传给模型')
+    mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
+    mark_user: Optional[int] = Field(index=False, description='标记用户')
+    mark_user_name: Optional[str] = Field(index=False, description='标记用户')
+    review_status: Optional[int] = Field(index=True, default=ReviewStatus.DEFAULT.value, description='会话审查状态')
+    review_reason: Optional[str] = Field(sa_column=Column(String(length=4096)), description='会话审查原因')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(

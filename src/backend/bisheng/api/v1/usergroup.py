@@ -12,7 +12,7 @@ from fastapi_jwt_auth import AuthJWT
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.role_group_service import RoleGroupService
-from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.utils import check_permissions
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
@@ -46,14 +46,34 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
     return resp_200({'records': groups_res})
 
 
+@router.get('/tree')
+async def get_all_group_tree(login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取所有分组树
+    """
+    if login_user.is_admin():
+        groups = []
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            if one.is_group_admin:
+                groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+
+    groups_res = RoleGroupService().get_group_tree(groups)
+    return resp_200(groups_res)
+
+
 @router.post('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
-async def create_group(request: Request, group: GroupCreate, Authorize: AuthJWT = Depends()):
+async def create_group(request: Request, login_user: UserPayload = Depends(get_admin_user),
+                       group: GroupCreate = Body(...)):
     """
     新建用户组
     """
-    await check_permissions(Authorize, ['admin'])
-    payload = json.loads(Authorize.get_jwt_subject())
-    login_user = UserPayload(**payload)
     return resp_200(RoleGroupService().create_group(request, login_user, group))
 
 
@@ -138,7 +158,7 @@ async def get_app_list(
     all_user = []
 
     for g in groups:
-        user_list = RoleGroupService().get_group_user_list(g.id, page_size, page_num)
+        user_list, _ = RoleGroupService().get_group_user_list(g.id, page_num, page_size)
         all_user.extend(user_list)
 
     data = {"app_list": all_resources, "user_list": all_user,"un_mark":100}
@@ -147,14 +167,19 @@ async def get_app_list(
 
 @router.get('/get_group_user', response_model=UnifiedResponseModel[List[User]], status_code=200)
 async def get_group_user(group_id: int,
-                         page_size: int = None,
-                         page_num: int = None,
-                         Authorize: AuthJWT = Depends()):
+                         page: int = None,
+                         limit: int = None,
+                         login_user: UserPayload = Depends(get_login_user)):
     """
-    获取分组用户
+    获取分组下的用户，包含子用户组
     """
-    # await check_permissions(Authorize, ['admin'])
-    return RoleGroupService().get_group_user_list(group_id, page_size, page_num)
+    if not login_user.check_group_admin(group_id):
+        return UnAuthorizedError.return_resp()
+    res, total = RoleGroupService().get_group_user_list(group_id, page, limit)
+    return resp_200({
+        'data': res,
+        'total': total
+    })
 
 
 @router.post('/set_group_admin',
@@ -228,8 +253,9 @@ async def get_manage_resources(*, request: Request, login_user: UserPayload = De
 
 @router.get("/roles", response_model=UnifiedResponseModel)
 async def get_group_roles(*,
-                          group_id: List[int] = Query(..., description="用户组ID列表"),
+                          group_id: int = Query(..., description="用户组ID"),
                           keyword: str = Query(None, description="搜索关键字"),
+                          include_parent: bool = Query(False, description="是否包含父用户组绑定的角色"),
                           page: int = 0,
                           limit: int = 0,
                           user: UserPayload = Depends(get_login_user)):
@@ -237,13 +263,11 @@ async def get_group_roles(*,
     获取用户组内的角色列表
     """
     # 判断是否是用户组的管理员
-    if not user.check_groups_admin(group_id):
+    if not user.check_groups_admin([group_id]):
         return UnAuthorizedError.return_resp()
-    # 查询组下角色列表
-    role_list = RoleDao.get_role_by_groups(group_id, keyword, page, limit)
-    total = RoleDao.count_role_by_groups(group_id, keyword)
+    res, total = RoleGroupService().get_group_roles(user, group_id, keyword, page, limit, include_parent)
 
     return resp_200(data={
-        "data": role_list,
+        "data": res,
         "total": total
     })

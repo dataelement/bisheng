@@ -3,6 +3,11 @@ from datetime import datetime
 from typing import List, Any, Dict, Optional
 from uuid import UUID
 
+from fastapi import Request, HTTPException
+from fastapi.encoders import jsonable_encoder
+from loguru import logger
+
+from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
@@ -20,36 +25,116 @@ from bisheng.database.models.role import AdminRole, RoleDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.database.models.user_role import UserRoleDao
-from fastapi import Request, HTTPException
-from fastapi.encoders import jsonable_encoder
-from loguru import logger
 
 
 class RoleGroupService():
 
+    @staticmethod
+    def get_all_group_tree():
+        # 先查出所有的用户组
+        groups = GroupDao.get_all_group()
+        # 转化为字典 id: group
+        groups_dict = {}
+        # 转化为树结构 level: {id: group}
+        group_tree = {}
+        for one in groups:
+            groups_dict[one.id] = GroupRead(**one.model_dump())
+            if one.level not in group_tree:
+                group_tree[one.level] = {}
+            group_tree[one.level][one.id] = groups_dict[one.id]
+        return groups_dict, group_tree
+
     def get_group_list(self, group_ids: List[int]) -> List[GroupRead]:
         """获取全量的group列表"""
+        groups_dict, group_tree = self.get_all_group_tree()
 
-        # 查询group
+        # 非超管过滤只属于他管理的group和其子用户组
         if group_ids:
-            groups = GroupDao.get_group_by_ids(group_ids)
-        else:
-            groups = GroupDao.get_all_group()
+            tmp_group_dict = {}
+            for group_id in group_ids:
+                if group_id not in groups_dict:
+                    continue
+                tmp_group_dict[group_id] = groups_dict[group_id]
+                tmp_group_dict.update(self.get_child_groups(groups_dict[group_id], group_tree))
+            groups_dict = tmp_group_dict
+
         # 查询user
-        user_admin = UserGroupDao.get_groups_admins([group.id for group in groups])
+        user_admin = UserGroupDao.get_groups_admins(list(groups_dict.keys()))
         users_dict = {}
         if user_admin:
             user_ids = [user.user_id for user in user_admin]
             users = UserDao.get_user_by_ids(user_ids)
             users_dict = {user.user_id: user for user in users}
 
-        groupReads = [GroupRead.validate(group) for group in groups]
-        for group in groupReads:
+        for group in groups_dict.values():
             group.group_admins = [
                 users_dict.get(user.user_id).model_dump() for user in user_admin
                 if user.group_id == group.id
             ]
-        return groupReads
+            group.parent_group_path = self.get_parent_group_path(group, group_tree)
+        return list(groups_dict.values())
+
+    def get_all_children(self, group: GroupRead, group_tree: dict, max_level: int = None):
+        # 获取直系子用户组
+        children = list(self.get_child_groups(group, group_tree, group.level + 1).values())
+        if not children:
+            return []
+        for child in children:
+            child.children = self.get_all_children(child, group_tree, max_level)
+        return children
+
+    def get_group_tree(self, group_ids) -> List[GroupRead]:
+        group_dict, group_tree = self.get_all_group_tree()
+        res = []
+        if not group_tree:
+            return []
+        # 转为数结构
+        for one in group_tree[0].values():
+            one.children = self.get_all_children(one, group_tree, max_level=one.level + 1)
+            if not group_ids:
+                res.append(one)
+                continue
+
+            # 非超管过滤只属于他管理的group和其子用户组
+            res.extend(self.filter_groups_tree(one, group_ids))
+        return res
+
+    def filter_groups_tree(self, one, group_ids):
+        if one.id in group_ids:
+            return [one]
+        if not one.children:
+            return []
+
+        # 遍历子用户组是否在group_ids中
+        res = []
+        for child in one.children:
+            child_res = self.filter_groups_tree(child, group_ids)
+            res.extend(child_res)
+        return res
+
+    @staticmethod
+    def get_parent_group_path(group: GroupRead, group_tree: dict):
+        """ 获取用户组的父级路径 """
+        level = group.level
+        parent_group_path = group.group_name
+        while level > 0:
+            parent_group = group_tree[level - 1][group.parent_id]
+            parent_group_path = f'{parent_group.group_name}/{parent_group_path}'
+            level -= 1
+        return parent_group_path.lstrip(f'/{group.group_name}')
+
+    def get_child_groups(self, group: GroupRead, group_tree: dict, max_level: int = None):
+        """ 获取所有的子用户组 """
+        child_group = {}
+        level = group.level + 1
+        if max_level and level > max_level:
+            return child_group
+        if group_tree.get(level):
+            for _, group_info in group_tree[level].items():
+                if group_info.parent_id == group.id:
+                    child_group[group_info.id] = group_info
+                child_group.update(self.get_child_groups(group_info, group_tree))
+        return child_group
 
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
         """新建用户组"""
@@ -124,6 +209,13 @@ class RoleGroupService():
         if need_move_resource:
             GroupResourceDao.update_group_resource(need_move_resource)
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
+
+        # 将子用户组挂载到用户组的父用户组上
+        child_groups = GroupDao.get_child_groups_by_id(group_info.id)
+        for child_group in child_groups:
+            child_group.parent_id = group_info.parent_id
+        GroupDao.update_groups(child_groups)
+
         # 删除用户组下的角色列表
         RoleDao.delete_role_by_group_id(group_info.id)
         # 删除用户组的管理员
@@ -133,16 +225,24 @@ class RoleGroupService():
         redis_client.rpush('delete_group', delete_message, expiration=86400)
         redis_client.publish('delete_group', delete_message)
 
-    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
+    def get_group_user_list(self, group_id: int, page: int, limit: int) -> (List[User], int):
         """获取全量的group列表"""
 
-        # 查询user
-        user_group_list = UserGroupDao.get_group_user(group_id, page_size, page_num)
-        if user_group_list:
-            user_ids = [user.user_id for user in user_group_list]
-            return UserDao.get_user_by_ids(user_ids)
+        group_info = GroupDao.get_user_group(group_id)
+        if not group_info:
+            raise NotFoundError.http_exception()
+        # 获取所有的子用户组
+        child_group = GroupDao.get_child_groups(group_info.code)
+        group_ids = [group.id for group in child_group]
+        group_ids.append(group_id)
 
-        return None
+        # 查询user
+        user_ids = UserGroupDao.get_groups_user(group_ids, page, limit)
+        if user_ids:
+            total = UserGroupDao.count_groups_user(group_ids)
+            return UserDao.get_user_by_ids(user_ids), total
+
+        return [], 0
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
         """插入用户组"""
@@ -337,7 +437,7 @@ class RoleGroupService():
 
     def get_manage_resources(self, request: Request, login_user: UserPayload, keyword: str, page: int,
                              page_size: int) -> (list, int):
-        """ 获取用户所管理的用户组下的应用列表 """
+        """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
         groups = []
         if not login_user.is_admin():
             groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
@@ -347,9 +447,23 @@ class RoleGroupService():
         resource_ids = []
         # 说明是用户组管理员，需要过滤获取到对应组下的资源
         if groups:
-            group_resources = GroupResourceDao.get_groups_resource(groups)
+            group_resources = GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
+                                                                                           ResourceTypeEnum.ASSISTANT,
+                                                                                           ResourceTypeEnum.WORK_FLOW])
             if not group_resources:
                 return [], 0
             resource_ids = [one.third_id for one in group_resources]
 
         return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)
+
+    def get_group_roles(self, login_user: UserPayload, group_id: int, keyword: str, page: int, page_size: int,
+                        include_parent: bool) -> (list, int):
+
+        """获取用户组下的角色列表"""
+        group_info = GroupDao.get_group_by_ids([group_id])
+        if not group_info:
+            raise NotFoundError.http_exception()
+        # 查询属于当前组的角色列表，以及父用户组绑定的角色列表
+        role_list = RoleDao.get_role_by_groups([group_id], keyword, page, page_size, include_parent)
+        total = RoleDao.count_role_by_groups([group_id], keyword, include_parent=include_parent)
+        return role_list, total

@@ -9,9 +9,10 @@ from io import BytesIO
 from typing import Annotated, Dict, List, Optional
 from uuid import UUID
 
+from bisheng.api.services.role import RoleService
 from bisheng.database.models.mark_task import MarkTaskDao
 import rsa
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request, Path
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
@@ -239,7 +240,7 @@ async def list_user(*,
             if not groups:
                 raise HTTPException(status_code=500, detail='无查看权限')
         # 查询用户组下的角色, 和角色筛选条件做交集，得到真正去查询的角色ID
-        group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
+        group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0, include_parent=True)
         if role_id:
             roles = list(set(role_id) & set([one.id for one in group_roles]))
     # 通过用户组和角色过滤出来的用户id
@@ -249,7 +250,7 @@ async def list_user(*,
         groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
-        user_ids = list(set([one.user_id for one in groups_user_ids]))
+        user_ids = list(set(groups_user_ids))
 
     if roles:
         roles_user_ids = UserRoleDao.get_roles_user(roles)
@@ -281,6 +282,9 @@ async def list_user(*,
                     del user_groups[i]
         one_data["roles"] = user_roles
         one_data["groups"] = user_groups
+
+        # 获取用户组里所有的绑定角色
+        one_data["roles"].extend(login_user.get_group_bind_role([one['id'] for one in user_groups]))
         res.append(one_data)
 
     return resp_200({'data': res, 'total': total_count})
@@ -339,20 +343,9 @@ async def create_role(*,
                       request: Request,
                       role: RoleCreate,
                       login_user: UserPayload = Depends(get_login_user)):
-    if not role.group_id:
-        raise HTTPException(status_code=500, detail='用户组ID不能为空')
-    if not role.role_name:
-        raise HTTPException(status_code=500, detail='角色名称不能为空')
-
-    if not login_user.check_group_admin(role.group_id):
-        return UnAuthorizedError.return_resp()
-
-    db_role = Role.model_validate(role)
+    service = RoleService(request=request, login_user=login_user)
     try:
-        with session_getter() as session:
-            session.add(db_role)
-            session.commit()
-            session.refresh(db_role)
+        db_role = service.add_role(role)
         create_role_hook(request, login_user, db_role)
         return resp_200(db_role)
     except Exception:
@@ -364,6 +357,13 @@ def create_role_hook(request: Request, login_user: UserPayload, db_role: Role) -
     logger.info(f'create_role_hook: {login_user.user_name}, role={db_role}')
     AuditLogService.create_role(login_user, get_request_ip(request), db_role)
 
+@router.get('/role/{role_id}', status_code=200)
+async def get_role_info(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                        role_id: int = Path(...)):
+    service = RoleService(request=request, login_user=login_user)
+    db_role = service.get_role_info(role_id)
+
+    return resp_200(db_role)
 
 @router.patch('/role/{role_id}', status_code=201)
 async def update_role(*,
@@ -371,27 +371,11 @@ async def update_role(*,
                       role_id: int,
                       role: RoleUpdate,
                       login_user: UserPayload = Depends(get_login_user)):
-    db_role = RoleDao.get_role_by_id(role_id)
-    if not db_role:
-        raise HTTPException(status_code=404, detail='角色不存在')
+    service = RoleService(request=request, login_user=login_user)
+    db_role = service.update_role(role_id, role)
+    update_role_hook(request, login_user, db_role)
+    return resp_200(db_role)
 
-    if not login_user.check_group_admin(db_role.group_id):
-        return UnAuthorizedError.return_resp()
-
-    try:
-        if role.role_name:
-            db_role.role_name = role.role_name
-        if role.remark:
-            db_role.remark = role.remark
-        with session_getter() as session:
-            session.add(db_role)
-            session.commit()
-            session.refresh(db_role)
-        update_role_hook(request, login_user, db_role)
-        return resp_200(db_role)
-    except Exception:
-        logger.exception(f'update_role')
-        raise HTTPException(status_code=500, detail='更新失败，服务端异常')
 
 
 def update_role_hook(request: Request, login_user: UserPayload, db_role: Role) -> bool:
@@ -424,8 +408,8 @@ async def get_role(*,
             raise HTTPException(status_code=500, detail='无查看权限')
 
     # 查询所有的角色列表
-    res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
-    total = RoleDao.count_role_by_groups(group_ids, role_name)
+    res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit, include_parent=True)
+    total = RoleDao.count_role_by_groups(group_ids, role_name, include_parent=True)
     return resp_200(data={"data": res, "total": total})
 
 
@@ -527,33 +511,6 @@ def update_user_role_hook(request: Request, login_user: UserPayload, user_id: in
         note += role_dict[one] + "、"
     note = note.rstrip("、")
     AuditLogService.update_user(login_user, get_request_ip(request), user_id, group_ids, note)
-
-
-@router.get('/user/role', status_code=200)
-async def get_user_role(*, user_id: int, Authorize: AuthJWT = Depends()):
-    # 废弃， 全部通过用户列表接口返回
-    Authorize.jwt_required()
-    if 'admin' != json.loads(Authorize.get_jwt_subject()).get('role'):
-        raise HTTPException(status_code=500, detail='无设置权限')
-
-    with session_getter() as session:
-        db_userroles = session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
-
-    role_ids = [role.role_id for role in db_userroles]
-    with session_getter() as session:
-        db_role = session.exec(select(Role).where(Role.id.in_(role_ids))).all()
-    role_name_dict = {role.id: role.role_name for role in db_role}
-
-    res = []
-    for db_user_role in db_userroles:
-        user_role = db_user_role.__dict__
-        if db_user_role.role_id not in role_name_dict:
-            # 错误数据
-            continue
-        user_role['role_name'] = role_name_dict[db_user_role.role_id]
-        res.append(user_role)
-
-    return resp_200(res)
 
 
 @router.post('/role_access/refresh', status_code=200)

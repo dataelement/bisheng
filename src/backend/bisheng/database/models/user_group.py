@@ -1,11 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
 
+from sqlmodel import Field, select, update, func, Column, DateTime, delete, text
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, delete, text
-from sqlmodel import Field, select, update
-
 from bisheng.database.models.group import DefaultGroup
 
 
@@ -130,8 +129,8 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def get_group_user(cls,
                        group_id: int,
-                       page_size: str = None,
-                       page_num: str = None) -> List[UserGroup]:
+                       page_size: int = None,
+                       page_num: int = None) -> List[UserGroup]:
         """
         获取分组下的所有用户，不包含管理员
         """
@@ -146,16 +145,27 @@ class UserGroupDao(UserGroupBase):
     def get_groups_user(cls,
                         group_ids: List[int],
                         page: int = 0,
-                        limit: int = 0) -> List[UserGroup]:
+                        limit: int = 0) -> List[int]:
         """
         批量获取分组下的用户
         """
         with session_getter() as session:
-            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids)).where(
+            statement = select(UserGroup.user_id).where(UserGroup.group_id.in_(group_ids)).where(
                 UserGroup.is_group_admin == 0)
             if page and limit:
                 statement = statement.offset((page - 1) * limit).limit(limit)
+            statement = statement.group_by(UserGroup.user_id).order_by(UserGroup.id.asc())
             return session.exec(statement).all()
+
+    @classmethod
+    def count_groups_user(cls, group_ids: List[int]) -> int:
+        """
+        统计用户组下的用户数量
+        """
+        with session_getter() as session:
+            statement = select(func.count(func.distinct(UserGroup.user_id))).where(UserGroup.group_id.in_(group_ids)).where(
+                UserGroup.is_group_admin == 0)
+            return session.scalar(statement)
 
     @classmethod
     def is_users_in_group(cls, group_id: int, user_ids: List[int]) -> List[UserGroup]:

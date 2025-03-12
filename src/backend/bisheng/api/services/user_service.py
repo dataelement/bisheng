@@ -37,6 +37,7 @@ class UserPayload:
         self.user_name = kwargs.get('user_name')
         self.group_cache = {}
         self.role_cache = {}
+        self.bind_role_cache = {}
 
     def is_admin(self):
         if self.user_role == 'admin':
@@ -143,10 +144,27 @@ class UserPayload:
                 self.role_cache[role_info.id] = {
                     "id": role_info.id,
                     "group_id": role_info.group_id,
-                    "name": role_info.role_name
+                    "name": role_info.role_name,
+                    "is_bind_all": role_info.is_bind_all
                 }
                 res.append(self.role_cache.get(role_info.id))
         return res
+
+    def get_group_bind_role(self, groups: list[int]):
+        """ 获取组的绑定角色 """
+        res = {}
+        for group_id in groups:
+            if group_id not in self.bind_role_cache:
+                bind_roles = RoleDao.get_role_by_groups([group_id], None, 0, 0, include_parent=True, only_bind=True)
+                self.bind_role_cache[group_id] = bind_roles
+            for role in self.bind_role_cache[group_id]:
+                res[role.id] = {
+                    'id': role.id,
+                    'name': role.role_name,
+                    'group_id': role.group_id,
+                    'is_bind_all': role.is_bind_all
+                }
+        return list(res.values())
 
 
 class UserService:
