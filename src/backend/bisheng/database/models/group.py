@@ -57,20 +57,17 @@ class GroupCreate(GroupBase):
 class GroupDao(GroupBase):
 
     @staticmethod
-    def generate_group_code(parent_code: str, current_level_code: str = None) -> str:
+    def generate_group_code(parent_code: str, group_id: int) -> str:
         """
         parent_code: 表示父用户组的code
         current_level_code: 表示当前用户组所在层级的最新code
          001: 代表第一层级的第一个用户组
          001|001: 代表第二层级的第一个用户组，且父用户组属于编码为A1的用户组
         """
-        level_num = 1
-        if current_level_code:
-            level_num = int(current_level_code.split('|')[-1]) + 1
         if parent_code:
-            return f'{parent_code}|{level_num:0>3}'
+            return f'{parent_code}|{group_id:0>3}'
         else:
-            return f'{level_num:0>3}'
+            return f'{group_id:0>3}'
 
     @staticmethod
     def parse_parent_code(group_code: str) -> List[str]:
@@ -108,11 +105,13 @@ class GroupDao(GroupBase):
             else:
                 group_add.level = 0
 
-            # 查询当前层级最新的用户组的code
-            tmp = select(Group).where(Group.level == group_add.level).order_by(Group.id.desc()).limit(1)
-            latest_group = session.exec(tmp).first()
-            group_add.code = cls.generate_group_code(parent_group_code, latest_group.code if latest_group else None)
+            # 先插入获取用户组ID
+            session.add(group_add)
+            session.commit()
+            session.refresh(group_add)
 
+            # 设置用户组的code
+            group_add.code = cls.generate_group_code(parent_group_code, group_add.id)
             session.add(group_add)
             session.commit()
             session.refresh(group_add)
@@ -139,12 +138,34 @@ class GroupDao(GroupBase):
             session.commit()
 
     @classmethod
+    def delete_groups(cls, group_ids: List[int]):
+        with session_getter() as session:
+            session.exec(delete(Group).where(Group.id.in_(group_ids)))
+            session.commit()
+
+    @classmethod
     def update_group(cls, group: Group) -> Group:
         with session_getter() as session:
             session.add(group)
             session.commit()
             session.refresh(group)
             return group
+
+    @classmethod
+    def update_parent_group(cls, group: Group, parent_group: Group):
+        """ 切换父用户组 """
+        group.parent_id = parent_group.id
+        group.level = parent_group.level + 1
+        group.code = cls.generate_group_code(parent_group.code, group.id)
+        with session_getter() as session:
+            session.add(group)
+            session.commit()
+            session.refresh(group)
+        # 递归更新子用户组的code
+        child_groups = cls.get_child_groups_by_id(group.id)
+        for one in child_groups:
+            cls.update_parent_group(one, group)
+        return group
 
     @classmethod
     def update_groups(cls, groups: List[Group]) -> List[Group]:
@@ -165,7 +186,7 @@ class GroupDao(GroupBase):
     @classmethod
     def get_child_groups(cls, group_code: str, level: int = None) -> list[Group]:
         """ 获取指定用户组的子用户组 """
-        statement = select(Group).where(Group.code.like(f'{group_code}%')).where(Group.code != group_code)
+        statement = select(Group).where(Group.code.like(f'{group_code}|%'))
         if level:
             statement = statement.where(Group.level == level)
         statement = statement.order_by(Group.id.asc())
@@ -219,4 +240,10 @@ class GroupDao(GroupBase):
     def get_group_by_code(cls, group_code: str) -> Group | None:
         with session_getter() as session:
             statement = select(Group).where(Group.code == group_code)
+            return session.exec(statement).first()
+
+    @classmethod
+    def get_group_by_third_id(cls, third_id: str):
+        with session_getter() as session:
+            statement = select(Group).where(Group.third_id == third_id)
             return session.exec(statement).first()

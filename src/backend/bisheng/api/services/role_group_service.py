@@ -8,7 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from bisheng.api.errcode.base import NotFoundError
-from bisheng.api.errcode.user import UserGroupNotDeleteError
+from bisheng.api.errcode.user import UserGroupNotDeleteError, UserGroupSubGroupError
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
@@ -184,12 +184,15 @@ class RoleGroupService():
         group_info = GroupDao.get_user_group(group_id)
         if not group_info:
             return resp_200()
-
-        # 判断组下是否还有用户
-        user_group_list = UserGroupDao.get_group_user(group_id)
+        groups = [group_id]
+        child_group = GroupDao.get_child_groups_by_id(group_id)
+        groups.extend([one.id for one in child_group])
+        # 判断组下以及子用户组下是否还有用户
+        user_group_list = UserGroupDao.get_groups_user(groups)
         if user_group_list:
             return UserGroupNotDeleteError.return_resp()
-        GroupDao.delete_group(group_id)
+        GroupDao.delete_groups(groups)
+        logger.info(f'act=delete_sub_group user={login_user.user_name} group_id={group_info.id} sub_group={child_group}')
         self.delete_group_hook(request, login_user, group_info)
         return resp_200()
 
@@ -212,12 +215,6 @@ class RoleGroupService():
         if need_move_resource:
             GroupResourceDao.update_group_resource(need_move_resource)
         GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
-
-        # 将子用户组挂载到用户组的父用户组上
-        child_groups = GroupDao.get_child_groups_by_id(group_info.id)
-        for child_group in child_groups:
-            child_group.parent_id = group_info.parent_id
-        GroupDao.update_groups(child_groups)
 
         # 删除用户组下的角色列表
         RoleDao.delete_role_by_group_id(group_info.id)
@@ -473,24 +470,82 @@ class RoleGroupService():
 
     def sync_third_groups(self, data: List[Dict]):
         """ 同步第三方部门数据 """
+        logger.debug('sync_third_groups start')
         root_group = data[0]
         # 更新根用户组的信息
         default_group = GroupDao.get_user_group(DefaultGroup)
         if default_group.group_name != root_group['name']:
             default_group.group_name = root_group['name']
+            default_group.third_id = root_group['id']
             GroupDao.update_group(default_group)
+        logger.debug("start sync update group info")
+        user_groups = self.sync_one_group(root_group, None)
+        logger.debug("start sync user group change")
+        for user_id, group_ids in user_groups:
+            # 获取用户所属的用户组
+            user_groups = UserGroupDao.get_user_group(user_id)
+            user_groups = {one.group_id for one in user_groups}
 
+            # 将用户放到这些用户组内
+            need_add_groups = group_ids - user_groups
+            if need_add_groups:
+                logger.debug(f'add_user_groups user_id: {user_id} groups: {need_add_groups}')
+                UserGroupDao.add_user_groups(user_id, list(need_add_groups))
+            need_remove_groups = user_groups - group_ids
+            if need_remove_groups:
+                logger.debug(f'remove_user_groups user_id: {user_id} groups: {need_remove_groups}')
+                UserGroupDao.delete_user_groups(user_id, list(need_remove_groups))
+        logger.debug('sync_third_groups over')
 
-    def sync_one_group(self, data: Dict):
-        """ 同步一个用户组数据 """
-        group_id = data['id']
-        group_info = GroupDao.get_user_group(group_id)
-        if not group_info:
-            return
-        group_info.group_name = data['name']
-        group_info.remark = data.get('remark', '')
-        GroupDao.update_group(group_info)
+    def sync_one_group(self, department: Dict, parent_group: Group = None):
+        """ 同步一个用户组数据
+        department: 第三方的部门数据， 目前指企微
+        group: 对应的毕昇里的用户组
+         """
+        group = self.update_group_data(department, parent_group)
 
+        # user_id: [group is list]
+        user_groups = {}
+        self.update_department_user(department, group, user_groups)
 
+        if not department.get('children', None):
+            return user_groups
+        for one in department['children']:
+            child_user_groups = self.sync_one_group(one, group)
+            for user_id, group_ids in child_user_groups:
+                if user_id not in user_groups:
+                    user_groups[user_id] = group_ids
+                else:
+                    user_groups[user_id] = user_groups[user_id] | group_ids
+        return user_groups
 
+    def update_department_user(self, department: Dict, group: Group, user_group: Dict):
+        for one in department['users']:
+            user = UserDao.get_user_by_username(one['userId'])
+            if not user:
+                user = UserDao.create_user(User(
+                    user_name=one['userId']
+                ))
+            if user.user_id not in user_group:
+                user_group[user.user_id] = set()
+            user_group[user.user_id].add(group.id)
+
+    def update_group_data(self, department: Dict, parent_group: Group = None):
+        """ 跟新分组的数据 """
+        group = GroupDao.get_group_by_third_id(department['id'])
+        # 没有对应的group先新建
+        if not group:
+            group = Group(
+                group_name=department['name'],
+                third_id=department['id'],
+                create_user=1,
+            )
+            if parent_group:
+                group.parent_id = parent_group.id
+            group = GroupDao.insert_group(group)
+            return group
+        # 说明父部门发生变更，修改部门数据
+        if parent_group and group.parent_id != parent_group.id:
+            group = GroupDao.update_parent_group(group, parent_group)
+        return group
 

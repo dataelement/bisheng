@@ -6,6 +6,8 @@ from sqlmodel import Field, select, update, func, Column, DateTime, delete, text
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.group import DefaultGroup
+from bisheng.database.models.role import RoleDao
+from bisheng.database.models.user_role import UserRoleDao
 
 
 class UserGroupBase(SQLModelSerializable):
@@ -105,6 +107,10 @@ class UserGroupDao(UserGroupBase):
         """
         将用户从某些组中移除
         """
+        #取消将用户和组下角色的关联关系
+        group_roles = RoleDao.get_role_by_groups(group_ids)
+        if group_roles:
+            UserRoleDao.delete_user_roles(user_id, [one.id for one in group_roles])
         with session_getter() as session:
             # 先把旧的用户组全部清空
             statement = delete(UserGroup).where(
