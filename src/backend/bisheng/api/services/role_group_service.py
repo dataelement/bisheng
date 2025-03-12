@@ -80,7 +80,7 @@ class RoleGroupService():
         if not children:
             return []
         for child in children:
-            child.children = self.get_all_children(child, group_tree, max_level)
+            child.children = self.get_all_children(child, group_tree, child.level + 1)
         return children
 
     def get_group_tree(self, group_ids) -> List[GroupRead]:
@@ -116,12 +116,14 @@ class RoleGroupService():
     def get_parent_group_path(group: GroupRead, group_tree: dict):
         """ 获取用户组的父级路径 """
         level = group.level
-        parent_group_path = group.group_name
+        parent_groups = []
         while level > 0:
             parent_group = group_tree[level - 1][group.parent_id]
-            parent_group_path = f'{parent_group.group_name}/{parent_group_path}'
+            parent_groups.append(parent_group.group_name)
+            group = parent_group
             level -= 1
-        return parent_group_path.lstrip(f'/{group.group_name}')
+        parent_groups = parent_groups[::-1]
+        return '/'.join(parent_groups)
 
     def get_child_groups(self, group: GroupRead, group_tree: dict, max_level: int = None):
         """ 获取所有的子用户组 """
@@ -133,7 +135,8 @@ class RoleGroupService():
             for _, group_info in group_tree[level].items():
                 if group_info.parent_id == group.id:
                     child_group[group_info.id] = group_info
-                child_group.update(self.get_child_groups(group_info, group_tree))
+            for _, group_info in child_group.items():
+                child_group.update(self.get_child_groups(group_info, group_tree, max_level))
         return child_group
 
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
@@ -467,3 +470,27 @@ class RoleGroupService():
         role_list = RoleDao.get_role_by_groups([group_id], keyword, page, page_size, include_parent)
         total = RoleDao.count_role_by_groups([group_id], keyword, include_parent=include_parent)
         return role_list, total
+
+    def sync_third_groups(self, data: List[Dict]):
+        """ 同步第三方部门数据 """
+        root_group = data[0]
+        # 更新根用户组的信息
+        default_group = GroupDao.get_user_group(DefaultGroup)
+        if default_group.group_name != root_group['name']:
+            default_group.group_name = root_group['name']
+            GroupDao.update_group(default_group)
+
+
+    def sync_one_group(self, data: Dict):
+        """ 同步一个用户组数据 """
+        group_id = data['id']
+        group_info = GroupDao.get_user_group(group_id)
+        if not group_info:
+            return
+        group_info.group_name = data['name']
+        group_info.remark = data.get('remark', '')
+        GroupDao.update_group(group_info)
+
+
+
+
