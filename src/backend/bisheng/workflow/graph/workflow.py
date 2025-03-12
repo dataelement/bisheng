@@ -41,8 +41,6 @@ class Workflow:
         """
         # 执行workflow
         if input_data is not None:
-            user_input_str = ' '.join([json.dumps(msg, ensure_ascii=False) for _, msg in input_data.items()])
-            self.graph_engine.graph_state.save_context(content=user_input_str, msg_sender='human')
             self.graph_engine.continue_run(input_data)
         else:
             # 首次运行时间
@@ -60,8 +58,6 @@ class Workflow:
         """
         # 执行workflow
         if input_data is not None:
-            user_input_str = ' '.join([json.dumps(msg, ensure_ascii=False) for _, msg in input_data.items()])
-            self.graph_engine.graph_state.save_context(content=user_input_str, msg_sender='human')
             await self.graph_engine.acontinue_run(input_data)
         else:
             # 首次运行时间
