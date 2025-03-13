@@ -17,7 +17,7 @@ class RoleBase(SQLModelSerializable):
     role_name: str = Field(index=False, description='前端展示名称')
     group_id: Optional[int] = Field(index=True, description="角色属于哪个用户组")
     is_bind_all: bool = Field(default=False, description='此角色是否绑定所有的子用户组')
-    extra: str = Field(default='', sa_column=Column(Text), description='额外信息')
+    extra: Optional[str] = Field(default='', sa_column=Column(Text), description='额外信息')
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

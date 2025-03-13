@@ -82,6 +82,7 @@ class InputNode(BaseNode):
 
     def parse_dialog_files(self) -> str:
         """ 获取对话框里上传的文件内容 """
+        file_length = 0
         dialog_files_content = ""
         if not self.node_params.get('dialog_files_content'):
             return dialog_files_content
@@ -89,7 +90,12 @@ class InputNode(BaseNode):
             file_info = self._redis_client.get(f'workflow:dialog_file:{file_id}')
             if not file_info:
                 continue
+            if file_length >= self._dialog_files_length:
+                break
             file_info = json.loads(file_info)
+            file_info['content'] = file_info['content'][:self._dialog_files_length - file_length]
+            file_length += len(file_info['content'])
+
             dialog_files_content += f"[file name]: {file_info['name']}\n[file content begin]\n{file_info['content']}\n[file content end]\n"
         dialog_files_content = dialog_files_content[:self._dialog_files_length]
         return dialog_files_content
