@@ -7,7 +7,7 @@ from fastapi import Request, HTTPException
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
-from bisheng.api.errcode.base import NotFoundError
+from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.user import UserGroupNotDeleteError, UserGroupSubGroupError
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.audit_log import AuditLogService
@@ -456,16 +456,28 @@ class RoleGroupService():
 
         return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)
 
-    def get_group_roles(self, login_user: UserPayload, group_id: int, keyword: str, page: int, page_size: int,
+    def get_group_roles(self, login_user: UserPayload, group_ids: List[int], keyword: str, page: int, page_size: int,
                         include_parent: bool) -> (list, int):
 
         """获取用户组下的角色列表"""
-        group_info = GroupDao.get_group_by_ids([group_id])
-        if not group_info:
-            raise NotFoundError.http_exception()
+        # 判断是否是超级管理员
+        if login_user.is_admin():
+            # 是超级管理员获取全部
+            group_ids = group_ids
+        else:
+            # 查询下是否是其他用户组的管理员
+            user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+            user_group_ids = [one.group_id for one in user_groups if one.is_group_admin]
+            if group_ids:
+                group_ids = list(set(group_ids) & set(user_group_ids))
+            else:
+                group_ids = user_group_ids
+            if not group_ids:
+                raise HTTPException(status_code=500, detail='无查看权限')
+
         # 查询属于当前组的角色列表，以及父用户组绑定的角色列表
-        role_list = RoleDao.get_role_by_groups([group_id], keyword, page, page_size, include_parent)
-        total = RoleDao.count_role_by_groups([group_id], keyword, include_parent=include_parent)
+        role_list = RoleDao.get_role_by_groups(group_ids, keyword, page, page_size, include_parent)
+        total = RoleDao.count_role_by_groups(group_ids, keyword, include_parent=include_parent)
         return role_list, total
 
     def sync_third_groups(self, data: List[Dict]):

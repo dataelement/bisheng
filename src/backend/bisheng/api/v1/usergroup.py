@@ -253,7 +253,7 @@ async def get_manage_resources(*, request: Request, login_user: UserPayload = De
 
 @router.get("/roles", response_model=UnifiedResponseModel)
 async def get_group_roles(*,
-                          group_id: int = Query(..., description="用户组ID"),
+                          group_id: list[int] = Query(None, description="用户组ID列表，不传则查询所有有权限的角色列表"),
                           keyword: str = Query(None, description="搜索关键字"),
                           include_parent: bool = Query(False, description="是否包含父用户组绑定的角色"),
                           page: int = 0,
@@ -262,9 +262,6 @@ async def get_group_roles(*,
     """
     获取用户组内的角色列表
     """
-    # 判断是否是用户组的管理员
-    if not user.check_groups_admin([group_id]):
-        return UnAuthorizedError.return_resp()
     res, total = RoleGroupService().get_group_roles(user, group_id, keyword, page, limit, include_parent)
 
     return resp_200(data={
