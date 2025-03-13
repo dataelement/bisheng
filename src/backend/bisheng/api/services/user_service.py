@@ -34,6 +34,9 @@ class UserPayload:
         if self.user_role != 'admin':  # 非管理员用户，需要获取他的角色列表
             roles = UserRoleDao.get_user_roles(self.user_id)
             self.user_role = [one.role_id for one in roles]
+            user_groups = UserGroupDao.get_user_group(self.user_id)
+            group_bind_roles = self.get_group_bind_role([one.group_id for one in user_groups])
+            self.user_role.extend([one['id'] for one in group_bind_roles])
         self.user_name = kwargs.get('user_name')
         self.group_cache = {}
         self.role_cache = {}
@@ -150,7 +153,7 @@ class UserPayload:
                 res.append(self.role_cache.get(role_info.id))
         return res
 
-    def get_group_bind_role(self, groups: list[int]):
+    def get_group_bind_role(self, groups: list[int]) -> List[Dict]:
         """ 获取组的绑定角色 """
         res = {}
         for group_id in groups:
