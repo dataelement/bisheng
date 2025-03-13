@@ -9,7 +9,7 @@ from .base import APIToolBase, Field, MultArgsSchemaTool
 
 class OpenApiTools(APIToolBase):
 
-    def get_real_path(self, path_params: dict|None):
+    def get_real_path(self, path_params: dict | None):
         path = self.params['path']
         if path_params:
             path = path.format(**path_params)

@@ -9,11 +9,6 @@ from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
 router = APIRouter(prefix='/workstation', tags=['OpenAPI', 'Chat'])
 
 
-@router.post('/parsefile')
-def parseFile(file: UploadFile = File(...)):
-    knowledge_imp.read_chunk_text
-
-
 @router.post('/knowledgeUpload')
 async def knowledgeUpload(
         request: Request,
@@ -22,7 +17,7 @@ async def knowledgeUpload(
         uid: int = Body(...),
 ):
     # 查询是否有个人知识库
-    knowledge = KnowledgeDao.get_user_knowledge(uid, None, KnowledgeTypeEnum.PRIVATE)[0]
+    knowledge = KnowledgeDao.get_user_knowledge(uid, None, KnowledgeTypeEnum.PRIVATE)
     if not knowledge:
         model = llm.LLMService.get_knowledge_llm()
         knowledgeCreate = KnowledgeCreate(name='个人知识库',
@@ -32,6 +27,8 @@ async def knowledgeUpload(
 
         knowledge = KnowledgeService.create_knowledge(request, UserPayload(user_id=uid),
                                                       knowledgeCreate)
+    else:
+        knowledge = knowledge[0]
 
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file.filename)
@@ -80,3 +77,20 @@ def knowledgeQuery(request: Request, uid: int, query: str):
         content = []
 
     return resp_200(data='\n'.join(content))
+
+
+@router.post('/fileContent')
+async def parseFileContent(file: UploadFile = File(...)):
+    file_byte = await file.read()
+    file_path = save_download_file(file_byte, 'bisheng', file.filename)
+    #  获取文件全文
+    documents, _, _ = knowledge_imp.read_chunk_text(
+        file_path,
+        file.filename,
+        ['\n\n\n\n\n'],
+        [],
+        102400,
+        0,
+    )
+
+    pass
