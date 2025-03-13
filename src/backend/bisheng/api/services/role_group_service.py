@@ -524,7 +524,8 @@ class RoleGroupService():
             user = UserDao.get_user_by_username(one['userId'])
             if not user:
                 user = UserDao.create_user(User(
-                    user_name=one['userId']
+                    user_name=one['userId'],
+                    password=''
                 ))
             if user.user_id not in user_group:
                 user_group[user.user_id] = set()
