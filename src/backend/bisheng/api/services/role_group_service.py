@@ -554,9 +554,24 @@ class RoleGroupService():
             )
             if parent_group:
                 group.parent_id = parent_group.id
-            group = GroupDao.insert_group(group)
+            try:
+                group = GroupDao.insert_group(group)
+            except:
+                logger.error(f'insert group error: {group}')
+                group.group_name = f'{group.group_name}（部门ID：{group.third_id}）'
+                group = GroupDao.insert_group(group)
             return group
-        # 说明父部门发生变更，修改部门数据
+        else:
+            if group.group_name != department['name']:
+                # 更新部门的名称
+                group.group_name = department['name']
+                try:
+                    group = GroupDao.update_group(group)
+                except:
+                    logger.error(f'update group error: {group}')
+                    group.group_name = f'{group.group_name}（部门ID：{group.third_id}）'
+                    group = GroupDao.update_group(group)
+        # 说明父部门发生变更，修改部门的父部门
         if parent_group and group.parent_id != parent_group.id:
             group = GroupDao.update_parent_group(group, parent_group)
         return group

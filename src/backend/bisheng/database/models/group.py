@@ -16,7 +16,7 @@ class GroupBase(SQLModelSerializable):
     code: Optional[str] = Field(default=None, index=True, unique=True,
                                 description='用户组路径，从根节点到当前节点的code路径')
     level: Optional[int] = Field(default=0, index=True, description='用户组层级')
-    third_id: Optional[str] = Field(default=0, index=True, description='第三方用户组唯一标识。例如对应到企微里的部门ID')
+    third_id: Optional[str] = Field(default='', index=True, description='第三方用户组唯一标识。例如对应到企微里的部门ID')
     group_name: str = Field(index=False, description='前端展示名称', unique=True)
     remark: Optional[str] = Field(index=False)
     create_user: Optional[int] = Field(index=True, description="创建用户的ID")
