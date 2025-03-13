@@ -493,17 +493,16 @@ class RoleGroupService():
         logger.debug("start sync update group info")
         user_groups = self.sync_one_group(root_group, None)
         logger.debug("start sync user group change")
-        for user_id, group_ids in user_groups:
+        for user_id, new_group_ids in user_groups.items():
             # 获取用户所属的用户组
-            user_groups = UserGroupDao.get_user_group(user_id)
-            user_groups = {one.group_id for one in user_groups}
+            old_group_ids = {one.group_id for one in UserGroupDao.get_user_group(user_id)}
 
             # 将用户放到这些用户组内
-            need_add_groups = group_ids - user_groups
+            need_add_groups = new_group_ids - old_group_ids
             if need_add_groups:
                 logger.debug(f'add_user_groups user_id: {user_id} groups: {need_add_groups}')
                 UserGroupDao.add_user_groups(user_id, list(need_add_groups))
-            need_remove_groups = user_groups - group_ids
+            need_remove_groups = old_group_ids - new_group_ids
             if need_remove_groups:
                 logger.debug(f'remove_user_groups user_id: {user_id} groups: {need_remove_groups}')
                 UserGroupDao.delete_user_groups(user_id, list(need_remove_groups))
@@ -524,7 +523,7 @@ class RoleGroupService():
             return user_groups
         for one in department['children']:
             child_user_groups = self.sync_one_group(one, group)
-            for user_id, group_ids in child_user_groups:
+            for user_id, group_ids in child_user_groups.items():
                 if user_id not in user_groups:
                     user_groups[user_id] = group_ids
                 else:
