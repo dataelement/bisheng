@@ -539,12 +539,9 @@ class FinetuneService:
                                                              model=one,
                                                              endpoint=f'http://{server_info.endpoint}/v2.1/models')))
 
-        # 过滤可用来进行微调的模型列表
-        all_sft_model = SftModelDao.get_all_sft_model()
-        sft_model_dict = {one.model_name: True for one in all_sft_model}
         res = []
         for one in ret:
-            res.append(ModelDeployInfo(**one.dict(), sft_support=sft_model_dict.get(one.model, False)))
+            res.append(ModelDeployInfo(**one.dict(), sft_support=True))
         return res
 
     @classmethod

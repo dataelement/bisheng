@@ -2,9 +2,9 @@ import io
 from uuid import uuid4
 
 from bisheng.utils.minio_client import MinioClient
+from bisheng.utils.docx_temp import DocxTemplateRender
 from bisheng.workflow.callback.event import OutputMsgData
 from bisheng.workflow.nodes.base import BaseNode
-from bisheng.workflow.nodes.report.template import DocxTemplateRender
 
 
 class ReportNode(BaseNode):
@@ -12,7 +12,8 @@ class ReportNode(BaseNode):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._report_info = self.node_params['report_info']
-        self._object_name = f"workflow/report/{self._report_info['version_key']}.docx"
+        self._version_key = self._report_info['version_key'].split('_')[0]
+        self._object_name = f"workflow/report/{self._version_key}.docx"
         self._file_name = self._report_info['file_name'] if self._report_info['file_name'] else 'tmp_report.docx'
         if not self._file_name.endswith('.docx'):
             self._file_name += '.docx'

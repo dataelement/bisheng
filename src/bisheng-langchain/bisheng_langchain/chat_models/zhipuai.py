@@ -1,6 +1,7 @@
 """ZhipuAI chat wrapper."""
 from __future__ import annotations
 
+import ast
 import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
@@ -274,7 +275,7 @@ class ChatZhipuAI(BaseChatModel):
         # print('response', response)
         def _norm_text(text):
             if text[0] == '"' and text[-1] == '"':
-                out = eval(text)
+                out = ast.literal_eval(text)
             else:
                 out = text
             return out

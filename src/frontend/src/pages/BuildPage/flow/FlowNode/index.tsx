@@ -137,10 +137,11 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         setFocusUpdate(!focusUpdate) // render
     }
 
-    const { paramValidateEntities, varValidateEntities, validateParams } = useEventMaster(node)
-    const handleRun = () => {
+    const [nodeError, setNodeError] = useBorderColor(node)
+    const { paramValidateEntities, varValidateEntities, validateAll } = useEventMaster(node, setNodeError)
+    const handleRun = async () => {
         // vilidate node
-        const errors = validateParams()
+        const errors = await validateAll({ tmp: true })
 
         if (errors.length) return message({
             description: errors,
@@ -150,8 +151,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         runRef.current.run(node)
     }
 
-    const [expend, setExpend] = useState(!!node.expand)
-    const nodeError = useBorderColor(node)
+    const [expend, setExpend] = useState(node.expand === undefined ? true : node.expand)
 
     const { isVisible, handleMouseEnter, handleMouseLeave } = useHoverToolbar();
 
@@ -195,14 +195,16 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 <span className='truncate block min-h-4'>{node.name}</span>
                             </EditText>
                         </div>
-                        {!['output', 'condition', 'end'].includes(node.type) && <ChevronDown
-                            className={`absolute right-0 bisheng-label cursor-pointer ${expend && 'rotate-180'}`}
-                            size={14}
+                        {!['output', 'condition', 'end'].includes(node.type) && <div
+                            className='absolute -right-1 -top-1 cursor-pointer p-2'
                             onClick={() => {
                                 setExpend(!expend)
                                 node.expand = !expend
-                            }}
-                        />}
+                            }}>
+                            <ChevronDown
+                                className={`bisheng-label ${expend && 'rotate-180'}`}
+                                size={16}
+                            /></div>}
                     </div>
                     <EditText
                         className='nodrag mt-2 text-xs text-muted-foreground'
@@ -267,32 +269,46 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
 export default CustomNode;
 
 
-const useEventMaster = (node) => {
+const useEventMaster = (node, setNodeError) => {
     const paramValidateEntities = useRef({})
     const varValidateEntities = useRef({})
 
-    const validateParams = () => {
+    const validateParams = (noTemporaryFile) => {
         const errors = []
         Object.keys(paramValidateEntities.current).forEach(key => {
             const { param, validate } = paramValidateEntities.current[key]
             if (param.tab && node.tab && node.tab.value !== param.tab) return
             const msg = validate()
-            msg && errors.push(msg)
+            if (noTemporaryFile && msg === 'input_file') {
+                errors.push('临时知识库不支持单节点调试')
+            } else {
+                msg && msg !== 'input_file' && errors.push(msg)
+            }
         })
         return errors
     }
 
-    const validateAll = () => {
+    const validateAll = async (config) => {
         // item
-        const errors = validateParams()
+        const errors = validateParams(false);
+
         // var
-        Object.keys(varValidateEntities.current).forEach(key => {
-            const { param, validate } = varValidateEntities.current[key]
-            if (param.tab && node.tab && node.tab.value !== param.tab) return
-            const msg = validate()
-            msg && errors.push(msg)
-        })
-        return errors
+        const promises = Object.keys(varValidateEntities.current).map(async (key) => {
+            const { param, validate } = varValidateEntities.current[key];
+
+            // 如果 param.tab 存在且不匹配，则跳过当前项
+            if (param.tab && node.tab && node.tab.value !== param.tab) return;
+
+            const msg = await validate(config); // 获取验证结果
+            if (msg) errors.push(msg);
+        });
+
+        await Promise.all(promises);
+
+        // 如果有错误，设置错误状态
+        if (errors.length > 0) setNodeError(true);
+
+        return errors;
     }
 
     // 控制权交出
@@ -323,6 +339,7 @@ const useEventMaster = (node) => {
 
     return {
         validateParams,
+        validateAll,
         paramValidateEntities,
         varValidateEntities
     }
@@ -341,7 +358,7 @@ const useBorderColor = (node) => {
         }
     }, [])
 
-    return error
+    return [error, setError]
 }
 
 

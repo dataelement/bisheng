@@ -213,7 +213,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def get_qa_knowledge_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
-        offset = page * page_size
+        offset = (page - 1) * page_size
         state = select(QAKnowledge).where(
             QAKnowledge.knowledge_id == knowledge_id, ).offset(offset).limit(page_size)
         with session_getter() as session:

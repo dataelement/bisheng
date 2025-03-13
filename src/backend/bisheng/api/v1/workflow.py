@@ -1,17 +1,15 @@
 import json
+import time
 from typing import Optional
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from bisheng_langchain.utils.requests import Requests
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request
-from fastapi import status as http_status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, status as http_status
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.errcode.flow import FlowOnlineEditError, WorkflowNameExistsError
+from bisheng.api.errcode.flow import WorkflowNameExistsError, WorkFlowOnlineEditError
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.services.workflow import WorkFlowService
@@ -24,6 +22,8 @@ from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, Fl
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.utils.minio_client import MinioClient
+from bisheng_langchain.utils.requests import Requests
+
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
@@ -37,6 +37,8 @@ async def get_report_file(
     if not version_key:
         # 重新生成一个version_key
         version_key = uuid4().hex
+    else:
+        version_key = version_key.split('_', 1)[0]
     file_url = ""
     object_name = f"workflow/report/{version_key}.docx"
     minio_client = MinioClient()
@@ -45,17 +47,26 @@ async def get_report_file(
 
     return resp_200(data={
         'url': file_url,
-        'version_key': version_key,
+        'version_key': f'{version_key}_{int(time.time() * 1000)}',
     })
 
 
-@router.post('/run_once', status_code=200)
-async def run_once(request: Request, login_user: UserPayload = Depends(get_login_user),
-                   node_input: Optional[dict] = None,  # 节点的入参
-                   node_data: dict = None):
-    result = WorkFlowService.run_once(login_user, node_input, node_data)
-
-    return resp_200(data=result)
+@router.post('/report/copy', status_code=200)
+async def copy_report_file(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+        version_key: str = Body(..., embed=True, description="minio的object_name")):
+    """ 复制report节点的模板文件 """
+    version_key = version_key.split('_', 1)[0]
+    new_version_key = uuid4().hex
+    object_name = f"workflow/report/{version_key}.docx"
+    new_object_name = f"workflow/report/{new_version_key}.docx"
+    minio_client = MinioClient()
+    if minio_client.object_exists(minio_client.bucket, object_name):
+        minio_client.copy_object(object_name, new_object_name, minio_client.bucket)
+    return resp_200(data={
+        'version_key': f'{new_version_key}',
+    })
 
 
 @router.post('/report/callback', status_code=200)
@@ -72,13 +83,24 @@ async def upload_report_file(
         return {'error': 0}
     logger.info(f'office_callback url={file_url}')
     file = Requests().get(url=file_url)
+    version_key = key.split('_', 1)[0]
 
     minio_client = MinioClient()
-    object_name = f"workflow/report/{key}.docx"
+    object_name = f"workflow/report/{version_key}.docx"
     minio_client.upload_minio_data(
         object_name, file._content, len(file._content),
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     return {'error': 0}
+
+
+@router.post('/run_once', status_code=200)
+async def run_once(request: Request, login_user: UserPayload = Depends(get_login_user),
+                   node_input: Optional[dict] = None,  # 节点的入参
+                   node_data: dict = None):
+    """ 单节点运行 """
+    result = WorkFlowService.run_once(login_user, node_input, node_data)
+
+    return resp_200(data=result)
 
 
 @router.websocket('/chat/{workflow_id}')
@@ -222,8 +244,9 @@ async def update_flow(*,
 
     # TODO:  验证工作流是否可以使用
 
-    if db_flow.status == FlowStatus.ONLINE.value and ('status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):
-        raise FlowOnlineEditError.http_exception()
+    if db_flow.status == FlowStatus.ONLINE.value and (
+            'status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):
+        raise WorkFlowOnlineEditError.http_exception()
 
     for key, value in flow_data.items():
         if key in ['data', 'create_time', 'update_time']:

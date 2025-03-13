@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 from typing import Dict, List
 from urllib.parse import unquote, urlparse
 
@@ -14,6 +15,15 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.schema.document import Document
 
+class SourceType(Enum):
+    """
+    source type
+    """
+    NOT_SUPPORT = 0  # 不支持溯源
+    FILE = 1  # 通过源文件溯源，支持bbox那种形式
+    NO_PERMISSION = 2  # 无权限访问溯源信息
+    LINK = 3  # 带链接的chunk内容
+    QA = 4  # 命中了QA知识库
 
 async def process_graph(langchain_object,
                         chat_inputs: ChatMessage,
@@ -81,24 +91,24 @@ def extract_answer_keys(answer, llm):
 
 
 def sync_judge_source(result, source_document, chat_id, extra: Dict):
-    source = 0
+    source = SourceType.NOT_SUPPORT.value
     if isinstance(result, Document):
         # 返回的是Document
         metadata = result.metadata
         question = result.page_content
         result = json.loads(metadata.get('extra', '{}')).get('answer')
-        source = 4
+        source = SourceType.QA.value
         extra.update({
             'qa': f'本答案来源于已有问答库: {question}',
             'url': json.loads(metadata.get('extra', '{}')).get('url')
         })
     elif source_document and chat_id:
         if any(not doc.metadata.get('right', True) for doc in source_document):
-            source = 2
+            source = SourceType.NO_PERMISSION.value
         elif all(
                 doc.metadata.get('extra') and json.loads(doc.metadata.get('extra')).get('url')
                 for doc in source_document):
-            source = 3
+            source = SourceType.LINK.value
             repeat_doc = {}
             doc = []
             # 来源文档做去重，不能改变原有的顺序
@@ -113,14 +123,14 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
                 repeat_doc[repeat_key] = 1
             extra.update({'doc': doc})
         else:
-            source = 1
+            source = SourceType.FILE.value
 
-    if source == 1:
+    if source == SourceType.FILE.value:
         for doc in source_document:
             # 确保每个chunk 都可溯源
             if 'bbox' not in doc.metadata or not doc.metadata['bbox'] or not json.loads(
                     doc.metadata['bbox'])['chunk_bboxes']:
-                source = 0
+                source = SourceType.NOT_SUPPORT.value
                 break
     return source, result
 

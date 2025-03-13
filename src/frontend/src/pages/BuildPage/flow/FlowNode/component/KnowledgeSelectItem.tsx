@@ -2,11 +2,11 @@ import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { readFileLibDatabase } from "@/controllers/API";
+import { getKnowledgeDetailApi, readFileLibDatabase } from "@/controllers/API";
+import { isVarInFlow } from "@/util/flowUtils";
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
-import { isVarInFlow } from "@/util/flowUtils";
 
 
 const TabsHead = memo(({ tab, onChange }) => {
@@ -62,12 +62,13 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         const files = []
         flow.nodes.forEach(node => {
             if (node.data.type !== 'input') return
+            if (node.data.tab.value === "dialog_input") return
             node.data.group_params.forEach(group => {
                 group.params.forEach(param => {
                     if (param.key === 'form_input') {
                         param.value.forEach(val => {
                             val.type === 'file' && files.push({
-                                label: val.key,
+                                label: `${val.key}(${val.value})`,
                                 value: `${node.id}.${val.key}`
                             })
                         })
@@ -119,11 +120,16 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     const [error, setError] = useState(false)
     useEffect(() => {
-        data.required && onValidate(() => {
-            if (!data.value.value.length) {
+        // data.required && onValidate(() => {
+        onValidate((config) => {
+            if (data.required && !data.value.value.length) {
                 setError(true)
                 return data.label + ' ' + t('required')
             }
+            if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
+                return 'input_file'
+            }
+
             setError(false)
             return false
         })
@@ -133,19 +139,46 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     // 校验变量是否可用
     const [errorKeys, setErrorKeys] = useState<string[]>([])
-    const validateVarAvailble = () => {
-        let error = ''
-        const _errorKeys = []
-        value.map(el => {
-            error = isVarInFlow(nodeId, flow.nodes, el.value, '');
-            error && _errorKeys.push(el.value)
-        })
-        setErrorKeys(_errorKeys)
-        // _errorKeys.length && setError(true)
+    const validateVarAvailable = async (config) => {
+        if (!value.length) return ''
+        let error = '';
+        // 单节点运行校验临时文件
+        if (config?.tmp && data.value.value.length && data.value.type === 'tmp') {
+            setError(true)
+            return '临时知识库不支持单节点调试'
+        }
+        const _errorKeys = [];
+        if (typeof value[0].value === 'number') {
+            const effectiveKnowledges = await getKnowledgeDetailApi(value.map(el => el.value));
+            for (const el of value) {
+                // If not found, check against effectiveKnowledges
+                if (!effectiveKnowledges.some(base => base.id === el.value)) {
+                    // error = t('nodeErrorMessage', {
+                    //     ns: 'flow',
+                    //     nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
+                    //     varNameCn: ''
+                    // });
+                    error = `${flow.nodes.find(node => node.id === nodeId).data.name}节点错误：${el.label}不存在.`
+                    error && _errorKeys.push(el.value);
+                }
+                setErrorKeys(_errorKeys);
+            }
+            return error;
+        }
+        for (const el of value) {
+            // Check if variable exists in flow
+            let _error = isVarInFlow(nodeId, flow.nodes, el.value, '');
+            if (_error) {
+                _errorKeys.push(el.value);
+                error = _error;
+            }
+        }
+        setErrorKeys(_errorKeys);
         return error;
     };
+
     useEffect(() => {
-        onVarEvent && onVarEvent(validateVarAvailble);
+        onVarEvent && onVarEvent(validateVarAvailable);
         return () => onVarEvent && onVarEvent(() => { });
     }, [data, value]);
 

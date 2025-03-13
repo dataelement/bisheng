@@ -35,6 +35,9 @@ class BaseNode(ABC):
         # 存储节点所需的参数 处理后的可直接用的参数
         self.node_params = {}
 
+        # 存储节点所需的其他节点变量的值
+        self.other_node_variable = {}
+
         # 用来判断是否运行超过最大次数
         self.current_step = 0
         self.max_steps = max_steps
@@ -43,6 +46,7 @@ class BaseNode(ABC):
         self.callback_manager = callback
 
         # 存储临时数据的 milvus 集合名 和 es 集合名 用workflow_id作为分区键
+        # ！！！同一个collection中向量数据必须是同一个embedding_model生成的，所以集合名中需要包含embedding_model_id
         self.tmp_collection_name = 'tmp_workflow_data'
 
         self.stop_flag = False
@@ -71,23 +75,38 @@ class BaseNode(ABC):
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         """
-         返回节点运行日志，默认返回节点的输出内容，有特殊需求自行覆盖此函数
+         返回节点运行日志，默认返回为空
         params:
             result: 节点运行结果
-        return:
+        return:  最外层是轮次，里面是每个轮次的日志
         [
-            {
-                "key": "xxx",
-                "value": "xxx",
-                "type": "tool" # tool: 工具类型的日志, variable：全局变量的日志, params：节点参数类型的日志，key：展示key本身
-            }
+            [
+                {
+                    "key": "xxx",
+                    "value": "xxx",
+                    "type": "tool" # tool: 工具类型的日志, variable：全局变量的日志, params：节点参数类型的日志，key：展示key本身
+                }
+            ]
         ]
         """
-        return result
+        return []
+
+    def get_other_node_variable(self, variable_key: str) -> Any:
+        """ 从全局变量中获取其他节点的变量值 """
+        value = self.graph_state.get_variable_by_str(variable_key)
+        self.other_node_variable[variable_key] = value
+        return value
 
     def get_input_schema(self) -> Any:
         """ 返回用户需要输入的表单描述信息 """
         return None
+
+    def is_condition_node(self) -> bool:
+        """ 是否是互斥节点 """
+        return self.node_data.type == NodeType.CONDITION.value
+
+    def get_milvus_collection_name(self, embedding_model_id: str) -> str:
+        return f"{self.tmp_collection_name}_{embedding_model_id}"
 
     def handle_input(self, user_input: dict) -> Any:
         # 将用户输入的数据更新到节点数里
@@ -136,10 +155,11 @@ class BaseNode(ABC):
             reason = str(e)
             raise e
         finally:
-            # 输出节点的结束日志由fake节点输出
+            # 输出节点的结束日志由fake节点输出, 因为需要等待用户先输入完成，才能正确显示日志
             if reason or self.type != NodeType.OUTPUT.value:
                 self.callback_manager.on_node_end(data=NodeEndData(
-                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data))
+                    unique_id=exec_id, node_id=self.id, name=self.name, reason=reason, log_data=log_data,
+                    input_data=self.other_node_variable))
         return state
 
     async def arun(self, state: dict) -> Any:

@@ -162,7 +162,9 @@ class AssistantAgent(AssistantUtils):
         tool_type_info = all_tool_type.get(tool.type)
         if not tool_type_info:
             raise Exception(f'获取工具类型失败，tool_type_id: {tool.type}')
-        return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, tool.extra,
+        extra_json = json.loads(tool.extra)
+        extra_json.update(json.loads(tool_type_info.extra))
+        return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, json.dumps(extra_json),
                                                        tool_type_info.server_host,
                                                        tool_type_info.auth_method,
                                                        tool_type_info.auth_type,

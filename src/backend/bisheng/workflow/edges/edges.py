@@ -57,6 +57,30 @@ class EdgeManage:
             return None
         return self.source_map[source]
 
+    def get_all_edges_nodes(self, start_node_id: str, end_node_id: str) -> List[List[str]]:
+        """ get all branch nodes from start node to end node """
+        branches = []
+        def get_node_branch(node_id, branch: List, node_map: dict):
+            # 已经遍历过的节点不再遍历，说明成环了
+            if node_id in node_map or node_id == end_node_id:
+                branch.append(node_id)
+                branches.append(branch)
+                return branch
+            branch.append(node_id)
+            node_map[node_id] = True
+            next_nodes = self.get_target_node(node_id)
+            if not next_nodes:
+                branches.append(branch)
+                return branch
+
+            for one_node in next_nodes:
+                tmp_node_map = node_map.copy()
+                tmp_branch = branch.copy()
+                get_node_branch(one_node, tmp_branch, tmp_node_map)
+            return branch
+        get_node_branch(start_node_id, [], {})
+        return branches
+
     def get_next_nodes(self, node_id: str, exclude: Optional[List[str]] = None) -> List[str] | None:
         """ get all next nodes by node id"""
         # 获取直接的下游节点

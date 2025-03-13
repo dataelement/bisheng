@@ -13,6 +13,7 @@ class NodeStartData(BaseModel):
 class NodeEndData(NodeStartData):
     reason: Optional[str] = Field(None, description='Reason for node exec error')
     log_data: Any = Field(None, description='Log data on node exec success')
+    input_data: Any = Field(None, description='Input variable data for node exec')
 
 
 class UserInputData(BaseModel):
@@ -21,11 +22,13 @@ class UserInputData(BaseModel):
 
 
 class GuideWordData(BaseModel):
+    unique_id: Optional[str] = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     guide_word: str = Field(..., description='Guide word')
 
 
 class GuideQuestionData(BaseModel):
+    unique_id: Optional[str] = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
     guide_question: List[str] = Field(..., description='Guide question')
 
@@ -54,7 +57,8 @@ class OutputMsgChooseData(OutputMsgData):
 class StreamMsgData(BaseModel):
     unique_id: str = Field(..., description='Unique execution id')
     node_id: str = Field(..., description='Node unique id')
-    msg: str = Field('', description='Stream msg')
+    msg: Optional[str] = Field('', description='Stream msg')
+    reasoning_content: Optional[str] = Field(None, description='Reasoning content')
     output_key: str = Field(..., description='Whether the message is stream')
 
 

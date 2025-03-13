@@ -1,6 +1,6 @@
 import json
 
-from bisheng.database.models.gpts_tools import AuthMethod
+from bisheng.database.models.gpts_tools import AuthMethod, AuthType
 
 
 class OpenApiSchema:
@@ -10,8 +10,9 @@ class OpenApiSchema:
         self.version = contents['openapi']
         self.info = contents['info']
         self.title = self.info['title']
+        self.auth_type = 'basic'
+        self.auth_method = 0 
         self.description = self.info.get('description', '')
-
         self.default_server = ''
         self.apis = []
 
@@ -26,10 +27,40 @@ class OpenApiSchema:
             self.default_server = servers[0]['url']
         else:
             self.default_server = servers['url']
+
+        # if self.contents.get('components') and self.contents['components'].get('securitySchemes') is not None:
+        #     self.auth_type = 'custom' if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' else 'basic'
+        #     s = self.contents['components']['securitySchemes']['ApiKeyAuth']['schema']
+        #     if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'http':
+        #         self.auth_type = s
+        #
+        #     self.auth_method= 1 if self.contents['components']['securitySchemes']['ApiKeyAuth']['type'] == 'apiKey' or 'http' else 0
+        #     self.api_location= self.contents['components']['securitySchemes']['ApiKeyAuth']['in']
+        #     self.parameter_name= self.contents['components']['securitySchemes']['ApiKeyAuth']['name']
+
+        security_schemes = self.contents.get('components', {}).get('securitySchemes', {})
+        api_key_auth = security_schemes.get('ApiKeyAuth', {})
+
+        # 获取认证类型
+        auth_type = api_key_auth.get('type')
+        if auth_type == 'apiKey':
+            self.auth_type = 'custom'
+        elif auth_type == 'http':
+            self.auth_type = api_key_auth.get('schema')
+        else:
+            self.auth_type = 'basic'
+
+        # 设置认证方法
+        self.auth_method = 1 if auth_type in ('apiKey', 'http') else 0
+
+        # 获取 API 位置和参数名
+        self.api_location = api_key_auth.get('in')
+        self.parameter_name = api_key_auth.get('name')
         return self.default_server
 
     def parse_paths(self) -> list[dict]:
         paths = self.contents['paths']
+
         self.apis = []
 
         for path, path_info in paths.items():
@@ -58,7 +89,7 @@ class OpenApiSchema:
                             for param_name, param_info in schema['properties'].items():
                                 param = {
                                     'name': param_name,
-                                    'description': param_name,
+                                    'description': param_info.get('description', ''),
                                     'in': 'body',
                                     'required': param_name in schema.get('required', []),
                                     'schema': {
@@ -84,12 +115,53 @@ class OpenApiSchema:
         # 拼接请求头
         headers = {}
         if auth_method == AuthMethod.API_KEY.value:
-            headers = {'Authorization': f'{auth_type} {api_key}'}
+            if auth_type == AuthType.CUSTOM.value:
+                extra_json = json.loads(extra)
+                location = extra_json["api_location"]
+                parameter_name= extra_json["parameter_name"]
+                if location == "header":
+                    headers = {parameter_name: api_key}
+            else:
+                headers = {'Authorization': f'{auth_type} {api_key}'}
+
 
         # 返回初始化 openapi所需的入参
         params = {
             'params': json.loads(extra),
             'headers': headers,
+            'api_key': api_key,
+            'url': server_host,
+            'description': name + description if description else name
+        }
+        return params
+
+    @staticmethod
+    def parse_openapi_tool_params_test(name: str,
+                                  description: str,
+                                  extra: str,
+                                  server_host: str,
+                                  auth_method: int,
+                                  auth_type: str = None,
+                                  api_key: str = None,
+                                  location: str = None,
+                                  parameter_name: str = None):
+        # 拼接请求头
+        headers = {}
+        if auth_method == AuthMethod.API_KEY.value:
+            if auth_type == AuthType.CUSTOM.value:
+                if location == "header":
+                    headers = {parameter_name: api_key}
+            else:
+                headers = {'Authorization': f'{auth_type} {api_key}'}
+
+
+        # 返回初始化 openapi所需的入参
+        params = {
+            'params': json.loads(extra),
+            'headers': headers,
+            'api_location': location,
+            'parameter_name': parameter_name,
+            'api_key': api_key,
             'url': server_host,
             'description': name + description if description else name
         }

@@ -54,7 +54,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'input':
             return <InputItem data={item} onChange={handleOnNewValue} />;
         case 'input_list':
-            return <InputListItem data={item} onChange={handleOnNewValue} />;
+            return <InputListItem data={item} dict={item.key === "preset_question"} onChange={handleOnNewValue} />;
         case 'var':
             return <VarItem data={item} />
         case 'chat_history_num':
@@ -101,7 +101,13 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
                 onVarEvent={bindVarValidate}
             />;
         case 'qa_select_multi':
-            return <KnowledgeQaSelectItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <KnowledgeQaSelectItem
+                nodeId={nodeId}
+                data={item}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
+                onVarEvent={bindVarValidate}
+            />;
         case 'number':
             return <InputItem type='number' data={item} onChange={handleOnNewValue} />;
         case 'code_input':
@@ -113,7 +119,14 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'add_tool':
             return <ToolItem data={item} onChange={handleOnNewValue} />;
         case 'condition':
-            return <ConditionItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+            return <ConditionItem
+                nodeId={nodeId}
+                node={node}
+                data={item}
+                onChange={handleOnNewValue}
+                onValidate={bindValidate}
+                onVarEvent={bindVarValidate}
+            />;
         case 'report':
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'sql_config':

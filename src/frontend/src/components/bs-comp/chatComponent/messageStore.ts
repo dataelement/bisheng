@@ -1,8 +1,8 @@
 import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
+import { formatDate } from '@/util/utils';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
-import { formatDate } from '@/util/utils';
 
 /**
  * 会话消息管理
@@ -51,7 +51,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/\t/g, '\\t')                  // 转义制表符
         .replace(/'/g, '"');                    // 将单引号替换为双引号
     const newData = data.filter(item =>
-        ['answer', 'question', 'processing', 'system', 'report', 'tool', 'knowledge', 'divider', 'flow'].includes(item.category)
+        ['answer', 'question', 'processing', 'system', 'report', 'tool', 'knowledge', 'divider', 'flow', 'reasoning_answer'].includes(item.category)
     )
     return newData.map(item => {
         // let count = 0
@@ -165,7 +165,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 files: [],
                 end: false,
                 user_name: '',
-                extra: data.extra
+                extra: data.extra,
+                reasoning_log: ''
             })
             return { messages: newChat }
         })
@@ -191,12 +192,23 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             }
         }
         const currentMessage = messages[currentMessageIndex]
-
+        // deepseek
+        let message = ''
+        let reasoning_log = currentMessage.reasoning_log
+        if (isRunLog) {
+            message = JSON.parse(wsdata.message)
+        } else if (typeof wsdata.message !== 'string' && wsdata.message && 'reasoning_content' in wsdata.message) {
+            message = currentMessage.message + (wsdata.message.content || '')
+            reasoning_log += (wsdata.message.reasoning_content || '')
+        } else {
+            message = currentMessage.message + (wsdata.message || '')
+        }
         const newCurrentMessage = {
             ...currentMessage,
             ...wsdata,
-            id: isRunLog ? wsdata.extra : wsdata.messageId, // 每条消息必唯一
-            message: isRunLog ? JSON.parse(wsdata.message) : currentMessage.message + wsdata.message,
+            id: currentMessage.id || (isRunLog ? wsdata.extra : wsdata.messageId), // 每条消息必唯一
+            message,
+            reasoning_log,
             thought: currentMessage.thought + (wsdata.thought ? `${wsdata.thought}\n` : ''),
             files: wsdata.files || [],
             category: wsdata.category || '',
@@ -221,16 +233,28 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             // }
             // 删除重复消息
             const prevMessage = messages[currentMessageIndex - 1];
-            if ((prevMessage
-                && prevMessage.message === newCurrentMessage.message
-                && prevMessage.thought === newCurrentMessage.thought)
-                || cover) {
-                const removedMsg = messages.pop()
-                // 使用最后一条的信息作为准确信息
-                Object.keys(prevMessage).forEach((key) => {
-                    prevMessage[key] = removedMsg[key]
-                })
+            // 有思考不覆盖 只覆盖message,保留思考
+            if (prevMessage.reasoning_log) {
+                if ((prevMessage
+                    && prevMessage.message === newCurrentMessage.message
+                    && prevMessage.thought === newCurrentMessage.thought)
+                    || cover) {
+                        const removedMsg = messages.pop()
+                        prevMessage.message = removedMsg.message
+                }
+            } else {
+                if ((prevMessage
+                    && prevMessage.message === newCurrentMessage.message
+                    && prevMessage.thought === newCurrentMessage.thought)
+                    || cover) {
+                    const removedMsg = messages.pop()
+                    // 使用最后一条的信息作为准确信息
+                    Object.keys(prevMessage).forEach((key) => {
+                        prevMessage[key] = removedMsg[key]
+                    })
+                }
             }
+
         }
         set((state) => ({ messages: [...messages] }))
     },

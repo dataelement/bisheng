@@ -1,3 +1,4 @@
+import ast
 import json
 import time
 from queue import Queue
@@ -402,7 +403,7 @@ class Handler:
                 for s in intermediate_steps.split('\n'):
                     # 清理召回日志中的一些冗余日志
                     if 'source_documents' in s:
-                        answer = eval(s.split(':', 1)[1])
+                        answer = ast.literal_eval(s.split(':', 1)[1])
                         if 'result' in answer:
                             finally_log += 'Answer: ' + answer.get('result') + '\n\n'
                     else:

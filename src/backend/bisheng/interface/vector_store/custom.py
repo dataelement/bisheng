@@ -1,3 +1,4 @@
+from ast import literal_eval
 from abc import ABC
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -530,7 +531,7 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
             keywords_str = self.llm_chain.run(query)
             logger.debug('elasticsearch llm search keywords:', keywords_str)
             try:
-                keywords = eval(keywords_str)
+                keywords = literal_eval(keywords_str)
                 if not isinstance(keywords, list):
                     raise ValueError('Keywords extracted by llm is not list.')
             except Exception:

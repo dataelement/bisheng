@@ -1,8 +1,8 @@
 {
     "model": {
-        "duplicateServiceProviderName": "Name duplicated, please modify",
-        "duplicateServiceProviderNameValidation": "The service provider name cannot be empty and can be up to thirty characters long",
-        "modelNameValidation": "Name required, max 30 chars",
+        "duplicateServiceProviderName": "Service provider name cannot be duplicated",
+        "duplicateServiceProviderNameValidation": "The service provider name cannot be empty and can be up to 100 characters long",
+        "modelNameValidation": "Name required, max 100 chars",
         "modelDuplicate": "Cannot duplicate",
         "addSuccess": "Added",
         "updateSuccess": "Updated",

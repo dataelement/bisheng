@@ -21,10 +21,10 @@ export default function VarTextareaItem({ nodeId, data, onChange, onValidate, on
 
     return (
         <div className='node-item mb-4 nodrag' data-key={data.key}>
-            <Label className='bisheng-label'>
+            {/* <Label className='bisheng-label'>
                 {data.required && <span className="text-red-500">*</span>}
                 {data.label}
-            </Label>
+            </Label> */}
             <VarInput
                 itemKey={data.key}
                 nodeId={nodeId}

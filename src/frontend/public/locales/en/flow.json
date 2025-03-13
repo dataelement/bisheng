@@ -157,10 +157,13 @@
     "copy": "Copy",
     "cannotBeEmpty": "{{label}} cannot be empty",
     "editReportTemplate": "Edit Report Template",
-    "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid, possibly because the related node has been deleted or replaced. Please reassign the variable.",
+    "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid.",
     "required": "Required",
     "isRequired": "Is Required",
     "documentKnowledgeBase": "Document Knowledge",
-    "temporarySessionFiles": "Temporary Files",
-    "storeFilesSentInCurrentSession": "Store files sent in the current session"
+    "temporarySessionFiles": "Temporary Knowledge",
+    "storeFilesSentInCurrentSession": "Store files sent in the current session",
+    "displayNameTooltip": "Displayed on the user conversation page",
+    "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",
+    "variableNameTooltipOther": "Used to store content entered on the user conversation page; can be referenced in other nodes"
 }

@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional, List
 
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string, BaseMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class GraphState(BaseModel):
@@ -12,13 +12,15 @@ class GraphState(BaseModel):
     history_memory: Optional[ConversationBufferWindowMemory]
 
     # 全局变量池
-    variables_pool: Dict[str, Dict[str, Any]] = {}
+    variables_pool: Dict[str, Dict[str, Any]] = Field(default={}, description='全局变量池: {node_id: {key: value}}')
 
     def get_history_memory(self, count: int) -> str:
         """ 获取聊天历史记录
         因为不是1对1，所以重写 buffer_as_str"""
         if not count:
             count = self.history_memory.k
+        if count == 0:
+            return ''
         messages = self.history_memory.chat_memory.messages[-count:]
         return get_buffer_string(
             messages,
@@ -68,10 +70,15 @@ class GraphState(BaseModel):
 
         # 数组变量的处理
         if variable_val_index:
-            variable_val_index = int(variable_val_index)
-            if not isinstance(variable_val, list) or len(variable_val) <= variable_val_index:
-                raise Exception(f'variable {contact_key} is not array or index out of range')
-            return variable_val[variable_val_index]
+            if isinstance(variable_val, list):
+                variable_val_index = int(variable_val_index)
+                if len(variable_val) <= variable_val_index:
+                    raise Exception(f'variable {contact_key} index out of range')
+                return variable_val[variable_val_index]
+            elif isinstance(variable_val, dict):
+                return variable_val.get(variable_val_index)
+            else:
+                raise Exception(f'variable {contact_key} is not a list or dict, not support #index')
 
         return variable_val
 
@@ -83,10 +90,8 @@ class GraphState(BaseModel):
             var_key, variable_val_index = var_key.split('#')
             old_value = self.get_variable(node_id, var_key)
             if not old_value:
-                old_value = ['' for i in variable_val_index]
-            if len(old_value) <= int(variable_val_index):
-                old_value.extend(['' for i in range(int(variable_val_index) - len(old_value) + 1)])
-            old_value[int(variable_val_index)] = value
+                old_value = {}
+            old_value[variable_val_index] = value
             value = old_value
         self.set_variable(node_id, var_key, value)
 
@@ -98,6 +103,6 @@ class GraphState(BaseModel):
                 ret[f'{node_id}.{key}'] = self.get_variable(node_id, key)
                 # 特殊处理下 preset_question key
                 if key == 'preset_question':
-                    for one in range(len(value)):
-                        ret[f'{node_id}.{key}#{one}'] = value[one]
+                    for k, v in value.items():
+                        ret[f'{node_id}.{key}#{k}'] = v
         return ret

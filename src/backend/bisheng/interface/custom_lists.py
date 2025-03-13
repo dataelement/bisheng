@@ -12,8 +12,9 @@ from langchain import llms, memory, text_splitter
 from langchain_community.utilities import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_community import agent_toolkits, document_loaders, embeddings
-from langchain_community.chat_models import ChatVertexAI, MiniMaxChat, ChatOllama
+from langchain_community.chat_models import ChatVertexAI, MiniMaxChat
 from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
+from langchain_ollama.chat_models import ChatOllama
 
 # LLMs
 llm_type_to_cls_dict = {}

@@ -212,9 +212,9 @@ export default function KnowledgeQa(params) {
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
                                 <Link to={`/filelib/qalib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
-                                {user.role === 'admin' || user.user_id === el.user_id ?
-                                    <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500 px-0">{t('delete')}</Button> :
-                                    <Button variant="link" className="ml-4 text-gray-400 px-0">{t('delete')}</Button>
+                                {el.copiable || user.role === 'admin' ?
+                                    <Button variant="link" onClick={() => handleDelete(el.id)} className="text-red-500 px-0 pl-2">{t('delete')}</Button> :
+                                    <Button variant="link" className=" text-gray-400 px-0 pl-2">{t('delete')}</Button>
                                 }
                             </TableCell>
                         </TableRow>

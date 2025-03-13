@@ -88,7 +88,9 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                 return (<span className="form-modal-markdown-span"> ▍ </span>);
                             }
 
-                            children[0] = (children[0] as string).replace("`▍`", "▍");
+                            if (typeof children[0] === "string") {
+                                children[0] = children[0].replace("▍", "▍");
+                            }
                         }
 
                         const match = /language-(\w+)/.exec(className || "");
@@ -150,6 +152,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                             {type === 'input' ?
                                 <div>
                                     <Textarea
+                                        className="w-96"
                                         ref={textRef}
                                         disabled={inputSended}
                                         defaultValue={data.message.input_msg}

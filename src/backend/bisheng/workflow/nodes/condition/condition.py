@@ -20,7 +20,7 @@ class ConditionNode(BaseNode):
         self._variable_key_value = {}
         next_node_ids = None
         for one in self._condition_cases:
-            flag = one.evaluate_conditions(self.graph_state)
+            flag = one.evaluate_conditions(self)
             self._variable_key_value.update(one.variable_key_value)
             if flag:
                 next_node_ids = self.get_next_node_id(one.id)
@@ -34,13 +34,13 @@ class ConditionNode(BaseNode):
             self._next_node_id = next_node_ids
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
-        return [
+        return [[
             {
                 "key": k,
                 "value": v,
                 "type": "variable"
             } for k, v in self._variable_key_value.items()
-        ]
+        ]]
 
     def route_node(self, state: dict) -> str:
         return self._next_node_id

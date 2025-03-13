@@ -28,6 +28,9 @@ export const ChatTest = forwardRef((props, ref) => {
                 setFlow(flow);
                 setChatId(`test_${generateUUID(16)}`);
             }, 0);
+        },
+        close() {
+            handleClose();
         }
     }));
 
@@ -93,7 +96,7 @@ export const ChatTest = forwardRef((props, ref) => {
                     ><X /></Button>
                 </div>
             </div>
-            <div className={`h-[calc(100vh-28px)] relative overflow-y-auto ${small ? 'hidden' : ''}`}>
+            <div className={`h-[calc(100vh-28px)] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
                 <ChatPane autoRun chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
             </div>
             {!small && <div

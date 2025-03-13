@@ -366,6 +366,14 @@ export async function getFileBboxApi(file_id) {
 }
 
 /**
+ * 获取知识库详情
+ */
+export async function getKnowledgeDetailApi(knowledge_id): Promise<any[]> {
+  let queryStr = knowledge_id.map(id => `knowledge_id=${id}`).join('&');
+  return await axios.get(`/api/v1/knowledge/info?${queryStr}`);
+}
+
+/**
  * 获取RT服务列表
  */
 export async function getServicesApi(): Promise<RTServer[]> {
@@ -451,7 +459,7 @@ export const getChatsApi = (page) => {
   return (axios.get(`/api/v1/chat/list?page=${page}&limit=40`) as Promise<any[]>).then(res => {
     const result = res?.filter((el, i) => el.chat_id) || []
     return result.map(el => {
-      const { intermediate_steps, message } = el.latest_message
+      const { intermediate_steps, message } = el.latest_message || { intermediate_steps: '', message: '' }
       const _message = (function () {
         if (intermediate_steps) return intermediate_steps;
         if (isJsonSerializable(message)) {

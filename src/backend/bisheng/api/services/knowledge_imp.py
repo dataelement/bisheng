@@ -64,6 +64,24 @@ class KnowledgeUtils:
         return f'preview_file_chunk:{knowledge_id}:{md5_value}'
 
     @classmethod
+    def aggregate_chunk_metadata(cls, chunk: str, metadata: dict) -> str:
+        # 拼接chunk和metadata中的数据，获取新的chunk
+        return f"{{<file_title>{metadata.get('source', '')}</file_title>\
+            \n<file_abstract>{metadata.get('title', '')}</file_abstract>\
+                \n<paragraph_content>{chunk}</paragraph_content>}}"
+
+    @classmethod
+    def split_chunk_metadata(cls, chunk: str) -> str:
+        # 从拼接后的chunk中分离出原始chunk
+
+        # 说明是旧的拼接规则
+        if not chunk.startswith('{<file_title>'):
+            return chunk.split(cls.chunk_split)[-1]
+
+        return chunk.split('</file_abstract>\n<paragraph_content>')[-1].rstrip(
+            '</paragraph_content>}')
+
+    @classmethod
     def save_preview_cache(cls,
                            cache_key,
                            mapping: dict = None,
@@ -346,8 +364,7 @@ def add_file_embedding(vector_client,
         if len(one) > 10000:
             raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \n）进行切分')
         # 入库时 拼接文件名和文档摘要
-        texts[
-            index] = f"{metadatas[index]['source']}\n{metadatas[index]['title']}{KnowledgeUtils.chunk_split}{one}"
+        texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index])
 
     db_file.parse_type = parse_type
     # 存储ocr识别后的partitions结果
@@ -858,6 +875,9 @@ def recommend_question(question: str, answer: str, number: int = 3) -> List[str]
         if code_ret:
             question_dict = json.loads(code_ret[0])
             return question_dict['questions']
+        elif gen_question:
+            question_dict = json.loads(gen_question)
+            return question_dict.get('questions', [])
         else:
             logger.info('md_code_extract_error {}', gen_question)
         return []

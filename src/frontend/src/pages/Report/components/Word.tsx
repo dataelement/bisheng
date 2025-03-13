@@ -1,13 +1,18 @@
 import i18next from "i18next"
 import { useEffect, useContext } from "react"
 import { locationContext } from "../../../contexts/locationContext"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
 
 export default function Word({ data, workflow }) {
     const { appConfig } = useContext(locationContext)
 
     const wordUrl = appConfig.officeUrl
-    const backUrl = workflow ? `${location.origin}${__APP_ENV__.BASE_URL}/api/v1/workflow/report/callback`
-    : `${location.origin}${__APP_ENV__.BASE_URL}/api/v1/report/callback` // 后端服务地址
+    // console.log('wordUrl :>> ', wordUrl, data);
+    // 本地调试
+    // const host = 'http://192.168.106.120:3002'
+    const host = `${location.origin}${__APP_ENV__.BASE_URL}`
+    const backUrl = workflow ? `${host}/api/v1/workflow/report/callback`
+        : `${host}/api/v1/report/callback` // 后端服务地址
 
     const editorConfig = {
         // 编辑器宽度
@@ -78,6 +83,7 @@ export default function Word({ data, workflow }) {
         window.editor = new window.DocsAPI.DocEditor('bsoffice', editorConfig)
     }
 
+    const { toast } = useToast()
     useEffect(() => {
         if (window.DocsAPI) {
             createEditor()
@@ -86,11 +92,18 @@ export default function Word({ data, workflow }) {
             script.src = wordUrl + '/web-apps/apps/api/documents/api.js' // 在线编辑服务
             script.onload = createEditor
             document.head.appendChild(script)
+            script.onerror = () => {
+                toast({
+                    variant: 'error',
+                    title: 'word编辑器加载失败',
+                    description: '请检查Office服务地址配置是否正确并正常启动.'
+                })
+            }
         }
 
         return () => {
             console.log('destroyEditor :>> ');
-            window.editor.destroyEditor();
+            window.editor?.destroyEditor();
         }
     }, [])
 

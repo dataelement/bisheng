@@ -17,7 +17,8 @@ from langchain_core.tools import BaseTool, Tool
 from mypy_extensions import Arg, KwArg
 
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
-from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchRun
+from bisheng_langchain.gpts.tools.bing_search.self_arxiv import ArxivAPIWrapperSelf
+from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults, BingSearchRun
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
@@ -40,7 +41,7 @@ def _get_calculator() -> BaseTool:
 
 
 def _get_arxiv() -> BaseTool:
-    return ArxivQueryRun(api_wrapper=ArxivAPIWrapper())
+    return ArxivQueryRun(api_wrapper=ArxivAPIWrapperSelf(top_k_results=5,load_max_docs=5,load_all_available_meta=True))
 
 
 _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
@@ -57,7 +58,7 @@ _EXTRA_LLM_TOOLS: Dict[
 
 
 def _get_bing_search(**kwargs: Any) -> BaseTool:
-    return BingSearchRun(api_wrapper=BingSearchAPIWrapper(**kwargs))
+    return BingSearchResults(api_wrapper=BingSearchAPIWrapper(**kwargs))
 
 
 def _get_dalle_image_generator(**kwargs: Any) -> Tool:

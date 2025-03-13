@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import Vditor from 'vditor';
 import 'vditor/dist/index.css';
 
-const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
+const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
     const vditorRef = useRef(null);
     const readyRef = useRef(false);
     const valurCacheRef = useRef('');
@@ -52,6 +52,7 @@ const VditorEditor = forwardRef(({ markdown, hidden }, ref) => {
                 if (valurCacheRef.current) {
                     vditorRef.current.setValue(valurCacheRef.current);
                 }
+                !edit && vditorRef.current.disabled();
             },
         });
 
@@ -86,7 +87,7 @@ const AceEditorCom = ({ markdown, hidden, onChange }) => {
     />
 }
 
-export default forwardRef(function Markdown({ isUns, title, q, value }, ref) {
+export default forwardRef(function Markdown({ edit, isUns, title, q, value }, ref) {
     const [val, setValue] = useState('')
     const [isAce, setIsAce] = useState(false)
     const { t } = useTranslation('knowledge')
@@ -121,15 +122,15 @@ export default forwardRef(function Markdown({ isUns, title, q, value }, ref) {
                 #{q} {t('splitContent')}
             </Label>
             {!isUns && <span>{title}</span>}
-            <div className="flex items-center gap-2">
+            {edit && <div className="flex items-center gap-2">
                 <Label>{t('markdownPreview')}</Label>
                 <Switch checked={!isAce} onCheckedChange={hangleCheckChagne} />
-            </div>
+            </div>}
         </div>
         <div className="border mb-2 h-[calc(100vh-104px)]">
             {/* 编辑器 */}
             <AceEditorCom hidden={!isAce} markdown={val} onChange={setValue} />
-            <VditorEditor ref={vditorRef} hidden={isAce} markdown={val} />
+            <VditorEditor ref={vditorRef} edit={edit} hidden={isAce} markdown={val} />
         </div>
     </div >
 });

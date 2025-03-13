@@ -8,28 +8,6 @@ from langchain_core.outputs import LLMResult
 from loguru import logger
 
 
-class LLMNodeAsyncCallbackHandler(AsyncCallbackHandler):
-    """Callback handler for streaming LLM responses."""
-
-    def __init__(self, callback: BaseCallback, unique_id: str, node_id: str):
-        self.callback_manager = callback
-        self.unique_id = unique_id
-        self.node_id = node_id
-
-    async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
-        # azure偶尔会返回一个None
-        if token is None:
-            return
-
-        self.callback_manager.on_stream_msg(
-            StreamMsgData(
-                node_id=self.node_id,
-                msg=token,
-                unique_id=self.unique_id,
-            ))
-
-
 class LLMNodeCallbackHandler(BaseCallbackHandler):
     """Callback handler for streaming LLM responses."""
 
@@ -53,6 +31,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.stream = stream
         self.tool_list = tool_list
         self.cancel_llm_end = cancel_llm_end
+        self.reasoning_content = ''
         logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
 
     async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
@@ -97,8 +76,9 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             self.output = True
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        chunk = kwargs.get('chunk', None)
         # azure偶尔会返回一个None
-        if token is None:
+        if token is None and chunk is None:
             return
         if not self.output or not self.stream:
             return
@@ -107,10 +87,12 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.callback_manager.on_stream_msg(
             StreamMsgData(node_id=self.node_id,
                           msg=token,
+                          reasoning_content=getattr(chunk.message, 'additional_kwargs', {}).get('reasoning_content'),
                           unique_id=self.unique_id,
                           output_key=self.output_key))
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        self.reasoning_content = getattr(response.generations[0][0].message, 'additional_kwargs', {}).get('reasoning_content')
         if self.cancel_llm_end:
             return
         if not self.output:
@@ -124,6 +106,7 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             # 流式输出结束需要返回一个流式结束事件
             self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.node_id,
                                                                    msg=msg,
+                                                                   reasoning_content=self.reasoning_content,
                                                                    unique_id=self.unique_id,
                                                                    output_key=self.output_key))
             return
@@ -134,8 +117,3 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
                           msg=msg,
                           unique_id=self.unique_id,
                           output_key=self.output_key))
-
-
-class LLMRagNodeCallbackHandler(LLMNodeCallbackHandler):
-    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        pass

@@ -45,6 +45,9 @@ class OutputNode(BaseNode):
         group_params = self.node_data.dict(include={'group_params'})
         return group_params['group_params']
 
+    def is_condition_node(self) -> bool:
+        return self._output_type == 'choose'
+
     def route_node(self, state: dict) -> str | list[str]:
         # 选择型交互需要根据用户的输入，来判断下个节点
         if self._output_type == 'choose':
@@ -74,7 +77,7 @@ class OutputNode(BaseNode):
                 "value": self._handled_output_result,
                 "type": "key"
             })
-        return ret
+        return [ret]
 
     def parse_output_msg(self):
         """ 填充msg中的变量，获取文件的share地址 """
@@ -121,6 +124,6 @@ class OutputNode(BaseNode):
                 # 引用qa知识库节点时，展示溯源情况
                 if node_id.startswith('qa_retriever'):
                     self._source_documents = self.graph_state.get_variable(node_id, '$retrieved_result$')
-                var_map[one] = self.graph_state.get_variable_by_str(one)
+                var_map[one] = self.get_other_node_variable(one)
             msg = msg_template.format(var_map)
         return msg

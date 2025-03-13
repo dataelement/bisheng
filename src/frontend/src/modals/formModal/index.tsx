@@ -125,6 +125,7 @@ export default function FormModal({
   function updateLastMessage({
     str,
     thought,
+    reasoning_log,
     end = false,
     files,
   }: {
@@ -164,6 +165,9 @@ export default function FormModal({
             newChat[newChat.length - 1].message + str;
         }
       }
+      if (reasoning_log) {
+        newChat[newChat.length - 1].thought = (newChat[newChat.length - 1].thought || '') + reasoning_log;
+      }
       if (thought) {
         newChat[newChat.length - 1].thought = thought;
       }
@@ -199,56 +203,30 @@ export default function FormModal({
 
   function handleWsMessage(data: any) {
     if (Array.isArray(data)) {
-      //set chat history
-      // setChatHistory((_) => {
-      //   let newChatHistory: ChatMessageType[] = [];
-      //   data.forEach(
-      //     (chatItem: {
-      //       intermediate_steps?: string;
-      //       is_bot: boolean;
-      //       message: string;
-      //       template: string;
-      //       type: string;
-      //       chatKey: string;
-      //       files?: Array<any>;
-      //     }) => {
-      //       if (chatItem.message) {
-      //         newChatHistory.push(
-      //           chatItem.files
-      //             ? {
-      //               isSend: !chatItem.is_bot,
-      //               message: chatItem.message,
-      //               template: chatItem.template,
-      //               thought: chatItem.intermediate_steps,
-      //               files: chatItem.files,
-      //               chatKey: chatItem.chatKey,
-      //             }
-      //             : {
-      //               isSend: !chatItem.is_bot,
-      //               message: chatItem.message,
-      //               template: chatItem.template,
-      //               thought: chatItem.intermediate_steps,
-      //               chatKey: chatItem.chatKey,
-      //             }
-      //         );
-      //       }
-      //     }
-      //   );
-      //   return newChatHistory;
-      // });
       return []
     }
     if (data.type === "start") {
       addChatHistory("", false, chatKey);
       isStream = true;
     }
+
+    // deepseek
+    let message = ''
+    let reasoning_log = data.message.reasoning_content || ''
+    if (typeof data.message !== 'string' && data.message && 'reasoning_content' in data.message) {
+      message = (data.message.content || '')
+      reasoning_log = (data.message.reasoning_content || '')
+    } else {
+      message = data.message
+    }
     if (data.type === "end") {
       if (data.message) {
-        updateLastMessage({ str: data.message, end: true });
+        updateLastMessage({ str: message, end: true });
       }
       if (data.intermediate_steps) {
         updateLastMessage({
-          str: data.message,
+          str: message,
+          reasoning_log,
           thought: data.intermediate_steps,
           end: true,
         });
@@ -264,7 +242,7 @@ export default function FormModal({
       isStream = false;
     }
     if (data.type === "stream" && isStream) {
-      updateLastMessage({ str: data.message, thought: data.intermediate_steps });
+      updateLastMessage({ str: message, reasoning_log, thought: data.intermediate_steps });
     }
   }
 
