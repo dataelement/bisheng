@@ -97,7 +97,6 @@ class InputNode(BaseNode):
             file_length += len(file_info['content'])
 
             dialog_files_content += f"[file name]: {file_info['name']}\n[file content begin]\n{file_info['content']}\n[file content end]\n"
-        dialog_files_content = dialog_files_content[:self._dialog_files_length]
         return dialog_files_content
 
     def parse_upload_file(self, key: str, key_info: dict, value: str) -> dict | None:
