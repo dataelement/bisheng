@@ -222,6 +222,10 @@ def gen_user_role(db_user: User):
         else:
             role_ids.append(user_role.role_id)
     if role != 'admin':
+        user_groups = UserGroupDao.get_user_group(db_user.user_id)
+        if user_groups:
+            groups_roles = RoleDao.get_role_by_groups([one.group_id for one in user_groups], include_parent=True, only_bind=True)
+            role_ids.extend([one.id for one in groups_roles])
         # 判断是否是用户组管理员
         db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
         if len(db_user_groups) > 0:
