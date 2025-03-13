@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-from sqlmodel import Field, select, Column, DateTime, delete, text, update
+from sqlmodel import Field, select, Column, DateTime, delete, text, update, or_
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -190,6 +190,20 @@ class GroupDao(GroupBase):
         if level:
             statement = statement.where(Group.level == level)
         statement = statement.order_by(Group.id.asc())
+        with session_getter() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_all_child_groups_by_id(cls, group_ids: list[int]) -> List[Group]:
+        """ 根据用户组ID列表 获取指定用户组的所有子用户组 """
+        groups_info = cls.get_group_by_ids(group_ids)
+        statement = select(Group)
+        or_list = []
+        for one in groups_info:
+            or_list.append(Group.code.like(f'{one.code}|%'))
+        if not or_list:
+            return []
+        statement = statement.where(or_(*or_list))
         with session_getter() as session:
             return session.exec(statement).all()
 

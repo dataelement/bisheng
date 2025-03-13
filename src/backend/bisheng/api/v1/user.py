@@ -10,6 +10,7 @@ from typing import Annotated, Dict, List, Optional
 from uuid import UUID
 
 from bisheng.api.services.role import RoleService
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 import rsa
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request, Path
@@ -246,22 +247,20 @@ async def list_user(*,
 
     # 通过用户组和角色过滤出来的用户id
     user_ids = []
-    role_groups = []
     if roles:
         # 获取绑定角色, 有绑定角色则查询对应用户组内的所有用户
         bind_roles = RoleDao.get_role_by_ids(roles, is_bind_all=True)
         role_groups = [one.group_id for one in bind_roles]
+        if role_groups:
+            all_child_groups = GroupDao.get_all_child_groups_by_id(role_groups)
+            role_groups.extend([one.id for one in all_child_groups])
+            group_user_ids = UserGroupDao.get_groups_user(role_groups)
+            user_ids.extend(list(set(group_user_ids)))
+
         roles_user_ids = UserRoleDao.get_roles_user(roles)
         if not roles_user_ids and not bind_roles:
             return resp_200({'data': [], 'total': 0})
-        user_ids = [one.user_id for one in roles_user_ids]
-
-    if role_groups and groups:
-        groups = list(set(groups) & set(role_groups))
-        if not groups:
-            return resp_200({'data': [], 'total': 0})
-    elif role_groups:
-        groups = role_groups
+        user_ids.extend([one.user_id for one in roles_user_ids])
 
     if groups:
         # 查询用户组下的用户ID
