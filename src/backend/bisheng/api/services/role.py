@@ -46,8 +46,10 @@ class RoleService(BaseModel):
         # 更新角色信息
         db_role = RoleDao.update_role(db_role)
 
-        # 如果变更过绑定关系
-        if bind_change:
+        if db_role.is_bind_all and bind_change:
+            # 清理这个角色之前的绑定关系
+            UserRoleDao.delete_role_users(db_role.id)
+        elif not db_role.is_bind_all:
             # 清理这个角色之前的绑定关系
             UserRoleDao.delete_role_users(db_role.id)
             if not db_role.is_bind_all and data.user_ids:
