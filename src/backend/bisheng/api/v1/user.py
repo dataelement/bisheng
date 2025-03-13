@@ -223,7 +223,7 @@ async def list_user(*,
                     group_id: Annotated[List[int], Query()] = None,
                     role_id: Annotated[List[int], Query()] = None,
                     login_user: UserPayload = Depends(get_login_user)):
-    groups = group_id
+    groups = group_id if group_id else []
     roles = role_id
     user_admin_groups = []
     if not login_user.is_admin():
@@ -243,28 +243,39 @@ async def list_user(*,
         group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0, include_parent=True)
         if role_id:
             roles = list(set(role_id) & set([one.id for one in group_roles]))
+
     # 通过用户组和角色过滤出来的用户id
     user_ids = []
+    role_groups = []
+    if roles:
+        # 获取绑定角色, 有绑定角色则查询对应用户组内的所有用户
+        bind_roles = RoleDao.get_role_by_ids(roles, is_bind_all=True)
+        role_groups = [one.group_id for one in bind_roles]
+        roles_user_ids = UserRoleDao.get_roles_user(roles)
+        if not roles_user_ids and not bind_roles:
+            return resp_200({'data': [], 'total': 0})
+        user_ids = [one.user_id for one in roles_user_ids]
+
+    if role_groups and groups:
+        groups = list(set(groups) & set(role_groups))
+        if not groups:
+            return resp_200({'data': [], 'total': 0})
+    elif role_groups:
+        groups = role_groups
+
     if groups:
         # 查询用户组下的用户ID
         groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
             return resp_200({'data': [], 'total': 0})
-        user_ids = list(set(groups_user_ids))
-
-    if roles:
-        roles_user_ids = UserRoleDao.get_roles_user(roles)
-        if not roles_user_ids:
-            return resp_200({'data': [], 'total': 0})
-        roles_user_ids = [one.user_id for one in roles_user_ids]
-
-        # 如果user_ids不为空，说明是groups一起做交集筛选，否则是只做角色筛选
+        group_user_ids = list(set(groups_user_ids))
+        # 如果user_ids不为空，说明是roles一起做交集筛选，否则是只做用户组筛选
         if user_ids:
-            user_ids = list(set(user_ids) & set(roles_user_ids))
+            user_ids = list(set(user_ids) & set(group_user_ids))
             if not user_ids:
                 return resp_200({'data': [], 'total': 0})
         else:
-            user_ids = list(set(roles_user_ids))
+            user_ids = list(set(group_user_ids))
 
     users, total_count = UserDao.filter_users(user_ids, name, page_num, page_size)
     res = []

@@ -121,9 +121,12 @@ class RoleDao(RoleBase):
             return data
 
     @classmethod
-    def get_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
+    def get_role_by_ids(cls, role_ids: List[int], is_bind_all: bool = False) -> List[Role]:
+        statement = select(Role).where(Role.id.in_(role_ids))
+        if is_bind_all:
+            statement = statement.where(Role.is_bind_all == True)
         with session_getter() as session:
-            return session.query(Role).filter(Role.id.in_(role_ids)).all()
+            return session.exec(statement).all()
 
     @classmethod
     def get_role_by_id(cls, role_id: int) -> Role:
