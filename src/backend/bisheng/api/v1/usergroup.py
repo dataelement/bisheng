@@ -47,12 +47,13 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
 
 
 @router.get('/tree')
-async def get_all_group_tree(login_user: UserPayload = Depends(get_login_user)):
+async def get_all_group_tree(login_user: UserPayload = Depends(get_login_user),
+                             group_id: Optional[int] = None):
     """
     获取所有分组树
     """
     if login_user.is_admin():
-        groups = []
+        groups = [group_id] if group_id else []
     else:
         # 查询下是否是其他用户组的管理员
         user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
@@ -62,7 +63,11 @@ async def get_all_group_tree(login_user: UserPayload = Depends(get_login_user)):
                 groups.append(one.group_id)
         # 不是任何用户组的管理员无查看权限
         if not groups:
-            raise HTTPException(status_code=500, detail='无查看权限')
+            raise UnAuthorizedError.http_exception()
+        if group_id:
+            if group_id not in groups:
+                raise UnAuthorizedError.http_exception()
+            groups = [group_id]
 
     groups_res = RoleGroupService().get_group_tree(groups)
     return resp_200(groups_res)
