@@ -52,8 +52,7 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, page, page_size)
         else:
-            user_role = UserRoleDao.get_user_roles(user.user_id)
-            role_ids = [role.role_id for role in user_role]
+            role_ids = user.user_role
             role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
                                                                          AccessType.ASSISTANT_READ])
             flow_id_extra = []

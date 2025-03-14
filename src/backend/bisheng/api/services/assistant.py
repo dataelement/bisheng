@@ -375,7 +375,7 @@ class AssistantService(BaseService, AssistantUtils):
         tool_type_ids_extra = []
         if not is_preset:
             # 获取自定义工具列表时，需要包含用户可用的工具列表
-            user_role = UserRoleDao.get_user_roles(user.user_id)
+            user_role = user.user_role
             if user_role:
                 role_ids = [role.role_id for role in user_role]
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.GPTS_TOOL_READ)
