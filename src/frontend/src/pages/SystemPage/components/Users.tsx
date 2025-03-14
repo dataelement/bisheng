@@ -127,8 +127,14 @@ export default function Users(params) {
     }
     // 获取角色类型数据
     const [roles, setRoles] = useState([])
-    const getRoles = async () => {
-        const res: any = await getRolesApi()
+    const getRoles = async (group_id = []) => {
+        const res: any = await getRolesApi({
+            group_id,
+            keyword: "",
+            include_parent: false,
+            page: 1,
+            limit: 1000
+        })
         setRoles(res)
     }
     // 已选项上浮
@@ -195,7 +201,10 @@ export default function Users(params) {
                                     nameKey='group_name'
                                     onChecked={handleGroupChecked}
                                     placeholder={t('system.searchUserGroups')}
-                                    onFilter={(ids) => filterData({ groupId: ids })}
+                                    onFilter={(ids) => {
+                                        filterData({ groupId: ids })
+                                        getRoles(ids)
+                                    }}
                                 ></UsersFilter>
                             </div>
                         </TableHead>

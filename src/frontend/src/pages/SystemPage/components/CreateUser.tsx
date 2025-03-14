@@ -24,6 +24,7 @@ export default function CreateUser({ open, onClose, onSave }) {
 
     const [items, setItems] = useState([initItems])
     const [form, setForm] = useState(initUser)
+    console.log('items :>> xxxxxxx', items);
 
     const handleCancel = () => {
         onClose(false)
@@ -39,9 +40,13 @@ export default function CreateUser({ open, onClose, onSave }) {
         if (errors.length > 0) return message({ title: t('prompt'), description: errors, variant: 'warning' })
 
         const encryptPwd = await handleEncrypt(form.password)
+
         const group_roles = items.map(item => ({
             group_id: Number(item.groupId),
-            role_ids: item.roles.map(r => Number(r))
+            role_ids: item.roles.reduce((res, el) => {
+                !el.is_bind_all && res.push(el.id) // 绑定数据
+                return res
+            }, [])
         }))
         captureAndAlertRequestErrorHoc(createUserApi(form.user_name, encryptPwd, group_roles).then(() => {
             copyText(`${t('system.username')}: ${form.user_name}，${t('system.initialPassword')}: ${form.password}`).then(() =>

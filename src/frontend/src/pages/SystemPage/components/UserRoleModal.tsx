@@ -22,14 +22,13 @@ export default function UserRoleModal({ user, onClose, onChange }) {
                 return {
                     key: generateUUID(8),
                     groupId: item.id,
-                    roles: roles.filter(role => role.group_id === item.id)
-                        .map(el => el.id.toString())
+                    roles: roles // .filter(role => role.group_id === item.id)
                 }
             })
             setRoleItems(items)
         }
     }, [user])
-
+console.log('roleItems user:>> ', roleItems);
     const handleChangeRoleItems = (index, groupId, roles) => {
         setRoleItems(items => items.map((el, i) => {
             return (index !== i) ? el : { groupId: groupId[0], roles }
@@ -38,15 +37,23 @@ export default function UserRoleModal({ user, onClose, onChange }) {
 
     const { message } = useToast()
     const handleSave = async () => {
+        console.log('items :>> ', roleItems);
         const map = {}
         const items = roleItems.filter(item => {
             if (map[item.groupId] || !item.groupId) return false
             map[item.groupId] = true
             return true
         })
+        console.log('item.roles :>> ', items);
         if (items.some(item => item.roles.length === 0)) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
         if (items.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
-        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, items.reduce((res, item) => [...res, ...item.roles], [])))
+        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, items.reduce((res, item) => [
+            ...res,
+            ...item.roles.reduce((res, el) => {
+                !el.is_bind_all && res.push(el.id) // 绑定数据
+                return res
+            }, [])
+        ], [])))
         captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, items.map(item => item.groupId)))
         onChange()
     }
@@ -59,6 +66,8 @@ export default function UserRoleModal({ user, onClose, onChange }) {
             <div className="max-h-[520px] py-1 overflow-y-auto flex flex-col gap-2">
                 {
                     roleItems.map((item, i) => <UserRoleItem key={item.key}
+                        isEdit
+                        userId={user?.user_id}
                         groupId={item.groupId + ''}
                         selectedRoles={item.roles}
                         onChange={(g, r) => handleChangeRoleItems(i, g, r)}

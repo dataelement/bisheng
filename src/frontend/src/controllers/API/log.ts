@@ -1,6 +1,6 @@
 import axios from "../request";
 
-const paramsSerializer = (params) => {
+export const paramsSerializer = (params) => {
     return Object.keys(params)
         .map(key => {
             const value = params[key];

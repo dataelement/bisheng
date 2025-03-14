@@ -148,6 +148,7 @@ export const modelProvider = [
     { "name": "讯飞星火", "value": "spark" },
     { "name": "腾讯云", "value": "tencent" },
     { "name": "Moonshot", "value": "moonshot" },
+    { "name": "火山引擎", "value": "火山引擎" },
 ]
 const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 

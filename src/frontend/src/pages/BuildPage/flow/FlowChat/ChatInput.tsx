@@ -12,8 +12,9 @@ import { Minimize2, RefreshCw } from "lucide-react";
 import GuideQuestions from "./GuideQuestions";
 import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
+import ChatFiles from "./ChatFiles";
 
-export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
+export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBeforSend, onLoad }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -87,6 +88,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }, [])
 
     const handleSendClick = async () => {
+        if (fileUploading) return
         // 解除锁定状态下 form 按钮开放的状态
         // setShowWhenLocked(false)
         // 关闭引导词
@@ -95,8 +97,14 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         // formShow && setFormShow(false)
         // setFormShow(false)
 
-        const value = inputRef.current.value
-        if (value.trim() === '') return
+        const [fileIds, fileNames] = getFileIds().reduce((acc, cur) => {
+            acc[0].push(cur.id)
+            acc[1].push(cur.name)
+            return acc
+        }, [[], []])
+        const _value = inputRef.current.value
+        if (_value.trim() === '' && fileIds.length === 0) return
+        const value = fileNames.length > 0 ? fileNames.join('\n') + '\n' + _value : _value;
 
         const event = new Event('input', { bubbles: true, cancelable: true });
         inputRef.current.value = ''
@@ -106,6 +114,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         const wsMsg = onBeforSend('input', {
             nodeId: inputNodeIdRef.current,
             msg: value,
+            files: fileIds,
             category: "question",
             extra: '',
             message_id: '',
@@ -424,6 +433,10 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         return inputLock.locked ? reason : t('chat.inputPlaceholder')
     }, [inputForm, inputLock])
 
+    // 文件上传状态
+    const { fileUploading, getFileIds, loadingChange } = useFileLoading(inputLock.locked)
+
+
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
             {/* form */}
@@ -454,13 +467,15 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     ><FormIcon></FormIcon></div>
                 }
             </div>
+            {/* 附件 */}
+            {!inputLock.locked && <ChatFiles v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
             {/* send */}
             <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
                     id="bs-send-btn"
                     className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
-                    onClick={() => { !inputLock.locked && handleSendClick() }}>
-                    <SendIcon className={`${inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}`} />
+                    onClick={() => { !inputLock.locked && !fileUploading && handleSendClick() }}>
+                    <SendIcon className={`${inputLock.locked || fileUploading ? 'text-muted-foreground' : 'text-foreground'}`} />
                 </div>
             </div>
             {/* stop & 重置 */}
@@ -496,3 +511,29 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>
 };
+
+
+const useFileLoading = (locked) => {
+    const [loading, setLoading] = useState(false);
+    const filesRef = useRef([])
+    useEffect(() => {
+        if (locked) filesRef.current = []
+    }, [locked])
+    return {
+        fileUploading: loading,
+        getFileIds: () => filesRef.current,
+        loadingChange(files: string[] | null) {
+            if (files) {
+                setLoading(false)
+                filesRef.current = files
+            } else {
+                setLoading(true)
+                filesRef.current = []
+            }
+        },
+        clear() {
+            setLoading(false)
+            filesRef.current = []
+        }
+    }
+}

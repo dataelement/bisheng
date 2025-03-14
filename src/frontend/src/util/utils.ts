@@ -140,3 +140,10 @@ export function getFieldTitle(
             ? toTitleCase(template[templateField].name!)
             : toTitleCase(templateField);
 }
+
+// 取后缀名
+export function getFileExtension(filename) {
+    const basename = filename.split(/[\\/]/).pop(); // 去除路径
+    const match = basename.match(/\.([^.]+)$/);
+    return match ? match[1] : '';
+  }

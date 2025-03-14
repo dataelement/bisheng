@@ -290,6 +290,24 @@ const modelProviders = {
             required: true,
             key: "api_key",
         },
+    ],
+    "火山引擎": [
+        {
+            label: "Base URL",
+            type: "text",
+            placeholder: "格式示例：https://ark.cn-beijing.volces.com/api/v3",
+            default: "https://ark.cn-beijing.volces.com/api/v3",
+            required: true,
+            key: "base_url",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: true,
+            key: "api_key",
+        },
     ]
 };
 

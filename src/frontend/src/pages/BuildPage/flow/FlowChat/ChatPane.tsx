@@ -9,7 +9,7 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '', te
         chatId.startsWith('test') && changeChatId(chatId)
     }, [chatId])
 
-    const getMessage = (action, { nodeId, msg, category, extra, source, message_id }) => {
+    const getMessage = (action, { nodeId, msg, category, extra, files, source, message_id }) => {
 
         const _flow = flow
         if (action === 'getInputForm') {
@@ -43,7 +43,8 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '', te
                 data: {
                     [nodeId]: {
                         data: {
-                            [variable]: msg
+                            [variable]: msg,
+                            dialog_files_content: files
                         },
                         message: msg,
                         message_id,
