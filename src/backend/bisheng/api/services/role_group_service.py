@@ -239,12 +239,26 @@ class RoleGroupService():
         group_ids.append(group_id)
 
         # 查询user
-        user_ids = UserGroupDao.get_groups_user(group_ids, page, limit)
-        if user_ids:
-            total = UserGroupDao.count_groups_user(group_ids)
-            return UserDao.get_user_by_ids(user_ids), total
+        users_groups = UserGroupDao.get_groups_users(group_ids, page, limit)
+        if len(users_groups) == 0:
+            return [], 0
+        user_ids = set()
+        user_group_dict = {}
+        for one in users_groups:
+            user_ids.add(one.user_id)
+            if one.user_id not in user_group_dict:
+                user_group_dict[one.user_id] = set()
+            user_group_dict[one.user_id].add(one.group_id)
 
-        return [], 0
+        total = UserGroupDao.count_groups_user(group_ids)
+        user_list = UserDao.get_user_by_ids(list(user_ids))
+        res = []
+        for one in user_list:
+            user_info = one.model_dump()
+            user_info['group_ids'] = list(user_group_dict.get(one.id, []))
+            res.append(user_info)
+        return res, total
+
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
         """插入用户组"""

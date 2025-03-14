@@ -164,6 +164,16 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_groups_users(cls, group_ids: List[int], page: int = 0, limit: int = 0):
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids)).where(
+                UserGroup.is_group_admin == 0)
+            if page and limit:
+                statement = statement.offset((page - 1) * limit).limit(limit)
+            statement = statement.order_by(UserGroup.id.asc())
+            return session.exec(statement).all()
+
+    @classmethod
     def count_groups_user(cls, group_ids: List[int]) -> int:
         """
         统计用户组下的用户数量
