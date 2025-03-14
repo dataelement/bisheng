@@ -1,11 +1,13 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Request, Body, Path, WebSocket, WebSocketException
+from fastapi import APIRouter, Request, Body, Path, WebSocket, WebSocketException, UploadFile, File
 from fastapi import status as http_status
 from loguru import logger
 
 from bisheng.api.errcode.base import NotFoundError
+from bisheng.api.services.workflow import WorkFlowService
+from bisheng.api.v1.schemas import resp_200
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowType
@@ -72,3 +74,11 @@ async def workflow_ws(*,
     except Exception as e:
         logger.error(f'Websocket handle error: {str(e)}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(e))
+
+
+@router.post('/input/file', status_code=200)
+async def process_input_file(request: Request, file: UploadFile = File(...)):
+    """ 处理对话框的文件上传, 将文件解析为对应的chunk """
+    login_user = get_default_operator()
+    res = await WorkFlowService.process_input_file(login_user, file)
+    return resp_200(data=res)
