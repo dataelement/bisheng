@@ -200,7 +200,7 @@ class UserService:
         for one in req_data.group_roles:
             group_ids.append(one.group_id)
             role_ids.extend(one.role_ids)
-        if not group_ids or not role_ids:
+        if not group_ids:
             raise UserNeedGroupAndRoleError.http_exception()
         user = UserDao.add_user_with_groups_and_roles(user, group_ids, role_ids)
         return user
