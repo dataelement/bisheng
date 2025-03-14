@@ -185,7 +185,7 @@ class RoleGroupService():
         if not group_info:
             return resp_200()
         groups = [group_id]
-        child_group = GroupDao.get_child_groups_by_id(group_id)
+        child_group = GroupDao.get_child_groups(group_info.code)
         groups.extend([one.id for one in child_group])
         # 判断组下以及子用户组下是否还有用户
         user_group_list = UserGroupDao.get_groups_user(groups)
@@ -193,6 +193,8 @@ class RoleGroupService():
             return UserGroupNotDeleteError.return_resp()
         GroupDao.delete_groups(groups)
         logger.info(f'act=delete_sub_group user={login_user.user_name} group_id={group_info.id} sub_group={child_group}')
+        for one in child_group:
+            self.delete_group_hook(request, login_user, one)
         self.delete_group_hook(request, login_user, group_info)
         return resp_200()
 
