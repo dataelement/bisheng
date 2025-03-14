@@ -255,7 +255,7 @@ class RoleGroupService():
         res = []
         for one in user_list:
             user_info = one.model_dump()
-            user_info['group_ids'] = list(user_group_dict.get(one.id, []))
+            user_info['group_ids'] = list(user_group_dict.get(one.user_id, []))
             res.append(user_info)
         return res, total
 
