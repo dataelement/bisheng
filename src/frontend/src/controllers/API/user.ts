@@ -1,5 +1,6 @@
 import { ROLE, User } from "../../types/api/user";
 import axios from "../request";
+import { paramsSerializer } from "./log";
 
 // 获取 key
 export const getPublicKeyApi = async (): Promise<{ public_key: string }> => {
@@ -53,7 +54,7 @@ export async function getUsersApi({ name = '', page, pageSize, groupId, roleId }
 }
 
 // 标注任务下用户列表
-export async function getLabelUsersApi( taskId: number): Promise<{ data: User[]; total: number }> {
+export async function getLabelUsersApi(taskId: number): Promise<{ data: User[]; total: number }> {
   return await axios.get(
     `/api/v1/mark/get_user?task_id=${taskId}`
   );
@@ -67,16 +68,39 @@ export async function disableUserApi(userid, status) {
   });
 }
 // 角色列表
-export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
+export async function getRolesApi(params: {
+  group_id: string[],
+  keyword: string,
+  include_parent: boolean,
+  page: number,
+  limit: number
+}): Promise<{ data: ROLE[] }> {
+  return await axios.get(`/api/v1/group/roles?role_name`, { params, paramsSerializer })
     .then(res => res.data);
+}
+
+// 角色详情
+export async function getRoleDetailApi(roleId: number) {
+  return await axios.get(`/api/v1/role/${roleId}`)
 }
 // 用户组下角色列表
-export async function getRolesByGroupApi(searchkey = "", groupIds: any[]): Promise<{ data: ROLE[] }> {
+export async function getRolesByGroupApi(searchkey = "", groupIds: any[], include_parent: boolean = false): Promise<{ data: ROLE[] }> {
   const groupStr = groupIds?.reduce((pre, id) => `${pre}&group_id=${id}`, '') || ''
-  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}${groupStr}`)
+  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}${groupStr}&include_parent=${include_parent}`)
     .then(res => res.data);
 }
+
+// 用户的用户组下的所有角色
+export async function getUserRolesApi(groupId: string, userId: number | undefined) {
+  if (!userId) return getRolesByGroupApi("", [groupId], true)
+  return await axios.get(`/api/v1/group/user/roles`, {
+    params: {
+      user_id: userId,
+      group_id: groupId
+    }
+  }).then(res => res.data);
+}
+
 /**
  * 获取配置
  */
@@ -130,10 +154,9 @@ export async function getGroupResourcesApi(
 /**
  * 新增角色
  */
-export async function createRole(groupId, name) {
+export async function createRole(data: { role_name: string, group_id: number, is_bind_all: boolean, user_ids: number[] }) {
   return await axios.post(`/api/v1/role/add`, {
-    group_id: groupId,
-    role_name: name,
+    ...data,
     remark: "手动创建用户",
   });
 }
@@ -174,9 +197,9 @@ export async function getRolePermissionsApi(
 /**
  * 更新角色基本信息
  */
-export async function updateRoleNameApi(roleId, name) {
+export async function updateRoleNameApi(roleId, data: { role_name: string, extra: string, is_bind_all: boolean, user_ids: number[] }) {
   return axios.patch(`/api/v1/role/${roleId}`, {
-    role_name: name,
+    ...data,
     remark: "手动创建用户",
   });
 }
@@ -207,6 +230,7 @@ export function saveUserGroup(form, selected) {
   return axios.post(`/api/v1/group/create`, {
     group_name,
     group_admins: selected.map(item => item.value),
+    parent_id: form.department.id
   });
 }
 
@@ -294,4 +318,14 @@ export async function loggedChangePasswordApi(password, new_password): Promise<a
     password,
     new_password
   })
+}
+
+// 用户组树数据
+export async function getUserGroupTreeApi(groupId: string): Promise<any> {
+  return axios.get(`/api/v1/group/tree`, { params: { group_id: groupId } });
+}
+
+// 获取用户组下所有用户
+export async function getUserGroupUsersApi(groupId): Promise<any> {
+  return axios.get(`/api/v1/group/get_group_user`, { params: { group_id: groupId, page: 1, page_size: 10000, include_child: true } });
 }

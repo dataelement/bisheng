@@ -86,6 +86,7 @@ export default function UserGroups() {
                         <TableHead className="w-[200px]">{t('system.groupName')}</TableHead>
                         <TableHead>{t('system.admins')}</TableHead>
                         {appConfig.isPro && <TableHead className="w-[150px]">{t('system.flowControl')}</TableHead>}
+                        <TableHead className="w-[160px]">上级用户组</TableHead>
                         <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
                         <TableHead className="text-right w-[130px]">{t('operations')}</TableHead>
                     </TableRow>
@@ -96,6 +97,7 @@ export default function UserGroups() {
                             <TableCell className="font-medium">{ug.group_name}</TableCell>
                             <TableCell className="break-all">{(ug.admin_user || ug.group_admins).map(el => el.user_name).join(',')}</TableCell>
                             {appConfig.isPro && <TableCell>{ug.group_limit ? t('system.limit') : t('system.unlimited')}</TableCell>}
+                            <TableCell>{ug.parent_group_path || '无'}</TableCell>
                             <TableCell>{ug.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" onClick={() => setUserGroup({

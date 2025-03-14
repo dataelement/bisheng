@@ -1,4 +1,5 @@
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
+import SelectGroup from "@/components/bs-comp/selectGroup";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
@@ -8,13 +9,14 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { locationContext } from "@/contexts/locationContext";
 import { getGroupFlowsApi, saveGroupApi } from "@/controllers/API/pro";
-import { getAdminsApi, saveUserGroup, updateUserGroup } from "@/controllers/API/user";
+import { getAdminsApi, getUserGroupTreeApi, saveUserGroup, updateUserGroup } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, SearchInput } from "../../../components/bs-ui/input";
+import { useQuery } from "react-query";
 
 /**
  * 
@@ -171,8 +173,10 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         groupLimit: 0,
         assistant: [],
         skill: [],
-        workFlows: []
+        workFlows: [],
+        department: null,
     })
+    // console.log('form :>> ', form);
     /**
      * 用户
      */
@@ -189,6 +193,9 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         if (form.groupName.length > 30) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNamePrompt'), variant: 'error' });
+        }
+        if (!form.department) {
+            return toast({ title: t('prompt'), description: '上级用户组不可为空', variant: 'error' });
         }
         const flag = onBeforeChange(form.groupName)
         if (flag) {
@@ -207,15 +214,23 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
                 ...form,
                 id: data.id || res.id, // 修改id:data.id， 创建id：res.id
                 adminUser: users.map(item => item.label).join(','),
-                adminUserId: users.map(item => item.value).join(',')
+                adminUserId: users.map(item => item.value).join(','),
+                parent_id: form.department.id
             }))
         }
 
         onChange(true)
+        refetchGroupTree()
     }
 
     useEffect(() => { // 初始化数据
-        setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
+        setForm({
+            ...form, groupName: data.group_name, groupLimit: data.group_limit || 0,
+            department: data.parent_id ? {
+                group_name: data.parent_group_path.split('/').pop(),
+                id: data.parent_id
+            } : null
+        })
         async function init() {
             const res = await getAdminsApi()
             const users = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
@@ -226,10 +241,26 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         init()
     }, [])
 
+    // 用户组数据
+    const { data: options = [], refetch: refetchGroupTree } = useQuery({
+        queryKey: "QueryGroupTreeKey",
+        queryFn: () => getUserGroupTreeApi()
+    });
+
+
     return <div className="max-w-[630px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.groupName')}</p>
             <Input placeholder={t('system.userGroupName')} required value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })}></Input>
+        </div>
+        <div className="font-bold mt-4">
+            <p className="text-xl mb-4">上级用户组</p>
+            <SelectGroup
+                disabled={data.group_name}
+                value={form.department}
+                onChange={(department) => setForm({ ...form, department })}
+                options={options}
+            />
         </div>
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.admins')}</p>

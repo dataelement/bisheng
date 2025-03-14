@@ -40,6 +40,7 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
 
         return msg
             .replaceAll('$$', '$') // latex
+            .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
             .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
     }, [data.message])
 

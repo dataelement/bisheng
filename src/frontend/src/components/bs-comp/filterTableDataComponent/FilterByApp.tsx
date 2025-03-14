@@ -11,7 +11,7 @@ export default function FilterByApp({ value, onChange }) {
                 options={apps}
                 value={value}
                 multiple
-                placeholder="应用名称"
+                placeholder="应用名称范围"
                 onLoad={loadApps}
                 onSearch={searchApp}
                 onScrollLoad={loadMoreApps}

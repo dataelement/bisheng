@@ -166,9 +166,22 @@ const workflowTemplate = [
                     {
                         "key": "user_input",
                         "global": "key",
-                        "label": "用户输入内容",
+                        "label": "输入文本内容",
                         "type": "var",
                         "tab": "dialog_input"
+                    },
+                    {
+                        "key": "dialog_files_content",
+                        "global": "key",
+                        "label": "上传文件内容",
+                        "type": "var",
+                        "tab": "dialog_input"
+                    },
+                    {
+                        "key": "dialog_files_content_size",
+                        "label": "文件内容长度上限",
+                        "type": "number",
+                        "value": 15000
                     },
                     {
                         "key": "form_input",
@@ -841,9 +854,22 @@ const workflowTemplateEN = [
                     {
                         "key": "user_input",
                         "global": "key",
-                        "label": "User Input Content",
+                        "label": "Input Text Content",
                         "type": "var",
                         "tab": "dialog_input"
+                    },
+                    {
+                        "key": "dialog_files_content",
+                        "global": "key",
+                        "label": "Uploaded File Content",
+                        "type": "var",
+                        "tab": "dialog_input"
+                    },
+                    {
+                        "key": "dialog_files_content_size",
+                        "label": "Retrieval Result Length (characters)",
+                        "type": "number",
+                        "value": 15000
                     },
                     {
                         "global": "item:form_input",
