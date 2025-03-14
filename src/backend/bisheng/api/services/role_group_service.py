@@ -480,6 +480,17 @@ class RoleGroupService():
         total = RoleDao.count_role_by_groups(group_ids, keyword, include_parent=include_parent)
         return role_list, total
 
+    def get_user_group_roles(self, login_user: UserPayload, user_id: int, group_id: int):
+        """ 获取用户在用户组下的角色列表 """
+        user_roles = UserRoleDao.get_user_roles(user_id)
+        roles_info = RoleDao.get_role_by_ids([one.role_id for one in user_roles])
+        role_list = RoleDao.get_role_by_groups([group_id], include_parent=True, only_bind=True)
+        res = {one.id: one for one in roles_info}
+        for one in role_list:
+            if one.id not in res:
+                res[one.id] = one
+        return list(res.values())
+
     def sync_third_groups(self, data: List[Dict]):
         """ 同步第三方部门数据 """
         logger.debug('sync_third_groups start')
@@ -573,6 +584,20 @@ class RoleGroupService():
                     group = GroupDao.update_group(group)
         # 说明父部门发生变更，修改部门的父部门
         if parent_group and group.parent_id != parent_group.id:
+            # 清理组下用户和父部门角色的关系
+            old_parent_groups = [one.id for one in GroupDao.get_parent_groups(group.code)]
             group = GroupDao.update_parent_group(group, parent_group)
+            new_parent_groups = [one.id for one in GroupDao.get_parent_groups(group.code)]
+
+            # 现在从哪些父部门移出去了
+            remove_parent_groups = list(set(old_parent_groups) - set(new_parent_groups))
+            if remove_parent_groups:
+                need_remove_roles = [one.id for one in RoleDao.get_role_by_groups(remove_parent_groups)]
+                # 获取用户组下所有的用户
+                sub_groups = [one.id for one in GroupDao.get_child_groups(group.code)]
+                sub_groups.append(group.id)
+                group_all_user = UserGroupDao.get_groups_user(sub_groups)
+                if group_all_user and need_remove_roles:
+                    UserRoleDao.delete_users_roles(group_all_user, need_remove_roles)
         return group
 

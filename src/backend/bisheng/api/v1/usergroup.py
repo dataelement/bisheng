@@ -273,3 +273,16 @@ async def get_group_roles(*,
         "data": res,
         "total": total
     })
+
+
+@router.get("/user/roles", response_model=UnifiedResponseModel)
+async def get_user_group_roles(login_user: UserPayload = Depends(get_login_user),
+                               user_id: int = Query(None, description="用户ID"),
+                               group_id: int = Query(None, description="用户组ID")):
+    """
+    获取用户 在指定用户组内的角色列表
+    """
+    res = RoleGroupService().get_user_group_roles(login_user, user_id, group_id)
+    return resp_200(data={
+        'data':res
+    })

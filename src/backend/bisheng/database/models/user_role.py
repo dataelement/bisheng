@@ -108,6 +108,14 @@ class UserRoleDao(UserRoleBase):
             session.commit()
 
     @classmethod
+    def delete_users_roles(cls, user_ids: List[int], role_ids: List[int]):
+        """ 将批量用户移除批量的角色 """
+        with session_getter() as session:
+            statement = delete(UserRole).where(UserRole.user_id.in_(user_ids)).where(UserRole.role_id.in_(role_ids))
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
     def delete_role_users(cls, role_id: int, user_ids: List[int] = None):
         """ 删除此角色绑定的用户 """
         statement = delete(UserRole).where(UserRole.role_id == role_id)
