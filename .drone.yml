@@ -176,7 +176,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 trigger:
   branch:
   - release
-  - feat/workstation
+  # - feat/workstation
   event:
   - push
    

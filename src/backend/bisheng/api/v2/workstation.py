@@ -15,6 +15,7 @@ async def knowledgeUpload(
         background_tasks: BackgroundTasks,
         file: UploadFile = File(...),
         uid: int = Body(...),
+        filename: str = Body(default=None),
 ):
     # 查询是否有个人知识库
     knowledge = KnowledgeDao.get_user_knowledge(uid, None, KnowledgeTypeEnum.PRIVATE)
@@ -31,7 +32,8 @@ async def knowledgeUpload(
         knowledge = knowledge[0]
 
     file_byte = await file.read()
-    file_path = save_download_file(file_byte, 'bisheng', file.filename)
+    filename = filename | file.filename
+    file_path = save_download_file(file_byte, 'bisheng', filename)
     req_data = KnowledgeFileProcess(knowledge_id=knowledge.id,
                                     file_list=[KnowledgeFileOne(file_path=file_path)])
     res = KnowledgeService.process_knowledge_file(request, UserPayload(user_id=uid),
@@ -84,7 +86,7 @@ async def parseFileContent(file: UploadFile = File(...)):
     file_byte = await file.read()
     file_path = save_download_file(file_byte, 'bisheng', file.filename)
     #  获取文件全文
-    documents, _, _ = knowledge_imp.read_chunk_text(
+    raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
         file_path,
         file.filename,
         ['\n\n\n\n\n'],
@@ -93,4 +95,4 @@ async def parseFileContent(file: UploadFile = File(...)):
         0,
     )
 
-    pass
+    return resp_200(' '.join(raw_texts))
