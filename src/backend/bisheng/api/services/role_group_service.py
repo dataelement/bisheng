@@ -518,7 +518,8 @@ class RoleGroupService():
         for one in role_list:
             tmp = one.model_dump()
             tmp['is_belong_user'] = one.id in roles_map or one.is_bind_all
-            res.append(tmp)
+            if one.id in roles_map or one.is_bind_all or one.group_id == group_id:
+                res.append(tmp)
         return res
 
     def sync_third_groups(self, data: List[Dict]):
