@@ -178,6 +178,7 @@ trigger:
   branch:
   - release
   - feat/0.3.7rc
+  - feat/zyrs_*
   event:
   - push
    
