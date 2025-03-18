@@ -63,7 +63,7 @@ export default function UserRoleItem({ isEdit = false, userId, showDel, groupId,
                     label: role.role_name,
                     value: role.id.toString()
                 };
-                (role.is_bind_all || userGroupSelected[0] != role.group_id) && selectedRoles.push(role)
+                (role.is_bind_all || role.is_belong_user) && selectedRoles.push(role)
                 options.push(item)
                 return [options, selectedRoles]
             }, [[], []])
