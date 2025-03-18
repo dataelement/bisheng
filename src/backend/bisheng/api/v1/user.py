@@ -495,7 +495,8 @@ async def user_addrole(*,
             need_add_role.append(one)
         else:
             # 剩余的就是需要删除的角色列表
-            need_delete_role.remove(one)
+            if one in need_delete_role:
+                need_delete_role.remove(one)
     if need_add_role:
         UserRoleDao.add_user_roles(user_role.user_id, need_add_role)
     if need_delete_role:

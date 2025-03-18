@@ -498,19 +498,28 @@ class RoleGroupService():
 
     def get_user_group_roles(self, login_user: UserPayload, user_id: int, group_id: int):
         """ 获取用户在用户组下的角色列表 """
+        group_info = GroupDao.get_user_group(group_id)
+        if not group_info:
+            raise NotFoundError.http_exception()
+
+        # 获取查询用户组下的所有角色
+        role_list = RoleDao.get_role_by_groups([group_id])
+        # 获取查询用户组的所有父用户组下的角色列表
+        parent_groups = GroupDao.get_parent_groups(group_info.code)
+        if parent_groups:
+            parent_role_list = RoleDao.get_role_by_groups([one.id for one in parent_groups])
+            role_list.extend(parent_role_list)
+
+        res = []
         user_roles = UserRoleDao.get_user_roles(user_id)
         roles_info = RoleDao.get_role_by_ids([one.role_id for one in user_roles])
-        role_list = RoleDao.get_role_by_groups([group_id], include_parent=True, only_bind=True)
-        res = {}
+        roles_map = {one.id: one for one in roles_info}
         # 用户可能拥有父部门指定的角色，这个角色信息不在他所在的用户组内
-        for one in roles_info:
-            res[one.id] = one.model_dump()
-            res[one.id]['is_belong_user'] = True
         for one in role_list:
             tmp = one.model_dump()
-            tmp['is_belong_user'] = one.id in res or one.is_bind_all
-            res[one.id] = one
-        return list(res.values())
+            tmp['is_belong_user'] = one.id in roles_map or one.is_bind_all
+            res.append(tmp)
+        return res
 
     def sync_third_groups(self, data: List[Dict]):
         """ 同步第三方部门数据 """

@@ -82,7 +82,7 @@ class RoleDao(RoleBase):
             page: 页数
             limit: 每页条数
             include_parent: 是否包含父级用户组的bind角色
-            only_bind: 是否只获取用户组绑定的角色
+            only_bind: 是否只获取属于查询用户组的绑定角色
         return: 角色列表
         """
         statement = select(Role)
