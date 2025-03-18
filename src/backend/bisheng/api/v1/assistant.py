@@ -243,10 +243,10 @@ async def get_tool_schema(*,
                                       is_delete=0,
                                       server_host=schema.default_server,
                                       openapi_schema=file_content,
-                                      api_location = schema.api_location,
-                                      parameter_name = schema.parameter_name,
-                                      auth_type = schema.auth_type,
-                                      auth_method = schema.auth_method,
+                                      api_location=schema.api_location,
+                                      parameter_name=schema.parameter_name,
+                                      auth_type=schema.auth_type,
+                                      auth_method=schema.auth_method,
                                       children=[])
         # 解析获取所有的api
         schema.parse_paths()
@@ -294,9 +294,11 @@ def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: 
 @router.post('/tool_test', response_model=UnifiedResponseModel)
 async def test_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
     """ 测试自定义工具 """
-    tool_params = OpenApiSchema.parse_openapi_tool_params_test('test', 'test', req.extra,
+    extra = json.loads(req.extra)
+    extra.update({'api_location': req.api_location, 'parameter_name': req.parameter_name})
+    tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', json.dumps(extra),
                                                           req.server_host, req.auth_method,
-                                                          req.auth_type, req.api_key,req.api_location,req.parameter_name)
+                                                          req.auth_type, req.api_key)
 
     openapi_tool = OpenApiTools.get_api_tool('test', **tool_params)
     try:
