@@ -501,10 +501,15 @@ class RoleGroupService():
         user_roles = UserRoleDao.get_user_roles(user_id)
         roles_info = RoleDao.get_role_by_ids([one.role_id for one in user_roles])
         role_list = RoleDao.get_role_by_groups([group_id], include_parent=True, only_bind=True)
-        res = {one.id: one for one in roles_info}
+        res = {}
+        # 用户可能拥有父部门指定的角色，这个角色信息不在他所在的用户组内
+        for one in roles_info:
+            res[one.id] = one.model_dump()
+            res[one.id]['is_belong_user'] = True
         for one in role_list:
-            if one.id not in res:
-                res[one.id] = one
+            tmp = one.model_dump()
+            tmp['is_belong_user'] = one.id in res or one.is_bind_all
+            res[one.id] = one
         return list(res.values())
 
     def sync_third_groups(self, data: List[Dict]):
