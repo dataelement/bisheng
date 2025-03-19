@@ -1,5 +1,6 @@
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { generateUUID } from "@/components/bs-ui/utils";
+import { copyReportTemplate } from "@/controllers/API/workflow";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
 import { autoNodeName, filterUselessFlow, initNode, useCopyPasteNode } from "@/util/flowUtils";
 import { useUndoRedo } from "@/util/hook";
@@ -13,7 +14,6 @@ import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import useFlowStore from "./flowStore";
-import { copyReportTemplate } from "@/controllers/API/workflow";
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode };

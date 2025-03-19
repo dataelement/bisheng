@@ -1,3 +1,4 @@
+import { paramsSerializer } from ".";
 import { ROLE, User } from "../../types/api/user";
 import axios from "../request";
 
@@ -43,17 +44,27 @@ export async function getUsersApi({ name = '', page, pageSize, groupId, roleId }
   pageSize: number,
   groupId?: number[],
   roleId?: number[]
-}): Promise<{ data: User[]; total: number }> {
-  const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
-  const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
+},
+  config?: { signal?: AbortSignal }): Promise<{ data: User[]; total: number }> {
 
   return await axios.get(
-    `/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name}${groupStr}${roleStr}`
+    `/api/v1/user/list`,
+    {
+      params: {
+        name,
+        page_num: page,
+        page_size: pageSize,
+        group_id: groupId,
+        role_id: roleId,
+      },
+      paramsSerializer,
+      signal: config?.signal, // 绑定 AbortSignal
+    }
   );
 }
 
 // 标注任务下用户列表
-export async function getLabelUsersApi( taskId: number): Promise<{ data: User[]; total: number }> {
+export async function getLabelUsersApi(taskId: number): Promise<{ data: User[]; total: number }> {
   return await axios.get(
     `/api/v1/mark/get_user?task_id=${taskId}`
   );
@@ -189,8 +200,10 @@ export async function delRoleApi(roleId) {
 }
 
 // 用户组列表
-export function getUserGroupsApi() {
-  return axios.get(`/api/v1/group/list`);
+export function getUserGroupsApi(config) {
+  return axios.get(`/api/v1/group/list`, {
+    signal: config?.signal, // 绑定 AbortSignal
+  });
 }
 
 

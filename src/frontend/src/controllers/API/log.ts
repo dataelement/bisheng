@@ -1,3 +1,4 @@
+import { paramsSerializer } from ".";
 import axios from "../request";
 
 // 获取操作过组下资源的所有用户
@@ -148,5 +149,38 @@ export async function getMarkStatusApi({ chat_id, task_id }) {
             chat_id,
             task_id
         }
+    })
+}
+/**
+ * 获取应用分组列表
+ * @param params 请求参数：keyword（关键词）、page（页码）、page_size（每页大小）
+ * @param config axios 配置，包含 signal（用于取消请求）
+ * @returns 返回分组列表数据
+ */
+export async function getGroupsApi(
+    params: { keyword: string; page: number; page_size: number },
+    config?: { signal?: AbortSignal } // 接收 AbortSignal
+): Promise<any[]> {
+    return await axios.get("/api/v1/group/manage/resources", {
+        params, // 请求参数
+        signal: config?.signal, // 绑定 AbortSignal
+    });
+}
+
+
+// 获取审计应用列表
+export async function getAuditAppListApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status,
+    page,
+    page_size
+}) {
+    return await axios.get('/api/v1/audit/session', {
+        params, paramsSerializer
     })
 }
