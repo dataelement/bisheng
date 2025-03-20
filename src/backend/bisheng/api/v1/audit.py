@@ -4,7 +4,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Query, Depends
 
 from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.v1.schemas import UnifiedResponseModel
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.api.services.audit_log import AuditLogService
 
 router = APIRouter(prefix='/audit', tags=['AuditLog'])
@@ -33,3 +33,23 @@ def get_all_operators(*, login_user: UserPayload = Depends(get_login_user)):
     获取操作过组下资源的所有用户
     """
     return AuditLogService.get_all_operators(login_user)
+
+
+@router.get('/session', response_model=UnifiedResponseModel)
+def get_session_list(login_user: UserPayload = Depends(get_login_user),
+                     flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
+                     user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
+                     group_ids: Optional[List[int]] = Query(default=[], description='用户组id列表'),
+                     start_date: Optional[datetime] = Query(default=None, description='开始时间'),
+                     end_date: Optional[datetime] = Query(default=None, description='结束时间'),
+                     feedback: Optional[str] = Query(default=None, description='like：点赞；dislike：点踩；copied：复制'),
+                     sensitive_status: Optional[int] = Query(default=None, description='敏感词审查状态'),
+                     page: Optional[int] = Query(default=1, description='页码'),
+                     page_size: Optional[int] = Query(default=10, description='每页条数')):
+    """ 筛选所有会话列表 """
+    data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
+                                                   feedback, sensitive_status, page, page_size)
+    return resp_200(data={
+        'data': data,
+        'total': total
+    })

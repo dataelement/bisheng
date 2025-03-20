@@ -23,9 +23,9 @@ class FlowStatus(Enum):
     ONLINE = 2
 
 class FlowType(Enum):
-    FLOW= 1
-    ASSISTANT= 5
-    WORKFLOW= 10
+    FLOW = 1
+    ASSISTANT = 5
+    WORKFLOW = 10
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
@@ -318,8 +318,8 @@ class FlowDao(FlowBase):
         return flow
 
     @classmethod
-    def get_all_apps(cls, name: str | None, status: int | None, id_list: list, flow_type: int | None, user_id: int | None, id_extra: list | None,
-                     page: int = 0, limit: int = 0) -> (List[Dict], int):
+    def get_all_apps(cls, name: str = None, status: int = None, id_list: list = None, flow_type: int = None,
+                     user_id: int = None, id_extra: list = None, page: int = 0, limit: int = 0) -> (List[Dict], int):
         """ 获取所有的应用 包含技能、助手、工作流 """
         sub_query = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id, Flow.status, Flow.create_time, Flow.update_time).union_all(
             select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value, Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time, Assistant.update_time).where(Assistant.is_delete==0)).subquery()

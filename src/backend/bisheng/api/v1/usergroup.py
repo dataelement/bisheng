@@ -238,3 +238,16 @@ async def get_group_roles(*,
         "data": role_list,
         "total": total
     })
+
+
+@router.get("/manage/resources", response_model=UnifiedResponseModel)
+async def get_manage_resources(login_user: UserPayload = Depends(get_login_user),
+                               keyword: str = Query(None, description="搜索关键字"),
+                               page: int = 1,
+                               page_size: int = 10):
+    """ 获取管理的用户组下的应用列表 """
+    res, total = RoleGroupService().get_manage_resources(login_user, keyword, page, page_size)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })

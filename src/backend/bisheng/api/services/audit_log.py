@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, List, Optional
 from uuid import UUID
 
@@ -7,12 +8,14 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
-from bisheng.database.models.group import GroupDao, Group
+from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.v1.schemas import resp_200
+from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.database.models.role import RoleDao, Role
+from bisheng.database.models.role import Role
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -389,3 +392,82 @@ class AuditLogService:
         user_group = [one.group_id for one in user_group]
         cls._system_log(user, ip_address, user_group, EventType.USER_LOGIN,
                         ObjectType.NONE, '', '')
+
+    @classmethod
+    def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
+        """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 false: 表示返回空列表"""
+        flow_ids = [UUID(one).hex for one in flow_ids]
+        group_admins = []
+        if not user.is_admin():
+            user_groups = UserGroupDao.get_user_admin_group(user.user_id)
+            # 不是用户组管理员，没有权限
+            if not user_groups:
+                raise UnAuthorizedError.http_exception()
+            group_admins = [one.group_id for one in user_groups]
+        # 分组id做交集
+        if group_ids:
+            if group_admins:
+                # 查询了不属于用户管理的用户组，返回为空
+                group_admins = list(set(group_admins) & set(group_ids))
+                if len(group_admins) == 0:
+                    return False, []
+            else:
+                group_admins = group_ids
+
+        # 获取分组下所有的应用ID
+        group_flows = []
+        if group_admins:
+            group_flows = GroupResourceDao.get_groups_resource(group_admins,
+                                                               resource_types=[ResourceTypeEnum.FLOW,
+                                                                               ResourceTypeEnum.WORK_FLOW,
+                                                                               ResourceTypeEnum.ASSISTANT])
+            # 用户管理下的用户组没有资源
+            if not group_flows:
+                return False, []
+            group_flows = [one.third_id for one in group_flows]
+
+        # 获取最终的技能ID限制列表
+        filter_flow_ids = []
+        if flow_ids and group_flows:
+            filter_flow_ids = list(set(group_flows) & set(flow_ids))
+            if not filter_flow_ids:
+                return False, []
+        elif flow_ids:
+            filter_flow_ids = flow_ids
+        elif group_flows:
+            filter_flow_ids = group_flows
+        return True, filter_flow_ids
+
+
+    @classmethod
+    def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int], start_date: datetime, end_date: datetime,
+                         feedback: str, sensitive_status: int, page: int, page_size: int) -> (list, int):
+        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        if not flag:
+            return [], 0
+        filter_status = []
+        if sensitive_status:
+            filter_status = [SensitiveStatus(sensitive_status)]
+
+        res = MessageSessionDao.filter_session(sensitive_status=filter_status, feedback=feedback,
+                                               flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
+                                               end_date=end_date, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(sensitive_status=filter_status, feedback=feedback,
+                                                       flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
+                                                       end_date=end_date)
+
+        res_users = []
+        for one in res:
+            res_users.append(one.user_id)
+        user_list = UserDao.get_user_by_ids(res_users)
+        user_map = {user.user_id: user.user_name for user in user_list}
+        result = []
+        for one in res:
+            result.append(AppChatList(**one.model_dump(),
+                                      like_count=one.like,
+                                      dislike_count=one.dislike,
+                                      copied_count=one.copied,
+                                      user_name=user_map.get(one.user_id, one.user_id),
+                                      user_groups=user.get_user_groups(one.user_id)))
+
+        return result, total
