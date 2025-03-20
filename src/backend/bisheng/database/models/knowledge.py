@@ -2,16 +2,17 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional, Union
 
+from pydantic import BaseModel
+from sqlmodel import Field, or_, select, Column, DateTime, delete, func, text, update
+from sqlmodel.sql.expression import Select, SelectOfScalar
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.knowledge_file import KnowledgeFile
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-from langchain.pydantic_v1 import BaseModel
-from sqlalchemy import Column, DateTime, delete, func, text, update
-from sqlmodel import Field, or_, select
-from sqlmodel.sql.expression import Select, SelectOfScalar
+
 
 
 class KnowledgeTypeEnum(Enum):

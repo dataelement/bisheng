@@ -334,3 +334,23 @@ class RoleGroupService():
             one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
             res.append(one_dict)
         return res, total
+
+    def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
+        """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
+        groups = []
+        if not login_user.is_admin():
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            if not groups:
+                return [], 0
+
+        resource_ids = []
+        # 说明是用户组管理员，需要过滤获取到对应组下的资源
+        if groups:
+            group_resources = GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
+                                                                                           ResourceTypeEnum.ASSISTANT,
+                                                                                           ResourceTypeEnum.WORK_FLOW])
+            if not group_resources:
+                return [], 0
+            resource_ids = [one.third_id for one in group_resources]
+
+        return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)

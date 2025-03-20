@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
+import { Input } from '../input';
 
 interface IProps {
     /** 当前页码 */
@@ -10,104 +12,85 @@ interface IProps {
     total: number,
     /** 最多同时显示 item 数 */
     maxVisiblePages?: number,
+    /** Function to handle page change */
     onChange?: (p: number) => void,
-    className?: string
+    className?: string,
+    /** 是否开启跳转页功能 */
+    showJumpInput?: boolean
 }
 
-const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className, onChange }: IProps) => {
+const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className, onChange, showJumpInput = false }: IProps) => {
     const totalPages = Math.ceil(total / pageSize);
+    const [jumpPage, setJumpPage] = useState<string>("");
 
-    const handlePageChange = (newPage) => {
+    const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= totalPages && newPage !== page) {
             onChange?.(newPage);
         }
     };
 
+    const handleJumpPage = () => {
+        const pageNum = parseInt(jumpPage, 10);
+        if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+            handlePageChange(pageNum);
+        }
+    };
+
+    const handleJumpInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setJumpPage(e.target.value);
+    };
+
+    const handleJumpInputBlur = () => {
+        handleJumpPage();
+    };
+
     const renderPaginationItems = () => {
         const items = [];
-
-        // If total pages are more than maxVisiblePages, show at most maxVisiblePages pages
         const startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
-        const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-        // page 0
+        const endPage = Math.min(totalPages || 1, startPage + maxVisiblePages - 1);
+
         if (page !== 1) {
             items.push(
                 <PaginationItem key="start">
-                    <PaginationLink href="javascrit:;" onClick={() => handlePageChange(1)} >
+                    <PaginationLink href="javascript:;" onClick={() => handlePageChange(1)}>
                         <ChevronsLeft />
                     </PaginationLink>
                 </PaginationItem>
             );
         }
-        // Previous Button
+
         items.push(
             <PaginationItem key="previous">
-                <PaginationPrevious href="javascrit:;"
+                <PaginationPrevious href="javascript:;"
                     className={page === startPage && 'text-gray-400'}
                     onClick={() => handlePageChange(page - 1)} />
             </PaginationItem>
         );
 
-        // Page Buttons
-        if (totalPages <= maxVisiblePages) {
-            // If total pages are less than or equal to maxVisiblePages, show all pages
-            for (let i = 1; i <= totalPages; i++) {
-                items.push(
-                    <PaginationItem key={i}>
-                        <PaginationLink href="javascrit:;"
-                            className={page === i ? 'font-bold' : 'text-gray-500'}
-                            onClick={() => handlePageChange(i)} isActive={i === page}>
-                            {i}
-                        </PaginationLink>
-                    </PaginationItem>
-                );
-            }
-        } else {
-
-            // if (startPage > 1) {
-            //     // Display ellipsis if there are pages before the startPage
-            //     items.push(
-            //         <PaginationItem key="startEllipsis">
-            //             <PaginationEllipsis />
-            //         </PaginationItem>
-            //     );
-            // }
-
-            for (let i = startPage; i <= endPage; i++) {
-                items.push(
-                    <PaginationItem key={i}>
-                        <PaginationLink href="javascrit:;"
-                            className={page === i ? 'font-bold' : 'text-gray-500'}
-                            onClick={() => handlePageChange(i)} isActive={i === page}>
-                            {i}
-                        </PaginationLink>
-                    </PaginationItem>
-                );
-            }
-
-            // if (endPage < totalPages) {
-            //     // Display ellipsis if there are pages after the endPage
-            //     items.push(
-            //         <PaginationItem key="endEllipsis">
-            //             <PaginationEllipsis />
-            //         </PaginationItem>
-            //     );
-            // }
+        for (let i = startPage; i <= endPage; i++) {
+            items.push(
+                <PaginationItem key={i}>
+                    <PaginationLink href="javascript:;"
+                        className={page === i ? 'font-bold' : 'text-gray-500'}
+                        onClick={() => handlePageChange(i)} isActive={i === page}>
+                        {i}
+                    </PaginationLink>
+                </PaginationItem>
+            );
         }
 
-        // Next Button
         items.push(
             <PaginationItem key="next">
-                <PaginationNext href="javascrit:;"
+                <PaginationNext href="javascript:;"
                     className={page === endPage && 'text-gray-400'}
                     onClick={() => handlePageChange(page + 1)} />
             </PaginationItem>
         );
-        // page last
+
         if (page !== totalPages) {
             items.push(
                 <PaginationItem key="end">
-                    <PaginationLink href="javascrit:;" onClick={() => handlePageChange(totalPages)} >
+                    <PaginationLink href="javascript:;" onClick={() => handlePageChange(totalPages)} >
                         <ChevronsRight />
                     </PaginationLink>
                 </PaginationItem>
@@ -119,7 +102,28 @@ const AutoPagination = ({ page, pageSize, total, maxVisiblePages = 5, className,
 
     return (
         <Pagination className={className}>
-            <PaginationContent>{renderPaginationItems()}</PaginationContent>
+            <PaginationContent>
+                {renderPaginationItems()}
+
+                {/* Conditionally render the "Jump to Page" input */}
+                {showJumpInput && (
+                    <PaginationItem key="jump">
+                        <div className="flex items-center text-sm gap-1">
+                            <span>跳至</span>
+                            <Input
+                                type="number"
+                                className="w-[40px] h-6 text-center p-0"
+                                boxClassName="w-auto"
+                                value={jumpPage}
+                                onChange={handleJumpInputChange}
+                                onBlur={handleJumpInputBlur}
+                                onKeyDown={(e) => e.key === 'Enter' && handleJumpPage()}
+                            />
+                            <span>页</span>
+                        </div>
+                    </PaginationItem>
+                )}
+            </PaginationContent>
         </Pagination>
     );
 };

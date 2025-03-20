@@ -211,7 +211,7 @@ const MultiSelect = ({
     >
         <SelectTrigger className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
-                !multiple && (values.length ? <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
+                !multiple && (values.length ? <span className="text-foreground">{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
             }
             {
                 multiple && (values.length ? (
@@ -221,7 +221,7 @@ const MultiSelect = ({
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value}
                                     className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] ${errorKeys.includes(item.value) && 'bg-red-100 border-red-600'}`}>
                                     {item.label}
-                                    {lockedValues.includes(item.value) || <X className="h-3 w-3" onClick={() => handleDelete(item.value)}></X>}
+                                    {lockedValues.includes(item.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item.value)}></X>}
                                 </Badge>
                             )
                         }
@@ -230,7 +230,7 @@ const MultiSelect = ({
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all">
                                     {option.label}
-                                    {lockedValues.includes(option.value) || <X className="h-3 w-3" onClick={() => handleDelete(option.value)}></X>}
+                                    {lockedValues.includes(option.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(option.value)}></X>}
                                 </Badge>
                             )
                         }

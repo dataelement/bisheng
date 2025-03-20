@@ -42,32 +42,6 @@ class WorkflowClient(BaseClient):
         else:
             await self.send_response('processing', 'close', '')
 
-    async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
-        if not self.chat_id:
-            return
-
-        message = ChatMessageDao.insert_one(ChatMessage(**{
-            'user_id': self.user_id,
-            'chat_id': self.chat_id,
-            'flow_id': self.client_id,
-            'type': ChatMessageType.WORKFLOW.value,
-
-            'is_bot': chat_response.is_bot,
-            'source': chat_response.source,
-            'message': chat_response.message if isinstance(chat_response.message, str) else json.dumps(
-                chat_response.message, ensure_ascii=False
-            ),
-            'extra': chat_response.extra,
-            'category': chat_response.category,
-        }))
-        return message.id
-
-    async def update_chat_message(self, message_id: int, message: dict | str):
-        db_message = ChatMessageDao.get_message_by_id(message_id)
-        if db_message:
-            db_message.message = message if isinstance(message, str) else json.dumps(message)
-            ChatMessageDao.update_message_model(db_message)
-
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
         if message.get('action') == 'init_data':
@@ -88,10 +62,13 @@ class WorkflowClient(BaseClient):
             return
         self.latest_history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
         if not self.latest_history:
-            # 新建会话，记录审计日志
+            # 用户点击了新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
     async def check_status(self, message: dict, is_init: bool = False) -> (bool, str):
+        """
+        bool: 表示是否需要重新执行workflow
+        """
         # chat ws connection first handle
         workflow_id = message.get('flow_id', self.client_id)
         self.chat_id = message.get('chat_id', '')

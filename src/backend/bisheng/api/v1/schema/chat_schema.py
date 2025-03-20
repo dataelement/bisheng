@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Any
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -10,12 +10,14 @@ class AppChatList(BaseModel):
     user_name: str
     user_id: int
     chat_id: str
-    flow_id: UUID
+    flow_id: str
     create_time: datetime
     like_count: int
     dislike_count: int
     copied_count: int
     flow_type: int
+    sensitive_status: Optional[int]  # 敏感词审查状态
+    user_groups: Optional[List[Any]] # 用户所属的分组
     mark_user: Optional[str]
     mark_status: Optional[int]
     mark_id: Optional[int]

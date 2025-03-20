@@ -9,6 +9,22 @@ import {
   RTServer
 } from "./../../types/api/index";
 
+export const paramsSerializer = (params) => {
+  return Object.keys(params)
+    .map(key => {
+      const value = params[key];
+      if (value === undefined) {
+        return null; // 只返回非undefined的值
+      }
+      if (Array.isArray(value)) {
+        return value.map(val => `${key}=${val}`).join('&');
+      }
+      return `${key}=${value}`;
+    })
+    .filter(item => item !== null) // 过滤掉值为null的项
+    .join('&');
+}
+
 const GITHUB_API_URL = "https://api.github.com";
 
 export async function getRepoStars(owner, repo) {

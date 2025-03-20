@@ -279,3 +279,9 @@ class ChatMessageDao(MessageBase):
             statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def get_all_message_by_chat_ids(cls, chat_ids: List[str]) -> List[ChatMessage]:
+        statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(ChatMessage.create_time.asc())
+        with session_getter() as session:
+            return session.exec(statement).all()

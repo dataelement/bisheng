@@ -1,4 +1,3 @@
-import uuid
 from contextlib import contextmanager
 
 from bisheng.database.service import DatabaseService
@@ -21,10 +20,3 @@ def session_getter() -> Session:
         raise
     finally:
         session.close()
-
-
-def generate_uuid() -> str:
-    """
-    生成uuid的字符串
-    """
-    return uuid.uuid4().hex

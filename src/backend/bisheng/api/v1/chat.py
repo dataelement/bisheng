@@ -25,6 +25,7 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
+from bisheng.database.models.session import SensitiveStatus, MessageSessionDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
@@ -252,6 +253,7 @@ def add_chat_messages(*,
                                 user_id=login_user.user_id,
                                 is_bot=False,
                                 message=data.human_message,
+                                sensitive_status=SensitiveStatus.VIOLATIONS.value,
                                 type='human',
                                 category='question')
     bot_message = ChatMessage(flow_id=flow_id.hex,
@@ -259,9 +261,12 @@ def add_chat_messages(*,
                               user_id=login_user.user_id,
                               is_bot=True,
                               message=data.answer_message,
+                              sensitive_status=SensitiveStatus.VIOLATIONS.value,
                               type='bot',
                               category='answer')
     ChatMessageDao.insert_batch([human_message, bot_message])
+    # 更新会话的状态
+    MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
 
     # 写审计日志, 判断是否是新建会话
     res = ChatMessageDao.get_messages_by_chat_id(chat_id=chat_id)
@@ -270,7 +275,7 @@ def add_chat_messages(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(flow_id.hex)
         if flow_info:
-            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id.hex)
+            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id.hex, flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
