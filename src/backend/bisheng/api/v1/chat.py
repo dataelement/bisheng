@@ -2,6 +2,7 @@ import json
 from typing import List, Optional
 from uuid import UUID, uuid1
 
+from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
@@ -24,7 +25,7 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao, LikedType
 from bisheng.database.models.session import SensitiveStatus, MessageSessionDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -319,16 +320,37 @@ def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_log
 @router.post('/liked', status_code=200)
 def like_response(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
     message_id = data.message_id
-    liked = data.liked
-    with session_getter() as session:
-        message = session.get(ChatMessage, message_id)
-    if message:
-        logger.info('act=add_liked user_id={} liked={}', login_user.user_id, liked)
-        message.liked = liked
-    with session_getter() as session:
-        session.add(message)
-        session.commit()
-    logger.info('k=s act=liked message_id={} liked={}', message_id, liked)
+    message = ChatMessageDao.get_message_by_id(data.message_id)
+    if not message:
+        raise NotFoundError.http_exception()
+
+    if message.liked == data.liked:
+        return resp_200(message='操作成功')
+
+    like_count = 0
+    dislike_count = 0
+    if message.liked == LikedType.UNRATED.value:
+        if data.liked == LikedType.LIKED.value:
+            like_count = 1
+        elif data.liked == LikedType.DISLIKED.value:
+            dislike_count = 1
+    elif message.liked == LikedType.LIKED.value:
+        like_count = -1
+        if data.liked == LikedType.DISLIKED.value:
+            dislike_count = 1
+    elif message.liked == LikedType.DISLIKED.value:
+        dislike_count = -1
+        if data.liked == LikedType.LIKED.value:
+            like_count = 1
+
+    message.liked = data.liked
+    ChatMessageDao.update_message_model(message)
+    logger.info('k=s act=liked message_id={} liked={}', message_id, data.liked)
+
+    # 更新会话表的点赞点踩数
+    MessageSessionDao.add_like_count(message.chat_id, like_count)
+    MessageSessionDao.add_dislike_count(message.chat_id, dislike_count)
+
     return resp_200(message='操作成功')
 
 
@@ -337,7 +359,12 @@ def copied_message(*,
                    message_id: int = Body(embed=True),
                    login_user: UserPayload = Depends(get_login_user)):
     """ 上传复制message的数据 """
-    ChatMessageDao.update_message_copied(message_id, 1)
+    message = ChatMessageDao.get_message_by_id(message_id)
+    if not message:
+        raise NotFoundError.http_exception()
+    if message.copied != 1:
+        ChatMessageDao.update_message_copied(message_id, 1)
+        MessageSessionDao.add_copied_count(message.chat_id, 1)
     return resp_200(message='操作成功')
 
 
@@ -348,64 +375,35 @@ def comment_resp(*, data: ChatInput, login_user: UserPayload = Depends(get_login
 
 
 @router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
-def get_chatlist_list(*,
+def get_session_list(*,
                       page: Optional[int] = 1,
                       limit: Optional[int] = 10,
                       login_user: UserPayload = Depends(get_login_user)):
-    smt = (select(ChatMessage.flow_id, ChatMessage.chat_id,
-                  func.min(ChatMessage.create_time).label('create_time'),
-                  func.max(ChatMessage.update_time).label('update_time')).where(
-                      ChatMessage.user_id == login_user.user_id).group_by(
-                          ChatMessage.flow_id,
-                          ChatMessage.chat_id).order_by(func.max(ChatMessage.update_time).desc()))
-    with session_getter() as session:
-        db_message = session.exec(smt).all()
 
-    flow_ids = [message.flow_id for message in db_message]
-    with session_getter() as session:
-        db_flow = session.exec(select(Flow).where(Flow.id.in_(flow_ids))).all()
-
-    assistant_chats = AssistantDao.get_assistants_by_ids(flow_ids)
-    assistant_dict = {assistant.id: assistant for assistant in assistant_chats}
-    # set object
-    chat_list = []
-    flow_dict = {flow.id: flow for flow in db_flow}
-    for i, message in enumerate(db_message):
-        if message.flow_id in flow_dict:
-            temp_flow = flow_dict[message.flow_id]
-            chat_list.append(
-                ChatList(flow_name=flow_dict[message.flow_id].name,
-                         flow_description=flow_dict[message.flow_id].description,
-                         flow_id=message.flow_id,
-                         flow_type=temp_flow.flow_type,
-                         chat_id=message.chat_id,
-                         logo=flow_dict[message.flow_id].logo,
-                         create_time=message.create_time,
-                         update_time=message.update_time))
-        elif message.flow_id in assistant_dict:
-            chat_list.append(
-                ChatList(flow_name=assistant_dict[message.flow_id].name,
-                         flow_description=assistant_dict[message.flow_id].desc,
-                         flow_id=message.flow_id,
-                         chat_id=message.chat_id,
-                         flow_type=FlowType.ASSISTANT.value,
-                         logo=assistant_dict[message.flow_id].logo,
-                         create_time=message.create_time,
-                         update_time=message.update_time))
-        else:
-            # 通过接口创建的会话记录，不关联技能或者助手, 或者技能和助手已被删除
-            pass
-    res = chat_list[(page - 1) * limit:page * limit]
-    chat_ids = [one.chat_id for one in res]
+    res = MessageSessionDao.filter_session(user_ids=[login_user.user_id], page=page, limit=limit, include_delete=False)
+    chat_ids = []
+    flow_ids = []
+    for one in res:
+        chat_ids.append(one.chat_id)
+        flow_ids.append(one.flow_id)
+    flow_list = FlowDao.get_flow_by_ids(flow_ids)
+    assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
+    logo_map = {one.id.hex: BaseService.get_logo_share_link(one.logo) for one in flow_list}
+    logo_map.update({one.id.hex: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
     latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,
                                                                     exclude_category=WorkflowEventType.UserInput.value)
     latest_messages = {one.chat_id: one for one in latest_messages}
-
-    for one in res:
-        # 获取每个会话的最后一条回复内容
-        one.latest_message = latest_messages.get(one.chat_id, None)
-        one.logo = BaseService.get_logo_share_link(one.logo)
-    return resp_200(chat_list[(page - 1) * limit:page * limit])
+    return resp_200([
+        ChatList(
+            chat_id=one.chat_id,
+            flow_id=one.flow_id,
+            flow_name=one.flow_name,
+            flow_type=one.flow_type,
+            logo=logo_map.get(one.flow_id, ''),
+            latest_message=latest_messages.get(one.chat_id, None),
+            create_time=one.create_time,
+            update_time=one.update_time) for one in res
+    ])
 
 
 # 获取所有已上线的技能和助手

@@ -115,3 +115,33 @@ class MessageSessionDao(MessageSessionBase):
         with session_getter() as session:
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def add_like_count(cls, chat_id: str, like_count: int):
+        if like_count == 0:
+            return
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            like=MessageSession.like + like_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def add_dislike_count(cls, chat_id: str, dislike_count: int):
+        if dislike_count == 0:
+            return
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            dislike=MessageSession.dislike + dislike_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def add_copied_count(cls, chat_id: str, copied_count: int):
+        if copied_count == 0:
+            return
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            copied=MessageSession.copied + copied_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
