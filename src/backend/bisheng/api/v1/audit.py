@@ -53,3 +53,19 @@ def get_session_list(login_user: UserPayload = Depends(get_login_user),
         'data': data,
         'total': total
     })
+
+@router.get('/session/export', response_model=UnifiedResponseModel)
+def get_session_list(login_user: UserPayload = Depends(get_login_user),
+                     flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
+                     user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
+                     group_ids: Optional[List[int]] = Query(default=[], description='用户组id列表'),
+                     start_date: Optional[datetime] = Query(default=None, description='开始时间'),
+                     end_date: Optional[datetime] = Query(default=None, description='结束时间'),
+                     feedback: Optional[str] = Query(default=None, description='like：点赞；dislike：点踩；copied：复制'),
+                     sensitive_status: Optional[int] = Query(default=None, description='敏感词审查状态')):
+    """ 导出会话详情列表 """
+    url = AuditLogService.export_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
+                                                   feedback, sensitive_status)
+    return resp_200(data={
+        'url': url
+    })

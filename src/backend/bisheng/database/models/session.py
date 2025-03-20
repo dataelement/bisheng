@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from sqlmodel import Field, Column, DateTime, text, select, func
+from sqlmodel import Field, Column, DateTime, text, select, func, update
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -14,7 +14,7 @@ class SensitiveStatus(Enum):
 
 
 class MessageSessionBase(SQLModelSerializable):
-    """ 会话列表表 """
+    """ 会话表 """
     chat_id: str = Field(default=None, primary_key=True, description='会话唯一ID')
     flow_id: str = Field(index=True, description='应用唯一ID')
     flow_type: int = Field(description='应用类型。技能、助手、工作流')
@@ -45,6 +45,12 @@ class MessageSessionDao(MessageSessionBase):
             session.commit()
             session.refresh(data)
             return data
+
+    @classmethod
+    def get_one(cls, chat_id: str) -> MessageSession | None:
+        statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
+        with session_getter() as session:
+            return session.exec(statement).first()
 
     @classmethod
     def generate_filter_session_statement(cls, statement, chat_ids: List[str] = None,
@@ -101,3 +107,11 @@ class MessageSessionDao(MessageSessionBase):
                                                           feedback, start_date, end_date, include_delete)
         with session_getter() as session:
             return session.scalar(statement)
+
+    @classmethod
+    def update_sensitive_status(cls, chat_id: str, sensitive_status: SensitiveStatus):
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            sensitive_status=sensitive_status.value)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()

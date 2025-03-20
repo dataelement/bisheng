@@ -1,23 +1,30 @@
+import csv
 from datetime import datetime
+from tempfile import NamedTemporaryFile
 from typing import Any, List, Optional
 from uuid import UUID
 
 from loguru import logger
 
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.user_service import UserPayload
-from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
+from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.api.v1.schema.workflow import WorkflowEventType
+from bisheng.api.v1.schemas import resp_200
 from bisheng.database.models.assistant import AssistantDao, Assistant
+from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.api.errcode.base import UnAuthorizedError
-from bisheng.api.v1.schemas import resp_200
-from bisheng.api.v1.schema.chat_schema import AppChatList
-from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
+from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.settings import settings
+from bisheng.utils import generate_uuid
+from bisheng.utils.minio_client import MinioClient
 
 
 class AuditLogService:
@@ -83,12 +90,13 @@ class AuditLogService:
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
-    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
         """
         新建技能会话的审计日志
         """
         logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
-        flow_info = FlowDao.get_flow_by_id(flow_id)
+        if not flow_info:
+            flow_info = FlowDao.get_flow_by_id(flow_id)
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.FLOW,
                       flow_id, flow_info.name, ResourceTypeEnum.FLOW)
 
@@ -155,7 +163,7 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str,flow_type:Optional[int] = None):
+    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         新建技能的审计日志
         """
@@ -170,7 +178,7 @@ class AuditLogService:
                        flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
-    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str,flow_type:Optional[int] = None):
+    def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
         """
         更新技能的审计日志
         """
@@ -185,7 +193,7 @@ class AuditLogService:
                        flow_info.id.hex, flow_info.name, rs_type)
 
     @classmethod
-    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow,flow_type:Optional[int] = None):
+    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
         """
         删除技能的审计日志
         """
@@ -438,9 +446,9 @@ class AuditLogService:
             filter_flow_ids = group_flows
         return True, filter_flow_ids
 
-
     @classmethod
-    def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int], start_date: datetime, end_date: datetime,
+    def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
+                         start_date: datetime, end_date: datetime,
                          feedback: str, sensitive_status: int, page: int, page_size: int) -> (list, int):
         flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
         if not flag:
@@ -453,7 +461,8 @@ class AuditLogService:
                                                flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
                                                end_date=end_date, page=page, limit=page_size)
         total = MessageSessionDao.filter_session_count(sensitive_status=filter_status, feedback=feedback,
-                                                       flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
+                                                       flow_ids=filter_flow_ids, user_ids=user_ids,
+                                                       start_date=start_date,
                                                        end_date=end_date)
 
         res_users = []
@@ -471,3 +480,65 @@ class AuditLogService:
                                       user_groups=user.get_user_groups(one.user_id)))
 
         return result, total
+
+    @classmethod
+    def export_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
+                            start_date: datetime, end_date: datetime,
+                            feedback: str, sensitive_status: int) -> str:
+        page = 1
+        page_size = 30
+        excel_data = [
+            ['会话ID', '应用名称', '会话创建时间', '用户名称', '消息角色', '消息发送时间', '消息文本内容', '点赞',
+             '点踩', '复制']]
+        bisheng_pro = settings.get_system_login_method().bisheng_pro
+        if bisheng_pro:
+            excel_data[0].append('是否命中内容安全审查')
+
+        while True:
+            result, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
+                                                 sensitive_status, page, page_size)
+            if not result:
+                break
+            page += 1
+            cls.parse_chat_messages(result, excel_data, bisheng_pro)
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.csv'
+        with NamedTemporaryFile(mode='w', newline='') as tmp_file:
+            csv_writer = csv.writer(tmp_file)
+            csv_writer.writerows(excel_data)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/text',
+                                      minio_client.tmp_bucket)
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+    @classmethod
+    def parse_chat_messages(cls, chat_list: List[AppChatList], excel_data: List[List], bisheng_pro: bool):
+        chat_ids = [chat.chat_id for chat in chat_list]
+
+        chat_messages = ChatMessageDao.get_all_message_by_chat_ids(chat_ids)
+        chat_messages_map = {}
+        for one in chat_messages:
+            if one.chat_id not in chat_messages_map:
+                chat_messages_map[one.chat_id] = []
+            chat_messages_map[one.chat_id].append(one)
+
+        for chat in chat_list:
+            chat_messages = chat_messages_map.get(chat.chat_id, [])
+            for message in chat_messages:
+                # remove workflow input event, because it's not show in web
+                if message.category == WorkflowEventType.UserInput.value:
+                    continue
+                message_data = [chat.chat_id, chat.flow_name, chat.create_time.strftime('%Y/%m/%d %H:%M:%S'),
+                                chat.user_name,
+                                '用户' if message.category == 'question' else 'AI',
+                                message.create_time.strftime('%Y/%m/%d %H:%M:%S'),
+                                message.message,
+                                '是' if message.liked == 1 else '否',
+                                '是' if message.liked == 2 else '否',
+                                '是' if message.copied else '否']
+                if bisheng_pro:
+                    message_data.append('是' if message.sensitive_status == 1 else '否')
+                excel_data.append(message_data)
