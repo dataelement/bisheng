@@ -306,6 +306,8 @@ def update_chat_message(*,
 
     ChatMessageDao.update_message_model(chat_message)
 
+    MessageSessionDao.update_sensitive_status(chat_message.chat_id, SensitiveStatus.VIOLATIONS)
+
     return resp_200(message='更新成功')
 
 
