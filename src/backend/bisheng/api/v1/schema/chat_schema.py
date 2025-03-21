@@ -11,11 +11,11 @@ class AppChatList(BaseModel):
     user_id: int
     chat_id: str
     flow_id: str
-    create_time: datetime
-    like_count: int
-    dislike_count: int
-    copied_count: int
     flow_type: int
+    create_time: datetime
+    like_count: Optional[int]
+    dislike_count: Optional[int]
+    copied_count: Optional[int]
     sensitive_status: Optional[int]  # 敏感词审查状态
     user_groups: Optional[List[Any]] # 用户所属的分组
     mark_user: Optional[str]

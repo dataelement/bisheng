@@ -77,22 +77,17 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: Optional[int] = None,
+                      task_id: Optional[int] = Query(..., description='标注任务ID'),
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
-    """通过消息表进行聊天App统计，全量表查询
-    性能问题后续优化"""
+    """ 通过标注任务ID获取对应的会话列表 """
 
     group_flow_ids = []
     flow_ids, user_ids = [], []
 
     user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-    if not task_id:
-        # task_list = MarkTaskDao.get_all_task(page_size=page_size,page_num=page_num);
-        # group_flow_ids = [app_id for one in task_list[0] for app_id in one.app_id.split(",")]
-        group_flow_ids = []
-    else:
+    if task_id:
         if not login_user.is_admin():
             task = MarkTaskDao.get_task_byid(task_id)
             if str(login_user.user_id) not in task.process_users.split(','):
@@ -100,7 +95,6 @@ def get_app_chat_list(*,
             # 判断下是否是用户组管理员
             if user_groups:
                 task = MarkTaskDao.get_task_byid(task_id)
-                # TODO: 加入筛选条件
                 group_flow_ids = task.app_id.split(',')
                 # group_flow_ids.extend([app_id for one in t_list for app_id in one.app_id.split(",")])
                 if not group_flow_ids:
@@ -129,62 +123,47 @@ def get_app_chat_list(*,
         # 检索内容为空
         if not flow_ids and not user_ids:
             return resp_200(PageList(list=[], total=0))
-        
 
     if group_flow_ids:
         if flow_ids and keyword:
-            #flow_ids = list(set(flow_ids) & set(group_flow_ids))
             flow_ids = flow_ids
         else:
             flow_ids = group_flow_ids
 
-    res, count = MessageDao.app_list_group_by_chat_id(page_size=page_size,
-                                                      page_num=page_num,
-                                                      flow_ids=flow_ids,
-                                                      user_ids=user_ids)
-    # 补齐中文
-    user_ids = [one.get('user_id') for one in res]
-    flow_ids = [one.get('flow_id') for one in res]
-    user_list = UserDao.get_user_by_ids(user_ids)
-    flow_list = FlowDao.get_flow_by_ids(flow_ids)
-    assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
-    user_map = {user.user_id: user.user_name for user in user_list}
-    flow_map = {flow.id: flow for flow in flow_list}
-    assistant_map = {assistant.id: assistant for assistant in assistant_list}
+    chat_ids = []
+    if mark_status or mark_user:
+        records = MarkRecordDao.filter_records(task_id=task_id, status=mark_status, mark_user=mark_user)
+        if not records:
+            return resp_200(PageList(list=[], total=0))
+        chat_ids = [record.session_id for record in records]
 
-    flow_map.update(assistant_map)
-    res_obj = PageList(list=[
-        AppChatList(user_name=user_map.get(one['user_id'], one['user_id']),
-                    flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one['flow_id'],
-                    flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else flow_map[one['flow_id']].flow_type,
-                    **one) for one in res if flow_map.get(one['flow_id'])
-    ],
-                       total=count)
+    # 获取会话列表
+    res = MessageSessionDao.filter_session(chat_ids=chat_ids, flow_ids=flow_ids, user_ids=user_ids, page=page_num, limit=page_size)
+    count = MessageSessionDao.filter_session_count(chat_ids=chat_ids, flow_ids=flow_ids, user_ids=user_ids)
 
-    for o in res_obj.list:
-        mark = MarkRecordDao.get_record(task_id, o.chat_id)
-        o.mark_user = ''
-        o.mark_status = 1
-        if mark:
-            o.mark_user = mark.create_user if mark.create_user is not None else ''
-            o.mark_status = mark.status if mark.status is not None else 1
-            o.mark_id = mark.create_id
+    # 查询会话的状态
+    chat_status_ids = [one.chat_id for one in res]
+    chat_status_ids = MarkRecordDao.filter_records(task_id=task_id, chat_ids=chat_status_ids)
+    chat_status_ids = {one.session_id: one for one in chat_status_ids}
 
-    if mark_status:
-        res_obj.list = [one for one in res_obj.list if one.mark_status == mark_status]
-        res_obj.total = len(res_obj.list)
+    result = []
+    for one in res:
+        tmp = AppChatList(
+            chat_id=one.chat_id,
+            flow_id=one.flow_id,
+            flow_name=one.flow_name,
+            flow_type=one.flow_type,
+            user_id=one.user_id,
+            user_name=one.user_id,
+            create_time=one.create_time,
+        )
+        if mark_info := chat_status_ids.get(one.chat_id):
+            tmp.mark_id = mark_info.create_id
+            tmp.mark_status = mark_info.status if mark_info.status is not None else 1
+            tmp.mark_user = mark_info.create_user
+        result.append(tmp)
 
-    if mark_user:
-        users = mark_user.split(',')
-        users_int = [int(user) for user in users]
-        res_obj.list = [one for one in res_obj.list if one.mark_id in users_int]
-        res_obj.total = len(res_obj.list)
-
-    # if not user_groups and not login_user.is_admin():
-    #     res_obj.list = [one for one in res_obj.list if one.mark_id==login_user.user_id]
-    #     res_obj.total = len(res_obj.list)
-
-    return resp_200(res_obj)
+    return resp_200(PageList(list=result, total=count))
 
 
 @router.get('/chat/history',

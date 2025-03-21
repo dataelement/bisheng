@@ -101,3 +101,14 @@ class MarkRecordDao(MarkRecordBase):
             return session.exec(statement).first()
 
 
+    @classmethod
+    def filter_records(cls, task_id: int, chat_ids: list[str] = None, status: int = None, mark_user: int = None) -> List[MarkRecord]:
+        statement = select(MarkRecord).where(MarkRecord.task_id == task_id)
+        if chat_ids:
+            statement = statement.where(MarkRecord.session_id.in_(chat_ids))
+        if status is not None:
+            statement = statement.where(MarkRecord.status == status)
+        if mark_user is not None:
+            statement = statement.where(MarkRecord.create_user == str(mark_user))
+        with session_getter() as session:
+            return session.exec(statement).all()
