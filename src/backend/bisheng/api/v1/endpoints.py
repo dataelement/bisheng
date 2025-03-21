@@ -74,7 +74,7 @@ def get_env():
 
 @router.get('/config')
 def get_config(admin_user: UserPayload = Depends(get_admin_user)):
-    db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB.value)
+    db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
     config_str = db_config.value if db_config else ''
     return resp_200(config_str)
 
