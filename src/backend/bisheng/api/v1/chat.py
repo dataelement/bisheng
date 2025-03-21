@@ -213,26 +213,29 @@ def del_chat_id(*,
                 chat_id: str,
                 login_user: UserPayload = Depends(get_login_user)):
     # 获取一条消息
-    message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
-    if message:
-        # 处理临时数据
-        col_name = f'tmp_{message.flow_id.hex}_{chat_id}'
-        logger.info('tmp_delete_milvus col={}', col_name)
-        delete_vector(col_name, None)
-        delete_es(col_name)
-        ChatMessageDao.delete_by_user_chat_id(login_user.user_id, chat_id)
+    session_chat = MessageSessionDao.get_one(chat_id)
+
+    if not session_chat or session_chat.is_delete:
+        return resp_200(message='删除成功')
+    # 处理临时数据
+    col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
+    logger.info('tmp_delete_milvus col={}', col_name)
+    delete_vector(col_name, None)
+    delete_es(col_name)
+    if session_chat.flow_type == FlowType.ASSISTANT.value:
+        assistant_info = AssistantDao.get_one_assistant(session_chat.flow_id)
+        if assistant_info:
+            AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
+    else:
         # 判断下是助手还是技能, 写审计日志
-        flow_info = FlowDao.get_flow_by_id(message.flow_id.hex)
-        if flow_info:
-            if flow_info.flow_type == FlowType.FLOW.value:
+        flow_info = FlowDao.get_flow_by_id(session_chat.flow_id)
+        if flow_info and flow_info.flow_type == FlowType.FLOW.value:
                 AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
-            else:
+        elif flow_info:
                 AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
-        else:
-            assistant_info = AssistantDao.get_one_assistant(message.flow_id)
-            if assistant_info:
-                AuditLogService.delete_chat_assistant(login_user, get_request_ip(request),
-                                                      assistant_info)
+
+    # 设置会话的删除状态
+    MessageSessionDao.delete_session(chat_id)
 
     return resp_200(message='删除成功')
 
@@ -313,7 +316,7 @@ def update_chat_message(*,
 
 @router.delete('/chat/message/{message_id}', status_code=200)
 def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_login_user)):
-    # 获取一条消息
+    # 删除一条消息，安全检查使用
     ChatMessageDao.delete_by_message_id(login_user.user_id, message_id)
 
     return resp_200(message='删除成功')

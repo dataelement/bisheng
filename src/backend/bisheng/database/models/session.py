@@ -47,6 +47,13 @@ class MessageSessionDao(MessageSessionBase):
             return data
 
     @classmethod
+    def delete_session(cls, chat_id: str):
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
     def get_one(cls, chat_id: str) -> MessageSession | None:
         statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
         with session_getter() as session:
