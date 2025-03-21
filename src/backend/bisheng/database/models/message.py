@@ -40,6 +40,7 @@ class MessageBase(SQLModelSerializable):
     liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
     solved: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 解决/2 未解决')
     copied: Optional[int] = Field(index=False, default=0, description='用户是否复制 0：未复制 1：已复制')
+    sensitive_status: Optional[int] = Field(index=False, default=1, description='敏感词状态 1：通过 2：违规')
     sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')

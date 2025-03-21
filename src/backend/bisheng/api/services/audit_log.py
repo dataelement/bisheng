@@ -17,7 +17,7 @@ from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.message import ChatMessageDao, LikedType
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao, User
@@ -536,9 +536,9 @@ class AuditLogService:
                                 '用户' if message.category == 'question' else 'AI',
                                 message.create_time.strftime('%Y/%m/%d %H:%M:%S'),
                                 message.message,
-                                '是' if message.liked == 1 else '否',
-                                '是' if message.liked == 2 else '否',
+                                '是' if message.liked == LikedType.LIKED.value else '否',
+                                '是' if message.liked == LikedType.DISLIKED.value else '否',
                                 '是' if message.copied else '否']
                 if bisheng_pro:
-                    message_data.append('是' if message.sensitive_status == 1 else '否')
+                    message_data.append('是' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else '否')
                 excel_data.append(message_data)
