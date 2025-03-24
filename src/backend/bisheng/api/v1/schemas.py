@@ -1,7 +1,6 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
-from uuid import UUID
 
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
@@ -106,7 +105,7 @@ class ChatInput(BaseModel):
 class AddChatMessages(BaseModel):
     """Add a pair of chat messages."""
 
-    flow_id: UUID  # 技能或助手ID
+    flow_id: str  # 技能或助手ID
     chat_id: str  # 会话ID
     human_message: str = None  # 用户问题
     answer_message: str = None  # 执行结果
@@ -117,7 +116,7 @@ class ChatList(BaseModel):
 
     flow_name: str = None
     flow_description: str = None
-    flow_id: UUID = None
+    flow_id: str = None
     chat_id: str = None
     create_time: datetime = None
     update_time: datetime = None
@@ -255,7 +254,7 @@ class AssistantCreateReq(BaseModel):
 
 
 class AssistantUpdateReq(BaseModel):
-    id: UUID = Field(description='助手ID')
+    id: str = Field(description='助手ID')
     name: Optional[str] = Field('', description='助手名称， 为空则不更新')
     desc: Optional[str] = Field('', description='助手描述， 为空则不更新')
     logo: Optional[str] = Field('', description='logo文件的相对地址，为空则不更新')
@@ -273,7 +272,7 @@ class AssistantUpdateReq(BaseModel):
 
 
 class AssistantSimpleInfo(BaseModel):
-    id: UUID
+    id: str
     name: str
     desc: str
     logo: str

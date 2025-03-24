@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
-from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
 from fastapi import Request, HTTPException
@@ -13,13 +12,14 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.errcode.user import UserGroupNotDeleteError
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import resp_200
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
-from bisheng.database.models.role import AdminRole, RoleDao
+from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
@@ -273,7 +273,7 @@ class RoleGroupService():
         if not resource_list:
             return [], 0
         res = []
-        flow_ids = [UUID(resource.third_id) for resource in resource_list]
+        flow_ids = [resource.third_id for resource in resource_list]
         flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value 
         data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
         db_user_ids = {one.user_id for one in data}
@@ -310,7 +310,7 @@ class RoleGroupService():
         if not resource_list:
             return [], 0
         res = []
-        assistant_ids = [UUID(resource.third_id) for resource in resource_list]  # 查询助手
+        assistant_ids = [resource.third_id for resource in resource_list]  # 查询助手
         data, total = AssistantDao.filter_assistant_by_id(assistant_ids, keyword, page_num, page_size)
         for one in data:
             simple_one = AssistantService.return_simple_assistant_info(one)

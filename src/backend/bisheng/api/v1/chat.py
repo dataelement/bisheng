@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from uuid import UUID, uuid1
+from uuid import UUID
 
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services import chat_imp
@@ -30,6 +30,7 @@ from bisheng.database.models.session import SensitiveStatus, MessageSessionDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
+from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
 from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException,
@@ -58,7 +59,7 @@ async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depe
         else:
             logger.info('last_message={}', last_message)
             message = last_message
-    session_id = request.session_id or uuid1().hex
+    session_id = request.session_id or generate_uuid()
 
     payload = {'user_name': 'root', 'user_id': 1, 'role': 'admin'}
     access_token = Authorize.create_access_token(subject=json.dumps(payload), expires_time=864000)
@@ -231,7 +232,7 @@ def add_chat_messages(*,
     chat_id = data.chat_id
     if not chat_id or not flow_id:
         raise HTTPException(status_code=500, detail='chat_id 和 flow_id 必传参数')
-    human_message = ChatMessage(flow_id=flow_id.hex,
+    human_message = ChatMessage(flow_id=flow_id,
                                 chat_id=chat_id,
                                 user_id=login_user.user_id,
                                 is_bot=False,
@@ -239,7 +240,7 @@ def add_chat_messages(*,
                                 sensitive_status=SensitiveStatus.VIOLATIONS.value,
                                 type='human',
                                 category='question')
-    bot_message = ChatMessage(flow_id=flow_id.hex,
+    bot_message = ChatMessage(flow_id=flow_id,
                               chat_id=chat_id,
                               user_id=login_user.user_id,
                               is_bot=True,
@@ -256,14 +257,14 @@ def add_chat_messages(*,
     if len(res) <= 2:
         # 新建会话
         # 判断下是助手还是技能, 写审计日志
-        flow_info = FlowDao.get_flow_by_id(flow_id.hex)
+        flow_info = FlowDao.get_flow_by_id(flow_id)
         if flow_info:
-            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id.hex, flow_info)
+            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id, flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
                 AuditLogService.create_chat_assistant(login_user, get_request_ip(request),
-                                                      flow_id.hex)
+                                                      flow_id)
 
     return resp_200(message='添加成功')
 
@@ -372,8 +373,8 @@ def get_session_list(*,
         flow_ids.append(one.flow_id)
     flow_list = FlowDao.get_flow_by_ids(flow_ids)
     assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
-    logo_map = {one.id.hex: BaseService.get_logo_share_link(one.logo) for one in flow_list}
-    logo_map.update({one.id.hex: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
+    logo_map = {one.id: BaseService.get_logo_share_link(one.logo) for one in flow_list}
+    logo_map.update({one.id: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
     latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,
                                                                     exclude_category=WorkflowEventType.UserInput.value)
     latest_messages = {one.chat_id: one for one in latest_messages}
@@ -407,7 +408,7 @@ def get_online_chat(*,
 @router.websocket('/chat/{flow_id}')
 async def chat(
         *,
-        flow_id: str,
+        flow_id: UUID,
         websocket: WebSocket,
         t: Optional[str] = None,
         chat_id: Optional[str] = None,
@@ -415,6 +416,7 @@ async def chat(
         Authorize: AuthJWT = Depends(),
 ):
     """Websocket endpoint for chat."""
+    flow_id = flow_id.hex
     try:
         if t:
             Authorize.jwt_required(auth_from='websocket', token=t)
@@ -484,7 +486,7 @@ async def init_build(*,
 
     if chat_id:
         with session_getter() as session:
-            graph_data = session.get(Flow, UUID(flow_id).hex).data
+            graph_data = session.get(Flow, flow_id).data
     elif version_id:
         flow_data_key = flow_data_key + '_' + str(version_id)
         graph_data = FlowVersionDao.get_version_by_id(version_id).data
@@ -564,7 +566,7 @@ async def stream_build(flow_id: str,
                 async for message in build_flow(graph_data=graph_data,
                                                 artifacts=artifacts,
                                                 process_file=False,
-                                                flow_id=UUID(flow_id).hex,
+                                                flow_id=flow_id,
                                                 chat_id=chat_id):
                     if isinstance(message, Graph):
                         graph = message

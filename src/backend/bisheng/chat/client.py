@@ -1,8 +1,8 @@
 import json
 from queue import Queue
 from typing import Dict, Callable, List
-from uuid import UUID, uuid4
 
+from bisheng.utils import generate_uuid
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
 from fastapi import WebSocket, status, Request
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
@@ -59,7 +59,7 @@ class ChatClient:
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
-        trace_id = uuid4().hex
+        trace_id = generate_uuid()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
         with logger.contextualize(trace_id=trace_id):
             # 处理客户端发过来的信息, 提交到线程池内执行
@@ -141,7 +141,7 @@ class ChatClient:
             # 处理智能助手业务
             if self.chat_id and self.gpts_agent is None:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
-                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
+                assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
                     raise IgnoreException('该助手已被删除')
                     # 判断下agent是否上线
@@ -149,7 +149,7 @@ class ChatClient:
                     raise IgnoreException('当前助手未上线，无法直接对话')
             elif not self.chat_id:
                 # 调试界面没测都重新生成
-                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
+                assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
                     raise IgnoreException('该助手已被删除')
         except IgnoreException as e:

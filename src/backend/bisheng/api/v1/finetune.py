@@ -1,10 +1,10 @@
 import json
 import tempfile
 from typing import List, Optional
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, Request
 from fastapi_jwt_auth import AuthJWT
+from fastapi import APIRouter, Body, Depends, File, Query, UploadFile, Request
+from loguru import logger
 
 from bisheng.api.services.finetune import FinetuneService
 from bisheng.api.services.finetune_file import FinetuneFileService
@@ -17,9 +17,7 @@ from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.knowledge_file import QAKnoweldgeDao
 from bisheng.database.models.preset_train import PresetTrain
 from bisheng.utils.minio_client import MinioClient
-from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
-from fastapi_jwt_auth import AuthJWT
-from loguru import logger
+
 
 router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(get_login_user)])
 
@@ -39,7 +37,7 @@ async def create_job(*, finetune: FinetuneCreateReq, Authorize: AuthJWT = Depend
 
 # 删除训练任务
 @router.delete('/job', response_model=UnifiedResponseModel)
-async def delete_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
+async def delete_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -48,7 +46,7 @@ async def delete_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
 
 # 中止训练任务
 @router.post('/job/cancel', response_model=UnifiedResponseModel)
-async def cancel_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
+async def cancel_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -57,7 +55,7 @@ async def cancel_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
 
 # 发布训练任务
 @router.post('/job/publish', response_model=UnifiedResponseModel)
-async def publish_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
+async def publish_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -65,7 +63,7 @@ async def publish_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
 
 
 @router.post('/job/publish/cancel', response_model=UnifiedResponseModel)
-async def cancel_publish_job(*, job_id: UUID, Authorize: AuthJWT = Depends()):
+async def cancel_publish_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())
@@ -99,7 +97,7 @@ async def get_job(*,
 
 # 获取任务最新详细信息，此接口会同步查询SFT-backend侧将任务状态更新到最新
 @router.get('/job/info', response_model=UnifiedResponseModel[Finetune])
-async def get_job_info(*, job_id: UUID, Authorize: AuthJWT = Depends()):
+async def get_job_info(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     return FinetuneService.get_job_info(job_id)
@@ -169,7 +167,7 @@ async def get_preset_file(*,
 
 
 @router.delete('/job/file/preset', response_model=UnifiedResponseModel)
-async def delete_preset_file(*, file_id: UUID, Authorize: AuthJWT = Depends()):
+async def delete_preset_file(*, file_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     current_user = json.loads(Authorize.get_jwt_subject())

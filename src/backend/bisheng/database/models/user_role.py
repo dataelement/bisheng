@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
-from bisheng.database.models.role import AdminRole
+from bisheng.database.constants import AdminRole
 
 
 class UserRoleBase(SQLModelSerializable):

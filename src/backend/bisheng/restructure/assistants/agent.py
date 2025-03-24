@@ -31,7 +31,7 @@ class RtcAssistantAgent(AssistantAgent):
 
     @classmethod
     async def create(cls, assistant: Assistant) -> "RtcAssistantAgent":
-        if ins := cls.load(assistant.id.hex):
+        if ins := cls.load(assistant.id):
             return ins
         else:
             ins = cls(assistant)
@@ -44,7 +44,7 @@ class RtcAssistantAgent(AssistantAgent):
         return cls.MemoryCache.get(assistant_id)
 
     def save(self):
-        self.MemoryCache.set(self.assistant.id.hex, self)
+        self.MemoryCache.set(self.assistant.id, self)
 
     async def init_abilities(self):
         """初始化能力"""

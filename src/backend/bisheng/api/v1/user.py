@@ -2,22 +2,20 @@ import hashlib
 import json
 import random
 import string
-import uuid
 from base64 import b64encode
 from datetime import datetime
 from io import BytesIO
 from typing import Annotated, Dict, List, Optional
-from uuid import UUID
 
-from bisheng.database.models.mark_task import MarkTaskDao
 import rsa
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.security import OAuth2PasswordBearer
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import and_, func
-from sqlmodel import delete, select
+from sqlmodel import delete, select, func
+from captcha.image import ImageCaptcha
 
+from bisheng.utils import generate_uuid
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserNotPasswordError, UserPasswordExpireError,
                                       UserValidateError, UserPasswordError)
@@ -28,20 +26,20 @@ from bisheng.api.services.captcha import verify_captcha
 from bisheng.api.services.user_service import (UserPayload, gen_user_jwt, gen_user_role, get_login_user,
                                                get_assistant_list_by_access, get_admin_user, UserService)
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, CreateUserReq
+from bisheng.database.models.mark_task import MarkTaskDao
+
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow
 from bisheng.database.models.group import GroupDao
-from bisheng.database.models.knowledge import Knowledge
-from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate, AdminRole, DefaultRole
-from bisheng.database.models.role_access import AccessType, RoleAccess, RoleRefresh
+from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
+from bisheng.database.constants import AdminRole, DefaultRole
+from bisheng.database.models.role_access import RoleAccess, RoleRefresh
 from bisheng.database.models.user import User, UserCreate, UserDao, UserLogin, UserRead, UserUpdate
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRole, UserRoleCreate, UserRoleDao
 from bisheng.settings import settings
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
 from bisheng.utils.logger import logger
-from captcha.image import ImageCaptcha
 
 # build router
 router = APIRouter(prefix='', tags=['User'])
@@ -490,11 +488,7 @@ async def delete_role(*,
 
     # 删除role相关的数据
     try:
-        with session_getter() as session:
-            session.delete(db_role)
-            session.exec(delete(UserRole).where(UserRole.role_id == role_id))
-            session.exec(delete(RoleAccess).where(RoleAccess.role_id == role_id))
-            session.commit()
+        RoleDao.delete_role(role_id)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail='删除角色失败')
@@ -624,8 +618,6 @@ async def access_refresh(*, request: Request, data: RoleRefresh, login_user: Use
     # 添加新的权限
     with session_getter() as session:
         for third_id in access_id:
-            if access_type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value, AccessType.WORK_FLOW.value,]:
-                third_id = UUID(third_id).hex
             role_access = RoleAccess(role_id=role_id, third_id=str(third_id), type=access_type)
             session.add(role_access)
         session.commit()
@@ -651,10 +643,6 @@ async def access_list(*, role_id: int, type: Optional[int] = None, login_user: U
     with session_getter() as session:
         db_role_access = session.exec(sql).all()
         total_count = session.scalar(count_sql)
-    # uuid 和str的转化
-    for access in db_role_access:
-        if access.type in [AccessType.FLOW.value, AccessType.ASSISTANT_READ.value,AccessType.WORK_FLOW.value]:
-            access.third_id = UUID(access.third_id)
 
     return resp_200({
         'data': [jsonable_encoder(access) for access in db_role_access],
@@ -675,7 +663,7 @@ async def get_captcha():
     capthca_b64 = b64encode(buffered.getvalue()).decode()
     logger.info('get_captcha captcha_char={}', chr_4)
     # generate key, 生成简单的唯一id，
-    key = CAPTCHA_PREFIX + uuid.uuid4().hex[:8]
+    key = CAPTCHA_PREFIX + generate_uuid()[:8]
     redis_client.set(key, chr_4, expiration=300)
 
     # 增加配置，是否必须使用验证码

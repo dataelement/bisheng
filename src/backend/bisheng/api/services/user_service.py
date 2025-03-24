@@ -11,11 +11,11 @@ from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
-from bisheng.database.models.role import AdminRole
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao

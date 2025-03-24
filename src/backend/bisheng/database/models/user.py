@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import List, Optional
 
 from bisheng.database.base import session_getter
+from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.models.role import AdminRole, DefaultRole
 from bisheng.database.models.user_group import UserGroup
 from bisheng.database.models.user_role import UserRole
 from pydantic import validator

@@ -2,7 +2,6 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
-from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable

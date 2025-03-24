@@ -34,7 +34,7 @@ class MessageBase(SQLModelSerializable):
     extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')
-    flow_id: UUID = Field(index=True, description='对应的技能id')
+    flow_id: str = Field(index=True, description='对应的技能id')
     chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
     user_id: Optional[str] = Field(index=True, description='用户id')
     liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')

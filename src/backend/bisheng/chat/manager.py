@@ -2,12 +2,11 @@ import asyncio
 import concurrent.futures
 import json
 import time
-import uuid
 from collections import defaultdict
 from queue import Queue
 from typing import Any, Dict, List
-from uuid import UUID
 
+from bisheng.utils import generate_uuid
 from bisheng_langchain.input_output.output import Report
 from fastapi import Request, WebSocket, WebSocketDisconnect, status
 from loguru import logger
@@ -201,7 +200,7 @@ class ChatManager:
             work_type: WorkType,
             websocket: WebSocket,
             graph_data: dict = None):
-        client_key = uuid.uuid4().hex
+        client_key = generate_uuid()
         if work_type == WorkType.GPTS:
             chat_client = ChatClient(request,
                                      client_key,
@@ -620,7 +619,7 @@ class ChatManager:
         graph = await build_flow_no_yield(graph_data=graph_data,
                                           artifacts=artifacts,
                                           process_file=True,
-                                          flow_id=UUID(flow_id).hex,
+                                          flow_id=flow_id,
                                           chat_id=chat_id,
                                           user_name=db_user.user_name)
         await graph.abuild()

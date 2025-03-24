@@ -2,7 +2,6 @@ import csv
 from datetime import datetime
 from tempfile import NamedTemporaryFile
 from typing import Any, List, Optional
-from uuid import UUID
 
 from loguru import logger
 
@@ -85,7 +84,7 @@ class AuditLogService:
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # 获取助手详情
-        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        assistant_info = AssistantDao.get_one_assistant(assistant_id)
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
@@ -117,7 +116,7 @@ class AuditLogService:
         """
         logger.info(f"act=delete_chat_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.FLOW,
-                      flow_info.id.hex, flow_info.name, ResourceTypeEnum.FLOW)
+                      flow_info.id, flow_info.name, ResourceTypeEnum.FLOW)
 
     @classmethod
     def delete_chat_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
@@ -126,7 +125,7 @@ class AuditLogService:
         """
         logger.info(f"act=delete_chat_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORK_FLOW,
-                      flow_info.id.hex, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+                      flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
     def delete_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_info: Assistant):
@@ -135,7 +134,7 @@ class AuditLogService:
         """
         logger.info(f"act=delete_assistant_flow user={user.user_name} ip={ip_address} assistant={assistant_info.id}")
         cls._chat_log(user, ip_address, EventType.DELETE_CHAT, ObjectType.ASSISTANT,
-                      assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+                      assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
     def _build_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
@@ -175,7 +174,7 @@ class AuditLogService:
         logger.info(f"act=create_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
         cls._build_log(user, ip_address, EventType.CREATE_BUILD, obj_type,
-                       flow_info.id.hex, flow_info.name, rs_type)
+                       flow_info.id, flow_info.name, rs_type)
 
     @classmethod
     def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
@@ -190,7 +189,7 @@ class AuditLogService:
         logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
         cls._build_log(user, ip_address, EventType.UPDATE_BUILD, obj_type,
-                       flow_info.id.hex, flow_info.name, rs_type)
+                       flow_info.id, flow_info.name, rs_type)
 
     @classmethod
     def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
@@ -204,7 +203,7 @@ class AuditLogService:
             rs_type = ResourceTypeEnum.WORK_FLOW
         logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         cls._build_log(user, ip_address, EventType.DELETE_BUILD, obj_type,
-                       flow_info.id.hex, flow_info.name, rs_type)
+                       flow_info.id, flow_info.name, rs_type)
 
     @classmethod
     def create_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -212,9 +211,9 @@ class AuditLogService:
         新建助手的审计日志
         """
         logger.info(f"act=create_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
-        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        assistant_info = AssistantDao.get_one_assistant(assistant_id)
         cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.ASSISTANT,
-                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+                       assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
     def update_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -222,10 +221,10 @@ class AuditLogService:
         更新助手的审计日志
         """
         logger.info(f"act=update_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
-        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        assistant_info = AssistantDao.get_one_assistant(assistant_id)
 
         cls._build_log(user, ip_address, EventType.UPDATE_BUILD, ObjectType.ASSISTANT,
-                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+                       assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
     def delete_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -233,10 +232,10 @@ class AuditLogService:
         删除助手的审计日志
         """
         logger.info(f"act=delete_build_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
-        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        assistant_info = AssistantDao.get_one_assistant(assistant_id)
 
         cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.ASSISTANT,
-                       assistant_info.id.hex, assistant_info.name, ResourceTypeEnum.ASSISTANT)
+                       assistant_info.id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
     def _knowledge_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
@@ -404,7 +403,7 @@ class AuditLogService:
     @classmethod
     def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
         """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 false: 表示返回空列表"""
-        flow_ids = [UUID(one).hex for one in flow_ids]
+        flow_ids = [one for one in flow_ids]
         group_admins = []
         if not user.is_admin():
             user_groups = UserGroupDao.get_user_admin_group(user.user_id)

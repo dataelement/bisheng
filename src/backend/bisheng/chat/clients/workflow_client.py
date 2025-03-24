@@ -1,8 +1,8 @@
 import asyncio
 import json
-import uuid
 from typing import Dict, Optional
 
+from bisheng.utils import generate_uuid
 from fastapi import Request, WebSocket, status
 from loguru import logger
 
@@ -72,7 +72,7 @@ class WorkflowClient(BaseClient):
         # chat ws connection first handle
         workflow_id = message.get('flow_id', self.client_id)
         self.chat_id = message.get('chat_id', '')
-        unique_id = uuid.uuid4().hex
+        unique_id = generate_uuid()
         if self.chat_id:
             await self.init_history()
             unique_id = f'{self.chat_id}_async_task_id'

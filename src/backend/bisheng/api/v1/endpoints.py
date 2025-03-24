@@ -86,7 +86,7 @@ def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
     try:
         # 校验是否符合yaml格式
         _ = yaml.safe_load(data.get('data'))
-        db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB.value)
+        db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
         db_config.value = data.get('data')
         ConfigDao.insert_config(db_config)
         redis_client.delete('config:initdb_config')
@@ -155,10 +155,9 @@ async def process_flow(
     """
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
-
+    flow_id = flow_id.hex
     logger.info(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
-    flow_id = flow_id.hex
 
     try:
         flow = FlowDao.get_flow_by_id(flow_id)

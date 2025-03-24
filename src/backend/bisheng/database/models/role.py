@@ -2,14 +2,12 @@ from datetime import datetime
 from typing import List, Optional
 
 from bisheng.database.base import session_getter
+from bisheng.database.constants import DefaultRole, AdminRole
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.role_access import RoleAccess
+from bisheng.database.models.user_role import UserRole
 from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
 from sqlmodel import Field, select
-
-# 默认普通用户角色的ID
-DefaultRole = 2
-# 超级管理员角色ID
-AdminRole = 1
 
 
 class RoleBase(SQLModelSerializable):
@@ -86,6 +84,14 @@ class RoleDao(RoleBase):
             session.commit()
             session.refresh(role)
             return role
+
+    @classmethod
+    def delete_role(cls, role_id: int):
+        with session_getter() as session:
+            session.exec(delete(Role).where(Role.id == role_id))
+            session.exec(delete(UserRole).where(UserRole.role_id == role_id))
+            session.exec(delete(RoleAccess).where(RoleAccess.role_id == role_id))
+            session.commit()
 
     @classmethod
     def get_role_by_ids(cls, role_ids: List[int]) -> List[Role]:

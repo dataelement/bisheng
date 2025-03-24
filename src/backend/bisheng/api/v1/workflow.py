@@ -1,7 +1,6 @@
 import json
 import time
 from typing import Optional
-from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, status as http_status
 from fastapi_jwt_auth import AuthJWT
@@ -23,6 +22,7 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.utils.requests import Requests
+from bisheng.utils import generate_uuid
 
 
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
@@ -36,7 +36,7 @@ async def get_report_file(
     """ 获取report节点的模板文件 """
     if not version_key:
         # 重新生成一个version_key
-        version_key = uuid4().hex
+        version_key = generate_uuid()
     else:
         version_key = version_key.split('_', 1)[0]
     file_url = ""
@@ -58,7 +58,7 @@ async def copy_report_file(
         version_key: str = Body(..., embed=True, description="minio的object_name")):
     """ 复制report节点的模板文件 """
     version_key = version_key.split('_', 1)[0]
-    new_version_key = uuid4().hex
+    new_version_key = generate_uuid()
     object_name = f"workflow/report/{version_key}.docx"
     new_object_name = f"workflow/report/{new_version_key}.docx"
     minio_client = MinioClient()
@@ -137,7 +137,7 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     # 创建新的技能
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
 
-    current_version = FlowVersionDao.get_version_by_flow(db_flow.id.hex)
+    current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
     FlowService.create_flow_hook(request, login_user, db_flow, ret.version_id, FlowType.WORKFLOW.value)
@@ -145,20 +145,19 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
 
 
 @router.get('/versions', status_code=200)
-def get_versions(*, flow_id: UUID, Authorize: AuthJWT = Depends()):
+def get_versions(*, flow_id: str, Authorize: AuthJWT = Depends()):
     """
     获取技能对应的版本列表
     """
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
-    flow_id = flow_id.hex
     return FlowService.get_version_list_by_flow(user, flow_id)
 
 
 @router.post('/versions', status_code=200)
 def create_versions(*,
-                    flow_id: UUID,
+                    flow_id: str,
                     flow_version: FlowVersionCreate,
                     Authorize: AuthJWT = Depends()):
     """
@@ -167,7 +166,6 @@ def create_versions(*,
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
-    flow_id = flow_id.hex
     flow_version.flow_type = FlowType.WORKFLOW.value
     return FlowService.create_new_version(user, flow_id, flow_version)
 
@@ -209,30 +207,28 @@ def get_version_info(*, version_id: int, Authorize: AuthJWT = Depends()):
 @router.post('/change_version', status_code=200)
 def change_version(*,
                    request: Request,
-                   flow_id: UUID = Query(default=None, description='技能唯一ID'),
+                   flow_id: str = Query(default=None, description='技能唯一ID'),
                    version_id: int = Query(default=None, description='需要设置的当前版本ID'),
                    login_user: UserPayload = Depends(get_login_user)):
     """
     修改当前版本
     """
-    flow_id = flow_id.hex
     return FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
 @router.get('/get_one_flow/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
-def read_flow(*, flow_id: UUID, login_user: UserPayload = Depends(get_login_user)):
+def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
-    return FlowService.get_one_flow(login_user, flow_id.hex)
+    return FlowService.get_one_flow(login_user, flow_id)
 
 
 @router.patch('/update/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
 async def update_flow(*,
                       request: Request,
-                      flow_id: UUID,
+                      flow_id: str,
                       flow: FlowUpdate,
                       login_user: UserPayload = Depends(get_login_user)):
     """online offline"""
-    flow_id = flow_id.hex
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise HTTPException(status_code=404, detail='Flow not found')
@@ -259,10 +255,10 @@ async def update_flow(*,
 
 @router.patch('/status', response_model=UnifiedResponseModel[FlowRead], status_code=200)
 async def update_flow_status(request: Request, login_user: UserPayload = Depends(get_login_user),
-                             flow_id: UUID = Body(..., description='技能ID'),
+                             flow_id: str = Body(..., description='技能ID'),
                              version_id: int = Body(..., description='版本ID'),
                              status: int = Body(..., description='状态')):
-    WorkFlowService.update_flow_status(login_user, flow_id.hex, version_id, status)
+    WorkFlowService.update_flow_status(login_user, flow_id, version_id, status)
     return resp_200()
 
 

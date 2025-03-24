@@ -2,9 +2,9 @@ import asyncio
 import json
 from abc import abstractmethod, ABC
 from typing import Dict, Callable
-from uuid import uuid4
 from queue import Queue, Empty
 
+from bisheng.utils import generate_uuid
 from loguru import logger
 from fastapi import WebSocket, Request
 
@@ -64,7 +64,7 @@ class BaseClient(ABC):
 
     async def handle_message(self, message: Dict[any, any]):
         """ 处理客户端发过来的信息, 提交到线程池内执行 """
-        trace_id = uuid4().hex
+        trace_id = generate_uuid()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
         with logger.contextualize(trace_id=trace_id):
             if message.get('action') == 'stop':

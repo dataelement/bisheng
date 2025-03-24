@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 from uuid import UUID, uuid4
 
+from bisheng.utils import generate_uuid
 from pydantic import validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
@@ -46,7 +47,6 @@ class FlowBase(SQLModelSerializable):
 
     @validator('data')
     def validate_json(v):
-        # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
         if not isinstance(v, dict):
@@ -62,21 +62,16 @@ class FlowBase(SQLModelSerializable):
 
 
 class Flow(FlowBase, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    # style: Optional['FlowStyle'] = Relationship(
-    #     back_populates='flow',
-    #     # use "uselist=False" to make it a one-to-one relationship
-    #     sa_relationship_kwargs={'uselist': False},
-    # )
 
 
 class FlowCreate(FlowBase):
-    flow_id: Optional[UUID]
+    flow_id: Optional[str]
 
 
 class FlowRead(FlowBase):
-    id: UUID
+    id: str
     user_name: Optional[str]
     version_id: Optional[int]
 
@@ -122,7 +117,7 @@ class FlowDao(FlowBase):
             session.delete(flow_info)
             # 删除对应的版本信息
             update_statement = update(FlowVersion).where(
-                FlowVersion.flow_id == flow_info.id.hex).values(is_delete=1)
+                FlowVersion.flow_id == flow_info.id).values(is_delete=1)
             session.exec(update_statement)
             session.commit()
             return flow_info
