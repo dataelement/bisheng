@@ -182,7 +182,7 @@ class AssistantService(BaseService, AssistantUtils):
             GroupResourceDao.insert_group_batch(batch_resource)
 
         # 写入审计日志
-        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id.hex)
+        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
 
         # 写入logo缓存
         cls.get_logo_share_link(assistant.logo)
@@ -304,7 +304,7 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
 
         # 写入审计日志
-        AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
+        AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id)
 
         # 写入缓存
         cls.get_logo_share_link(assistant.logo)
