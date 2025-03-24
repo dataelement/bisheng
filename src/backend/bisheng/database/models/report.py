@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Optional
-from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text
@@ -11,7 +10,7 @@ class ReportBase(SQLModelSerializable):
     # ```
     # 使用flow_id 按更新时间倒排获取最新模板的路径
     # 会存储模板生成的最终报告的记录`
-    flow_id: UUID = Field(index=False, description='技能名字')
+    flow_id: str = Field(index=False, description='技能名字')
     file_name:  Optional[str] = Field(index=False, description='生成报告名字')
     template_name:  Optional[str] = Field(index=False, description='报告模板数据存储路径')
     version_key: Optional[str] = Field(index=True, unique=True, description='前端模板唯一key')

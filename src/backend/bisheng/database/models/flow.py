@@ -3,7 +3,6 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
-from uuid import UUID, uuid4
 
 from bisheng.utils import generate_uuid
 from pydantic import validator
@@ -125,7 +124,7 @@ class FlowDao(FlowBase):
     @classmethod
     def get_flow_by_id(cls, flow_id: str) -> Optional[Flow]:
         with session_getter() as session:
-            statement = select(Flow).where(Flow.id == UUID(flow_id))
+            statement = select(Flow).where(Flow.id == flow_id)
             return session.exec(statement).first()
 
     @classmethod
@@ -280,7 +279,7 @@ class FlowDao(FlowBase):
                                  limit=limit,flow_type=flow_type)
 
     @classmethod
-    def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0,flow_type:int=FlowType.FLOW.value) \
+    def filter_flows_by_ids(cls, flow_ids: List[str], keyword: str = None, page: int = 0, limit: int = 0,flow_type:int=FlowType.FLOW.value) \
             -> (List[Flow], int):
         """
         通过技能ID过滤技能列表，只返回简略信息，不包含data
