@@ -101,7 +101,7 @@ class FlowDao(FlowBase):
             flow_version = FlowVersion(name='v0',
                                        is_current=1,
                                        data=flow_info.data,
-                                       flow_id=flow_info.id.hex,
+                                       flow_id=flow_info.id,
                                        create_time=datetime.now(),
                                        user_id=flow_info.user_id,
                                        flow_type=flow_type)

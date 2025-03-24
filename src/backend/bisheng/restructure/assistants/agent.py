@@ -114,7 +114,7 @@ class RtcAssistantAgent(AssistantAgent):
                 logger.warning('act=init_tools skip not online flow_id: {}', datum.id)
                 continue
             tool_description = f'{datum.name}:{datum.description}'
-            fake_chat_id = self.assistant.id.hex
+            fake_chat_id = self.assistant.id
             graph = await build_flow_no_yield(graph_data=datum.data, artifacts={}, process_file=True, flow_id=datum.id,
                                               chat_id=fake_chat_id)
             built_obj = await graph.abuild()

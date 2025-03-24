@@ -442,7 +442,7 @@ class FinetuneService:
         logger.info('start query sft job log and report')
         sft_ret = SFTBackend.get_job_log(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job log error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'get sft job log error: job_id: {finetune.id}, err: {sft_ret[1]}')
         log_data = sft_ret[1]['log_data'].encode('utf-8')
         # 上传日志文件到minio上
         log_path = cls.upload_job_log(finetune, io.BytesIO(log_data), len(log_data))
@@ -450,9 +450,9 @@ class FinetuneService:
 
         # 查询任务评估报告
         logger.info('start query sft job report')
-        sft_ret = SFTBackend.get_job_metrics(host=parse_server_host(sft_endpoint), job_id=finetune.id.hex)
+        sft_ret = SFTBackend.get_job_metrics(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job report error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'get sft job report error: job_id: {finetune.id}, err: {sft_ret[1]}')
         else:
             finetune.report = sft_ret[1]['report']
 
@@ -489,14 +489,14 @@ class FinetuneService:
             return True
         published_model = ModelDeployDao.find_model(finetune.model_id)
         if not published_model:
-            logger.error(f'published model not found, job_id: {finetune.id.hex}, model_id: {finetune.model_id}')
+            logger.error(f'published model not found, job_id: {finetune.id}, model_id: {finetune.model_id}')
             return False
 
         # 调用接口修改已发布模型的名称
-        sft_ret = SFTBackend.change_model_name(parse_server_host(finetune.sft_endpoint), finetune.id.hex,
+        sft_ret = SFTBackend.change_model_name(parse_server_host(finetune.sft_endpoint), finetune.id,
                                                published_model.model, model_name)
         if not sft_ret[0]:
-            logger.error(f'change model name error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'change model name error: job_id: {finetune.id}, err: {sft_ret[1]}')
             return False
 
         # 修改可预训练的模型名称
