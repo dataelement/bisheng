@@ -157,12 +157,13 @@ class ChatClient:
             await self.websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=str(e))
             raise IgnoreException(f'get assistant info error: {str(e)}')
         try:
-            self.db_assistant = assistant
             if self.chat_id and self.gpts_agent is None:
+                self.db_assistant = assistant
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
+                self.db_assistant = assistant
                 # 调试界面每次都重新生成
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
