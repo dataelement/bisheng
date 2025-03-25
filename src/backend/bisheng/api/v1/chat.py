@@ -26,7 +26,7 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao, LikedType
-from bisheng.database.models.session import SensitiveStatus, MessageSessionDao
+from bisheng.database.models.session import SensitiveStatus, MessageSessionDao, MessageSession
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
@@ -259,10 +259,26 @@ def add_chat_messages(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if flow_info:
+            MessageSessionDao.insert_one(MessageSession(
+                chat_id=chat_id,
+                flow_id=flow_id,
+                flow_type=FlowType.FLOW.value,
+                flow_name=flow_info.name,
+                user_id=login_user.user_id,
+                sensitive_status=SensitiveStatus.VIOLATIONS.value,
+            ))
             AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id, flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
+                MessageSessionDao.insert_one(MessageSession(
+                    chat_id=chat_id,
+                    flow_id=flow_id,
+                    flow_type=FlowType.ASSISTANT.value,
+                    flow_name=assistant_info.name,
+                    user_id=login_user.user_id,
+                    sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                ))
                 AuditLogService.create_chat_assistant(login_user, get_request_ip(request),
                                                       flow_id)
 
