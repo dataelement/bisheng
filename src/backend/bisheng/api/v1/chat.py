@@ -157,6 +157,9 @@ def get_app_chat_list(*,
             user_id=one.user_id,
             user_name=one.user_id,
             create_time=one.create_time,
+            like_count=one.like,
+            dislike_count=one.dislike,
+            copied_count=one.copied,
         )
         if mark_info := chat_status_ids.get(one.chat_id):
             tmp.mark_id = mark_info.create_id
