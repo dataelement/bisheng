@@ -11,10 +11,11 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { locationContext } from "@/contexts/locationContext";
-import { getAuditAppListApi } from "@/controllers/API/log";
+import { userContext } from "@/contexts/userContext";
+import { getAuditAppListApi, exportCsvApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { downloadFile, formatDate } from "@/util/utils";
-import { useContext, useEffect, useReducer, useState } from "react";
+import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 const getStrTime = (date) => {
@@ -29,7 +30,7 @@ type FilterState = {
     userGroup: string;
     dateRange: any[];
     feedback: string;
-    result: string;
+    sensitive_status: string;
 };
 
 type Action =
@@ -47,7 +48,7 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
                 userGroup: '',
                 dateRange: [],
                 feedback: '',
-                result: ''
+                sensitive_status: ''
             };
         default:
             return state;
@@ -69,9 +70,16 @@ export default function AppUseLog() {
             start_date,
             end_date,
             feedback: param.feedback || undefined,
-            // review_status: param.result || undefined,
+            sensitive_status: param.sensitive_status || undefined,
         })
     });
+    const processedData = useMemo(() =>
+        datalist.map(el => ({
+            ...el,
+            userGroupsString: el.user_groups.map(item => item.name).join(','),
+        })),
+        [datalist] // 依赖 datalist
+    );
 
     const [filters, dispatch] = useReducer(filterReducer, {
         appName: [],
@@ -79,7 +87,7 @@ export default function AppUseLog() {
         userGroup: '',
         dateRange: [],
         feedback: '',
-        result: ''
+        sensitive_status: ''
     });
 
     const resetClick = () => {
@@ -90,7 +98,7 @@ export default function AppUseLog() {
             userGroup: '',
             dateRange: [],
             feedback: '',
-            result: ''
+            sensitive_status: ''
         })
     }
     // 进详情页前缓存 page, 临时方案
@@ -107,11 +115,36 @@ export default function AppUseLog() {
         }
     }, [])
 
+    const { user } = useContext(userContext)
     const [auditing, setAuditing] = useState(false);
     const handleExport = async () => {
+
+        const generateFileName = (start_date, end_date, userName) => {
+            let str = '';
+            if (start_date && end_date) {
+                const startDatePart = start_date.split(' ')[0];
+                const endDatePart = end_date.split(' ')[0];
+                str = `${startDatePart}_${endDatePart}_`;
+            }
+            return `Export_${str}${userName}_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`;
+        };
+
         setAuditing(true)
-        await downloadFile('url', 'text.csv') // csv zip
-        setAuditing(false)
+
+        const [start_date, end_date] = getStrTime(filters.dateRange || [])
+        exportCsvApi({
+            flow_ids: filters.appName?.length ? filters.appName.map(el => el.value) : undefined,
+            user_ids: filters.userName?.[0]?.value || undefined,
+            group_ids: filters.userGroup || undefined,
+            start_date,
+            end_date,
+            feedback: filters.feedback || undefined,
+            sensitive_status: filters.sensitive_status || undefined,
+        }).then(async res => {
+            const fileName = generateFileName(start_date, end_date, user.user_name);
+            await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
+            setAuditing(false)
+        })
     }
 
 
@@ -140,14 +173,14 @@ export default function AppUseLog() {
                     </Select>
                 </div>
                 {appConfig.isPro && <div className="w-[200px] relative">
-                    <Select value={filters.result} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['result']: value } })} >
+                    <Select value={filters.sensitive_status} onValueChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['sensitive_status']: value } })} >
                         <SelectTrigger className="w-[200px]">
                             <SelectValue placeholder="实时内容安全审查结果" />
                         </SelectTrigger>
                         <SelectContent className="max-w-[200px] break-all">
                             <SelectGroup>
-                                <SelectItem value={'violate'}>违规</SelectItem>
-                                <SelectItem value={'pass'}>通过</SelectItem>
+                                <SelectItem value={'2'}>违规</SelectItem>
+                                <SelectItem value={'1'}>通过</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
@@ -162,6 +195,7 @@ export default function AppUseLog() {
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
                         <TableHead>{t('log.userName')}</TableHead>
+                        <TableHead>用户组</TableHead>
                         <TableHead>{t('createTime')}</TableHead>
                         <TableHead>{t('log.userFeedback')}</TableHead>
                         {appConfig.isPro && <TableHead>实时内容安全审查结果</TableHead>}
@@ -170,12 +204,13 @@ export default function AppUseLog() {
                 </TableHeader>
 
                 <TableBody>
-                    {datalist.map((el: any) => (
+                    {processedData.map((el: any) => (
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-[200px]">
                                 <div className=" truncate-multiline">{el.flow_name}</div>
                             </TableCell>
                             <TableCell>{el.user_name}</TableCell>
+                            <TableCell>{el.userGroupsString}</TableCell>
                             <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                             <TableCell className="break-all flex gap-2">
                                 <div className="text-center text-xs relative">
@@ -201,8 +236,9 @@ export default function AppUseLog() {
                                 </div>
                             </TableCell>
                             {appConfig.isPro && <TableCell>
-                                <Badge variant="outline" className="text-green-500">通过</Badge>
-                                <Badge variant="outline" className="text-red-500">违规</Badge>
+                                {el.sensitive_status === 1 ? <Badge variant="outline" className="text-green-500">通过</Badge>
+                                    : <Badge variant="outline" className="text-red-500">违规</Badge>
+                                }
                             </TableCell>}
                             <TableCell className="text-right" onClick={() => {
                                 // @ts-ignore
@@ -218,7 +254,8 @@ export default function AppUseLog() {
                                 }
                             </TableCell>
                         </TableRow>
-                    ))}
+                    )
+                    )}
                 </TableBody>
             </Table>
         </div>

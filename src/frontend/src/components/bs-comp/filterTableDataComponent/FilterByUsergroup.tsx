@@ -17,7 +17,7 @@ export default function FilterByUsergroup({ value, onChange }) {
                     {value ? (
                         <span>{groups.find(g => g.id === value)?.group_name}</span>
                     ) : (
-                        <SelectValue placeholder="用户组范围" />
+                        <SelectValue placeholder="用户组" />
                     )}
                 </SelectTrigger>
                 <SelectContent className="max-w-[200px] break-all">

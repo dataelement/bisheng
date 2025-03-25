@@ -18,7 +18,7 @@ export default function FilterByApp({ value, onChange }) {
                 options={apps}
                 value={value}
                 multiple
-                placeholder="应用名称范围"
+                placeholder="应用名称"
                 onLoad={() => loadApps("")} // 初始加载
                 onSearch={searchApps} // 搜索时触发
                 onScrollLoad={loadMoreApps} // 滚动加载更多

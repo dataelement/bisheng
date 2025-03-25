@@ -32,6 +32,8 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
 
             setOptions(llmOptions)
             agent && !data.value && onChange(llmOptions[0].children[0].value)
+
+            setLoading(false)
             // return { llmOptions, embeddings }
         })
 
@@ -42,8 +44,9 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
     }, [])
 
 
+    const [loading, setLoading] = useState(true)
     const defaultValue = useMemo(() => {
-        if (!options.length) return ''
+        if (!options.length) return []
         let _defaultValue = []
         if (!data.value) return _defaultValue
         options.some(option => {
@@ -80,7 +83,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             {data.required && <span className="text-red-500">*</span>}
             {data.label}
         </Label>
-        {defaultValue?.length ? <Cascader
+        {!loading ? <Cascader
             error={error}
             placholder={data.placeholder}
             defaultValue={defaultValue}

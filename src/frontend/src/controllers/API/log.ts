@@ -176,11 +176,27 @@ export async function getAuditAppListApi(params: {
     start_date,
     end_date,
     feedback,
-    review_status,
+    sensitive_status,
     page,
     page_size
 }) {
     return await axios.get('/api/v1/audit/session', {
+        params, paramsSerializer
+    })
+}
+
+// 导出csv
+
+export async function exportCsvApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    sensitive_status
+}) {
+    return await axios.get('/api/v1/audit/session/export', {
         params, paramsSerializer
     })
 }
