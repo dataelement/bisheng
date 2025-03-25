@@ -303,7 +303,7 @@ def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_log
 
 
 @router.post('/liked', status_code=200)
-def like_response(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
+def like_response(*, data: ChatInput):
     message_id = data.message_id
     message = ChatMessageDao.get_message_by_id(data.message_id)
     if not message:
@@ -340,9 +340,7 @@ def like_response(*, data: ChatInput, login_user: UserPayload = Depends(get_logi
 
 
 @router.post('/chat/copied', status_code=200)
-def copied_message(*,
-                   message_id: int = Body(embed=True),
-                   login_user: UserPayload = Depends(get_login_user)):
+def copied_message(message_id: int = Body(embed=True)):
     """ 上传复制message的数据 """
     message = ChatMessageDao.get_message_by_id(message_id)
     if not message:
@@ -354,7 +352,7 @@ def copied_message(*,
 
 
 @router.post('/chat/comment', status_code=200)
-def comment_resp(*, data: ChatInput, login_user: UserPayload = Depends(get_login_user)):
+def comment_resp(*, data: ChatInput):
     comment_answer(data.message_id, data.comment)
     return resp_200(message='操作成功')
 
