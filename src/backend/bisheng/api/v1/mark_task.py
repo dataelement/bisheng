@@ -1,9 +1,13 @@
 from collections import deque
-import itertools
-import json
 from typing import Optional
+
+from fastapi_jwt_auth import AuthJWT
+from fastapi import APIRouter,Depends,Request
+
+
 from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
+from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
@@ -13,9 +17,6 @@ from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils.linked_list import DoubleLinkList
 from bisheng.utils.logger import logger
-from fastapi_jwt_auth import AuthJWT
-from bisheng.api.services.user_service import UserPayload, get_login_user
-from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request)
 
 
 router = APIRouter(prefix='/mark', tags=['Mark'])

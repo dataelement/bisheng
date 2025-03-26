@@ -112,7 +112,8 @@ class MarkTaskDao(MarkTaskBase):
             filter_or = []
             if status:
                 filter.append(MarkTask.status == status)
-                filter.append(func.find_in_set(user_id, MarkTask.process_users) > 0)
+                if user_id:
+                    filter.append(func.find_in_set(user_id, MarkTask.process_users) > 0)
             if create_id:
                 filter.append(MarkTask.create_id == create_id)
             if user_id:
