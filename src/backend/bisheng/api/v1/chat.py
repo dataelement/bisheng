@@ -23,7 +23,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.mark_record import MarkRecordDao
+from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao, LikedType
 from bisheng.database.models.session import SensitiveStatus, MessageSessionDao, MessageSession
@@ -131,16 +131,9 @@ def get_app_chat_list(*,
         else:
             flow_ids = group_flow_ids
 
-    chat_ids = []
-    if mark_status or mark_user:
-        records = MarkRecordDao.filter_records(task_id=task_id, status=mark_status, mark_user=mark_user)
-        if not records:
-            return resp_200(PageList(list=[], total=0))
-        chat_ids = [record.session_id for record in records]
-
     # 获取会话列表
-    res = MessageSessionDao.filter_session(chat_ids=chat_ids, flow_ids=flow_ids, user_ids=user_ids, page=page_num, limit=page_size)
-    count = MessageSessionDao.filter_session_count(chat_ids=chat_ids, flow_ids=flow_ids, user_ids=user_ids)
+    res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+    total = len(res)
 
     # 查询会话的状态
     chat_status_ids = [one.chat_id for one in res]
@@ -160,14 +153,25 @@ def get_app_chat_list(*,
             like_count=one.like,
             dislike_count=one.dislike,
             copied_count=one.copied,
+            mark_status=MarkRecordStatus.DEFAULT.value,
+            mark_user=None,
         )
         if mark_info := chat_status_ids.get(one.chat_id):
             tmp.mark_id = mark_info.create_id
             tmp.mark_status = mark_info.status if mark_info.status is not None else 1
             tmp.mark_user = mark_info.create_user
+        if mark_status:
+            if mark_status != tmp.mark_status:
+                continue
+        if mark_user:
+            users = [int(one) for one in mark_user.split(',')]
+            if tmp.mark_id not in users:
+                continue
         result.append(tmp)
 
-    return resp_200(PageList(list=result, total=count))
+    result = result[(page_num - 1) * page_size: page_num * page_size]
+
+    return resp_200(PageList(list=result, total=total))
 
 
 @router.get('/chat/history',
