@@ -13,6 +13,7 @@ from bisheng.database.models.mark_app_user import MarkAppUser, MarkAppUserDao
 from bisheng.database.models.mark_task import  MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils.linked_list import DoubleLinkList
@@ -201,16 +202,17 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
                 return resp_200()
             record = queue.pop()
             logger.info("queue={} record={}",queue,record)
-            chat = ChatMessageDao.get_msg_by_chat_id(record.session_id)
-            result["chat_id"] = record.session_id
-            result["flow_type"] = record.flow_type
-            result["flow_id"] = chat[0].flow_id
+            chat = MessageSessionDao.get_one(record.session_id)
+            result["chat_id"] = chat.chat_id
+            result["flow_type"] = chat.flow_type
+            result["flow_id"] = chat.flow_id
             return resp_200(data=result)
     else:
         task = MarkTaskDao.get_task_byid(task_id)
         record = MarkRecordDao.get_list_by_taskid(task_id)
         chat_list = [r.session_id for r in record]
-        msg = ChatMessageDao.get_last_msg_by_flow_id(task.app_id.split(","),chat_list)
+
+        msg = MessageSessionDao.filter_session(flow_ids=task.app_id.split(","), exclude_chats=chat_list)
         linked = DoubleLinkList()
         k_list = {}
         for m in msg:
@@ -228,22 +230,14 @@ async def pre_or_next(chat_id:str,action:str,task_id:int,login_user: UserPayload
                 cur = k_list[linked.head().data]
             else:
                 cur = k_list[cur.next.data]
-            flow = FlowDao.get_flow_by_idstr(cur.flow_id)
-            if flow:
-                result['flow_type'] = flow.flow_type
-            else:
-                result['flow_type'] = FlowType.ASSISTANT.value
 
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
+            result['flow_type'] = cur.flow_type
             return resp_200(data=result)
         else:
             cur = k_list[linked.head().data]
-            flow = FlowDao.get_flow_by_idstr(cur.flow_id)
-            if flow:
-                result['flow_type'] = flow.flow_type
-            else:
-                result['flow_type'] = FlowType.ASSISTANT.value
+            result['flow_type'] = cur.flow_type
             result["chat_id"] = cur.chat_id
             result["flow_id"] = cur.flow_id
             return resp_200(data=result)

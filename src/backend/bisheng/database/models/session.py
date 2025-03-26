@@ -64,7 +64,7 @@ class MessageSessionDao(MessageSessionBase):
                                           sensitive_status: List[SensitiveStatus] = None,
                                           flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
                                           start_date: datetime = None, end_date: datetime = None,
-                                          include_delete: bool = True):
+                                          include_delete: bool = True, exclude_chats: List[str] = None):
         if chat_ids:
             statement = statement.where(MessageSession.chat_id.in_(chat_ids))
         if flow_ids:
@@ -81,7 +81,8 @@ class MessageSessionDao(MessageSessionBase):
 
         if not include_delete:
             statement = statement.where(MessageSession.is_delete == False)
-
+        if exclude_chats:
+            statement = statement.where(MessageSession.chat_id.not_in(exclude_chats))
         if start_date:
             statement = statement.where(MessageSession.create_time >= start_date)
         if end_date:
@@ -94,10 +95,10 @@ class MessageSessionDao(MessageSessionBase):
     def filter_session(cls, chat_ids: List[str] = None, sensitive_status: List[SensitiveStatus] = None,
                        flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
                        start_date: datetime = None, end_date: datetime = None, include_delete: bool = True,
-                       page: int = 0, limit: int = 0) -> List[MessageSession]:
+                       exclude_chats: List[str] = None, page: int = 0, limit: int = 0) -> List[MessageSession]:
         statement = select(MessageSession)
         statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status, flow_ids, user_ids,
-                                                          feedback, start_date, end_date, include_delete)
+                                                          feedback, start_date, end_date, include_delete, exclude_chats)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(MessageSession.create_time.desc())
@@ -107,11 +108,11 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     def filter_session_count(cls, chat_ids: List[str] = None, sensitive_status: List[SensitiveStatus] = None,
                              flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
-                             start_date: datetime = None, end_date: datetime = None,
-                             include_delete: bool = True) -> int:
+                             start_date: datetime = None, end_date: datetime = None, include_delete: bool = True,
+                             exclude_chats: List[str] = None) -> int:
         statement = select(func.count(MessageSession.chat_id))
         statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status, flow_ids, user_ids,
-                                                          feedback, start_date, end_date, include_delete)
+                                                          feedback, start_date, end_date, include_delete, exclude_chats)
         with session_getter() as session:
             return session.scalar(statement)
 
