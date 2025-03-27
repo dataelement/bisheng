@@ -252,7 +252,7 @@ def add_chat_messages(*,
                               user_id=login_user.user_id,
                               is_bot=True,
                               message=data.answer_message,
-                              sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                              sensitive_status=SensitiveStatus.PASS.value,
                               type='bot',
                               category='answer')
     ChatMessageDao.insert_batch([human_message, bot_message])
@@ -309,6 +309,7 @@ def update_chat_message(*,
 
     chat_message.message = message
     chat_message.source = False
+    chat_message.sensitive_status = SensitiveStatus.VIOLATIONS.value
 
     ChatMessageDao.update_message_model(chat_message)
 
