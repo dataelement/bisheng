@@ -20,6 +20,7 @@ class AppChatList(BaseModel):
     mark_user: Optional[str]
     mark_status: Optional[int]
     mark_id: Optional[int]
+    messages: Optional[List[dict]] # 会话的所有消息列表数据
 
 
 class APIAddQAParam(BaseModel):

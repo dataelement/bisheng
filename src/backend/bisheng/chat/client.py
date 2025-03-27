@@ -235,7 +235,8 @@ class ChatClient:
         answer = ''
         while not self.stream_queue.empty():
             msg = self.stream_queue.get()
-            answer += msg
+            if msg.get('type') == 'answer':
+                answer += msg.get('content', '')
 
         # 有流式输出内容的话，记录流式输出内容到数据库
         if answer.strip():

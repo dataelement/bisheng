@@ -481,9 +481,26 @@ class AuditLogService:
         return result, total
 
     @classmethod
-    def export_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
-                            start_date: datetime, end_date: datetime,
-                            feedback: str, sensitive_status: int) -> str:
+    def get_session_messages(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
+                             start_date: datetime, end_date: datetime, feedback: str,
+                             sensitive_status: int) -> List[AppChatList]:
+        page = 1
+        page_size = 50
+        res = []
+        while True:
+            result, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
+                                                 sensitive_status, page, page_size)
+            if not result:
+                break
+            page += 1
+            res.extend(cls.get_chat_messages(result))
+        return res
+
+    @classmethod
+    def export_session_messages(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int],
+                                group_ids: List[int],
+                                start_date: datetime, end_date: datetime,
+                                feedback: str, sensitive_status: int) -> str:
         page = 1
         page_size = 30
         excel_data = [
@@ -499,7 +516,21 @@ class AuditLogService:
             if not result:
                 break
             page += 1
-            cls.parse_chat_messages(result, excel_data, bisheng_pro)
+            chat_list = cls.get_chat_messages(result)
+            for chat in chat_list:
+                for message in chat.messages:
+                    message_data = [chat.chat_id, chat.flow_name, chat.create_time.strftime('%Y/%m/%d %H:%M:%S'),
+                                    chat.user_name,
+                                    '用户' if message.category == 'question' else 'AI',
+                                    message.create_time.strftime('%Y/%m/%d %H:%M:%S'),
+                                    message.message,
+                                    '是' if message.liked == LikedType.LIKED.value else '否',
+                                    '是' if message.liked == LikedType.DISLIKED.value else '否',
+                                    '是' if message.copied else '否']
+                    if bisheng_pro:
+                        message_data.append(
+                            '是' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else '否')
+                    excel_data.append(message_data)
 
         minio_client = MinioClient()
         tmp_object_name = f'tmp/session/export_{generate_uuid()}.csv'
@@ -514,7 +545,7 @@ class AuditLogService:
         return minio_client.clear_minio_share_host(share_url)
 
     @classmethod
-    def parse_chat_messages(cls, chat_list: List[AppChatList], excel_data: List[List], bisheng_pro: bool):
+    def get_chat_messages(cls, chat_list: List[AppChatList]) -> List[AppChatList]:
         chat_ids = [chat.chat_id for chat in chat_list]
 
         chat_messages = ChatMessageDao.get_all_message_by_chat_ids(chat_ids)
@@ -523,21 +554,9 @@ class AuditLogService:
             if one.chat_id not in chat_messages_map:
                 chat_messages_map[one.chat_id] = []
             chat_messages_map[one.chat_id].append(one)
-
         for chat in chat_list:
             chat_messages = chat_messages_map.get(chat.chat_id, [])
-            for message in chat_messages:
-                # remove workflow input event, because it's not show in web
-                if message.category == WorkflowEventType.UserInput.value:
-                    continue
-                message_data = [chat.chat_id, chat.flow_name, chat.create_time.strftime('%Y/%m/%d %H:%M:%S'),
-                                chat.user_name,
-                                '用户' if message.category == 'question' else 'AI',
-                                message.create_time.strftime('%Y/%m/%d %H:%M:%S'),
-                                message.message,
-                                '是' if message.liked == LikedType.LIKED.value else '否',
-                                '是' if message.liked == LikedType.DISLIKED.value else '否',
-                                '是' if message.copied else '否']
-                if bisheng_pro:
-                    message_data.append('是' if message.sensitive_status == SensitiveStatus.VIOLATIONS.value else '否')
-                excel_data.append(message_data)
+            # remove workflow input event, because it's not show in web
+            chat.messages = [message for message in chat_messages
+                             if message.category != WorkflowEventType.UserInput.value]
+        return chat_list
