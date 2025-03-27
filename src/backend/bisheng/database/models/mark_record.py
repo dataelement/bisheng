@@ -77,6 +77,13 @@ class MarkRecordDao(MarkRecordBase):
             session.commit()
             return
 
+    @classmethod
+    def del_task_chat(cls, task_id: int, session_id: str):
+        with session_getter() as session:
+            st = delete(MarkRecord).where(MarkRecord.task_id == task_id).where(MarkRecord.session_id == session_id)
+            session.exec(st)
+            session.commit()
+            return
 
     @classmethod
     def get_list_by_taskid(cls,task_id:int):
