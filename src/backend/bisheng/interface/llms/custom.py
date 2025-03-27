@@ -134,7 +134,7 @@ class BishengLLM(BaseChatModel):
             params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
         elif server_info.type == LLMServerType.QWEN.value:
             params['dashscope_api_key'] = params.pop('openai_api_key')
-            params.pop('openai_api_base')
+            params.pop('openai_api_base', None)
             params['model_kwargs'] = {'enable_search': enable_web_search}
             if params.get('max_tokens'):
                 params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
