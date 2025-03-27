@@ -166,7 +166,7 @@ const useChatList = () => {
     const { chatId, messages } = useMessageStore()
 
     useEffect(() => {
-        if (messages.length > 0) {
+        if (messages.length > 0 && chatId === messages[0].chat_id) {
             let latest: any = messages[messages.length - 1]
             // 有分割线取上一条
             if (latest.category === 'divider') latest = messages[messages.length - 2] || {}

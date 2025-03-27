@@ -72,8 +72,8 @@ const TestDialog = forwardRef((props: any, ref) => {
         await captureAndAlertRequestErrorHoc(testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
-            auth_method,
-            auth_type,
+            auth_method: formStateRef.current.authMethod === 'apikey' ? 1 : 0,
+            auth_type: formStateRef.current.authType,
             api_key: formStateRef.current.apiKey,
             request_params: formRef.current,
             api_location: formStateRef.current.apiLocation,

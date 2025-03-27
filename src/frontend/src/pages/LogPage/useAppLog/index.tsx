@@ -10,6 +10,7 @@ import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getAuditAppListApi, exportCsvApi } from "@/controllers/API/log";
@@ -58,6 +59,7 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
 export default function AppUseLog() {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
+    const { message } = useToast()
     // 20条每页
     const { page, pageSize, data: datalist, total, loading, setPage, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
@@ -118,7 +120,6 @@ export default function AppUseLog() {
     const { user } = useContext(userContext)
     const [auditing, setAuditing] = useState(false);
     const handleExport = async () => {
-
         const generateFileName = (start_date, end_date, userName) => {
             let str = '';
             if (start_date && end_date) {
@@ -129,9 +130,64 @@ export default function AppUseLog() {
             return `Export_${str}${userName}_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`;
         };
 
-        setAuditing(true)
+        setAuditing(true);
 
-        const [start_date, end_date] = getStrTime(filters.dateRange || [])
+        // 处理时间范围逻辑
+        const dateRange = filters.dateRange || [];
+        let originalStart = dateRange[0];
+        let originalEnd = dateRange[1];
+
+        let adjustedStart = originalStart;
+        let adjustedEnd = originalEnd;
+        let showToast = false;
+        let toastMessage = '';
+
+        // 未选择时间范围
+        if (!originalStart && !originalEnd) {
+            adjustedEnd = new Date();
+            adjustedStart = new Date(adjustedEnd.getTime() - 59 * 24 * 60 * 60 * 1000); // 最近60天
+            showToast = true;
+            toastMessage = '未选择时间范围，已自动为你导出最近 60 天数据';
+        }
+        // 部分选择时间（只选开始或结束）
+        else if (!originalStart || !originalEnd) {
+            if (originalStart) {
+                adjustedEnd = new Date(originalStart);
+                adjustedEnd.setDate(adjustedEnd.getDate() + 59);
+            } else {
+                adjustedStart = new Date(originalEnd);
+                adjustedStart.setDate(adjustedStart.getDate() - 59);
+            }
+            showToast = true;
+            const formattedStart = formatDate(adjustedStart, 'yyyy-MM-dd');
+            const formattedEnd = formatDate(adjustedEnd, 'yyyy-MM-dd');
+            toastMessage = `未选择时间范围，已自动为你导出 ${formattedStart} - ${formattedEnd} 数据`;
+        }
+        // 已选择时间范围，检查跨度
+        else {
+            const diffTime = adjustedEnd.getTime() - adjustedStart.getTime();
+            const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000)) + 1; // 包含起止日期的总天数
+            if (diffDays > 60) {
+                message({
+                    variant: 'error',
+                    description: '导出时间范围不能超过 60 天，请缩小范围后重试',
+                })
+                setAuditing(false);
+                return;
+            }
+        }
+
+        // 显示提示信息
+        if (showToast) {
+            message({
+                variant: 'warning',
+                description: toastMessage,
+            })
+        }
+
+        // 生成请求参数
+        const [start_date, end_date] = getStrTime([adjustedStart, adjustedEnd])
+
         exportCsvApi({
             flow_ids: filters.appName?.length ? filters.appName.map(el => el.value) : undefined,
             user_ids: filters.userName?.[0]?.value || undefined,
@@ -143,9 +199,12 @@ export default function AppUseLog() {
         }).then(async res => {
             const fileName = generateFileName(start_date, end_date, user.user_name);
             await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
-            setAuditing(false)
-        })
-    }
+            setAuditing(false);
+        }).catch((error) => {
+            setAuditing(false);
+            // 可选：处理错误情况
+        });
+    };
 
 
     return <div className="relative">
@@ -185,7 +244,22 @@ export default function AppUseLog() {
                         </SelectContent>
                     </Select>
                 </div>}
-                <Button onClick={() => filterData(filters)} >查询</Button>
+                <Button onClick={() => {
+                    const dateRange = filters.dateRange || [];
+                    let originalStart = dateRange[0];
+                    let originalEnd = dateRange[1];
+                    let adjustedStart = originalStart;
+                    let adjustedEnd = originalEnd;
+                    if (originalStart && !originalEnd) {
+                        adjustedEnd = new Date(originalStart);
+                        adjustedEnd.setDate(adjustedEnd.getDate() + 59);
+                    } else if (!originalStart && originalEnd) {
+                        adjustedStart = new Date(originalEnd);
+                        adjustedStart.setDate(adjustedStart.getDate() - 59);
+                    }
+
+                    filterData({ ...filters, dateRange: [adjustedStart, adjustedEnd] })
+                }} >查询</Button>
                 <Button onClick={resetClick} variant="outline">重置</Button>
                 <Button onClick={handleExport} disabled={auditing}>
                     {auditing && <LoadIcon className="mr-1" />}导出</Button>
