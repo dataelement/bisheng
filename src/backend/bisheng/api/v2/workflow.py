@@ -106,21 +106,3 @@ async def stop_workflow(request: Request,
     workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
     workflow.set_workflow_stop()
     return resp_200()
-
-
-@router.websocket('/chat/{workflow_id}')
-async def workflow_ws(*,
-                      workflow_id: str = Path(..., description='工作流唯一ID'),
-                      websocket: WebSocket,
-                      chat_id: Optional[str] = None):
-    try:
-        # Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        # payload = Authorize.get_jwt_subject()
-        login_user = get_default_operator()
-        await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
-    except WebSocketException as exc:
-        logger.error(f'Websocket exception: {str(exc)}')
-        await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
-    except Exception as e:
-        logger.error(f'Websocket handle error: {str(e)}')
-        await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(e))
