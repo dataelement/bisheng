@@ -95,7 +95,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       docker_password:
         from_secret: NEXUS_PASSWORD
     commands:
-      - version="${version//\//-}"
+      - version="${$version//\//-}"
+      - echo "build image tag is $version"
       - cd ./src/backend/
       - docker login -u $docker_user -p $docker_password $docker_registry
       - docker build -t $docker_repo:$version .
@@ -124,7 +125,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       docker_password:
         from_secret: NEXUS_PASSWORD
     commands:
-      - version="${version//\//-}"
+      - version="${$version//\//-}"
+      - echo "build image tag is $version"
       - cd ./src/frontend/
       - docker login -u $docker_user -p $docker_password $docker_registry
       - docker build -t $docker_repo:$version .
