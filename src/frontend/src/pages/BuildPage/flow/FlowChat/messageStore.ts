@@ -109,7 +109,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 end: type === 'over',
                 sender: '',
                 node_id: message?.node_id || '',
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+                create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
                 extra,
                 reasoning_log
             })
@@ -131,7 +131,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
             message: data.type === 'end' ? data.message.msg : currentMsg.message + data.message.msg,
             reasoning_log: reasoning_content ? currentMsg.reasoning_log + reasoning_content : currentMsg.reasoning_log,
-            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+            create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
             end: data.type === 'end'
         }
@@ -147,7 +147,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                     category: 'question',
                     message_id: generateUUID(8),
                     message: msg,
-                    update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                    create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
                 }]
         }))
     },
@@ -161,7 +161,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 category: 'separator',
                 message_id: generateUUID(8),
                 message: text,
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             }]
         }))
     },
@@ -180,7 +180,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 end: false,
                 sender: '',
                 node_id: message?.node_id || '',
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
                 // extra,
             })
             return { messages: newChat }
@@ -197,7 +197,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                 category: 'separator',
                 message_id: generateUUID(8),
                 message: i18next.t('chat.chatEndMessage', { ns: 'chat' }),
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             })
         }
         set({
@@ -241,7 +241,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             ...data,
             message: currentMessage.message + data.message,
             end: ['end', 'over'].includes(data.type),
-            update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+            create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
         }
 
         messages[currentMessageIndex] = newCurrentMessage

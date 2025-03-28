@@ -3,6 +3,7 @@ import clsx, { ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { APITemplateType } from "../types/api";
 import { checkUpperWords } from "../utils";
+import * as XLSX from 'xlsx';
 
 export function classNames(...classes: Array<string>): string {
     return classes.filter(Boolean).join(" ");
@@ -139,4 +140,31 @@ export function getFieldTitle(
         : template[templateField].name
             ? toTitleCase(template[templateField].name!)
             : toTitleCase(templateField);
+}
+
+
+// 导出excle
+export function exportCsv(data: any[], fileName: string = 'test_result.csv') {
+    // 创建Worksheet
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    // 将Worksheet转换为CSV字符串
+    const csv = XLSX.utils.sheet_to_csv(ws);
+
+    // 生成CSV文件
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+
+    // 模拟点击下载链接
+    document.body.appendChild(a);
+    a.click();
+
+    // 清理URL对象
+    setTimeout(function () {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }, 0);
 }

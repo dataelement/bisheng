@@ -238,7 +238,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 messageId: data.message_id,
                 noAccess: false,
                 liked: 0,
-                update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
             }, data.type === 'end_cover')
 
             if (!msgClosedRef.current) msgClosedRef.current = true

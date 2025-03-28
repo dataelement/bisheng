@@ -147,7 +147,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
                     files: [],
                     end: false,
                     user_name: "",
-                    update_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+                    create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
                 }]
         }))
     },

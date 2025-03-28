@@ -13,12 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { getAuditAppListApi, exportCsvApi } from "@/controllers/API/log";
+import { exportCsvDataApi, getAuditAppListApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
-import { downloadFile, formatDate } from "@/util/utils";
+import { exportCsv, formatDate } from "@/util/utils";
 import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+
 const getStrTime = (date) => {
     const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
     const end_date = date[1] && (formatDate(date[1], 'yyyy-MM-dd') + ' 23:59:59')
@@ -188,7 +189,7 @@ export default function AppUseLog() {
         // 生成请求参数
         const [start_date, end_date] = getStrTime([adjustedStart, adjustedEnd])
 
-        exportCsvApi({
+        exportCsvDataApi({
             flow_ids: filters.appName?.length ? filters.appName.map(el => el.value) : undefined,
             user_ids: filters.userName?.[0]?.value || undefined,
             group_ids: filters.userGroup || undefined,
@@ -197,8 +198,44 @@ export default function AppUseLog() {
             feedback: filters.feedback || undefined,
             sensitive_status: filters.sensitive_status || undefined,
         }).then(async res => {
-            const fileName = generateFileName(start_date, end_date, user.user_name);
-            await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
+            const data = [
+                ['会话ID', '应用名称', '会话创建时间', '用户名称', '消息角色', '消息发送时间', '消息文本内容', '点赞', '点踩', '复制', '是否命中内容安全审查']
+            ];
+
+            const handleMessage = (msg, id) => {
+                try {
+                    msg = msg && msg[0] === '{' ? JSON.parse(msg) : msg || ''
+                } catch (error) {
+                    console.log('error :>> ', `${id} 消息转换失败`);
+                }
+                return typeof msg === 'string' ? msg : msg.msg
+            }
+
+            // 数据转换
+            res.data.forEach(item => {
+                item.messages.forEach(msg => {
+                    const { message } = msg
+                    data.push([
+                        item.chat_id,
+                        item.flow_name,
+                        item.create_time.replace('T', ' '),
+                        item.user_name,
+                        msg.is_bot ? 'AI' : '用户',
+                        msg.create_time.replace('T', ' '),
+                        handleMessage(message, item.flow_id + '_' + item.chat_id),
+                        msg.liked === 1 ? '是' : '否',
+                        msg.liked === 2 ? '是' : '否',
+                        msg.copied ? '是' : '否',
+                        msg.sensitive_status ? '是' : '否'
+                    ])
+                })
+            })
+
+            // 导出excle
+            exportCsv(data)
+
+            // const fileName = generateFileName(start_date, end_date, user.user_name);
+            // await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
             setAuditing(false);
         }).catch((error) => {
             setAuditing(false);
@@ -251,11 +288,9 @@ export default function AppUseLog() {
                     let adjustedStart = originalStart;
                     let adjustedEnd = originalEnd;
                     if (originalStart && !originalEnd) {
-                        adjustedEnd = new Date(originalStart);
-                        adjustedEnd.setDate(adjustedEnd.getDate() + 59);
+                        adjustedEnd = undefined;
                     } else if (!originalStart && originalEnd) {
-                        adjustedStart = new Date(originalEnd);
-                        adjustedStart.setDate(adjustedStart.getDate() - 59);
+                        adjustedStart = undefined;
                     }
 
                     filterData({ ...filters, dateRange: [adjustedStart, adjustedEnd] })

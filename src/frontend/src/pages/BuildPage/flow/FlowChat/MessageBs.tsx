@@ -126,7 +126,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                 <div className="flex justify-between items-center mb-1">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
                     <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                        <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
+                        <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
                     </div>
                 </div>
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">

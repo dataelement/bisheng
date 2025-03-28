@@ -200,3 +200,18 @@ export async function exportCsvApi(params: {
         params, paramsSerializer
     })
 }
+
+// 包装csv的表格数据
+export async function exportCsvDataApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    sensitive_status
+}) {
+    return await axios.get('/api/v1/audit/session/export/data', {
+        params, paramsSerializer
+    })
+}

@@ -96,7 +96,6 @@ export default function RunTest({ nodeId }) {
             })
             data.push(rowData)
         })
-        mulitVersionFlow
 
         // 创建Workbook对象
         const wb = XLSX.utils.book_new();
