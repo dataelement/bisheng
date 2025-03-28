@@ -202,27 +202,30 @@ export default function AppUseLog() {
                 ['会话ID', '应用名称', '会话创建时间', '用户名称', '消息角色', '消息发送时间', '消息文本内容', '点赞', '点踩', '复制', '是否命中内容安全审查']
             ];
 
-            const handleMessage = (msg, id) => {
+            const handleMessage = (msg, category, id) => {
                 try {
                     msg = msg && msg[0] === '{' ? JSON.parse(msg) : msg || ''
                 } catch (error) {
                     console.log('error :>> ', `${id} 消息转换失败`);
                 }
-                return typeof msg === 'string' ? msg : msg.msg
+                // output
+                if ('output_with_input_msg' === category) return `${msg.msg} :${msg.hisValue}`
+                if ('output_with_choose_msg' === category) return `${msg.msg} :${msg.options.find(el => el.id === msg.hisValue).label}`
+                return typeof msg === 'string' ? msg : (msg.input || msg.msg)
             }
 
             // 数据转换
             res.data.forEach(item => {
                 item.messages.forEach(msg => {
                     const { message } = msg
-                    data.push([
+                    message && data.push([
                         item.chat_id,
                         item.flow_name,
                         item.create_time.replace('T', ' '),
                         item.user_name,
                         msg.is_bot ? 'AI' : '用户',
                         msg.create_time.replace('T', ' '),
-                        handleMessage(message, item.flow_id + '_' + item.chat_id),
+                        handleMessage(message, msg.category, item.flow_id + '_' + item.chat_id),
                         msg.liked === 1 ? '是' : '否',
                         msg.liked === 2 ? '是' : '否',
                         msg.copied ? '是' : '否',
@@ -232,9 +235,9 @@ export default function AppUseLog() {
             })
 
             // 导出excle
-            exportCsv(data)
+            const fileName = generateFileName(start_date, end_date, user.user_name);
+            exportCsv(data, fileName)
 
-            // const fileName = generateFileName(start_date, end_date, user.user_name);
             // await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
             setAuditing(false);
         }).catch((error) => {
