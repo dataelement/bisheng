@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "0.4.5",
+  "version": "0.4.2",
   "private": true,
   "dependencies": {
     "@headlessui/react": "^2.0.4",
@@ -25,6 +25,7 @@
     "@radix-ui/react-toggle": "^1.1.0",
     "@radix-ui/react-toggle-group": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.2",
+    "@radix-ui/themes": "^3.2.1",
     "@tailwindcss/forms": "^0.5.7",
     "@xyflow/react": "^12.3.3",
     "ace-builds": "^1.35.0",

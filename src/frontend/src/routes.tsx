@@ -26,6 +26,8 @@ import TaskAppChats from "./pages/LabelPage/taskAppChats";
 import TaskApps from "./pages/LabelPage/taskApps";
 import LogPage from "./pages/LogPage";
 import AppChatDetail from "./pages/LogPage/useAppLog/appChatDetail";
+import OperationPage from "./pages/OperationPage";
+import OperationAppChatDetail from "./pages/OperationPage/useAppLog/appChatDetail";
 import { LoginPage } from "./pages/LoginPage/login";
 import { ResetPwdPage } from "./pages/LoginPage/resetPwd";
 import Doc from "./pages/ModelPage/doc";
@@ -85,6 +87,8 @@ const privateRouter = [
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail /> },
+      { path: "operation", element: <OperationPage />},
+      { path: "operation/chatLog/:fid/:cid/:type", element: <OperationAppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },

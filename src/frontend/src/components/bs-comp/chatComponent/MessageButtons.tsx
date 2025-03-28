@@ -6,13 +6,14 @@ import { copyTrackingApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+
 const enum ThumbsState {
     Default = 0,
     ThumbsUp,
     ThumbsDown
 }
 
-export default function MessageButtons({ mark = false, id, onCopy, data, onUnlike, onMarkClick }) {
+export default function MessageButtons({ mark = false, id, onCopy, data, onUnlike, onMarkClick, msgVNode }) {
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
@@ -44,7 +45,8 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
         })
     }
 
-    return <div className="flex gap-1">
+    return <div>
+        <div className="flex justify-end gap-1">
         {mark && <Button className="h-6 text-xs group-hover:opacity-100 opacity-0" onClick={onMarkClick}>
             <FlagIcon width={12} height={12} className="cursor-pointer" />
             <span>{t('addQa')}</span>
@@ -64,5 +66,7 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
             className={`cursor-pointer ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
             onClick={() => handleClick(ThumbsState.ThumbsDown)}
         />
+        </div>
+        { msgVNode }
     </div>
 };

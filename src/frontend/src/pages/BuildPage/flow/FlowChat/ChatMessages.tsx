@@ -15,7 +15,7 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
+export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, msgVNode }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -110,6 +110,7 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                             logo={logo}
                             key={msg.message_id}
                             data={msg}
+                            msgVNode={msgVNode}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
                             onSource={(data) => { sourceRef.current?.openModal(data) }}
                             onMarkClick={() => onMarkClick('answer', msg.message_id, findQa(messagesList, index))}

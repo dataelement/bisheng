@@ -11,7 +11,7 @@ export default function FilterByUser({ value, onChange }) {
                 contentClassName="overflow-y-auto max-w-[200px]"
                 options={users}
                 value={value}
-                placeholder="用户名范围"
+                placeholder="用户名"
                 onLoad={loadUsers}
                 onSearch={searchUser}
                 onScrollLoad={loadMoreUsers}

@@ -30,13 +30,13 @@ TooltipContent.displayName = TooltipPrimitive.Content.displayName
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger }
 
 
-export const QuestionTooltip = ({ className = '', content }) => (
+export const QuestionTooltip = ({ className = '', content, side = 'top' }) => (
     <TooltipProvider delayDuration={100}>
         <Tooltip>
             <TooltipTrigger className={className}>
                 <CircleHelp className="w-3.5 h-3.5" />
             </TooltipTrigger>
-            <TooltipContent>
+            <TooltipContent side={side}>
                 <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
             </TooltipContent>
         </Tooltip>
