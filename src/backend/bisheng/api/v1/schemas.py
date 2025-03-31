@@ -145,14 +145,14 @@ class ChatMessage(BaseModel):
     type: str = 'human'
     category: str = 'processing'  # system processing answer tool
     intermediate_steps: str = None
-    files: list = []
+    files: Optional[list] = []
     user_id: int = None
     message_id: int | str = None
     source: int = 0
     sender: str = None
     receiver: dict = None
     liked: int = 0
-    extra: str | dict = '{}'
+    extra: Optional[str | dict] = '{}'
     flow_id: str = None
     chat_id: str = None
 
@@ -161,9 +161,7 @@ class ChatResponse(ChatMessage):
     """Chat response schema."""
 
     intermediate_steps: str = ''
-    type: str
     is_bot: bool = True
-    files: list = []
     category: str = 'processing'
 
     @validator('type')
