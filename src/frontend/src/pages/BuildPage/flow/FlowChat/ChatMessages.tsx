@@ -15,7 +15,7 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, msgVNode, id, url  }) {
+export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, msgVNode, flow  }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -108,8 +108,7 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                             audit={audit}
                             mark={mark}
                             logo={logo}
-                            id={id}
-                            url={url}
+                            flow={flow}
                             key={msg.message_id}
                             data={msg}
                             msgVNode={msgVNode}
@@ -120,9 +119,11 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                     case 'separator':
                         return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
                     case 'output_choose_msg':
-                        return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} id={id} url={url} />;
+                        return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} 
+                        flow={flow} />;
                     case 'output_input_msg':
-                        return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} id={id} url={url} />;
+                        return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} 
+                        flow={flow} />;
                     case 'node_run':
                         // TODO
                         return <MessageNodeRun key={msg.message_id} data={msg} />;

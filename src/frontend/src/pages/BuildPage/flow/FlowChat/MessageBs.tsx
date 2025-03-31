@@ -32,7 +32,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ audit, mark = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, url = '', id = 0  }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, id?: string | number, url?: string }) {
+export default function MessageBs({ audit, mark = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow = {id: 0, logo: ''}  }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, flow?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -101,7 +101,7 @@ export default function MessageBs({ audit, mark = false, msgVNode = null, logo, 
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
                     {/* TODO */}
-                    {<TitleLogo url={url} className="" id={id}></TitleLogo>}
+                    {<TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>}
                     {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>
