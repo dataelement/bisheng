@@ -78,6 +78,13 @@ class MarkRecordDao(MarkRecordBase):
             session.commit()
             return
 
+    @classmethod
+    def del_task_chat(cls, task_id: int, session_id: str):
+        with session_getter() as session:
+            st = delete(MarkRecord).where(MarkRecord.task_id == task_id).where(MarkRecord.session_id == session_id)
+            session.exec(st)
+            session.commit()
+            return
 
     @classmethod
     def get_list_by_taskid(cls,task_id:int):
@@ -100,4 +107,14 @@ class MarkRecordDao(MarkRecordBase):
             statement = select(MarkRecord).where(MarkRecord.task_id==task_id).where(MarkRecord.session_id==session_id)
             return session.exec(statement).first()
 
-
+    @classmethod
+    def filter_records(cls, task_id: int, chat_ids: list[str] = None, status: int = None, mark_user: int = None) -> List[MarkRecord]:
+        statement = select(MarkRecord).where(MarkRecord.task_id == task_id)
+        if chat_ids:
+            statement = statement.where(MarkRecord.session_id.in_(chat_ids))
+        if status is not None:
+            statement = statement.where(MarkRecord.status == status)
+        if mark_user is not None:
+            statement = statement.where(MarkRecord.create_user == str(mark_user))
+        with session_getter() as session:
+            return session.exec(statement).all()

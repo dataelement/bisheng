@@ -15,8 +15,10 @@ from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
+from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.settings import settings
 from bisheng.api.utils import get_request_ip
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
@@ -36,6 +38,7 @@ class ChatClient:
         self.kwargs = kwargs
 
         # 业务自定义参数
+        self.db_assistant = None
         self.gpts_agent: AssistantAgent | None = None
         self.gpts_async_callback = None
         self.chat_history = []
@@ -106,7 +109,14 @@ class ChatClient:
         ))
         # 记录审计日志, 是新建会话
         if len(self.chat_history) <= 1:
-            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
+            MessageSessionDao.insert_one(MessageSession(
+                chat_id=self.chat_id,
+                flow_id=self.client_id,
+                flow_name=self.db_assistant.name,
+                flow_type=FlowType.ASSISTANT.value,
+                user_id=self.user_id,
+            ))
+            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id, self.db_assistant)
         return msg
 
     async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
@@ -149,10 +159,12 @@ class ChatClient:
             raise IgnoreException(f'get assistant info error: {str(e)}')
         try:
             if self.chat_id and self.gpts_agent is None:
+                self.db_assistant = assistant
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
+                self.db_assistant = assistant
                 # 调试界面每次都重新生成
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)

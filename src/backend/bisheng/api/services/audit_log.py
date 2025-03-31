@@ -85,23 +85,25 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str, assistant_info = None):
         """
         新建助手会话的审计日志
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # 获取助手详情
-        assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+        if not assistant_info:
+            assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
-    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str):
+    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info: Flow = None):
         """
         新建技能会话的审计日志
         """
         logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
-        flow_info = FlowDao.get_flow_by_id(flow_id)
+        if not flow_info:
+            flow_info = FlowDao.get_flow_by_id(flow_id)
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.FLOW,
                       flow_id, flow_info.name, ResourceTypeEnum.FLOW)
 
@@ -486,55 +488,25 @@ class AuditLogService:
         flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
         if not flag:
             return [], 0
-        exclude_chat_ids = []
-        filter_chat_ids = []
-        if review_status:
-            # 未审查状态的，目前的实现需要采用过滤的形式来搜索，目前在表里的都是未审查的
-            if review_status == ReviewStatus.DEFAULT.value:
-                session_list = MessageSessionDao.filter_session()
-                exclude_chat_ids = [one.chat_id for one in session_list]
-            else:
-                session_list = MessageSessionDao.filter_session(review_status=[review_status])
-                if not session_list:
-                    return [], 0
-                filter_chat_ids = [one.chat_id for one in session_list]
-
-        res, total = MessageDao.app_list_group_by_chat_id(page_size, page, filter_flow_ids, user_ids, None, start_date,
-                                                          end_date, feedback, None, filter_chat_ids, exclude_chat_ids)
+        res = MessageSessionDao.filter_session(chat_ids=None, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(chat_ids=None, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
 
         res_users = []
-        res_flows = []
-        res_chats = []
         for one in res:
-            res_users.append(one['user_id'])
-            res_flows.append(one['flow_id'])
-            res_chats.append(one['chat_id'])
+            res_users.append(one.user_id)
         user_list = UserDao.get_user_by_ids(res_users)
-        flow_list = FlowDao.get_flow_by_ids(res_flows)
-        assistant_list = AssistantDao.get_assistants_by_ids(res_flows)
-        session_list = MessageSessionDao.filter_session(chat_ids=res_chats)
-
         user_map = {user.user_id: user.user_name for user in user_list}
-        flow_map = {flow.id: flow for flow in flow_list}
-        assistant_map = {assistant.id: assistant for assistant in assistant_list}
-        flow_map.update(assistant_map)
-        session_map = {one.chat_id: one for one in session_list}
 
         result = []
         for one in res:
-            if not flow_map.get(one['flow_id']):
-                continue
-            result.append(AppChatList(**one,
-                                      user_name=user_map.get(int(one['user_id']), one['user_id']),
-                                      user_groups=user.get_user_groups(one['user_id']),
-                                      flow_name=flow_map[one['flow_id']].name if flow_map.get(one['flow_id']) else one[
-                                          'flow_id'],
-                                      flow_type=FlowType.ASSISTANT.value if assistant_map.get(one['flow_id'], None) else
-                                      flow_map[one['flow_id']].flow_type,
-                                      review_status=session_map[one['chat_id']].review_status if session_map.get(
-                                          one['chat_id']) else ReviewStatus.DEFAULT.value
-                                      )
-                          )
+            result.append(AppChatList(chat_id=one.chat_id,
+                                      flow_id=one.flow_id,
+                                      flow_name=one.flow_name,
+                                      flow_type=one.flow_type,
+                                      user_id=one.user_id,
+                                      user_name=user_map.get(one.user_id, one.user_id),
+                                      user_groups=user.get_user_groups(one.user_id),
+                                      review_status=one.review_status))
 
         return result, total
 

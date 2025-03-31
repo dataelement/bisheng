@@ -2,9 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
+from sqlmodel import Field, Column, DateTime, text, select, update, func
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlmodel import Field, Column, DateTime, text, select
 
 
 class ReviewStatus(Enum):
@@ -25,6 +26,7 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
     copied: Optional[int] = Field(default=0, description='已复制的消息数量')
     review_status: int = Field(default=ReviewStatus.DEFAULT.value, description='审查状态')
+    is_delete: Optional[bool] = Field(default=False, description='会话本身是否被删除')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -47,11 +49,101 @@ class MessageSessionDao(MessageSessionBase):
             return data
 
     @classmethod
-    def filter_session(cls, chat_ids: List[str] = None, review_status: List[int] = None) -> List[MessageSession]:
-        statement = select(MessageSession)
+    def delete_session(cls, chat_id: str):
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def get_one(cls, chat_id: str) -> MessageSession | None:
+        statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
+        with session_getter() as session:
+            return session.exec(statement).first()
+
+    @classmethod
+    def generate_filter_session_statement(cls, statement, chat_ids: List[str] = None,
+                                          review_status: List[ReviewStatus] = None,
+                                          flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
+                                          start_date: datetime = None, end_date: datetime = None,
+                                          include_delete: bool = True, exclude_chats: List[str] = None):
         if chat_ids:
             statement = statement.where(MessageSession.chat_id.in_(chat_ids))
+        if flow_ids:
+            statement = statement.where(MessageSession.flow_id.in_(flow_ids))
+        if user_ids:
+            statement = statement.where(MessageSession.user_id.in_(user_ids))
+
+        if feedback == 'like':
+            statement = statement.where(MessageSession.like > 0)
+        elif feedback == 'dislike':
+            statement = statement.where(MessageSession.dislike > 0)
+        elif feedback == 'copied':
+            statement = statement.where(MessageSession.copied > 0)
+
+        if not include_delete:
+            statement = statement.where(MessageSession.is_delete == False)
+        if exclude_chats:
+            statement = statement.where(MessageSession.chat_id.not_in(exclude_chats))
+        if start_date:
+            statement = statement.where(MessageSession.create_time >= start_date)
+        if end_date:
+            statement = statement.where(MessageSession.create_time <= end_date)
         if review_status:
-            statement = statement.where(MessageSession.review_status.in_(review_status))
+            statement = statement.where(MessageSession.review_status.in_([one.value for one in review_status]))
+        return statement
+
+    @classmethod
+    def filter_session(cls, chat_ids: List[str] = None, review_status: List[ReviewStatus] = None,
+                       flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
+                       start_date: datetime = None, end_date: datetime = None, include_delete: bool = True,
+                       exclude_chats: List[str] = None, page: int = 0, limit: int = 0) -> List[MessageSession]:
+        statement = select(MessageSession)
+        statement = cls.generate_filter_session_statement(statement, chat_ids, review_status, flow_ids, user_ids,
+                                                          feedback, start_date, end_date, include_delete, exclude_chats)
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(MessageSession.create_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    def filter_session_count(cls, chat_ids: List[str] = None, review_status: List[ReviewStatus] = None,
+                             flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
+                             start_date: datetime = None, end_date: datetime = None, include_delete: bool = True,
+                             exclude_chats: List[str] = None) -> int:
+        statement = select(func.count(MessageSession.chat_id))
+        statement = cls.generate_filter_session_statement(statement, chat_ids, review_status, flow_ids, user_ids,
+                                                          feedback, start_date, end_date, include_delete, exclude_chats)
+        with session_getter() as session:
+            return session.scalar(statement)
+
+    @classmethod
+    def add_like_count(cls, chat_id: str, like_count: int):
+        if like_count == 0:
+            return
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            like=MessageSession.like + like_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def add_dislike_count(cls, chat_id: str, dislike_count: int):
+        if dislike_count == 0:
+            return
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            dislike=MessageSession.dislike + dislike_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def add_copied_count(cls, chat_id: str, copied_count: int):
+        if copied_count == 0:
+            return
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            copied=MessageSession.copied + copied_count)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
