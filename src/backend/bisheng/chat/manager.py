@@ -22,8 +22,9 @@ from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow
+from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
@@ -425,8 +426,16 @@ class ChatManager:
                         'user_id': user_id,
                         'user_name': UserDao.get_user(user_id).user_name,
                     })
+                    flow_info = FlowDao.get_flow_by_id(flow_id)
+                    MessageSessionDao.insert_one(MessageSession(
+                        chat_id=chat_id,
+                        flow_id=flow_id,
+                        flow_name=flow_info.name,
+                        flow_type=FlowType.FLOW.value,
+                        user_id=user_id,
+                    ))
                     AuditLogService.create_chat_flow(login_user, get_request_ip(websocket),
-                                                     flow_id)
+                                                     flow_id, flow_info)
         start_resp.type = 'start'
 
         # should input data

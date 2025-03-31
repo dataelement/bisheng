@@ -13,11 +13,15 @@ from bisheng.database.models.session import ReviewStatus
 
 
 class ChatMessageType(Enum):
-    # todo 在041版本将旧的数据里的type全按照这个改一下
+    # 已废弃
     FLOW = 'flow'  # 表示技能会话消息
     ASSISTANT = 'assistant'  # 表示助手会话消息
     WORKFLOW = 'workflow'  # 表示工作流会话消息
 
+class LikedType(Enum):
+    UNRATED = 0  # 未评价
+    LIKED = 1  # 喜欢
+    DISLIKED = 2  # 不喜欢
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')

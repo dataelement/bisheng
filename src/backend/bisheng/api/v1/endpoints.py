@@ -15,8 +15,9 @@ from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.database.base import generate_uuid, session_getter
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
-from bisheng.database.models.flow import Flow
-from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.flow import Flow, FlowType
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
@@ -241,10 +242,18 @@ async def process_flow(
                                   category='answer',
                                   message=answer,
                                   source=source)
-            with session_getter() as session:
-                session.add_all([question, message])
-                session.commit()
-                session.refresh(message)
+            ChatMessageDao.insert_one(question)
+            message = ChatMessageDao.insert_one(message)
+            try:
+                MessageSessionDao.insert_one(MessageSession(
+                    chat_id=session_id,
+                    flow_id=flow_id,
+                    flow_name=flow.name,
+                    flow_type=FlowType.FLOW.value,
+                    user_id=1,
+                ))
+            except Exception as e:
+                logger.warning(f'insert repeat session error: {e}')
 
             extra.update({'source': source, 'message_id': message.id})
 
