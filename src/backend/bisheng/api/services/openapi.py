@@ -95,7 +95,8 @@ class OpenApiSchema:
                                     'schema': {
                                         'type': param_info.get('type', 'string'),
                                         'title': param_info.get('title', param_name),
-                                    }
+                                        'properties': param_info.get('properties', {})
+                                    },
                                 }
                                 one_api_info['parameters'].append(param)
                 else:
