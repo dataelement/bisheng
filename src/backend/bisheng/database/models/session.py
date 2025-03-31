@@ -26,7 +26,6 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
     copied: Optional[int] = Field(default=0, description='已复制的消息数量')
     review_status: int = Field(default=ReviewStatus.DEFAULT.value, description='审查状态')
-    is_delete: Optional[bool] = Field(default=False, description='会话本身是否被用户删除')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
