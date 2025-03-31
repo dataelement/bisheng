@@ -58,7 +58,7 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
 
             <Dialog>
                 <DialogTrigger asChild>
-                    <Button variant='outline' className='border-primary text-primary mt-2 h-8'>
+                    <Button id={value.key} variant='outline' className='border-primary text-primary mt-2 h-8'>
                         {t('editReportTemplate')}
                     </Button>
                 </DialogTrigger>

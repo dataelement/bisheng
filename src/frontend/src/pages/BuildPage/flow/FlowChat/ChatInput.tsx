@@ -276,8 +276,9 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
         if (data.category === 'node_run') {
             insetNodeRun(data)
             return sendNodeLogEvent(data)
-        }
-        if (data.category === 'user_input') {
+        } else if (data.category === "guide_word") {
+            data.message.msg = data.message.guide_word
+        } else if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
             // 待用户输入

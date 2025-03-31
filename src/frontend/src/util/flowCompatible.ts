@@ -6,8 +6,9 @@ export const flowVersionCompatible = (flow) => {
     flow.nodes.forEach((node) => {
 
         switch (node.data.type) {
-            // case 'start': comptibleStart(node.data); break;
+            case 'start': comptibleStart(node.data); break;
             case 'input': comptibleInput(node.data); break;
+            case 'agent': comptibleAgent(node.data); break;
         }
     })
     return flow
@@ -23,7 +24,7 @@ const comptibleStart = (node) => {
         }))
         // TODO 历史使用过的预知问题变量替换
 
-        // node.v = 1
+        node.v = 1
     }
 }
 
@@ -51,6 +52,13 @@ const comptibleInput = (node) => {
             return item
         })
 
-        // node.v = 1
+        node.v = 1
+    }
+}
+
+const comptibleAgent = (node) => {
+    if (!node.v && node.group_params[1].params[0].type === 'bisheng_model') {
+        node.group_params[1].params[0].type = 'agent_model'
+        node.v = 1
     }
 }

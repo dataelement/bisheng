@@ -3,10 +3,10 @@ import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { isVarInFlow } from "@/util/flowUtils";
 import { ChevronDown, X } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
-import { useTranslation } from "react-i18next";
 
 const valueToOutput = (newValues, varZh) => {
     return newValues.map(el => {
@@ -40,6 +40,19 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
         }
     };
 
+    const handleVarChange = useCallback((checked, items) => {
+        const newValues = value.filter(el => !items.some(({ node, variable }) => `${node.id}.${variable.value}` === el));
+        if (!checked) return updateValue(newValues);
+
+        items.map(({ node, variable }) => {
+            const itemVar = `${node.id}.${variable.value}`;
+            if (!data.varZh) data.varZh = {};
+            data.varZh[itemVar] = `${node.name}/${variable.label}`;
+            newValues.push(itemVar);
+        })
+        updateValue(newValues);
+    }, [value]);
+
     const { t } = useTranslation()
     useEffect(() => {
         data.required && onValidate(() => {
@@ -61,11 +74,14 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
         let error = ''
         const _errorKeys = []
         value.map(key => {
-            error = isVarInFlow(nodeId, flow.nodes, key, data.varZh?.[key]);
-            error && _errorKeys.push(key)
+            const _error = isVarInFlow(nodeId, flow.nodes, key, data.varZh?.[key]);
+            if (_error) {
+                _errorKeys.push(key)
+                error = _error
+            }
         })
         setErrorKeys(_errorKeys)
-        return error;
+        return Promise.resolve(error);
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
@@ -81,14 +97,14 @@ export default function VarSelectItem({ nodeId, data, onChange, onOutPutChange, 
             </Label>
             <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
         </div>
-        <SelectVar nodeId={nodeId} itemKey={data.key} multip value={value} onSelect={handleChange}>
+        <SelectVar nodeId={nodeId} itemKey={data.key} multip value={value} onSelect={handleChange} onCheck={handleVarChange}>
             <div className={`${error && 'border-red-500'} no-drag nowheel mt-2 group flex min-h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400`}>
                 <div className="flex flex-wrap size-full max-h-32 overflow-y-auto">
                     {value.length ? value.map(item => <Badge
                         onPointerDown={(e) => e.stopPropagation()}
                         key={item}
                         className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] ${errorKeys.includes(item) && 'bg-red-100 border-red-600'}`}>
-                        {data.varZh[item]}
+                        {data.varZh?.[item]}
                         <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item)}></X>
                     </Badge>
                     ) : <span className="text-gray-400 mt-0.5">{data.placeholder}</span>}
@@ -138,7 +154,7 @@ export function VarSelectSingleItem({ nodeId, data, onChange, onValidate, onVarE
     const validateVarAvailble = () => {
         const error = isVarInFlow(nodeId, flow.nodes, value, data.varZh?.[value])
         error && setError(true)
-        return error;
+        return Promise.resolve(error);
     };
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);

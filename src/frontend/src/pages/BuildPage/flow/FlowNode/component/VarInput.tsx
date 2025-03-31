@@ -1,12 +1,13 @@
 import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { isVarInFlow } from "@/util/flowUtils";
-import { UploadCloud, Variable } from "lucide-react";
+import { Expand, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
-import { useTranslation } from "react-i18next";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -55,6 +56,7 @@ export default function VarInput({
     itemKey,
     placeholder = '',
     flowNode,
+    full = false,
     value,
     error = false,
     children = null,
@@ -62,8 +64,9 @@ export default function VarInput({
     onChange,
     onVarEvent = undefined,
 }) {
-    const { textareaRef, handleFocus, handleBlur } = usePlaceholder(placeholder);
+    const { textareaRef, handleFocus, handleBlur, removePlaceholder } = usePlaceholder(placeholder);
     const valueRef = useRef(value || '');
+    const [fullVarInputValue, setFullVarInputValue] = useState(value || '');
     const selectVarRef = useRef(null);
     const { t } = useTranslation('flow')
 
@@ -73,7 +76,7 @@ export default function VarInput({
         const value = valueRef.current;
         const [html, error] = parseToHTML(value || '', true);
         textareaRef.current.innerHTML = html;
-        return error;
+        return Promise.resolve(error);
     };
 
     useEffect(() => {
@@ -81,22 +84,25 @@ export default function VarInput({
         return () => onVarEvent && onVarEvent(() => { });
     }, [flowNode]);
 
+    const printPyRef = useRef(false); // 正在输入pyin
     const handleInput = () => {
+        if (printPyRef.current) return;
         const value = parseToValue(textareaRef.current.innerHTML, flowNode);
         // console.log('textarea value :>> ', value);
         valueRef.current = value;
+        setFullVarInputValue(value)
         onChange(value);
+        removePlaceholder()
     };
 
     function parseToHTML(input, validate = false) {
         let error = '';
         const html = encodeHTMLEntities(input)
             .replace(/{{#(.*?)#}}/g, (a, part) => {
-                if (validate) {
-                    error = isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) || error;
-                }
+                const _error = validate ? isVarInFlow(nodeId, flow.nodes, part, flowNode.varZh?.[part]) : ''
+                error = _error || error;
                 const msgZh = flowNode.varZh?.[part] || part;
-                return `<span class=${error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
+                return `<span class=${_error ? 'textarea-error' : 'textarea-badge'} contentEditable="false">${msgZh}</span>`;
             })
             .replace(/\n/g, '<br>');
         return [html, error];
@@ -177,19 +183,50 @@ export default function VarInput({
             className={`nodrag mt-2 flex flex-col w-full relative rounded-md border bg-search-input text-sm shadow-sm ${error ? 'border-red-500' : 'border-input'
                 }`}
         >
-            <div className="flex justify-between gap-1 border-b px-2 py-1" onClick={() => textareaRef.current.focus()}>
+            <div className="flex justify-between gap-1 border-b dark:border-gray-600 px-2 py-1" onClick={() => textareaRef.current.focus()}>
                 <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>
-                    {t('variableInput')}
+                    {flowNode.required && <span className="text-red-500">*</span>}
+                    {flowNode.label}
                 </Label>
                 <div className="flex gap-2">
                     <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>
-                        <Variable size={16} className="text-muted-foreground hover:text-gray-800" />
+                        <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
+                        {/* <Variable size={16} className="text-muted-foreground hover:text-gray-800" /> */}
                     </SelectVar>
                     {onUpload && (
                         <Button variant="ghost" className="p-0 h-4 text-muted-foreground" onClick={onUpload}>
                             <UploadCloud size={16} />
                         </Button>
                     )}
+                    {!full && <Dialog >
+                        <DialogTrigger asChild>
+                            <Button className="text-muted-foreground absolute right-2 top-6 size-5" size="icon" variant="ghost"><Expand size={14} /></Button>
+                        </DialogTrigger>
+                        <DialogContent className="lg:max-w-[800px]">
+                            {/* <DialogHeader>
+                                <DialogTitle className="flex items-center"></DialogTitle>
+                            </DialogHeader> */}
+                            <div>
+                                <VarInput
+                                    full
+                                    nodeId={nodeId}
+                                    itemKey={itemKey}
+                                    placeholder={placeholder}
+                                    flowNode={flowNode}
+                                    value={fullVarInputValue}
+                                    error={error}
+                                    children={children}
+                                    onUpload={onUpload}
+                                    onChange={(val) => {
+                                        textareaRef.current.innerHTML = parseToHTML(val || '')[0];
+                                        handleBlur();
+                                        handleInput();
+                                    }}
+                                >
+                                </VarInput>
+                            </div>
+                        </DialogContent>
+                    </Dialog>}
                 </div>
             </div>
             <div
@@ -200,6 +237,11 @@ export default function VarInput({
                 onPaste={handlePaste}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
+                onCompositionStart={() => printPyRef.current = true}
+                onCompositionEnd={() => {
+                    printPyRef.current = false
+                    handleInput()
+                }}
                 onKeyDown={(e) => {
                     // 唤起插入变量
                     if (e.key === '{') {
@@ -220,8 +262,9 @@ export default function VarInput({
                             e.preventDefault();  // 阻止默认行为
                         }
                     }
+                    e.stopPropagation()
                 }}
-                className="nowheel bisheng-richtext px-3 py-2 cursor-text whitespace-pre-line min-h-[80px] max-h-64 overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${full ? 'min-h-64' : 'max-h-64 min-h-[80px]'} nowheel bisheng-richtext px-3 py-2 cursor-text whitespace-pre-line overflow-y-auto overflow-x-hidden border-none outline-none bg-search-input rounded-md dark:text-gray-50 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50`}
             ></div>
             {children}
             <div
@@ -287,6 +330,10 @@ function usePlaceholder(placeholder) {
         }
     };
 
+    const removePlaceholder = () => {
+        divRef.current.classList.remove("placeholder");
+    }
+
     useEffect(() => {
         if (!placeholder) return
         if (divRef.current) {
@@ -304,7 +351,7 @@ function usePlaceholder(placeholder) {
         }
     }, [placeholder]);
 
-    return { textareaRef: divRef, handleFocus, handleBlur };
+    return { textareaRef: divRef, handleFocus, handleBlur, removePlaceholder };
 }
 
 
