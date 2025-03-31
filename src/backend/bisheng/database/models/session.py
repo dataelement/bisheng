@@ -2,9 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
+from sqlmodel import Field, Column, DateTime, text, select, update
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlmodel import Field, Column, DateTime, text, select
 
 
 class ReviewStatus(Enum):
@@ -25,6 +26,7 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
     copied: Optional[int] = Field(default=0, description='已复制的消息数量')
     review_status: int = Field(default=ReviewStatus.DEFAULT.value, description='审查状态')
+    is_delete: Optional[bool] = Field(default=False, description='会话本身是否被用户删除')
     create_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
@@ -45,6 +47,19 @@ class MessageSessionDao(MessageSessionBase):
             session.commit()
             session.refresh(data)
             return data
+
+    @classmethod
+    def delete_session(cls, chat_id: str):
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def get_one(cls, chat_id: str) -> MessageSession | None:
+        statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
+        with session_getter() as session:
+            return session.exec(statement).first()
 
     @classmethod
     def filter_session(cls, chat_ids: List[str] = None, review_status: List[int] = None) -> List[MessageSession]:

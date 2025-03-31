@@ -1,6 +1,6 @@
 import json
 
-from bisheng.database.models.gpts_tools import AuthMethod
+from bisheng.database.models.gpts_tools import AuthMethod, AuthType
 
 
 class OpenApiSchema:
@@ -64,6 +64,7 @@ class OpenApiSchema:
                                     'schema': {
                                         'type': param_info.get('type', 'string'),
                                         'title': param_info.get('title', param_name),
+                                        'properties': param_info.get('properties', {})
                                     }
                                 }
                                 one_api_info['parameters'].append(param)
@@ -84,7 +85,10 @@ class OpenApiSchema:
         # 拼接请求头
         headers = {}
         if auth_method == AuthMethod.API_KEY.value:
-            headers = {'Authorization': f'{auth_type} {api_key}'}
+            if auth_type == AuthType.BASIC.value:
+                headers = {'Authorization': f'Basic {api_key}'}
+            elif auth_type == AuthType.BEARER.value:
+                headers = {'Authorization': f'Bearer {api_key}'}
 
         # 返回初始化 openapi所需的入参
         params = {
