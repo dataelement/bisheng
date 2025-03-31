@@ -9,7 +9,9 @@ from loguru import logger
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
+from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
+from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.settings import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
@@ -27,6 +29,7 @@ class RedisCallback(BaseCallback):
         self.chat_id = chat_id
         self.user_id = user_id
         self.workflow = None
+        self.create_session = False
 
         # workflow status cache in memory 10 seconds
         self.workflow_cache: TTLCache = TTLCache(maxsize=1024, ttl=10)
@@ -141,6 +144,20 @@ class RedisCallback(BaseCallback):
         # 如果是文档溯源，处理召回的chunk
         if chat_response.source not in [0, 4]:
             sync_process_source_document(source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
+
+        # 判断是否需要新建会话
+        if not self.create_session and chat_response.category != 'user_input':
+            # 没有会话数据则新插入一个会话
+            if not MessageSessionDao.get_one(self.chat_id):
+                db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
+                MessageSessionDao.insert_one(MessageSession(
+                    chat_id=self.chat_id,
+                    flow_id=self.workflow_id,
+                    flow_name=db_workflow.name,
+                    flow_type=FlowType.WORKFLOW.value,
+                    user_id=self.user_id,
+                ))
+            self.create_session = True
 
         return message.id
 
