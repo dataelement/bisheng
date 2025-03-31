@@ -32,7 +32,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ audit, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, url = '', id = 0 }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, id?: string | number, url?: string }) {
+export default function MessageBs({ audit, mark = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, url = '', id = 0  }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, id?: string | number, url?: string }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -41,7 +41,6 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
 
         return msg
             .replaceAll('$$', '$') // latex
-            .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
             .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
     }, [data.message])
 
@@ -142,6 +141,7 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
+                        msgVNode={msgVNode}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
