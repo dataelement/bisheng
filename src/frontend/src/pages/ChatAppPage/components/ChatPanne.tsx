@@ -283,7 +283,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} id={workflow.id} url={workflow.logo}/>
                 <CommitmentDialog id={workflow.id} name={workflow.name} />
             </div>
         }

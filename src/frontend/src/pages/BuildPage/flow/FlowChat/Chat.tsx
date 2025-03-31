@@ -7,6 +7,8 @@ export default function Chat({
     stop = false,
     autoRun,
     logo = '',
+    url = '',
+    id = 0,
     clear = false,
     form = false,
     useName,
@@ -20,7 +22,7 @@ export default function Chat({
 
     return <div className="h-full bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
         <div className="relative h-full">
-            <ChatMessages logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
+            <ChatMessages url={url} id={id} logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
             <ChatInput autoRun={autoRun} clear={clear} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onLoad={() => setLoading(false)} ></ChatInput>
         </div>
         {loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">

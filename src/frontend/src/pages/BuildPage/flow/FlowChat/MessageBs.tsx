@@ -15,6 +15,7 @@ import ChatFile from "./ChatFileFile";
 import { useMessageStore } from "./messageStore";
 import { Badge } from "@/components/bs-ui/badge";
 import { ShieldAlert } from "lucide-react";
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 
 // 颜色列表
 const colorList = [
@@ -31,7 +32,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ audit, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ audit, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, url = '', id = 0 }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, id?: string | number, url?: string }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -100,12 +101,14 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
             {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                    {/* TODO */}
+                    {<TitleLogo url={url} className="" id={id}></TitleLogo>}
+                    {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />
-                        </div>}
+                        </div>} */}
                     {message || data.files.length ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                             {message && mkdown}

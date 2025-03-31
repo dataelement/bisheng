@@ -15,7 +15,7 @@ import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick }) {
+export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, id, url }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -108,6 +108,8 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                             audit={audit}
                             mark={mark}
                             logo={logo}
+                            id={id}
+                            url={url}
                             key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
@@ -117,10 +119,11 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                     case 'separator':
                         return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
                     case 'output_choose_msg':
-                        return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} />;
+                        return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} id={id} url={url} />;
                     case 'output_input_msg':
-                        return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
+                        return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} id={id} url={url} />;
                     case 'node_run':
+                        // TODO
                         return <MessageNodeRun key={msg.message_id} data={msg} />;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.message_id}>Unknown message type</div>;
