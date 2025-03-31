@@ -2,26 +2,19 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy.sql import not_
+from loguru import logger
+from pydantic import BaseModel
+from sqlmodel import Field, delete, select, not_, JSON, Column, DateTime, String, Text, case, func, or_, text, update
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from loguru import logger
-from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, or_, text, update
-from sqlmodel import Field, delete, select
 
-
-class ChatMessageType(Enum):
-    # 不需要了，会话表来存储消息属于什么类型的技能
-    FLOW = 'flow'  # 表示技能会话消息
-    ASSISTANT = 'assistant'  # 表示助手会话消息
-    WORKFLOW = 'workflow'  # 表示工作流会话消息
 
 class LikedType(Enum):
     UNRATED = 0  # 未评价
     LIKED = 1  # 喜欢
     DISLIKED = 2  # 不喜欢
+
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
@@ -183,7 +176,8 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage.chat_id,ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id,ChatMessage.flow_id)
+            statement = select(ChatMessage.chat_id, ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(
+                not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id, ChatMessage.flow_id)
             return session.exec(statement).all()
 
     @classmethod

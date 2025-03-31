@@ -15,7 +15,7 @@ from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
+from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.settings import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -255,7 +255,7 @@ class RedisCallback(BaseCallback):
             user_id=self.user_id,
             chat_id=self.chat_id,
             flow_id=self.workflow_id,
-            type=ChatMessageType.WORKFLOW.value,
+            type=chat_response.type,
 
             is_bot=chat_response.is_bot,
             source=chat_response.source,

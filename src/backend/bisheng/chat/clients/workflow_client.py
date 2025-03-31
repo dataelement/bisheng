@@ -10,11 +10,10 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.workflow import WorkflowEventType
-from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowStatus
-from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
+from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -33,6 +32,7 @@ class WorkflowClient(BaseClient):
         self.ws_closed = False
 
     async def close(self, force_stop=False):
+        # 不是用户主动停止的话，设置ws关闭标志，但是不需要中止workflow的执行
         if not force_stop:
             self.ws_closed = True
         # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
