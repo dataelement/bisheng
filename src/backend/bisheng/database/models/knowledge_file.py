@@ -275,6 +275,24 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         return qa
 
     @classmethod
+    def batch_insert_qa(cls, qa_knowledges: List[QAKnowledgeUpsert]):
+        with session_getter() as session:
+            try:
+                qas = []
+                for qa_knowledge in qa_knowledges:
+                    qa = QAKnowledge.validate(qa_knowledge)
+                    qas.append(qa)
+                session.add_all(qas)
+                session.commit()
+                for qa in qas:
+                    session.refresh(qa)
+                return 1
+            except Exception as e:
+                session.rollback()
+                raise 0
+
+
+    @classmethod
     def total_count(cls, sql):
         with session_getter() as session:
             return session.scalar(sql)

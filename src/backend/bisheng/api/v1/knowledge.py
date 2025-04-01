@@ -17,7 +17,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
                                                KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
-                                                    QAKnoweldgeDao, QAKnowledgeUpsert)
+                                                    QAKnoweldgeDao, QAKnowledgeUpsert, QAKnowledge)
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
@@ -491,3 +491,49 @@ def get_export_url(*,
             break
 
     return resp_200({"file_list": file_list})
+
+@router.post('/qa/import/{qa_knowledge_id}', status_code=200)
+def post_import_file(*,
+                     qa_knowledge_id: int,
+                     file_list: list[str] = Body(..., embed=True),
+                     login_user: UserPayload = Depends(get_login_user)):
+    # 查询当前知识库，是否有写入权限
+    with session_getter() as session:
+        db_knowledge: Knowledge = session.get(Knowledge, qa_knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+    if not login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                   AccessType.KNOWLEDGE):
+        return UnAuthorizedError.return_resp()
+
+    if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库为普通知识库')
+
+    insert_result = []
+    for file_url in file_list:
+        df = pd.read_excel(file_url)
+        columns = df.columns.to_list()
+        if '答案' not in columns or '问题' not in columns:
+            insert_result.append(0)
+            continue
+        data = df.T.to_dict().values()
+        insert_data = []
+        for dd in data:
+            d = QAKnowledgeUpsert(
+            user_id = login_user.user_id,
+            knowledge_id = qa_knowledge_id,
+            answers = [dd['答案']],
+            questions = [dd['问题']],
+            source = 1,
+            status = 1)
+            for key,value in dd.items():
+                if key.startswith('相似问题'):
+                    d.questions.append(value)
+            insert_data.append(d)
+        result = QAKnoweldgeDao.batch_insert_qa(insert_data)
+        insert_result.append(result)
+
+    return resp_200({"result": insert_result})
+
+
+
