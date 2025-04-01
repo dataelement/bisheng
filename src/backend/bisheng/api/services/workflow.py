@@ -295,6 +295,10 @@ class WorkFlowService(BaseService):
                     key=event_input_schema.get('key'),
                     type='text',
                     required=True,
+                ),
+                WorkflowInputItem(
+                    key='dialog_files_content',
+                    type='dialog_file',
                 )
             ]
         workflow_event.input_schema = input_schema
