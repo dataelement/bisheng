@@ -4,7 +4,7 @@ services:
     image: mysql:8.0
     
     ports:
-      - "3306:3306"
+      - "4306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
       MYSQL_DATABASE: bisheng
@@ -54,7 +54,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v0.4.1.2
+    image: bisheng-backend:cl_zy_0.0.1
     ports:
       - "7860:7860"
     environment:
@@ -94,7 +94,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v0.4.1.2
+    image: bisheng-frontend:cl_zy_0.0.1
     ports:
       - "3001:3001"
     environment:
