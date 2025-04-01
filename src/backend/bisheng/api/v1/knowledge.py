@@ -2,7 +2,6 @@ import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
-from pathlib import Path
 from typing import List, Optional
 
 from bisheng.api.errcode.base import UnAuthorizedError
@@ -13,7 +12,7 @@ from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UnifiedResponseModel,
                                     UpdatePreviewFileChunk, UploadFileResponse, resp_200, resp_500)
-from bisheng.cache.utils import save_uploaded_file, CACHE_DIR
+from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
                                                KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
@@ -450,11 +449,9 @@ def get_export_url(*,
     page_size = max_lines
     user_list = UserDao.get_all_users()
     user_map = {user.user_id: user.user_name for user in user_list}
-    cache_path = Path(CACHE_DIR)
-    folder_path = cache_path / "bisheng"
-    if not folder_path.exists():
-        folder_path.mkdir()
     file_list = []
+    file_pr = datetime.now().strftime('%Y%m%d%H%M%S')
+    file_index = 1
     while True:
         qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                  page_num, question, answer,
@@ -464,26 +461,30 @@ def get_export_url(*,
         qa_dict_list = []
         all_title = ["问题","答案","类型","创建时间","更新时间","创建者","状态"]
         for qa in data:
-            one_data = {
-                "问题":qa['questions'],
+            qa_dict_list.append({
+                "问题":qa['questions'][0],
                 "答案":json.loads(qa['answers'])[0],
                 "类型":get_qa_source(qa['source']),
                 "创建时间":qa['create_time'],
                 "更新时间":qa['update_time'],
                 "创建者":user_map.get(qa['user_id'], qa['user_id']),
                 "状态":get_status(qa['status']),
-            }
-            for index,question in enumerate(json.loads(qa['questions'])):
+            })
+            for index,question in enumerate(qa['questions']):
+                if index == 0:
+                    continue
                 key = f"相似问题{index}"
                 if key not in all_title:
                     all_title.append(key)
-                one_data[key] = question
+                qa_dict_list[-1][key] = question
         df = pd.DataFrame(qa_dict_list)
         df = df[all_title]
         bio = BytesIO()
         with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-            df.to_excel(writer, sheet_name="Sheet1")
-        file_path = save_uploaded_file(bio)
+            df.to_excel(writer, sheet_name="Sheet1",index=False)
+        file_name = f"{file_pr}_{file_index}.xlsx"
+        file_index = file_index + 1
+        file_path = save_uploaded_file(bio,'bisheng', file_name)
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num>=total_count:
