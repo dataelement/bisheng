@@ -54,6 +54,8 @@ class GroupUpdate(GroupBase):
 
 class GroupCreate(GroupBase):
     group_admins: Optional[List[int]]
+    group_operations: Optional[List[int]]
+    group_audits: Optional[List[int]]
 
 
 class GroupDao(GroupBase):

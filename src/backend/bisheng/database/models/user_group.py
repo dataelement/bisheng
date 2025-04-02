@@ -75,6 +75,24 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_user_audit_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是审计的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0,UserGroup.user_type==GROUP_USER_TYPE_AUDIT)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_operation_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是审计的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0,UserGroup.user_type==GROUP_USER_TYPE_OPERATION)
+            return session.exec(statement).all()
+
+    @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
         with session_getter() as session:
             user_group = UserGroup.validate(user_group)

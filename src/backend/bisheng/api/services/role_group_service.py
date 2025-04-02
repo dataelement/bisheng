@@ -64,7 +64,7 @@ class RoleGroupService():
         user_audit = UserGroupDao.get_groups_audits(list(groups_dict.keys()))
         users_dict = {}
         if user_admin:
-            user_ids = [user.user_id for user in user_admin]
+            user_ids = [user.user_id for user in user_admin] + [user.user_id for user in user_operation] + [user.user_id for user in user_audit]
             users = UserDao.get_user_by_ids(user_ids)
             users_dict = {user.user_id: user for user in users}
 
@@ -152,12 +152,20 @@ class RoleGroupService():
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
         """新建用户组"""
         group_admin = group.group_admins
+        group_operations = group.group_operations
+        group_audit = group.group_audits
         group.create_user = login_user.user_id
         group.update_user = login_user.user_id
         group = GroupDao.insert_group(group)
         if group_admin:
             logger.info('set_admin group_admins={} group_id={}', group_admin, group.id)
             self.set_group_admin(request, login_user, group_admin, group.id)
+        if group_operations:
+            logger.info('group_operations group_operations={} group_id={}', group_operations, group.id)
+            self.set_group_admin(request, login_user, group_operations, group.id)
+        if group_audit:
+            logger.info('group_audit group_audit={} group_id={}', group_audit, group.id)
+            self.set_group_admin(request, login_user, group_audit, group.id)
         self.create_group_hook(request, login_user, group)
         return group
 
