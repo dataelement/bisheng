@@ -136,6 +136,12 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
+        # 创建milvus的collection_name和es的index_name
+        embeddings = decide_embeddings(db_knowledge.model)
+        vector_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+        embeddings = FakeEmbedding()
+        es_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+
         # 处理创建知识库的后续操作
         cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
