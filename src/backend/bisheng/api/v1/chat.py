@@ -388,8 +388,7 @@ def get_chatlist_list(*,
     assistant_list = AssistantDao.get_assistants_by_ids([UUID(one) for one in flow_ids])
     logo_map = {one.id.hex: BaseService.get_logo_share_link(one.logo) for one in flow_list}
     logo_map.update({one.id.hex: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
-    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,
-                                                                    exclude_category='user_input')
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,category='user_input')
     latest_messages = {one.chat_id: one for one in latest_messages}
     return resp_200([
         ChatList(

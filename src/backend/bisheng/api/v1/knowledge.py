@@ -412,7 +412,7 @@ def get_export_url(*,
                    answer: Optional[str] = None,
                    keyword: Optional[str] = None,
                    status: Optional[int] = None,
-                   max_lines: Optional[int] = 1000,
+                   max_lines: Optional[int] = 10000,
                    login_user: UserPayload = Depends(get_login_user)):
 
     # 查询当前知识库，是否有写入权限
@@ -465,8 +465,8 @@ def get_export_url(*,
                 "问题":qa['questions'][0],
                 "答案":json.loads(qa['answers'])[0],
                 "类型":get_qa_source(qa['source']),
-                "创建时间":qa['create_time'],
-                "更新时间":qa['update_time'],
+                "创建时间":qa['create_time'].strftime('%Y-%m-%d %H:%M:%S'),
+                "更新时间":qa['update_time'].strftime('%Y-%m-%d %H:%M:%S'),
                 "创建者":user_map.get(qa['user_id'], qa['user_id']),
                 "状态":get_status(qa['status']),
             })
@@ -491,6 +491,40 @@ def get_export_url(*,
             break
 
     return resp_200({"file_list": file_list})
+
+@router.post('/qa/preview/{qa_knowledge_id}', status_code=200)
+def post_import_file(*,
+                     qa_knowledge_id: int,
+                     file_url: str = Body(..., embed=True),
+                     size: Optional[int] = None,
+                     offset: Optional[int] = None,
+                     login_user: UserPayload = Depends(get_login_user)):
+    df = pd.read_excel(file_url)
+    columns = df.columns.to_list()
+    if '答案' not in columns or '问题' not in columns:
+        HTTPException(status_code=500, detail='文件格式错误，没有 ‘问题’ 或 ‘答案’ 列')
+    data = df.T.to_dict().values()
+    insert_data = []
+    for dd in data:
+        d = QAKnowledgeUpsert(
+            user_id=login_user.user_id,
+            knowledge_id=qa_knowledge_id,
+            answers=[dd['答案']],
+            questions=[dd['问题']],
+            source=1,
+            status=1,
+            create_time=datetime.now(),
+            update_time=datetime.now())
+        for key, value in dd.items():
+            if key.startswith('相似问题'):
+                d.questions.append(value)
+        insert_data.append(d)
+    if size and size>0 and offset and offset>0:
+        if offset > len(insert_data):
+            insert_data = []
+        else:
+            insert_data = insert_data[offset:size]
+    return resp_200({"result": insert_data})
 
 @router.post('/qa/import/{qa_knowledge_id}', status_code=200)
 def post_import_file(*,

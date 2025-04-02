@@ -506,7 +506,11 @@ class AuditLogService:
                                       user_id=one.user_id,
                                       user_name=user_map.get(one.user_id, one.user_id),
                                       user_groups=user.get_user_groups(one.user_id),
-                                      review_status=one.review_status))
+                                      review_status=one.review_status,
+                                      create_time=one.create_time,
+                                      like_count=one.like,
+                                      dislike_count=one.dislike,
+                                      copied_count=one.copied))
 
         return result, total
 
