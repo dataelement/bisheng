@@ -214,6 +214,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
                 }
                 ws.onclose = (event) => {
                     console.log('error event :>> ', event);
+                    onLoad()
                     // wsRef.current = null
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })

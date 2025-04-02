@@ -82,7 +82,7 @@ export default function VarInput({
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
         return () => onVarEvent && onVarEvent(() => { });
-    }, [flowNode]);
+    }, [flowNode, flow]);
 
     const printPyRef = useRef(false); // 正在输入pyin
     const handleInput = () => {

@@ -201,7 +201,8 @@ const workflowTemplate = [
                         "key": "dialog_files_content_size",
                         "label": "文件内容长度上限",
                         "type": "number",
-                        "value": 15000
+                        "value": 15000,
+                        "tab": "dialog_input"
                     },
                     {
                         "key": "form_input",
@@ -904,7 +905,8 @@ const workflowTemplateEN = [
                         "key": "dialog_files_content_size",
                         "label": "Retrieval Result Length (characters)",
                         "type": "number",
-                        "value": 15000
+                        "value": 15000,
+                        "tab": "dialog_input"
                     },
                     {
                         "global": "item:form_input",
