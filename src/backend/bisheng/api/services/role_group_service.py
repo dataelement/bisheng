@@ -60,6 +60,8 @@ class RoleGroupService():
 
         # 查询user
         user_admin = UserGroupDao.get_groups_admins(list(groups_dict.keys()))
+        user_operation = UserGroupDao.get_groups_operations(list(groups_dict.keys()))
+        user_audit = UserGroupDao.get_groups_audits(list(groups_dict.keys()))
         users_dict = {}
         if user_admin:
             user_ids = [user.user_id for user in user_admin]
@@ -69,6 +71,14 @@ class RoleGroupService():
         for group in groups_dict.values():
             group.group_admins = [
                 users_dict.get(user.user_id).model_dump() for user in user_admin
+                if user.group_id == group.id
+            ]
+            group.group_operations = [
+                users_dict.get(user.user_id).model_dump() for user in user_operation
+                if user.group_id == group.id
+            ]
+            group.group_audits = [
+                users_dict.get(user.user_id).model_dump() for user in user_audit
                 if user.group_id == group.id
             ]
             group.parent_group_path = self.get_parent_group_path(group, group_tree)
@@ -346,6 +356,60 @@ class RoleGroupService():
                 res.append(UserGroupDao.insert_user_group_admin(user_id, group_id))
         if need_delete_admin:
             UserGroupDao.delete_group_admins(group_id, need_delete_admin)
+        # 修改用户组的最近修改人
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
+
+        group_info = GroupDao.get_user_group(group_id)
+        self.update_group_hook(request, login_user, group_info)
+        return res
+
+    def set_group_operation(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+        """设置用户组运营人员"""
+        # 获取目前用户组的运营人员列表
+        user_group_operations = UserGroupDao.get_groups_operations([group_id])
+        res = []
+        need_delete_operation = []
+        need_add_operation = user_ids
+        if user_group_operations:
+            for user in user_group_operations:
+                if user.user_id in need_add_operation:
+                    res.append(user)
+                    need_add_operation.remove(user.user_id)
+                else:
+                    need_delete_operation.append(user.user_id)
+        if need_add_operation:
+            # 可以分配非组内用户为运营人员。进行用户创建
+            for user_id in need_add_operation:
+                res.append(UserGroupDao.insert_user_group_operation(user_id, group_id))
+        if need_delete_operation:
+            UserGroupDao.delete_group_operations(group_id, need_delete_operation)
+        # 修改用户组的最近修改人
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
+
+        group_info = GroupDao.get_user_group(group_id)
+        self.update_group_hook(request, login_user, group_info)
+        return res
+
+    def set_group_audit(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+        """设置用户组审计人员"""
+        # 获取目前用户组的审计人员列表
+        user_group_audits = UserGroupDao.get_groups_audits([group_id])
+        res = []
+        need_delete_audit = []
+        need_add_audit = user_ids
+        if user_group_audits:
+            for user in user_group_audits:
+                if user.user_id in need_add_audit:
+                    res.append(user)
+                    need_add_audit.remove(user.user_id)
+                else:
+                    need_delete_audit.append(user.user_id)
+        if need_add_audit:
+            # 可以分配非组内用户为审计人员。进行用户创建
+            for user_id in need_add_audit:
+                res.append(UserGroupDao.insert_user_group_audit(user_id, group_id))
+        if need_delete_audit:
+            UserGroupDao.delete_group_audits(group_id, need_delete_audit)
         # 修改用户组的最近修改人
         GroupDao.update_group_update_user(group_id, login_user.user_id)
 

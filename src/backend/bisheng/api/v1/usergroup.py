@@ -203,6 +203,37 @@ async def set_group_admin(
         return UnAuthorizedError.return_resp()
     return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
 
+@router.post('/set_group_operation',
+             response_model=UnifiedResponseModel[List[UserGroupRead]],
+             status_code=200)
+async def set_group_operation(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取分组的admin，批量设置接口，覆盖历史的operation
+    """
+
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().set_group_operation(request, login_user, user_ids, group_id))
+
+@router.post('/set_group_audit',
+             response_model=UnifiedResponseModel[List[UserGroupRead]],
+             status_code=200)
+async def set_group_audit(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取分组的admin，批量设置接口，覆盖历史的audit
+    """
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().set_group_audit(request, login_user, user_ids, group_id))
+
 
 @router.post('/set_update_user', status_code=200)
 async def set_update_user(group_id: Annotated[int, Body(embed=True)],

@@ -8,12 +8,14 @@ from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.group import DefaultGroup
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.utils.constants import GROUP_USER_TYPE_ADMIN, GROUP_USER_TYPE_AUDIT, GROUP_USER_TYPE_OPERATION
 
 
 class UserGroupBase(SQLModelSerializable):
     user_id: int = Field(index=True, description='用户id')
     group_id: int = Field(index=True, description='组id')
     is_group_admin: bool = Field(default=False, index=False, description='是否是组管理员')  # 管理员不属于此用户组
+    user_type: int = Field(default=0, description='用户类型，0：未知，1：admin，2：运营，3：审计')
     remark: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -87,7 +89,31 @@ class UserGroupDao(UserGroupBase):
         将用户设置为组管理员
         """
         with session_getter() as session:
-            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=True)
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=True,user_type=GROUP_USER_TYPE_ADMIN)
+            session.add(user_group)
+            session.commit()
+            session.refresh(user_group)
+            return user_group
+
+    @classmethod
+    def insert_user_group_operation(cls, user_id: int, group_id: int) -> UserGroup:
+        """
+        将用户设置为组管理员
+        """
+        with session_getter() as session:
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=False,user_type=GROUP_USER_TYPE_OPERATION)
+            session.add(user_group)
+            session.commit()
+            session.refresh(user_group)
+            return user_group
+
+    @classmethod
+    def insert_user_group_audit(cls, user_id: int, group_id: int) -> UserGroup:
+        """
+        将用户设置为组管理员
+        """
+        with session_getter() as session:
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=False, user_type=GROUP_USER_TYPE_AUDIT)
             session.add(user_group)
             session.commit()
             session.refresh(user_group)
@@ -198,6 +224,20 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_groups_audits(cls, group_ids: List[int]) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
+                                                UserGroup.is_group_admin == 0, UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_groups_operations(cls, group_ids: List[int]) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
+                                                UserGroup.is_group_admin == 0,UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+            return session.exec(statement).all()
+
+    @classmethod
     def update_user_groups(cls, user_groups: List[UserGroup]) -> List[UserGroup]:
         with session_getter() as session:
             session.add_all(user_groups)
@@ -224,6 +264,31 @@ class UserGroupDao(UserGroupBase):
                 UserGroup.group_id == group_id).where(
                 UserGroup.user_id.in_(admin_ids)).where(
                 UserGroup.is_group_admin == 1)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def delete_group_operations(cls, group_id: int, operation_ids: List[int]) -> None:
+        """
+        批量删除用户组的operations
+        """
+        with session_getter() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id).where(
+                UserGroup.user_id.in_(operation_ids)).where(
+                UserGroup.is_group_admin == 0,UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+            session.exec(statement)
+            session.commit()
+
+    def delete_group_audits(cls, group_id: int, audit_ids: List[int]) -> None:
+        """
+        批量删除用户组的audits
+        """
+        with session_getter() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id).where(
+                UserGroup.user_id.in_(audit_ids)).where(
+                UserGroup.is_group_admin == 0, UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
             session.exec(statement)
             session.commit()
 
