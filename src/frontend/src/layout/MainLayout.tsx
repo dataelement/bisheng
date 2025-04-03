@@ -75,8 +75,11 @@ export default function MainLayout() {
             <div className="flex justify-between h-[64px] bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'>
+                    {/*  */}
+
                         {/* @ts-ignore */}
                         <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
+                        {'测试环境！'}
                     </Link>
                 </div>
                 <div>
@@ -177,6 +180,7 @@ export default function MainLayout() {
                                 </NavLink>
                             </>
                         }
+                        {/* TODO: 权限 zzy */}
                         <NavLink to='/operation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">运&nbsp;&nbsp;&nbsp;&nbsp;营</span>
                         </NavLink>
