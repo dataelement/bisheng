@@ -5,8 +5,9 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { ArrowLeft } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useDropzone } from 'react-dropzone';
 import { Link, useParams } from "react-router-dom";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button, LoadButton } from "../../components/bs-ui/button";
@@ -20,7 +21,7 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { deleteQa, generateSimilarQa, getQaDetail, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -30,6 +31,168 @@ const defaultQa = {
     similarQuestions: [''],
     answer: ''
 }
+
+function UploadModal() {
+
+}
+
+function BasicDropzone() {
+    const { t } = useTranslation('bs');
+    const [files, setFiles] = useState([]);
+  
+    const onDrop = useCallback(acceptedFiles => {
+      setFiles(acceptedFiles.map(file => (
+        Object.assign(file, {
+          preview: URL.createObjectURL(file)
+        })
+      )));
+    }, []);
+  
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+      onDrop,
+      accept: {
+        'image/*': ['.jpeg', '.png', '.jpg'],
+        'text/csv': ['.csv'],
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+      },
+      maxFiles: 3,
+      maxSize: 5 * 1024 * 1024 // 5MB
+    });
+  
+    console.log('files', files);
+    return (
+      <div>
+        <div {...getRootProps()} 
+          style={{
+            border: '2px dashed #eee',
+            borderRadius: '4px',
+            padding: '20px',
+            textAlign: 'center',
+            backgroundColor: isDragActive ? '#fafafa' : 'white',
+            cursor: 'pointer'
+          }}
+        >
+          <input {...getInputProps()} />
+          <p>{isDragActive ? t('code.dropFileHere') : t('code.clickOrDragHere')}</p>
+        </div>
+  
+        <aside style={{ marginTop: '20px' }}>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {files.map(file => (
+              <li key={file.path}>
+                {file.path} - {Math.round(file.size / 1024)} KB
+                {file.type.startsWith('image/') && (
+                  <img 
+                    src={file.preview} 
+                    alt="预览" 
+                    style={{ maxWidth: '100px', display: 'block', marginTop: '10px' }}
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+        </aside>
+      </div>
+    );
+}
+
+function QaTable({ dataList }) {
+    const { t } = useTranslation('knowledge');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(5);
+    const [total, setTotal] = useState(40);
+    return (
+      <div>
+        <Table>
+            <TableRow>
+                <TableHead>{t('question')}</TableHead>
+                <TableHead>{t('answer')}</TableHead>
+                <TableHead>{t('similarQuestions')}</TableHead>
+            </TableRow>
+            <TableBody>
+                {dataList.map(el => (
+                    <TableRow key={el.id}>
+                        <TableCell className="font-medium">
+                            {el.question}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                            {el.question}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                            <div onClick={() => {
+                                //打开相似问题预览窗口
+                                
+                            }}>{t('similarQuestions')}</div>
+                        </TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+        <div>
+            <AutoPagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={(newPage) => setPage(newPage)}
+            />
+        </div>
+      </div>
+    );
+}
+
+// 导入Qa
+const ImportQa = forwardRef(({ knowlageId } : any, ref) => {
+    const { t } = useTranslation('knowledge');
+    const [open, setOpen] = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [saveLoad, setSaveLoad] = useState(false);
+    const [isUpload, setisUpload] = useState(false);
+    const [dataList, setDataList] = useState([]);
+
+    useImperativeHandle(ref, () => ({
+        open() {
+            setOpen(true);
+        }
+    }));
+
+    const close = () => {
+        setOpen(false);
+    };
+
+    const handleSubmit = () => {
+
+    };
+
+    // 导入预览
+    const handlePreview = async () => {
+
+    }
+    return (
+        <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
+            <DialogContent className="sm:max-w-[625px]">
+                <DialogHeader>
+                    <DialogTitle>{t('importQa')}</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col gap-4 py-2">
+                   {isUpload ? QaTable({
+                    dataList
+                   }) : BasicDropzone()}
+                </div>
+                <DialogFooter>
+                    <DialogClose>
+                        <Button variant="outline" className="px-11" type="button" onClick={close}>
+                            {t('cancel2')}
+                        </Button>
+                    </DialogClose>
+                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={isUpload ? handleSubmit : handlePreview}>
+                        {isUpload ? t('submit') : t('importPreview')}
+                    </LoadButton>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+})
+
 // 添加&编辑qa
 const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
     const { t } = useTranslation('knowledge');
@@ -224,6 +387,7 @@ export default function QasPage() {
     const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
+    const importRef = useRef(null)
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
@@ -297,6 +461,15 @@ export default function QasPage() {
         refreshData((item) => item.id === id, { status })
     }
 
+    function downloadFile(url, filename) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename || 'downloaded-file'; // 如果没有提供文件名，使用默认名
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -320,6 +493,15 @@ export default function QasPage() {
                     </div>
                     <div className="flex gap-4 items-center">
                         <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
+                        <Button className="px-8" onClick={() => importRef.current.open()}>{t('importQa')}</Button>
+                        <Button className="px-8" onClick={() => {
+                            getQaFile(id).then(res => {
+                                const fileUrl = res.file_list[0];
+                                console.log('fileUrl', fileUrl);
+                                
+                                downloadFile(fileUrl, title);
+                            })
+                        }}>{t('exportQa')}</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
                     </div>
                 </div>
@@ -385,5 +567,6 @@ export default function QasPage() {
             </div>
         </div>
         <EditQa ref={editRef} knowlageId={id} onChange={reload} />
+        <ImportQa ref={importRef} knowlageId={id}/>
     </div >
 };

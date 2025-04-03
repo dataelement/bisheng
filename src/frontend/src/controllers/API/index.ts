@@ -290,6 +290,13 @@ export async function getQaList(id, data: { page, pageSize, keyword }) {
 }
 
 /**
+ * 导出QA文件
+ */
+export async function getQaFile(id): Promise<{file_list: string[]}> {
+  return await axios.get(`/api/v1/knowledge/qa/export/${id}`);
+}
+
+/**
  * 修改qa状态
  */
 export async function updateQaStatus(id, status) {

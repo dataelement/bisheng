@@ -75,6 +75,8 @@
     "batchDelete": "批量删除",
     "qaContent": "QA 内容",
     "createQA": "创建QA",
+    "importQa": "导入 QA",
+    "exportQa": "导出 QA",
     "question": "问题",
     "answer": "答案",
     "type": "类型",
@@ -94,5 +96,6 @@
     "similarQuestions": "相似问题",
     "aiGenerate": "AI生成",
     "cancel2": "取消",
-    "confirm": "确认"
+    "confirm": "确认",
+    "importPreview": "导入预览"
 }
