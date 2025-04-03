@@ -101,7 +101,7 @@ export default function MessageBs({ audit, mark = false, msgVNode = null, logo, 
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
                     {/* TODO */}
-                    {<TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>}
+                    {<TitleLogo url={flow?.logo} className="" id={flow?.id}></TitleLogo>}
                     {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>

@@ -126,7 +126,7 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                         flow={flow} />;
                     case 'node_run':
                         // TODO
-                        return <MessageNodeRun key={msg.message_id} data={msg} />;
+                        return <MessageNodeRun key={msg.message_id} data={msg} flow={flow} />;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.message_id}>Unknown message type</div>;
                 }
