@@ -10,7 +10,7 @@ import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ mark = false, audit = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => { }, msgVNode }) {
+export default function MessagePanne({ mark = false, audit = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => { }, msgVNode, flow, }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -88,6 +88,7 @@ export default function MessagePanne({ mark = false, audit = false, logo, useNam
     return <div id="message-panne" ref={messagesRef} className="h-full overflow-y-auto scrollbar-hide pt-12 pb-60">
         {guideWord && <MessageBs
             key={9999}
+            flow={flow} 
             data={{ message: guideWord, isSend: false, chatKey: '', end: true, user_name: '' }} />}
         {
             messagesList.map((msg, index) => {
@@ -115,6 +116,7 @@ export default function MessagePanne({ mark = false, audit = false, logo, useNam
                             audit={audit}
                             mark={mark}
                             logo={logo}
+                            flow={flow} 
                             key={msg.id}
                             data={msg}
                             msgVNode={msgVNode}

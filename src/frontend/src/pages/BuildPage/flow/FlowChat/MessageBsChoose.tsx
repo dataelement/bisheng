@@ -29,7 +29,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBsChoose({ type = 'choose', logo, data, id = 0, url = '' }: { type?: string, logo: string, data: WorkflowMessage, id?: number | string, url: string}) {
+export default function MessageBsChoose({ type = 'choose', logo, data, flow = {id: 0, logo: ''} }: { type?: string, logo: string, data: WorkflowMessage, flow: any}) {
     const { t } = useTranslation()
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
@@ -123,7 +123,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, id = 0, u
             </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {<TitleLogo url={url} className="" id={id}></TitleLogo>}
+                    {<TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>}
                     {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>

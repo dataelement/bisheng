@@ -14,6 +14,7 @@ import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
 import { Badge } from "@/components/bs-ui/badge";
 import { ShieldAlert } from "lucide-react";
+import { TitleLogo } from "../cardComponent";
 
 // 颜色列表
 const colorList = [
@@ -30,7 +31,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ mark = false, audit = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ mark = false, audit = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any, flow: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -85,7 +86,6 @@ export default function MessageBs({ mark = false, audit = false, msgVNode = null
     }
 
     const chatId = useMessageStore(state => state.chatId)
-
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
             <div className="flex justify-between items-center mb-1">
@@ -97,12 +97,13 @@ export default function MessageBs({ mark = false, audit = false, msgVNode = null
             {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                    {<TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>}
+                    {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />
-                        </div>}
+                        </div>} */}
                     {data.message.toString() ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                             {mkdown}
