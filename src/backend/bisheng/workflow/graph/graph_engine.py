@@ -144,6 +144,8 @@ class GraphEngine:
         # 判断是否存在从condition节点或者output节点（选择型交互）到此节点的 两条不重复的路径
         all_branches = []
         for one in self.condition_nodes:
+            if node_id == one:
+                continue
             branches = self.edges.get_all_edges_nodes(one, node_id)
             for branch in branches:
                 if node_id not in branch:
