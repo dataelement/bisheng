@@ -66,11 +66,17 @@ export default function AppChatDetail() {
                 </div>
             </div>
             <div className="h-[calc(100vh-132px)]">
+                {/* TODO：ZZY 确实flowflow */}
                 {type === AppNumType.FLOW
-                    ? <ChatMessages audit logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg
+                    ? <ChatMessages
+                        audit logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg
                         (fid, true)}  mark={false} onMarkClick={null} msgVNode={<MsgVNodeCom message="自定义1" />}></ChatMessages>
-                    : <MessagePanne logo='' useName='' guideWord='' audit
-                    mark={false}
+                    : <MessagePanne
+                        audit
+                        logo=''
+                        useName=''
+                        guideWord=''
+                        mark={false}
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                         msgVNode={<MsgVNodeCom message="自定义2" />}
                     ></MessagePanne>

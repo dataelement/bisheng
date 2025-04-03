@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getAuditAppListApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { useEffect, useState } from "react";
+import { SearchInput } from "@/components/bs-ui/input";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { getStrTime } from "../StatisticsReport";
@@ -29,6 +30,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             end_date,
             feedback: param.feedback || undefined,
             review_status: param.result || undefined,
+            //TODO: 修改参数名
+            keyword: param.keyword || undefined,
         })
     });
 
@@ -38,7 +41,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         userGroup: '',
         dateRange: [],
         feedback: '',
-        result: ''
+        result: '',
+        keyword: '',
     });
     useEffect(() => {
         if (initFilter) {
@@ -64,7 +68,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             userGroup: '',
             dateRange: [],
             feedback: '',
-            result: ''
+            result: '',
+            keyword: '',
         }
         setFilters(param)
         filterData(param)
@@ -115,6 +120,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </SelectContent>
                         </Select>
                     </div>
+                    <SearchInput className="w-64" placeholder={'历史记录'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                 </div>
