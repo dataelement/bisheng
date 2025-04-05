@@ -235,8 +235,8 @@ def gen_user_role(db_user: User):
         if len(db_user_operation_groups) > 0:
             gr.append('group_operation')
         if len(db_user_admin_groups) > 0:
-            role = 'group_admin'
-        elif len(gr) > 0:
+            gr.append('group_admin')
+        if len(gr) > 0:
             role = "|".join(gr)
         else:
             role = role_ids
