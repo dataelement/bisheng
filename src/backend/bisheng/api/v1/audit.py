@@ -61,10 +61,11 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
                      feedback: Optional[str] = Query(default=None, description='like：点赞；dislike：点踩；copied：复制'),
                      review_status: Optional[int] = Query(default=None, description='审查状态'),
                      page: Optional[int] = Query(default=1, description='页码'),
-                     page_size: Optional[int] = Query(default=10, description='每页条数')):
+                     page_size: Optional[int] = Query(default=10, description='每页条数'),
+                     keyword: Optional[str] = Query(default=None,description='历史记录')):
     """ 筛选所有会话列表 """
     data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
-                                                   feedback, review_status, page, page_size)
+                                                   feedback, review_status, page, page_size, keyword)
     return resp_200(data={
         'data': data,
         'total': total

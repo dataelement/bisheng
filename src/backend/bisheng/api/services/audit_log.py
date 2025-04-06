@@ -9,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 from openpyxl.workbook import Workbook
 from redbeat import RedBeatSchedulerEntry
+from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.knowledge_imp import extract_code_blocks
@@ -17,7 +18,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.audit import ReviewSessionConfig
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schemas import resp_200
-from bisheng.database.base import generate_uuid
+from bisheng.database.base import generate_uuid, session_getter
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
@@ -25,7 +26,7 @@ from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group, GroupDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.database.models.message import MessageDao, ChatMessageDao
+from bisheng.database.models.message import MessageDao, ChatMessageDao, ChatMessage
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, ReviewStatus, MessageSession
 from bisheng.database.models.user import UserDao, User
@@ -484,12 +485,18 @@ class AuditLogService:
 
     @classmethod
     def get_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
-                         feedback, review_status, page, page_size) -> (list, int):
+                         feedback, review_status, page, page_size, keyword=None) -> (list, int):
         flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
         if not flag:
             return [], 0
-        res = MessageSessionDao.filter_session(chat_ids=None, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
-        total = MessageSessionDao.filter_session_count(chat_ids=None, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
+        chat_ids = None
+        if keyword:
+            where = select(ChatMessage).where(ChatMessage.flow_id.in_(filter_flow_ids))
+            with session_getter() as session:
+                chat_res = session.exec(where).all()
+                chat_ids = [one.chat_id for one in chat_res]
+        res = MessageSessionDao.filter_session(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
 
         res_users = []
         for one in res:
