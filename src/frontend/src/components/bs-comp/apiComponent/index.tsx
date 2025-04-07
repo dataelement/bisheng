@@ -1,78 +1,113 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import ApiAccess from './ApiAccess';
 import ApiAccessFlow from './ApiAccessFlow';
 import ApiAccessSkill from './ApiAccessSkill';
 import ChatLink from './ChatLink';
 
-const enum API_TYPE {
+enum API_TYPE {
     ASSISTANT = 'assistant',
     SKILL = 'skill',
     FLOW = 'flow'
 }
 
-/**
- * 
- * @param type 助手/技能/工作流
- * @ 助手id/技能useContext(TabsContext)/ 
- */
-const ApiMainPage = ({ type = API_TYPE.ASSISTANT }) => {
-    const [activeMenu, setActiveMenu] = useState(type === API_TYPE.FLOW ? 'no-login-link' : 'api-access');
-    const { t } = useTranslation()
+type MenuItem = {
+    key: string;
+    labelKey: string;
+    component: React.ReactNode;
+};
 
-    const renderContent = () => {
-        switch (activeMenu) {
-            case 'api-access':
-                return type === API_TYPE.ASSISTANT ? <ApiAccess /> : type === API_TYPE.SKILL ? <ApiAccessSkill /> : <ApiAccessFlow />;
-            case 'no-login-link':
-                return <ChatLink noLogin type={type} />;
-            case 'login-link':
-                return <ChatLink type={type} />;
-            default:
-                return <ApiAccess />;
+interface ApiMainPageProps {
+    /** 
+     * API 类型，决定显示哪种类型的接入方式
+     * @default API_TYPE.ASSISTANT
+     */
+    type?: API_TYPE;
+}
+
+const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
+    const { t } = useTranslation();
+    const [activeMenu, setActiveMenu] = useState('api-access');
+
+    // 菜单配置项
+    const menuItems = useMemo((): MenuItem[] => [
+        {
+            key: 'api-access',
+            labelKey: t('api.apiAccess'),
+            component: getApiAccessComponent(type)
+        },
+        {
+            key: 'no-login-link',
+            labelKey: t('api.noLoginLink'),
+            component: <ChatLink noLogin type={type} />
+        },
+        {
+            key: 'login-link',
+            labelKey: t('api.loginLink'),
+            component: <ChatLink type={type} />
         }
-    };
+    ], [type]);
+
+    // 当前活动内容
+    const activeContent = useMemo(
+        () => menuItems.find(item => item.key === activeMenu)?.component,
+        [activeMenu, menuItems]
+    );
 
     return (
         <div className="flex size-full bg-background-main">
-            {/* 左侧竖向菜单 */}
-            <aside className="w-52 text-white flex-shrink-0">
-                <nav className="p-2">
-                    <ul className="space-y-4">
-                        {type !== API_TYPE.FLOW && <li>
-                            <button
-                                className={`w-full text-left ${activeMenu === 'api-access' ? 'bg-card' : ''} p-2 pl-6 rounded`}
-                                onClick={() => setActiveMenu('api-access')}
-                            >
-                                {t('api.apiAccess')}
-                            </button>
-                        </li>}
-                        <li>
-                            <button
-                                className={`w-full text-left ${activeMenu === 'no-login-link' ? 'bg-card' : ''} p-2 pl-6 rounded`}
-                                onClick={() => setActiveMenu('no-login-link')}
-                            >
-                                {t('api.noLoginLink')}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                className={`w-full text-left ${activeMenu === 'login-link' ? 'bg-card' : ''} p-2 pl-6 rounded`}
-                                onClick={() => setActiveMenu('login-link')}
-                            >
-                                {t('api.loginLink')}
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
-            </aside>
+            {/* 左侧菜单组件 */}
+            <MenuPanel
+                items={menuItems}
+                activeKey={activeMenu}
+                onChange={setActiveMenu}
+            />
 
             {/* 右侧内容区 */}
-            <main className="flex-1 p-2 pl-0 overflow-y-auto">
-                {renderContent()}
+            <main className="flex-1 p-2 pl-0 overflow-y-auto" style={{ scrollBehavior: 'smooth' }}>
+                {activeContent}
             </main>
         </div>
     );
 };
+
+// 辅助函数：获取 API 接入组件
+const getApiAccessComponent = (type: API_TYPE) => {
+    const components = {
+        [API_TYPE.ASSISTANT]: <ApiAccess />,
+        [API_TYPE.SKILL]: <ApiAccessSkill />,
+        [API_TYPE.FLOW]: <ApiAccessFlow />
+    };
+    return components[type] || <ApiAccess />;
+};
+
+// 菜单面板组件
+const MenuPanel = ({ items, activeKey, onChange }: {
+    items: MenuItem[];
+    activeKey: string;
+    onChange: (key: string) => void
+}) => (
+    <aside className="w-52 text-white flex-shrink-0">
+        <nav className="p-2">
+            <ul className="space-y-4">
+                {items.map((item) => (
+                    <li key={item.key}>
+                        <button
+                            role="tab"
+                            aria-selected={activeKey === item.key}
+                            className={`w-full text-left p-2 pl-6 rounded transition-colors ${activeKey === item.key
+                                ? 'bg-card hover:bg-card/90'
+                                : 'hover:bg-card/50'
+                                }`}
+                            onClick={() => onChange(item.key)}
+                        >
+                            {item.labelKey}
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </nav>
+    </aside>
+);
 
 export default ApiMainPage;

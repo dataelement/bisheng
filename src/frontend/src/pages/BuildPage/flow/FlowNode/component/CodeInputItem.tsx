@@ -1,6 +1,7 @@
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from 'react-i18next';
@@ -51,14 +52,16 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
             </Select>
             {/* value */}
             {item.type === 'ref' ? <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
-                onUpdateItem(index, { ...item, label: v.label, value: `${E.id}.${v.value}` })
+                onUpdateItem(index, { ...item, label: `${E.name}/${v.label}`, value: `${E.id}.${v.value}` })
             }}>
-                <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
-                    {item.label ? <span className="flex items-center">
-                        {item.label}
-                    </span> : <span className="bisheng-label">{t('value')}</span>}
-                    <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
-                </div>
+                <Tip content={item.label} side="top">
+                    <div className="no-drag nowheel group flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-search-input px-3 py-1 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 data-[placeholder]:text-gray-400">
+                        {item.label ? <span className="flex items-center">
+                            {item.label}
+                        </span> : <span className="bisheng-label">{t('value')}</span>}
+                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                    </div>
+                </Tip>
             </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className="h-8" />}
             <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
@@ -126,7 +129,7 @@ export default function CodeInputItem({ nodeId, data, onValidate, onChange }) {
     }, [data.value])
 
     return (
-        <div>
+        <div className="nowheel max-h-80 overflow-y-auto">
             {items.map((item, index) => (
                 <Item
                     key={index}

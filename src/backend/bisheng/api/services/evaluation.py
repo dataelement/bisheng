@@ -305,7 +305,7 @@ def add_evaluation_task(evaluation_id: int):
             ("answer", "answer", 1),
             ("statements_num_gt_only", "statements_num_gt_only", 2),
             ("statements_num_answer_only", "statements_num_answer_only", 2),
-            ("statements_overlap", "statements_overlap", 2),
+            ("statements_num_overlap", "statements_num_overlap", 2),
             ("answer_recall", "recall", 3),
             ("answer_precision", "precision", 3),
             ("answer_f1", "F1", 3)
