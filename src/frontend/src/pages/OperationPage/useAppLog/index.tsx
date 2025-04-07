@@ -8,7 +8,7 @@ import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { getAuditAppListApi } from "@/controllers/API/log";
+import { getOperationAppListApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { useEffect, useState } from "react";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -20,7 +20,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
     const { page, pageSize, data: datalist, total, loading, setPage, filterData, reload } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
-        return getAuditAppListApi({
+        return getOperationAppListApi({
             page: page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
@@ -30,7 +30,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             end_date,
             feedback: param.feedback || undefined,
             review_status: param.result || undefined,
-            //TODO: 修改参数名
             keyword: param.keyword || undefined,
         })
     });
@@ -102,9 +101,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
                 <div className="flex flex-wrap gap-4">
-                    <FilterByApp value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
-                    <FilterByUser value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
-                    <FilterByUsergroup value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
+                    <FilterByApp isAudit={false} value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
+                    <FilterByUser isAudit={false} value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
+                    <FilterByUsergroup isAudit={false} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
                     <div className="w-[200px] relative">
                         <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>

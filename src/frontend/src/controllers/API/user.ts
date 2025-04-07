@@ -37,21 +37,39 @@ export async function registerApi(name, pwd, captcha_key?, captcha?) {
     captcha,
   });
 }
-// 用户列表
+
+// 管理员视角 获取用户列表
 export async function getUsersApi({ name = '', page, pageSize, groupId, roleId }: {
   name: string,
   page: number,
   pageSize: number,
   groupId?: number[],
-  roleId?: number[]
+  roleId?: number[],
 }): Promise<{ data: User[]; total: number }> {
   const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
   const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
-
   return await axios.get(
     `/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name}${groupStr}${roleStr}`
   );
 }
+
+// 审计员&运营员视角 获取用户列表
+export async function getUsersApiForUser({ name = '', page, pageSize, groupId, roleId, isAudit }: {
+  name: string,
+  page: number,
+  pageSize: number,
+  groupId?: number[],
+  roleId?: number[],
+  isAudit: boolean,
+}): Promise<{ data: User[]; total: number }> {
+  const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
+  const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
+  const role = isAudit ? 'audit' : 'operation';
+  return await axios.get(
+    `/api/v1/user/list?group_role_type=${role}&page_num=${page}&page_size=${pageSize}&name=${name}${groupStr}${roleStr}`
+  );
+}
+
 
 // 标注任务下用户列表
 export async function getLabelUsersApi(taskId: number): Promise<{ data: User[]; total: number }> {
@@ -216,6 +234,15 @@ export function getUserGroupsApi() {
   return axios.get(`/api/v1/group/list`);
 }
 
+// 审计视角获取用户组列表
+export function getAuditGroupsApi() {
+  return axios.get(`/api/v1/group/list_audit`);
+}
+
+// 运营视角获取用户组列表
+export function getOperationGroupsApi() {
+  return axios.get(`/api/v1/group/list_operation`);
+}
 
 // 删除用户组post
 export function delUserGroupApi(group_id) {

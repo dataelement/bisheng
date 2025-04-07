@@ -7,7 +7,7 @@ import GoodEvaluateSelect from './components/GoodEvaluateSelect';
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { getChatStatisticsApi, getReportDownloadLinkApi } from "@/controllers/API/log";
+import { getOperationChatStatisticsApi, getOperationReportDownloadLinkApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { downloadFile, formatDate } from "@/util/utils";
 import { ArrowLeft, ChevronDown, ChevronsUpDown } from "lucide-react";
@@ -34,7 +34,7 @@ export default function StatisticsReport({ onBack, onJump }) {
     const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
     const { page, pageSize, data: datalist, loading, total, setPage, reload, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(filters.dateRange)
-        return getChatStatisticsApi({
+        return getOperationChatStatisticsApi({
             flow_ids: filters.appName.map(el => el.value),
             group_ids: filters.userGroup || undefined,
             start_date,
@@ -72,7 +72,7 @@ export default function StatisticsReport({ onBack, onJump }) {
             start_date,
             end_date,
         };
-        getReportDownloadLinkApi(params).then(res => {
+        getOperationReportDownloadLinkApi(params).then(res => {
             downloadFile(__APP_ENV__.BASE_URL + res.url, '统计报表.xlsx')
         })
     };
@@ -105,13 +105,14 @@ export default function StatisticsReport({ onBack, onJump }) {
                         <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
+                {/* 运营视角 */}
                 <span>统计报表</span>
             </div>
             <div className="h-[calc(100vh-132px)] overflow-y-auto px-2 py-4 pb-10">
                 {/* 筛选区 */}
                 <div className="flex flex-wrap gap-4 mb-6">
-                    <FilterByApp value={filters.appName} onChange={(value) => setFilters({ ...filters, appName: value })} />
-                    <FilterByUsergroup value={filters.userGroup} onChange={(value) => setFilters({ ...filters, userGroup: value })} />
+                    <FilterByApp isAudit={false} value={filters.appName} onChange={(value) => setFilters({ ...filters, appName: value })} />
+                    <FilterByUsergroup isAudit={false} value={filters.userGroup} onChange={(value) => setFilters({ ...filters, userGroup: value })} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => setFilters({ ...filters, dateRange: value })} />
 
                     <div className="flex gap-4">

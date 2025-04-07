@@ -31,7 +31,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             end_date,
             feedback: param.feedback || undefined,
             review_status: param.result || undefined,
-            //TODO: 修改参数名
             keyword: param.keyword || undefined,
         })
     });
@@ -148,9 +147,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
                 <div className="flex flex-wrap gap-4">
-                    <FilterByApp value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
-                    <FilterByUser value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
-                    <FilterByUsergroup value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
+                    <FilterByApp isAudit={true} value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
+                    <FilterByUser isAudit={true} value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
+                    <FilterByUsergroup isAudit={true} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
                     <div className="w-[200px] relative">
                         <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
