@@ -25,7 +25,10 @@ type State = {
     /**
      * 控制引导问题的显示状态
      */
-    showGuideQuestion: boolean
+    showGuideQuestion: boolean,
+    // 存储违规消息ID { [chatId]: [messageId1, messageId2] }
+    violations: {}, 
+    searchMatches: {}, // 存储历史搜索匹配的消息ID
 }
 
 type Actions = {
@@ -86,6 +89,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     hisMessages: [],
     historyEnd: false,
     showGuideQuestion: false,
+    violations: {}, // 存储违规消息ID { [chatId]: [messageId1, messageId2] }
+    searchMatches: {}, // 存储历史搜索匹配的消息ID
+
     changeChatId(chatId) {
         set((state) => ({ chatId }))
     },
