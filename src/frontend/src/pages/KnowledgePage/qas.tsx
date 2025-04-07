@@ -1,10 +1,10 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, SquarePen } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useDropzone } from 'react-dropzone';
@@ -21,10 +21,11 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateKnowledgeApi, updateQa, updateQaStatus } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import KnowledgeBaseSettingsDialog from "./components/EditKnowledgeDialog";
 
 const defaultQa = {
     question: '',
@@ -382,12 +383,14 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
 export default function QasPage() {
     const { t } = useTranslation('knowledge')
 
-    const { id } = useParams()
-    const [title, setTitle] = useState('')
+    const { id } = useParams();
     const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
     const importRef = useRef(null)
+    const [libInfo, setLibInfo] = useState({ name: '', desc: '' })
+    const [open, setOpen] = useState(false)
+    const { message } = useToast()
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
@@ -400,11 +403,12 @@ export default function QasPage() {
 
     useEffect(() => {
         // @ts-ignore
-        const libname = window.libname // 临时记忆
+        const [libname, libdesc] = window.libname || [] // 临时记忆
         if (libname) {
-            localStorage.setItem('libname', window.libname)
+            localStorage.setItem('libname', libname)
+            localStorage.setItem('libdesc', libdesc)
         }
-        setTitle(window.libname || localStorage.getItem('libname'))
+        setLibInfo({ name: libname || localStorage.getItem('libname'), desc: libdesc || localStorage.getItem('libdesc') })
     }, [])
 
     const handleCheckboxChange = (id) => {
@@ -470,6 +474,23 @@ export default function QasPage() {
         document.body.removeChild(link);
     }
 
+    const handleSave = (form) => {
+        captureAndAlertRequestErrorHoc(updateKnowledgeApi({
+            knowledge_id: Number(id),
+            name: form.name,
+            description: form.desc
+        })).then((res) => {
+        if (!res) return
+            // api
+            setLibInfo(form)
+            setOpen(false)
+            message({ variant: 'success', description: t('saved') })
+            localStorage.setItem('libname', form.name)
+            localStorage.setItem('libdesc', form.desc)
+        })
+    }
+    
+
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -483,7 +504,21 @@ export default function QasPage() {
                                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
                             </button>
                         </ShadTooltip>
-                        <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{title}</span>
+                        <div>
+                            <div className="group flex items-center">
+                                <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{libInfo.name}</span>
+                                {/* edit dialog */}
+                                <Dialog open={open} onOpenChange={setOpen} >
+                                    <DialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="group-hover:visible invisible"><SquarePen className="w-4 h-4" /></Button>
+                                    </DialogTrigger>
+                                    {
+                                        open && <KnowledgeBaseSettingsDialog initialName={libInfo.name} initialDesc={libInfo.desc} onSave={handleSave}></KnowledgeBaseSettingsDialog>
+                                    }
+                                </Dialog>
+                            </div>
+                            <p className="max-w-96 pl-4 text-muted-foreground text-sm truncate">{libInfo.desc}</p>
+                        </div>
                     </div>
                 </div>
                 <div className="flex justify-between items-center mb-4">
@@ -499,7 +534,7 @@ export default function QasPage() {
                                 const fileUrl = res.file_list[0];
                                 console.log('fileUrl', fileUrl);
                                 
-                                downloadFile(fileUrl, title);
+                                downloadFile(fileUrl, libInfo.name);
                             })
                         }}>{t('exportQa')}</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
