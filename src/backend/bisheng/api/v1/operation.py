@@ -9,7 +9,7 @@ from bisheng.api.v1.schema.audit import ReviewSessionConfig
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.user_group import UserGroupDao
 
-router = APIRouter(prefix='/operation', tags=['Audit'])
+router = APIRouter(prefix='/operation', tags=['Operation'])
 
 @router.get('/session', response_model=UnifiedResponseModel)
 def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_login_user),
