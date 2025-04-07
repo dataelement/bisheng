@@ -256,6 +256,22 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_user_operation_groups(cls, user_id: int) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id,
+                                                UserGroup.is_group_admin == 0,
+                                                UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_audit_groups(cls, user_id: int) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id,
+                                                UserGroup.is_group_admin == 0,
+                                                UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
+            return session.exec(statement).all()
+
+    @classmethod
     def update_user_groups(cls, user_groups: List[UserGroup]) -> List[UserGroup]:
         with session_getter() as session:
             session.add_all(user_groups)
