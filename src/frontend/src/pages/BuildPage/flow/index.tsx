@@ -18,10 +18,12 @@ export default function FlowPage() {
     //     }
     // }, [])
 
-    const { flow, setFlow } = useFlowStore()
+    const { flow, setFlow, clearRunCache } = useFlowStore()
 
     useEffect(() => {
         getFlowApi(id).then(f => {
+            clearRunCache();
+
             if (f.data) {
                 const { data, ..._flow } = f
                 return setFlow({
@@ -46,6 +48,7 @@ export default function FlowPage() {
         })
         return () => {
             setFlow(null);
+            clearRunCache();
         }
     }, [])
 

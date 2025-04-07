@@ -25,7 +25,7 @@ export default function Tip({
                 avoidCollisions={false}
                 sticky="always"
             >
-                {content}
+                <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
             </TooltipContent>
         </Tooltip>
     );

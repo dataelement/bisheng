@@ -13,15 +13,18 @@ from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowOutputSchema, WorkflowInputSchema, \
+    WorkflowInputItem
+from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
+from bisheng.chat.utils import SourceType
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
-from bisheng.database.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
@@ -221,3 +224,121 @@ class WorkFlowService(BaseService):
             'name': upload_file.filename,
             'size': upload_file.size,
         }
+
+
+    @classmethod
+    def convert_chat_response_to_workflow_event(cls, chat_response: ChatResponse) -> WorkflowEvent:
+        workflow_event = WorkflowEvent(
+            event=chat_response.category,
+            message_id=chat_response.message_id,
+            status='end',
+            node_id=chat_response.message.get('node_id'),
+            node_execution_id=chat_response.message.get('unique_id'),
+        )
+        match workflow_event.event:
+            case WorkflowEventType.UserInput.value:
+                return cls.convert_user_input_event(chat_response, workflow_event)
+            case WorkflowEventType.GuideWord.value:
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message.get('guide_word')
+                )
+            case WorkflowEventType.GuideQuestion.value:
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message.get('guide_question')
+                )
+            case WorkflowEventType.OutputMsg.value:
+                return cls.convert_output_event(chat_response, workflow_event)
+            case WorkflowEventType.OutputWithChoose.value:
+                return cls.convert_output_choose_event(chat_response, workflow_event)
+            case WorkflowEventType.OutputWithInput.value:
+                return cls.convert_output_input_event(chat_response, workflow_event)
+            case WorkflowEventType.StreamMsg.value:
+                workflow_event.status = chat_response.type
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message.get('msg'),
+                    reasoning_content=chat_response.message.get('reasoning_content'),
+                    output_key=chat_response.message.get('output_key'),
+                )
+                cls.handle_source(chat_response, workflow_event)
+            case WorkflowEventType.Error.value:
+                workflow_event.event = WorkflowEventType.Close.value
+                workflow_event.output_schema = WorkflowOutputSchema(
+                    message=chat_response.message
+                )
+
+        return workflow_event
+
+    @classmethod
+    def handle_source(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent):
+        if chat_response.source == SourceType.FILE.value:
+            workflow_event.output_schema.source_url = f'resouce/{chat_response.chat_id}/{chat_response.message_id}'
+        elif chat_response.source in [SourceType.LINK.value, SourceType.QA.value]:
+            workflow_event.output_schema.extra = chat_response.extra
+
+
+    @classmethod
+    def convert_user_input_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        event_input_schema = chat_response.message.get('input_schema')
+        input_schema = WorkflowInputSchema(
+            input_type=event_input_schema.get('tab'),
+        )
+        if input_schema.input_type == 'form_input':
+            # 前端的表单定义转为后端的表单定义
+            input_schema.value = [WorkflowInputItem(**one) for one in event_input_schema.get('value', [])]
+            for one in input_schema.value:
+                one.label = one.value
+                one.value = ''
+        else:
+            # 说明是输入框输入
+            input_schema.value = [
+                WorkflowInputItem(
+                    key=event_input_schema.get('key'),
+                    type='text',
+                    required=True,
+                ),
+                WorkflowInputItem(
+                    key='dialog_files_content',
+                    type='dialog_file',
+                )
+            ]
+        workflow_event.input_schema = input_schema
+        return workflow_event
+
+    @classmethod
+    def convert_output_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        workflow_event.output_schema = WorkflowOutputSchema(
+            message=chat_response.message.get('msg'),
+            files=chat_response.files,
+            output_key=chat_response.message.get('output_key')
+        )
+        cls.handle_source(chat_response, workflow_event)
+        return workflow_event
+
+    @classmethod
+    def convert_output_input_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        workflow_event = cls.convert_output_event(chat_response, workflow_event)
+        workflow_event.input_schema = WorkflowInputSchema(
+            input_type='message_inline_input',
+            value=[WorkflowInputItem(
+                key=chat_response.message.get('key'),
+                type='text',
+                required=True,
+                value=chat_response.message.get('input_msg', '')
+            )]
+        )
+        return workflow_event
+
+    @classmethod
+    def convert_output_choose_event(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent) -> WorkflowEvent:
+        workflow_event = cls.convert_output_event(chat_response, workflow_event)
+        workflow_event.input_schema = WorkflowInputSchema(
+            input_type='message_inline_option',
+            value=[WorkflowInputItem(
+                key=chat_response.message.get('key'),
+                type='select',
+                required=True,
+                value='',
+                options=chat_response.message.get('options', [])
+            )]
+        )
+        return workflow_event

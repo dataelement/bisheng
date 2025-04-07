@@ -3,10 +3,10 @@ import { Label } from "@/components/bs-ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next"; // 引入国际化
 import { CustomHandle } from "..";
 import DragOptions from "./DragOptions";
 import VarInput from "./VarInput";
-import { useTranslation } from "react-i18next"; // 引入国际化
 
 const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
     const { t } = useTranslation('flow'); // 使用国际化
@@ -17,16 +17,21 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
             text: el.label,
             type: ''
         }))
-    }, [data]);
+    }, [data.options]);
+
+    const nData = useMemo(() => {
+        return { ...data, label: '变量输入', required: false }
+    }, [data])
 
     // 根据交互类型切换不同的展示
-    const renderContent = () => {
+    const renderContent = (error) => {
         switch (interactionType) {
             case "none":
                 return null;
             case "choose":
                 return (
                     <DragOptions
+                        edit
                         edges
                         options={options}
                         onChange={(opts) => {
@@ -53,10 +58,11 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
                             </Badge>
                         </div>
                         <VarInput
+                            error={error}
                             placeholder={t("userInputPlaceholder")}
                             nodeId={nodeId}
                             itemKey={data.key}
-                            flowNode={data}
+                            flowNode={nData}
                             value={data.value.value}
                             onChange={(msg) =>
                                 onChange({ type: interactionType, value: msg })
@@ -87,6 +93,10 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
                     setError(true);
                     return t("optionsCannotBeEmpty"); // 选项不可为空
                 }
+                // if (interactionType === "input" && !data.value.value?.trim()) {
+                //     setError(true);
+                //     return '展示内容不可为空'; // 输入不可为空
+                // }
                 setError(false);
                 return false;
             });
@@ -128,8 +138,8 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
             </RadioGroup>
 
             <div className="interaction-content mt-4 nodrag">
-                {renderContent()}
-                {error && (
+                {renderContent(error)}
+                {error && interactionType === "choose" && (
                     <div className="text-red-500 text-sm mt-2">
                         {t("optionsCannotBeEmpty")} {/* 选项不可为空 */}
                     </div>
