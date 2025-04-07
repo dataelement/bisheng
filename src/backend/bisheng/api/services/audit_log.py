@@ -491,10 +491,15 @@ class AuditLogService:
             return [], 0
         chat_ids = None
         if keyword:
-            where = select(ChatMessage).where(ChatMessage.flow_id.in_(filter_flow_ids))
+            where = select(ChatMessage).where(ChatMessage.message.like(f'%{keyword}%'),ChatMessage.category == 'question')
+            if filter_flow_ids:
+                where = select(ChatMessage).where(ChatMessage.flow_id.in_(filter_flow_ids))
             with session_getter() as session:
                 chat_res = session.exec(where).all()
                 chat_ids = [one.chat_id for one in chat_res]
+                if len(chat_ids) == 0:
+                    chat_ids = [""]
+                chat_ids = list(set(chat_ids))
         res = MessageSessionDao.filter_session(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
         total = MessageSessionDao.filter_session_count(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
 
