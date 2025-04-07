@@ -183,9 +183,7 @@ class KnowledgeService(KnowledgeUtils):
             if repeat_knowledge and repeat_knowledge.id != db_knowledge.id:
                 raise KnowledgeExistError.http_exception()
             db_knowledge.name = knowledge.name
-        if knowledge.description:
-            db_knowledge.description = knowledge.description
-
+        db_knowledge.description = knowledge.description
         db_knowledge = KnowledgeDao.update_one(db_knowledge)
         user = UserDao.get_user(db_knowledge.user_id)
         res = KnowledgeRead(**db_knowledge.model_dump(),
