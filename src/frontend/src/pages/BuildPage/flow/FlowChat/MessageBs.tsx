@@ -17,7 +17,6 @@ import { ChevronDown, ShieldAlert } from "lucide-react";
 import { cname } from "@/components/bs-ui/utils";
 import { ToastIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
-import { ShieldAlert } from "lucide-react";
 
 // 颜色列表
 const colorList = [
