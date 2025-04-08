@@ -173,12 +173,12 @@ export default function App() {
 
   // 系统管理员(超管、组超管)
   const isAdmin = useMemo(() => {
-    return user.role?.includes('admin')
+    return user?.role?.includes('admin')
   }, [user])
       
   // 拥有权限管理权限
   const hasGroupAdminRole = useMemo(() => {
-    return user.role?.includes('group_admin')
+    return user?.role?.includes('group_admin')
   }, [user])
 
   // 动态路由根据权限

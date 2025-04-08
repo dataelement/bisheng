@@ -152,18 +152,17 @@ export default function Users(params) {
         getRoles()
         return () => { setUserGroups([]); setRoles([]) }
     }, [])
+    // 系统管理员(超管、组超管)
+    const isAdmin = useMemo(() => {
+        return user.role?.includes('admin')
+    }, [user])
+    
+    // 拥有权限管理权限
+    const hasGroupAdminRole = useMemo(() => {
+        return user.role?.includes('group_admin')
+    }, [user])
 
     const operations = (el) => {
-        // 系统管理员(超管、组超管)
-        const isAdmin = useMemo(() => {
-            return user.role?.includes('admin')
-        }, [user])
-        
-        // 拥有权限管理权限
-        const hasGroupAdminRole = useMemo(() => {
-            return user.role?.includes('group_admin')
-        }, [user])
-
         const isSuperAdmin = el.roles.some(role => role.id === 1)
         // 禁止编辑admin用户
         if (isSuperAdmin) return <div>
