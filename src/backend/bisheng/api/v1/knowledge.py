@@ -4,6 +4,8 @@ from datetime import datetime
 from io import BytesIO
 from typing import List, Optional
 
+import numpy as np
+
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
@@ -405,6 +407,19 @@ def qa_auto_question(
     questions = knowledge_imp.recommend_question(ori_question, number=number, answer=answer)
     return resp_200(data={'questions': questions})
 
+@router.get('/qa/export/template', status_code=200)
+def get_export_url():
+    title = ["问题","答案","类型","创建时间","更新时间","创建者","状态","相似问题1","相似问题2"]
+    df = pd.DataFrame(columns=[title])
+    bio = BytesIO()
+    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="Sheet1", index=False)
+    file_name = f"QA知识库导入模板.xlsx"
+    file_path = save_uploaded_file(bio, 'bisheng', file_name)
+    file_path = file_path.replace('http://minio.9000', '')
+    return resp_200({"url": file_path})
+
+
 @router.get('/qa/export/{qa_knowledge_id}', status_code=200)
 def get_export_url(*,
                    qa_knowledge_id: int,
@@ -465,8 +480,8 @@ def get_export_url(*,
                 "问题":qa['questions'][0],
                 "答案":json.loads(qa['answers'])[0],
                 "类型":get_qa_source(qa['source']),
-                "创建时间":qa['create_time'].strftime('%Y-%m-%d %H:%M:%S'),
-                "更新时间":qa['update_time'].strftime('%Y-%m-%d %H:%M:%S'),
+                "创建时间":qa['create_time'],
+                "更新时间":qa['update_time'],
                 "创建者":user_map.get(qa['user_id'], qa['user_id']),
                 "状态":get_status(qa['status']),
             })
@@ -485,6 +500,7 @@ def get_export_url(*,
         file_name = f"{file_pr}_{file_index}.xlsx"
         file_index = file_index + 1
         file_path = save_uploaded_file(bio,'bisheng', file_name)
+        file_path = file_path.replace('http://minio.9000', '')
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num>=total_count:
@@ -562,7 +578,8 @@ def post_import_file(*,
             status = 1)
             for key,value in dd.items():
                 if key.startswith('相似问题'):
-                    d.questions.append(value)
+                    if value is not np.nan:
+                        d.questions.append(value)
             insert_data.append(d)
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
         insert_result.append(result)
