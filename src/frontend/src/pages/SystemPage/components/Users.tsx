@@ -156,7 +156,6 @@ export default function Users(params) {
     const operations = (el) => {
         // 系统管理员(超管、组超管)
         const isAdmin = useMemo(() => {
-            console.log('user.role', user.role);
             return user.role?.includes('admin')
         }, [user])
         

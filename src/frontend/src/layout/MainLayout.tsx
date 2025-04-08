@@ -166,7 +166,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            user.role === 'admin' && <>
+                            isAdmin && <>
                                 <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
                                 </NavLink>
