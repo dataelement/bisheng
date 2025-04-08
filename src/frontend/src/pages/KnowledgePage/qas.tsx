@@ -3,12 +3,13 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { ArrowLeft, SquarePen } from "lucide-react";
+import { message, useToast } from "@/components/bs-ui/toast/use-toast";
+import { ArrowLeft, Computer, SquarePen } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useDropzone } from 'react-dropzone';
 import { Link, useParams } from "react-router-dom";
+import { Label } from "@/components/bs-ui/label";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button, LoadButton } from "../../components/bs-ui/button";
 import { Input, InputList, SearchInput, Textarea } from "../../components/bs-ui/input";
@@ -26,6 +27,9 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import KnowledgeBaseSettingsDialog from "./components/EditKnowledgeDialog";
+import { downloadFile } from "@/util/utils";
+import SimpleUpload from "@/components/bs-ui/upload/simple";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 
 const defaultQa = {
     question: '',
@@ -33,75 +37,11 @@ const defaultQa = {
     answer: ''
 }
 
-function UploadModal() {
-
-}
-
-function BasicDropzone() {
-    const { t } = useTranslation('bs');
-    const [files, setFiles] = useState([]);
-  
-    const onDrop = useCallback(acceptedFiles => {
-      setFiles(acceptedFiles.map(file => (
-        Object.assign(file, {
-          preview: URL.createObjectURL(file)
-        })
-      )));
-    }, []);
-  
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-      onDrop,
-      accept: {
-        'image/*': ['.jpeg', '.png', '.jpg'],
-        'text/csv': ['.csv'],
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
-      },
-      maxFiles: 3,
-      maxSize: 5 * 1024 * 1024 // 5MB
-    });
-  
-    console.log('files', files);
-    return (
-      <div>
-        <div {...getRootProps()} 
-          style={{
-            border: '2px dashed #eee',
-            borderRadius: '4px',
-            padding: '20px',
-            textAlign: 'center',
-            backgroundColor: isDragActive ? '#fafafa' : 'white',
-            cursor: 'pointer'
-          }}
-        >
-          <input {...getInputProps()} />
-          <p>{isDragActive ? t('code.dropFileHere') : t('code.clickOrDragHere')}</p>
-        </div>
-  
-        <aside style={{ marginTop: '20px' }}>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {files.map(file => (
-              <li key={file.path}>
-                {file.path} - {Math.round(file.size / 1024)} KB
-                {file.type.startsWith('image/') && (
-                  <img 
-                    src={file.preview} 
-                    alt="预览" 
-                    style={{ maxWidth: '100px', display: 'block', marginTop: '10px' }}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-        </aside>
-      </div>
-    );
-}
-
 function QaTable({ dataList }) {
     const { t } = useTranslation('knowledge');
-    const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(5);
-    const [total, setTotal] = useState(40);
+    const [page, setPage] = useState(0);
+    const [pageSize, setPageSize] = useState(0);
+    const [total, setTotal] = useState(0);
     return (
       <div>
         <Table>
@@ -122,7 +62,6 @@ function QaTable({ dataList }) {
                         <TableCell className="font-medium">
                             <div onClick={() => {
                                 //打开相似问题预览窗口
-                                
                             }}>{t('similarQuestions')}</div>
                         </TableCell>
                     </TableRow>
@@ -147,8 +86,14 @@ const ImportQa = forwardRef(({ knowlageId } : any, ref) => {
     const [open, setOpen] = useState(true);
     const [loading, setLoading] = useState(false);
     const [saveLoad, setSaveLoad] = useState(false);
-    const [isUpload, setisUpload] = useState(false);
     const [dataList, setDataList] = useState([]);
+    const [form, setForm] = useState({
+        fileUrl: '',
+        fileName: '',
+    });
+    const [error, setError] = useState({
+        fileUrl: false,
+    });
 
     useImperativeHandle(ref, () => ({
         open() {
@@ -158,35 +103,88 @@ const ImportQa = forwardRef(({ knowlageId } : any, ref) => {
 
     const close = () => {
         setOpen(false);
+        setError({
+            fileUrl: false,
+        });
     };
 
     const handleSubmit = () => {
-
+        const isFileUrlEmpty = !form.fileUrl;
+        const errors = [];
+        setError({
+            fileUrl: isFileUrlEmpty,
+        });
+        
+        if (isFileUrlEmpty) errors.push(t('dataset.uploadFile'));
+        if (errors.length > 0) {
+            return message({
+                variant: 'warning',
+                description: errors
+            });
+        }
     };
 
-    // 导入预览
-    const handlePreview = async () => {
+    const handleFileUploadSuccess = (name, url) => {
+        setForm({
+            fileUrl: url,
+            fileName: name
+        });
+    };
 
-    }
+
+    useEffect(() => {
+
+    })
     return (
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[625px]">
                 <DialogHeader>
                     <DialogTitle>{t('importQa')}</DialogTitle>
                 </DialogHeader>
-                <div className="flex flex-col gap-4 py-2">
-                   {isUpload ? QaTable({
-                    dataList
-                   }) : BasicDropzone()}
+                <div>
+                <div className="flex justify-between items-center">
+                    <label htmlFor="dataSetName" className="bisheng-label">
+                        <span className="text-red-500">*</span>{t('pleaseUploadFile')}
+                    </label>
+                    <div className="flex gap-2 items-center">
+                        <Label>{t('sampleFile')}:</Label>
+                         <Button variant="link" className="px-1" onClick={() => {
+                            getQaFile('template').then(res => {
+                                const fileUrl = res.file_list[0];
+                                downloadFile(checkSassUrl(fileUrl), t('qaSample'));
+                            })
+                         }}>
+                            {t('qaSample')}
+                        </Button>
+                    </div>
+                    </div>
+                    <div className="flex flex-col gap-4 py-2">
+                        <SimpleUpload
+                            filekey="file"
+                            uploadUrl={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
+                            accept={['xlsx']}
+                            className={`${error.fileUrl ? 'border-red-400' : ''}`}
+                            onSuccess={handleFileUploadSuccess}
+                        />
+                        <p className="text-sm text-green-500 mt-2">{form.fileName}</p>
+                    </div>
                 </div>
+                {<div>
+                    <label htmlFor="dataSetName" className="bisheng-label">
+                        {t('importPreview')}
+                    </label>
+                    <div className="flex flex-col gap-4 py-2">
+                        { QaTable({ dataList }) }
+                    </div>
+                </div>}
                 <DialogFooter>
                     <DialogClose>
                         <Button variant="outline" className="px-11" type="button" onClick={close}>
                             {t('cancel2')}
                         </Button>
                     </DialogClose>
-                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={isUpload ? handleSubmit : handlePreview}>
-                        {isUpload ? t('submit') : t('importPreview')}
+                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit}>
+                        {t('submit')}
                     </LoadButton>
                 </DialogFooter>
             </DialogContent>
@@ -464,16 +462,7 @@ export default function QasPage() {
         await updateQaStatus(id, status)
         refreshData((item) => item.id === id, { status })
     }
-
-    function downloadFile(url, filename) {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename || 'downloaded-file'; // 如果没有提供文件名，使用默认名
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
+    
     const handleSave = (form) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeApi({
             knowledge_id: Number(id),
@@ -532,9 +521,7 @@ export default function QasPage() {
                         <Button className="px-8" onClick={() => {
                             getQaFile(id).then(res => {
                                 const fileUrl = res.file_list[0];
-                                console.log('fileUrl', fileUrl);
-                                
-                                downloadFile(fileUrl, libInfo.name);
+                                downloadFile(checkSassUrl(fileUrl), `${libInfo.name}.xlsx`);
                             })
                         }}>{t('exportQa')}</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>

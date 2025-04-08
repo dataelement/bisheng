@@ -14,8 +14,9 @@ import MessageBsChoose from "./MessageBsChoose";
 import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
+import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 
-export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, msgVNode, flow  }) {
+export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, flow  }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -89,13 +90,13 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
         function handleScroll() {
             if (queryLockRef.current) return
             const lastViolation = findLastViolation();
-            if (isFirstLoad && audit && lastViolation) {
-                console.log('滚动', isFirstLoad);
-                // 这里写违规消息和历史记录搜索的滚动逻辑
-                scrollToMessage(lastViolation);
-                setIsFirstLoad(false);
-                return;
-            }
+           // if (isFirstLoad && audit && lastViolation) {
+            //     console.log('滚动', isFirstLoad);
+            //     // 这里写违规消息和历史记录搜索的滚动逻辑
+            //     scrollToMessage(lastViolation);
+            //     setIsFirstLoad(false);
+            //     return;
+           // }
 
             const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
             // 距离底部 600px内，开启自动滚动
@@ -175,7 +176,6 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                                 flow={flow}
                                 key={msg.message_id}
                                 data={msg}
-                                msgVNode={msgVNode}
                                 onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
                                 onSource={(data) => { sourceRef.current?.openModal(data) }}
                                 onMarkClick={() => onMarkClick('answer', msg.message_id, findQa(messagesList, index))}

@@ -16,6 +16,7 @@ import { useMessageStore } from "./messageStore";
 import { Badge } from "@/components/bs-ui/badge";
 import { ShieldAlert } from "lucide-react";
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 
 // 颜色列表
 const colorList = [
@@ -32,13 +33,12 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ audit, mark = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow = {id: 0, logo: ''}  }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, flow?: any }) {
+export default function MessageBs({ audit, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow = {id: 0, logo: ''}  }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any, flow?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
     const message = useMemo(() => {
-        const msg = typeof data.message === 'string' ? data.message : data.message.msg
-
+        const msg = typeof data.message === 'string' ? data.message : data.message.msg;
         return msg
             .replaceAll('$$', '$') // latex
             .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
@@ -138,10 +138,11 @@ export default function MessageBs({ audit, mark = false, msgVNode = null, logo, 
                         })}
                     />
                     <MessageButtons
+                        onlyRead={audit}
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
-                        msgVNode={msgVNode}
+                        msgVNode={<MsgVNodeCom message="自定义2" />}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
