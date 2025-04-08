@@ -97,5 +97,8 @@
     "aiGenerate": "AI生成",
     "cancel2": "取消",
     "confirm": "确认",
-    "importPreview": "导入预览"
+    "importPreview": "导入预览（仅显示前十条）",
+    "pleaseUploadFile": "请上传文件",
+    "sampleFile": "示例文件",
+    "qaSample": "QA导入格式示例.xlsx"
 }

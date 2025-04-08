@@ -66,11 +66,11 @@ export default function AppChatDetail() {
                 </div>
             </div>
             <div className="h-[calc(100vh-132px)]">
-                {/* TODO：ZZY 确实flowflow */}
+                {/* TODO：ZZY 缺失flow */}
                 {type === AppNumType.FLOW
                     ? <ChatMessages
                         audit logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg
-                        (fid, true)}  mark={false} onMarkClick={null} msgVNode={<MsgVNodeCom message="自定义1" />}></ChatMessages>
+                        (fid, true)}  mark={false} onMarkClick={null}></ChatMessages>
                     : <MessagePanne
                         audit
                         logo=''
@@ -78,7 +78,6 @@ export default function AppChatDetail() {
                         guideWord=''
                         mark={false}
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
-                        msgVNode={<MsgVNodeCom message="自定义2" />}
                     ></MessagePanne>
                 }
             </div>
