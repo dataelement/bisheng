@@ -75,6 +75,7 @@ export default function useChatFunctions({
   const getSender = useGetSender();
   const isTemporary = useRecoilValue(store.isTemporary);
   const modelType = useRecoilValue(store.modelType);
+  const chatModel = useRecoilValue(store.chatModel);
   const searchType = useRecoilValue(store.searchType);
   // const netSearch = useRecoilValue(store.netSearch);
 

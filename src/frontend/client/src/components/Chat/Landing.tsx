@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
 import {
   useGetAssistantDocsQuery,
+  useGetBsConfig,
   useGetEndpointsQuery,
   useGetStartupConfig,
 } from '~/data-provider';
@@ -21,6 +22,7 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
   const assistantMap = useAssistantsMapContext();
   const { data: startupConfig } = useGetStartupConfig();
   const { data: endpointsConfig } = useGetEndpointsQuery();
+  const { data: bsConfig } = useGetBsConfig()
 
   const localize = useLocalize();
 
@@ -96,9 +98,17 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
     <div className={cn('relative', !isNew && 'h-full')}>
       <div className="absolute left-0 right-0">{Header != null ? Header : null}</div>
       <div className="flex h-full flex-col items-center justify-center">
-        <div className={cn('relative', name && avatar ? 'mb-0' : 'mb-3')}>
-          <img className="overflow w-20 rounded-full" src="/assets/sg-logo.png" />
-          {/* <ConvoIcon
+        <div className='flex items-center gap-4'>
+          <img className="overflow w-16 rounded-full" src={bsConfig?.assistantIcon.image} />
+          <h2 className="max-w-[75vh] px-12 text-center text-lg font-medium dark:text-white md:px-0 md:text-2xl">
+            {bsConfig?.welcomeMessage}
+          </h2>
+        </div>
+        <div className="max-w-lg text-center mt-4 text-sm font-normal text-text-primary">
+          {bsConfig?.functionDescription}
+        </div>
+        {/* <div className={cn('relative', name && avatar ? 'mb-0' : 'mb-3')}>
+          <ConvoIcon
             agentsMap={agentsMap}
             assistantMap={assistantMap}
             conversation={conversation}
@@ -115,9 +125,9 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
             >
               <BirthdayIcon />
             </TooltipAnchor>
-          ) : null} */}
-        </div>
-        {name ? (
+          ) : null}
+        </div> */}
+        {/* {name ? (
           <div className="flex flex-col items-center gap-0 p-2">
             <div className="text-center text-2xl font-medium dark:text-white">{name}</div>
             <div className="max-w-md text-center text-sm font-normal text-text-primary">
@@ -126,15 +136,15 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
                   ? startupConfig?.interface?.customWelcome
                   : localize('com_nav_welcome_message'))}
             </div>
-            {/* <div className="mt-1 flex items-center gap-1 text-token-text-tertiary">
+            <div className="mt-1 flex items-center gap-1 text-token-text-tertiary">
              <div className="text-sm text-token-text-tertiary">By Daniel Avila</div>
-          </div> */}
+          </div> 
           </div>
         ) : (
           <h2 className="mb-5 max-w-[75vh] px-12 text-center text-lg font-medium dark:text-white md:px-0 md:text-2xl">
             我是毕昇工作台，很高兴见到你！
           </h2>
-        )}
+        )} */}
         {/* 引导词 */}
         <div className="mt-8 flex flex-wrap justify-center gap-3 px-4">
           {conversation_starters.length > 0 &&

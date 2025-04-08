@@ -101,6 +101,7 @@ export const resendVerificationEmail = () => '/api/user/verify/resend';
 export const plugins = () => '/api/plugins';
 
 export const config = () => '/api/config';
+export const bsConfig = () => '/api/config';
 
 export const prompts = () => '/api/prompts';
 

@@ -5,6 +5,7 @@ import {
   mergeFileConfig,
   isAssistantsEndpoint,
   fileConfig as defaultFileConfig,
+  BsConfig,
 } from '~/data-provider/data-provider/src';
 import {
   useChatContext,
@@ -24,7 +25,7 @@ import {
 import { cn, removeFocusRings, checkIfScrollable } from '~/utils';
 import FileFormWrapper from './Files/FileFormWrapper';
 import { Button, TextareaAutosize } from '~/components/ui';
-import { useGetFileConfig } from '~/data-provider';
+import { useGetBsConfig, useGetFileConfig } from '~/data-provider';
 import { TemporaryChat } from './TemporaryChat';
 import TextareaHeader from './TextareaHeader';
 import PromptsCommand from './PromptsCommand';
@@ -37,6 +38,7 @@ import SendButton from './SendButton';
 import Mention from './Mention';
 import store from '~/store';
 import { Globe, GlobeIcon, Rotate3DIcon, FileText, SparkleIcon } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
 
 const ChatForm = ({ index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
@@ -58,6 +60,7 @@ const ChatForm = ({ index = 0 }) => {
   const [modelType, setModelType] = useRecoilState(store.modelType);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
   const [isSearch, setIsSearch] = useRecoilState(store.isSearch);
+  const [chatModel, setChatModel] = useRecoilState(store.chatModel);
 
   const isSearching = useRecoilValue(store.isSearching);
   const [showStopButton, setShowStopButton] = useRecoilState(store.showStopButtonByIndex(index));
@@ -76,11 +79,14 @@ const ChatForm = ({ index = 0 }) => {
     setShowPlusPopover,
     setShowMentionPopover,
   });
+
+  const { data: bsConfig } = useGetBsConfig()
   const { handlePaste, handleKeyDown, handleCompositionStart, handleCompositionEnd } = useTextarea({
     textAreaRef,
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
+    placeholder: bsConfig?.inputPlaceholder
   });
 
   const {
@@ -217,7 +223,8 @@ const ChatForm = ({ index = 0 }) => {
           /> */}
           {/* 操作已添加的对话 */}
           {/* <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} /> */}
-          <FileFormWrapper disableInputs={disableInputs} disabledSearch={isSearch}>
+          {/* {bsConfig?.fileUpload.enabled && */}
+          <FileFormWrapper noUpload={!bsConfig?.fileUpload.enabled} disableInputs={disableInputs} disabledSearch={isSearch}>
             {endpoint && (
               <>
                 <CollapseChat
@@ -275,6 +282,8 @@ const ChatForm = ({ index = 0 }) => {
           </div>
           {/* 深度思考 联网 */}
           <div className="absolute bottom-2 left-5 flex gap-2">
+            <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => setChatModel({ id: Number(val), name: 'xx' })} />
+            {/* <div className="absolute bottom-2 left-5 flex gap-2">
             <Button
               type="button"
               variant={'outline'}
@@ -292,8 +301,8 @@ const ChatForm = ({ index = 0 }) => {
             >
               <Rotate3DIcon size="16" />
               <span className="text-xs font-normal">{localize('com_ui_model_think')}</span>
-            </Button>
-            <Button
+            </Button> */}
+            {/* <Button
               type="button"
               variant={'outline'}
               className={cn(
@@ -310,53 +319,81 @@ const ChatForm = ({ index = 0 }) => {
             >
               <Rotate3DIcon size="16" />
               <span className="text-xs font-normal">{localize('com_ui_model_shougang')}</span>
-            </Button>
-            <Button
-              type="button"
-              variant={'outline'}
-              className={cn(
-                'h-6 rounded-full px-2',
-                'netSearch' === searchType && buttonActiveStyle,
-              )}
-              onClick={() => {
-                if (searchType === 'netSearch') {
-                  setSearchType('');
-                } else {
-                  setSearchType('netSearch');
-                }
-              }}
-              disabled={!!files.size}
-            >
-              <GlobeIcon size="16" />
-              <span className="text-xs font-normal">{localize('com_ui_model_search')}</span>
-            </Button>
-            <Button
-              type="button"
-              variant={'outline'}
-              className={cn(
-                'h-6 rounded-full px-2',
-                'knowledgeSearch' === searchType && buttonActiveStyle,
-              )}
-              onClick={() => {
-                if (searchType === 'knowledgeSearch') {
-                  setSearchType('');
-                } else {
-                  setSearchType('knowledgeSearch');
-                }
-              }}
-              disabled={!!files.size}
-            >
-              <FileText size="16" />
-              <span className="text-xs font-normal">{localize('com_ui_knowledge_search')}</span>
-            </Button>
+            </Button> */}
+            {
+              bsConfig?.webSearch.enabled && <Button
+                type="button"
+                variant={'outline'}
+                className={cn(
+                  'h-6 rounded-full px-2 dark:bg-transparent dark:border-gray-600',
+                  'netSearch' === searchType && buttonActiveStyle,
+                )}
+                onClick={() => {
+                  if (searchType === 'netSearch') {
+                    setSearchType('');
+                  } else {
+                    setSearchType('netSearch');
+                  }
+                }}
+                disabled={!!files.size}
+              >
+                <GlobeIcon size="16" />
+                <span className="text-xs font-normal">{localize('com_ui_model_search')}</span>
+              </Button>
+            }
+            {
+              bsConfig?.knowledgeBase.enabled && <Button
+                type="button"
+                variant={'outline'}
+                className={cn(
+                  'h-6 rounded-full px-2 dark:bg-transparent dark:border-gray-600',
+                  'knowledgeSearch' === searchType && buttonActiveStyle,
+                )}
+                onClick={() => {
+                  if (searchType === 'knowledgeSearch') {
+                    setSearchType('');
+                  } else {
+                    setSearchType('knowledgeSearch');
+                  }
+                }}
+                disabled={!!files.size}
+              >
+                <FileText size="16" />
+                <span className="text-xs font-normal">{localize('com_ui_knowledge_search')}</span>
+              </Button>
+            }
           </div>
         </div>
       </div>
-    </form>
+    </form >
   );
 };
 
 const buttonActiveStyle =
   'text-blue-main border-blue-300 bg-blue-100 hover:text-blue-main hover:bg-blue-200';
+
+const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'], value: number, onChange: (value: string) => void }) => {
+
+  const label = useMemo(() => {
+    if (!options) return ''
+    if (!value) onChange(options[0].id + '')
+    return options.find(opt => opt.id === value)?.displayName
+  }, [options, value])
+
+  return <Select onValueChange={onChange}>
+    <SelectTrigger className="h-6 rounded-full px-2 bg-white dark:bg-transparent">
+      <div
+        className='flex gap-2'
+      >
+        <Rotate3DIcon size="16" />
+        <span className="text-xs font-normal">{label}</span>
+      </div>
+    </SelectTrigger>
+    <SelectContent className='bg-white'>
+      {options?.map((opt) => <SelectItem key={opt.key} value={opt.id + ''}>{opt.displayName}</SelectItem>)}
+    </SelectContent>
+  </Select>
+}
+
 
 export default memo(ChatForm);

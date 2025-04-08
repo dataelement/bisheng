@@ -7,7 +7,7 @@ import type { TConversation, TMessage } from '~/data-provider/data-provider/src'
 import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetBsConfig, useGetEndpointsQuery } from '~/data-provider';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { NewChatIcon } from '~/components/svg';
 import { cn } from '~/utils';
@@ -75,6 +75,8 @@ export default function NewChat({
   const queryClient = useQueryClient();
   /** Note: this component needs an explicit index passed if using more than one */
   const { newConversation: newConvo } = useNewConvo(index);
+  const { data: bsConfig } = useGetBsConfig()
+
   const navigate = useNavigate();
   const localize = useLocalize();
 
@@ -98,8 +100,8 @@ export default function NewChat({
       <div className="pb-0.5 last:pb-0" style={{ transform: 'none' }}>
         <div className="mb-3 flex justify-between gap-3 px-3 py-2">
           <div className="flex items-center gap-2">
-            <img className='w-14 overflow rounded-full' src="/assets/sg-logo.png" />
-            <div>工作台</div>
+            <img className='w-14 overflow rounded-full' src={bsConfig?.sidebarIcon.image} />
+            <div className='dark:text-gray-50'>{bsConfig?.sidebarSlogan}</div>
           </div>
           <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100">
             {/* <CloseToggleIcon className="size-5" /> */}

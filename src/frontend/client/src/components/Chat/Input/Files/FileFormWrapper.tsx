@@ -19,10 +19,12 @@ function FileFormWrapper({
   children,
   disableInputs,
   disabledSearch,
+  noUpload = false
 }: {
   disableInputs: boolean;
   children?: React.ReactNode;
   disabledSearch: boolean;
+  noUpload: boolean;
 }) {
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
   const chatDirection = useRecoilValue(store.chatDirection).toLowerCase();
@@ -74,6 +76,8 @@ function FileFormWrapper({
     });
     setFileTotalTokens(total);
   }, [files]);
+
+  if (noUpload) return children
 
   return (
     <>

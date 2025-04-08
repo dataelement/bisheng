@@ -6,6 +6,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
+const app_env = { BASE_URL: '/workbench' }
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -13,7 +14,7 @@ export default defineConfig({
     port: 4001,
     strictPort: false,
     proxy: {
-      '/api': {
+      '^/api/': {
         target: 'http://192.168.106.116:3080',
         // target: 'http://localhost:3080',
         changeOrigin: true,
@@ -23,7 +24,29 @@ export default defineConfig({
         target: 'http://192.168.106.116:3080',
         changeOrigin: true,
       },
+      '/bisheng': {
+        target: "http://192.168.106.120:3003",
+        changeOrigin: true,
+        secure: false
+      },
+      '/workbench/api': {
+        target: 'http://192.168.106.116:3080',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => {
+          return path.replace(/^\/workbench\/api/, '/api');
+        },
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Proxying request to:', proxyReq.path);
+          });
+        }
+      }
     },
+  },
+  base: app_env.BASE_URL || '/',
+  define: {
+    __APP_ENV__: JSON.stringify(app_env)
   },
   // Set the directory where environment variables are loaded from and restrict prefixes
   envDir: '../',
@@ -94,7 +117,7 @@ export default defineConfig({
   publicDir: './public',
   build: {
     sourcemap: process.env.NODE_ENV === 'development',
-    outDir: './dist',
+    outDir: './build',
     minify: 'terser',
     rollupOptions: {
       preserveEntrySignatures: 'strict',

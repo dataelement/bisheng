@@ -19,6 +19,7 @@ type MessageRenderProps = {
   isCard?: boolean;
   isMultiMessage?: boolean;
   isSubmittingFamily?: boolean;
+  iconURL?: string;
 } & Pick<
   TMessageProps,
   'currentEditId' | 'setCurrentEditId' | 'siblingIdx' | 'setSiblingIdx' | 'siblingCount'
@@ -30,6 +31,7 @@ const MessageRender = memo(
     siblingIdx,
     siblingCount,
     message: msg,
+    iconURL = '',
     setSiblingIdx,
     currentEditId,
     isMultiMessage,
@@ -65,12 +67,11 @@ const MessageRender = memo(
       () => hasNoChildren && (msg?.depth === latestMessage?.depth || msg?.depth === -1),
       [hasNoChildren, msg?.depth, latestMessage?.depth],
     );
-
     const iconData: TMessageIcon = useMemo(
       () => ({
         endpoint: msg?.endpoint ?? conversation?.endpoint,
         model: msg?.model ?? conversation?.model,
-        iconURL: msg?.iconURL ?? conversation?.iconURL,
+        iconURL: msg?.iconURL ?? conversation?.iconURL ?? iconURL,
         modelLabel: messageLabel,
         isCreatedByUser: msg?.isCreatedByUser,
       }),
@@ -83,6 +84,7 @@ const MessageRender = memo(
         msg?.iconURL,
         msg?.endpoint,
         msg?.isCreatedByUser,
+        iconURL
       ],
     );
 

@@ -12,6 +12,7 @@ import { useRecoilState } from 'recoil';
 import { setTokenHeader, SystemRoles } from '~/data-provider/data-provider/src';
 import type * as t from '~/data-provider/data-provider/src';
 import {
+  useGetBsConfig,
   useGetRole,
   useGetUserQuery,
   useLoginUserMutation,
@@ -43,6 +44,7 @@ const AuthContextProvider = ({
   });
 
   const navigate = useNavigate();
+  const { data: bsConfig } = useGetBsConfig()
 
   const setUserContext = useCallback(
     (userContext: TUserContext) => {
@@ -91,7 +93,7 @@ const AuthContextProvider = ({
         token: undefined,
         isAuthenticated: false,
         user: undefined,
-        redirect: data.redirect ?? '/login',
+        redirect: data.redirect ?? bsConfig?.host,
       });
     },
     onError: (error) => {
@@ -100,7 +102,7 @@ const AuthContextProvider = ({
         token: undefined,
         isAuthenticated: false,
         user: undefined,
-        redirect: '/login',
+        redirect: bsConfig?.host,
       });
     },
   });

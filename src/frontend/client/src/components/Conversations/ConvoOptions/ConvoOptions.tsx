@@ -97,11 +97,11 @@ function ConvoOptions({
       onClick: duplicateHandler,
       icon: <Copy className="icon-sm mr-2 text-text-primary" />,
     },
-    {
-      label: localize('com_ui_archive'),
-      onClick: archiveHandler,
-      icon: <Archive className="icon-sm mr-2 text-text-primary" />,
-    },
+    // {
+    //   label: localize('com_ui_archive'),
+    //   onClick: archiveHandler,
+    //   icon: <Archive className="icon-sm mr-2 text-text-primary" />,
+    // },
     {
       label: localize('com_ui_delete'),
       onClick: deleteHandler,

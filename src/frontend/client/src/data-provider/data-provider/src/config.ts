@@ -533,6 +533,47 @@ export type TStartupConfig = {
   instanceProjectId: string;
 };
 
+export type BsConfig = {
+  sidebarIcon: {
+    enabled: boolean;
+    image: string;
+  };
+  assistantIcon: {
+    enabled: boolean;
+    image: string;
+  };
+  sidebarSlogan: string;
+  welcomeMessage: string;
+  functionDescription: string;
+  inputPlaceholder: string;
+  models: Array<{
+    key: string;
+    id: number;
+    name: string;
+    displayName: string;
+  }>;
+  voiceInput: {
+    enabled: boolean;
+    model: string;
+  };
+  webSearch: {
+    enabled: boolean;
+    tool: string;
+    bingKey: string;
+    bingUrl: string;
+    prompt: string;
+  };
+  knowledgeBase: {
+    enabled: boolean;
+    prompt: string;
+  };
+  fileUpload: {
+    enabled: boolean;
+    prompt: string;
+  };
+  host: ''
+};
+
 export const configSchema = z.object({
   version: z.string(),
   cache: z.boolean().default(true),
@@ -774,17 +815,17 @@ export const initialModelsConfig: TModelsConfig = {
 };
 
 export const EndpointURLs: { [key in EModelEndpoint]: string } = {
-  [EModelEndpoint.openAI]: `/api/ask/${EModelEndpoint.openAI}`,
-  [EModelEndpoint.google]: `/api/ask/${EModelEndpoint.google}`,
-  [EModelEndpoint.custom]: `/api/ask/${EModelEndpoint.custom}`,
-  [EModelEndpoint.anthropic]: `/api/ask/${EModelEndpoint.anthropic}`,
-  [EModelEndpoint.gptPlugins]: `/api/ask/${EModelEndpoint.gptPlugins}`,
-  [EModelEndpoint.azureOpenAI]: `/api/ask/${EModelEndpoint.azureOpenAI}`,
-  [EModelEndpoint.chatGPTBrowser]: `/api/ask/${EModelEndpoint.chatGPTBrowser}`,
-  [EModelEndpoint.azureAssistants]: '/api/assistants/v1/chat',
-  [EModelEndpoint.assistants]: '/api/assistants/v2/chat',
-  [EModelEndpoint.agents]: `/api/${EModelEndpoint.agents}/chat`,
-  [EModelEndpoint.bedrock]: `/api/${EModelEndpoint.bedrock}/chat`,
+  [EModelEndpoint.openAI]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.openAI}`,
+  [EModelEndpoint.google]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.google}`,
+  [EModelEndpoint.custom]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.custom}`,
+  [EModelEndpoint.anthropic]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.anthropic}`,
+  [EModelEndpoint.gptPlugins]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.gptPlugins}`,
+  [EModelEndpoint.azureOpenAI]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.azureOpenAI}`,
+  [EModelEndpoint.chatGPTBrowser]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.chatGPTBrowser}`,
+  [EModelEndpoint.azureAssistants]: `${__APP_ENV__.BASE_URL}/api/assistants/v1/chat`,
+  [EModelEndpoint.assistants]: `${__APP_ENV__.BASE_URL}/api/assistants/v2/chat`,
+  [EModelEndpoint.agents]: `${__APP_ENV__.BASE_URL}/api/${EModelEndpoint.agents}/chat`,
+  [EModelEndpoint.bedrock]: `${__APP_ENV__.BASE_URL}/api/${EModelEndpoint.bedrock}/chat`,
 };
 
 export const modularEndpoints = new Set<EModelEndpoint | string>([

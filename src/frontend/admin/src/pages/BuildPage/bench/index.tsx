@@ -16,7 +16,7 @@ export interface FormErrors {
     welcomeMessage: string;
     functionDescription: string;
     inputPlaceholder: string;
-    modelNames: string[];
+    modelNames: string[] | string[][];
 }
 
 export interface ChatConfigForm {
@@ -356,16 +356,45 @@ const useChatConfig = () => {
         }
 
         // Validate models
-        const modelNameErrors: string[] = [];
+        const modelNameErrors: string[][] = [];
         formData.models.forEach((model, index) => {
-            if (!model.displayName.trim()) {
-                modelNameErrors[index] = '模型名称不能为空';
-                isValid = false;
-            } else if (model.displayName.length > 30) {
-                modelNameErrors[index] = '最多30个字符';
+            const displayName = model.displayName.trim();
+            let error = [];
+
+            // 检查是否为空
+            if (!displayName) {
+                error = ['', '模型名称不能为空'];
+            }
+            // 检查长度
+            else if (displayName.length > 30) {
+                error = ['', '最多30个字符'];
+            }
+            // 检查重复（仅在非空且长度有效时检查）
+            else {
+                console.log('formData.models :>> ', formData.models);
+                formData.models.some(
+                    (m, i) => {
+                        if (i !== index) {
+                            error = ['', ''];
+                            if (m.id === model.id) {
+                                error[0] = '模型不能重复'
+                            }
+                            if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
+                                error[1] = '显示名称不能重复'
+                            }
+                            if (error[0] && error[1]) {
+                                return true;
+                            }
+                        }
+                    });
+            }
+
+            if (error[0] || error[1]) {
+                modelNameErrors[index] = error;
                 isValid = false;
             }
         });
+
         newErrors.modelNames = modelNameErrors;
 
         setErrors(newErrors);

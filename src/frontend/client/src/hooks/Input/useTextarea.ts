@@ -27,11 +27,13 @@ export default function useTextarea({
   submitButtonRef,
   setIsScrollable,
   disabled = false,
+  placeholder = ''
 }: {
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   submitButtonRef: React.RefObject<HTMLButtonElement>;
   setIsScrollable: React.Dispatch<React.SetStateAction<boolean>>;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   const localize = useLocalize();
   const getSender = useGetSender();
@@ -77,7 +79,7 @@ export default function useTextarea({
     }
 
     const getPlaceholderText = () => {
-      return '给 小毕 发送消息'
+      return placeholder || '发送消息内容...'
       if (disabled) {
         return localize('com_endpoint_config_placeholder');
       }
@@ -106,17 +108,17 @@ export default function useTextarea({
       )}`;
     };
 
-    const placeholder = getPlaceholderText();
+    const _placeholder = getPlaceholderText();
 
-    if (textAreaRef.current?.getAttribute('placeholder') === placeholder) {
+    if (textAreaRef.current?.getAttribute('placeholder') === _placeholder) {
       return;
     }
 
     const setPlaceholder = () => {
-      const placeholder = getPlaceholderText();
+      const _placeholder = getPlaceholderText();
 
-      if (textAreaRef.current?.getAttribute('placeholder') !== placeholder) {
-        textAreaRef.current?.setAttribute('placeholder', placeholder);
+      if (textAreaRef.current?.getAttribute('placeholder') !== _placeholder) {
+        textAreaRef.current?.setAttribute('placeholder', _placeholder);
         forceResize(textAreaRef.current);
       }
     };

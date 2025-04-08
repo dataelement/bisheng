@@ -8,6 +8,7 @@ import {
   useHealthCheck,
   useGetEndpointsQuery,
   useGetStartupConfig,
+  useGetBsConfig,
 } from '~/data-provider';
 import { useNewConvo, useAppStartup, useAssistantListMap } from '~/hooks';
 import { getDefaultModelSpec, getModelSpecIconURL } from '~/utils';
@@ -22,6 +23,8 @@ import store from '~/store';
 export default function ChatRoute() {
   useHealthCheck();
   const { data: startupConfig } = useGetStartupConfig();
+  const { data: bsConfig } = useGetBsConfig()
+
   const { isAuthenticated, user } = useAuthRedirect();
   const setIsTemporary = useRecoilCallback(
     ({ set }) =>

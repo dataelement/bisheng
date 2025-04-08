@@ -4,24 +4,30 @@ import * as endpoints from './api-endpoints';
 import { setTokenHeader } from './headers-helpers';
 import type * as t from './types';
 
+
+const customAxios = axios.create({
+  baseURL: import.meta.env.BASE_URL
+  // 配置
+});
+
 async function _get<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
-  const response = await axios.get(url, { ...options });
+  const response = await customAxios.get(url, { ...options });
   return response.data;
 }
 
 async function _getResponse<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
-  return await axios.get(url, { ...options });
+  return await customAxios.get(url, { ...options });
 }
 
 async function _post(url: string, data?: any) {
-  const response = await axios.post(url, JSON.stringify(data), {
+  const response = await customAxios.post(url, JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
   });
   return response.data;
 }
 
 async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig) {
-  const response = await axios.post(url, formData, {
+  const response = await customAxios.post(url, formData, {
     ...options,
     headers: { 'Content-Type': 'multipart/form-data' },
   });
@@ -29,7 +35,7 @@ async function _postMultiPart(url: string, formData: FormData, options?: AxiosRe
 }
 
 async function _postTTS(url: string, formData: FormData, options?: AxiosRequestConfig) {
-  const response = await axios.post(url, formData, {
+  const response = await customAxios.post(url, formData, {
     ...options,
     headers: { 'Content-Type': 'multipart/form-data' },
     responseType: 'arraybuffer',
@@ -38,24 +44,24 @@ async function _postTTS(url: string, formData: FormData, options?: AxiosRequestC
 }
 
 async function _put(url: string, data?: any) {
-  const response = await axios.put(url, JSON.stringify(data), {
+  const response = await customAxios.put(url, JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
   });
   return response.data;
 }
 
 async function _delete<T>(url: string): Promise<T> {
-  const response = await axios.delete(url);
+  const response = await customAxios.delete(url);
   return response.data;
 }
 
 async function _deleteWithOptions<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
-  const response = await axios.delete(url, { ...options });
+  const response = await customAxios.delete(url, { ...options });
   return response.data;
 }
 
 async function _patch(url: string, data?: any) {
-  const response = await axios.patch(url, JSON.stringify(data), {
+  const response = await customAxios.patch(url, JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
   });
   return response.data;
@@ -83,7 +89,7 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
-axios.interceptors.response.use(
+customAxios.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
@@ -108,7 +114,7 @@ axios.interceptors.response.use(
             failedQueue.push({ resolve, reject });
           });
           originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          return await axios(originalRequest);
+          return await customAxios(originalRequest);
         } catch (err) {
           return Promise.reject(err);
         }
@@ -128,7 +134,7 @@ axios.interceptors.response.use(
           originalRequest.headers['Authorization'] = 'Bearer ' + token;
           dispatchTokenUpdatedEvent(token);
           processQueue(null, token);
-          return await axios(originalRequest);
+          return await customAxios(originalRequest);
         } else if (window.location.href.includes('share/')) {
           console.log(
             `Refresh token failed from shared link, attempting request to ${originalRequest.url}`,

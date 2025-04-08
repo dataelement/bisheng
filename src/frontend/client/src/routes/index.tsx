@@ -25,6 +25,11 @@ const AuthLayout = () => (
   </AuthContextProvider>
 );
 
+const baseConfig = {
+  //@ts-ignore
+  basename: __APP_ENV__.BASE_URL
+}
+
 export const router = createBrowserRouter([
   {
     path: 'share/:shareId',
@@ -95,4 +100,4 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+], baseConfig);

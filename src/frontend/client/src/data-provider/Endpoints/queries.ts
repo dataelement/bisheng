@@ -2,14 +2,14 @@ import { useRecoilValue } from 'recoil';
 import { QueryKeys, dataService } from '~/data-provider/data-provider/src';
 import { useQuery } from '@tanstack/react-query';
 import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
-import type t from '~/data-provider/data-provider/src';
+import { TEndpointsConfig, TStartupConfig, BsConfig } from '~/data-provider/data-provider/src';
 import store from '~/store';
 
-export const useGetEndpointsQuery = <TData = t.TEndpointsConfig>(
-  config?: UseQueryOptions<t.TEndpointsConfig, unknown, TData>,
+export const useGetEndpointsQuery = <TData = TEndpointsConfig>(
+  config?: UseQueryOptions<TEndpointsConfig, unknown, TData>,
 ): QueryObserverResult<TData> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
-  return useQuery<t.TEndpointsConfig, unknown, TData>(
+  return useQuery<TEndpointsConfig, unknown, TData>(
     [QueryKeys.endpoints],
     () => dataService.getAIEndpoints(),
     {
@@ -24,12 +24,30 @@ export const useGetEndpointsQuery = <TData = t.TEndpointsConfig>(
 };
 
 export const useGetStartupConfig = (
-  config?: UseQueryOptions<t.TStartupConfig>,
-): QueryObserverResult<t.TStartupConfig> => {
+  config?: UseQueryOptions<TStartupConfig>,
+): QueryObserverResult<TStartupConfig> => {
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
-  return useQuery<t.TStartupConfig>(
+  return useQuery<TStartupConfig>(
     [QueryKeys.startupConfig],
     () => dataService.getStartupConfig(),
+    {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+      ...config,
+      enabled: (config?.enabled ?? true) === true && queriesEnabled,
+    },
+  );
+};
+
+
+export const useGetBsConfig = (
+  config?: UseQueryOptions<BsConfig>,
+): QueryObserverResult<BsConfig> => {
+  const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
+  return useQuery<BsConfig>(
+    [QueryKeys.bishengConfig],
+    () => dataService.getBishengConfig(),
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

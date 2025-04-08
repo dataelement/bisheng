@@ -43,8 +43,8 @@ export type Credentials = ApiKeyCredentials | OAuthCredentials;
 type MediaTypeObject =
   | undefined
   | {
-      [media: string]: OpenAPIV3.MediaTypeObject | undefined;
-    };
+    [media: string]: OpenAPIV3.MediaTypeObject | undefined;
+  };
 
 type RequestBodyObject = Omit<OpenAPIV3.RequestBodyObject, 'content'> & {
   content: MediaTypeObject;
@@ -167,7 +167,7 @@ class RequestConfig {
     readonly operation: string,
     readonly isConsequential: boolean,
     readonly contentType: string,
-  ) {}
+  ) { }
 }
 
 class RequestExecutor {
@@ -281,7 +281,9 @@ class RequestExecutor {
     };
 
     const method = this.config.method.toLowerCase();
-    const axios = _axios.create();
+    const axios = _axios.create({
+      baseURL: import.meta.env.BASE_URL
+    });
     if (method === 'get') {
       return axios.get(url, { headers, params: this.params });
     } else if (method === 'post') {
@@ -360,10 +362,10 @@ export class ActionRequest {
 
 export function resolveRef<
   T extends
-    | OpenAPIV3.ReferenceObject
-    | OpenAPIV3.SchemaObject
-    | OpenAPIV3.ParameterObject
-    | OpenAPIV3.RequestBodyObject,
+  | OpenAPIV3.ReferenceObject
+  | OpenAPIV3.SchemaObject
+  | OpenAPIV3.ParameterObject
+  | OpenAPIV3.RequestBodyObject,
 >(obj: T, components?: OpenAPIV3.ComponentsObject): Exclude<T, OpenAPIV3.ReferenceObject> {
   if ('$ref' in obj && components) {
     const refPath = obj.$ref.replace(/^#\/components\//, '').split('/');

@@ -24,7 +24,7 @@ export const ModelManagement = ({
     onNameChange,
 }: {
     models: Model[];
-    errors: string[];
+    errors: string[][];
     onAdd: () => void;
     onRemove: (index: number) => void;
     onModelChange: (index: number, id: string) => void;
@@ -55,6 +55,7 @@ export const ModelManagement = ({
                         options={llmOptions}
                         onChange={(val) => onModelChange(index, val)}
                     />}
+                    {errors[index] && <p className="text-red-500 text-xs mt-1">{errors[index]?.[0]}</p>}
                 </div>
                 <div className="pr-2">
                     <Input
@@ -62,7 +63,7 @@ export const ModelManagement = ({
                         onChange={(e) => onNameChange(index, e.target.value)}
                         placeholder="显示名称"
                     />
-                    {errors[index] && <p className="text-red-500 text-xs mt-1">{errors[index]}</p>}
+                    {errors[index] && <p className="text-red-500 text-xs mt-1">{errors[index]?.[1]}</p>}
                 </div>
                 <div className="m-auto">
                     <TrashIcon

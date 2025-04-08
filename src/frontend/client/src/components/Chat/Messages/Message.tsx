@@ -7,6 +7,7 @@ import MessageRender from './ui/MessageRender';
 import MultiMessage from './MultiMessage';
 import { cn } from '~/utils';
 import store from '~/store';
+import { useGetBsConfig } from '~/data-provider';
 
 const MessageContainer = React.memo(
   ({
@@ -39,6 +40,7 @@ export default function Message(props: TMessageProps) {
   } = useMessageProcess({ message: props.message });
   const { message, currentEditId, setCurrentEditId } = props;
   const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
+  const { data: bsConfig } = useGetBsConfig()
 
   if (!message || typeof message !== 'object') {
     return null;
@@ -75,7 +77,7 @@ export default function Message(props: TMessageProps) {
           </div>
         ) : (
           <div className="m-auto justify-center p-4 py-2 md:gap-6 ">
-            <MessageRender {...props} />
+            <MessageRender iconURL={bsConfig?.assistantIcon.image} {...props} />
           </div>
         )}
       </MessageContainer>
