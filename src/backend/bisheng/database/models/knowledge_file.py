@@ -52,7 +52,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
-    source: Optional[int] = Field(index=False, description='0: 未知 1: 手动；2: 审计, 3: api')
+    source: Optional[int] = Field(index=False, description='0: 未知 1: 手动；2: 审计, 3: api,4: 批量导入')
     status: Optional[int] = Field(index=False, description='1: 解析中；2: 解析成功；3: 解析失败')
     extra_meta: Optional[str] = Field(index=False)
     remark: Optional[str] = Field(sa_column=Column(String(length=512)))

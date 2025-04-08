@@ -409,14 +409,14 @@ def qa_auto_question(
 
 @router.get('/qa/export/template', status_code=200)
 def get_export_url():
-    title = ["问题","答案","类型","创建时间","更新时间","创建者","状态","相似问题1","相似问题2"]
+    title = ["问题","答案","相似问题1","相似问题2"]
     df = pd.DataFrame(columns=[title])
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     file_name = f"QA知识库导入模板.xlsx"
     file_path = save_uploaded_file(bio, 'bisheng', file_name)
-    file_path = file_path.replace('http://minio.9000', '')
+    file_path = file_path.replace('http://minio:9000', '')
     return resp_200({"url": file_path})
 
 
@@ -474,16 +474,16 @@ def get_export_url(*,
 
         data = [jsonable_encoder(qa) for qa in qa_list]
         qa_dict_list = []
-        all_title = ["问题","答案","类型","创建时间","更新时间","创建者","状态"]
+        all_title = ["问题","答案"]
         for qa in data:
             qa_dict_list.append({
                 "问题":qa['questions'][0],
                 "答案":json.loads(qa['answers'])[0],
-                "类型":get_qa_source(qa['source']),
-                "创建时间":qa['create_time'],
-                "更新时间":qa['update_time'],
-                "创建者":user_map.get(qa['user_id'], qa['user_id']),
-                "状态":get_status(qa['status']),
+                # "类型":get_qa_source(qa['source']),
+                # "创建时间":qa['create_time'],
+                # "更新时间":qa['update_time'],
+                # "创建者":user_map.get(qa['user_id'], qa['user_id']),
+                # "状态":get_status(qa['status']),
             })
             for index,question in enumerate(qa['questions']):
                 if index == 0:
@@ -500,7 +500,7 @@ def get_export_url(*,
         file_name = f"{file_pr}_{file_index}.xlsx"
         file_index = file_index + 1
         file_path = save_uploaded_file(bio,'bisheng', file_name)
-        file_path = file_path.replace('http://minio.9000', '')
+        file_path = file_path.replace('http://minio:9000', '')
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num>=total_count:
@@ -527,7 +527,7 @@ def post_import_file(*,
             knowledge_id=qa_knowledge_id,
             answers=[dd['答案']],
             questions=[dd['问题']],
-            source=1,
+            source=4,
             status=1,
             create_time=datetime.now(),
             update_time=datetime.now())
