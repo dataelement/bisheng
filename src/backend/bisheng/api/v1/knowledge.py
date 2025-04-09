@@ -416,7 +416,6 @@ def get_export_url():
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     file_name = f"QA知识库导入模板.xlsx"
     file_path = save_uploaded_file(bio, 'bisheng', file_name)
-    file_path = file_path.replace('http://minio:9000', '')
     return resp_200({"url": file_path})
 
 
@@ -500,7 +499,6 @@ def get_export_url(*,
         file_name = f"{file_pr}_{file_index}.xlsx"
         file_index = file_index + 1
         file_path = save_uploaded_file(bio,'bisheng', file_name)
-        file_path = file_path.replace('http://minio:9000', '')
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num>=total_count:
