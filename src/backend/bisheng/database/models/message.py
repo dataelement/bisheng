@@ -1,23 +1,19 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
-from uuid import UUID
 
-from sqlalchemy.sql import not_
+from loguru import logger
+from pydantic import BaseModel
+from sqlmodel import Field, delete, select, not_, JSON, Column, DateTime, String, Text, case, func, or_, text, update
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from loguru import logger
-from pydantic import BaseModel
-from sqlalchemy import JSON, Column, DateTime, String, Text, case, func, or_, text, update
-from sqlmodel import Field, delete, select
 
 
-class ChatMessageType(Enum):
-    # todo 在041版本将旧的数据里的type全按照这个改一下
-    FLOW = 'flow'  # 表示技能会话消息
-    ASSISTANT = 'assistant'  # 表示助手会话消息
-    WORKFLOW = 'workflow'  # 表示工作流会话消息
+class LikedType(Enum):
+    UNRATED = 0  # 未评价
+    LIKED = 1  # 喜欢
+    DISLIKED = 2  # 不喜欢
 
 
 class MessageBase(SQLModelSerializable):
@@ -30,12 +26,13 @@ class MessageBase(SQLModelSerializable):
     extra: Optional[str] = Field(sa_column=Column(String(length=4096)), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')
-    flow_id: UUID = Field(index=True, description='对应的技能id')
+    flow_id: str = Field(index=True, description='对应的技能id')
     chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
     user_id: Optional[str] = Field(index=True, description='用户id')
     liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
     solved: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 解决/2 未解决')
     copied: Optional[int] = Field(index=False, default=0, description='用户是否复制 0：未复制 1：已复制')
+    sensitive_status: Optional[int] = Field(index=False, default=1, description='敏感词状态 1：通过 2：违规')
     sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
     intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
@@ -179,7 +176,8 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage.chat_id,ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id,ChatMessage.flow_id)
+            statement = select(ChatMessage.chat_id, ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(
+                not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id, ChatMessage.flow_id)
             return session.exec(statement).all()
 
     @classmethod
@@ -197,10 +195,8 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_msg_by_flows(cls, flow_id: List[str]):
-        ids = [UUID(i) for i in flow_id]
         with session_getter() as session:
-            # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
-            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id.in_(ids)).group_by(ChatMessage.chat_id)
+            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id.in_(flow_id)).group_by(ChatMessage.chat_id)
             return session.exec(st).all()
 
     @classmethod
@@ -279,3 +275,9 @@ class ChatMessageDao(MessageBase):
             statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    def get_all_message_by_chat_ids(cls, chat_ids: List[str]) -> List[ChatMessage]:
+        statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(ChatMessage.create_time.asc())
+        with session_getter() as session:
+            return session.exec(statement).all()

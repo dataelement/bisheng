@@ -3,7 +3,8 @@ import io
 import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
-from uuid import UUID
+
+from pydantic import ValidationError
 
 from bisheng.api.errcode.finetune import (CancelJobError, ChangeModelNameError, CreateFinetuneError,
                                           DeleteJobError, ExportJobError, GetGPUInfoError,
@@ -25,7 +26,7 @@ from bisheng.database.models.server import Server, ServerDao
 from bisheng.database.models.sft_model import SftModelDao
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from pydantic import ValidationError
+
 
 sync_job_thread_pool = ThreadPoolExecutor(3)
 
@@ -159,13 +160,13 @@ class FinetuneService:
         finetune.root_model_name = root_model_name
 
         # 调用SFT-backend的API新建任务
-        logger.info(f'start create sft job: {finetune.id.hex}')
+        logger.info(f'start create sft job: {finetune.id}')
         # 拼接指令所需的command参数
         command_params = cls.parse_command_params(finetune, base_model)
         sft_ret = SFTBackend.create_job(host=parse_server_host(finetune.sft_endpoint),
-                                        job_id=finetune.id.hex, params=command_params)
+                                        job_id=finetune.id, params=command_params)
         if not sft_ret[0]:
-            logger.error(f'create sft job error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'create sft job error: job_id: {finetune.id}, err: {sft_ret[1]}')
             return CreateFinetuneError.return_resp()
         # 插入到数据库内
         FinetuneDao.insert_one(finetune)
@@ -173,7 +174,7 @@ class FinetuneService:
         return resp_200(data=finetune)
 
     @classmethod
-    def cancel_job(cls, job_id: UUID, user: Any) -> UnifiedResponseModel[Finetune]:
+    def cancel_job(cls, job_id: str, user: Any) -> UnifiedResponseModel[Finetune]:
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
         if not finetune:
@@ -187,7 +188,7 @@ class FinetuneService:
 
         # 调用SFT-backend的API取消任务
         logger.info(f'start cancel job_id: {job_id}, user: {user.get("user_name")}')
-        sft_ret = SFTBackend.cancel_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id.hex)
+        sft_ret = SFTBackend.cancel_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id)
         if not sft_ret[0]:
             logger.error(f'cancel sft job error: job_id: {job_id}, err: {sft_ret[1]}')
             return CancelJobError.return_resp()
@@ -198,7 +199,7 @@ class FinetuneService:
         return resp_200(data=finetune)
 
     @classmethod
-    def delete_job(cls, job_id: UUID, user: Any) -> UnifiedResponseModel[Finetune]:
+    def delete_job(cls, job_id: str, user: Any) -> UnifiedResponseModel[Finetune]:
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
         if not finetune:
@@ -208,7 +209,7 @@ class FinetuneService:
 
         # 调用接口删除训练任务
         logger.info(f'start delete sft job: {job_id}, user: {user.get("user_name")}')
-        sft_ret = SFTBackend.delete_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id.hex,
+        sft_ret = SFTBackend.delete_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id,
                                         model_name=model_name)
         if not sft_ret[0]:
             logger.error(f'delete sft job error: job_id: {job_id}, err: {sft_ret[1]}')
@@ -223,12 +224,12 @@ class FinetuneService:
     @classmethod
     def delete_job_log(cls, finetune: Finetune):
         minio_client = MinioClient()
-        minio_client.delete_minio(f'/finetune/log/{finetune.id.hex}')
+        minio_client.delete_minio(f'/finetune/log/{finetune.id}')
 
     @classmethod
     def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
         minio_client = MinioClient()
-        log_path = f'finetune/log/{finetune.id.hex}'
+        log_path = f'finetune/log/{finetune.id}'
         minio_client.upload_minio_file(log_path, log_data, length=length)
         return log_path
 
@@ -273,7 +274,7 @@ class FinetuneService:
         return published_model.model
 
     @classmethod
-    def publish_job(cls, job_id: UUID, user: Any) -> UnifiedResponseModel[Finetune]:
+    def publish_job(cls, job_id: str, user: Any) -> UnifiedResponseModel[Finetune]:
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
         if not finetune:
@@ -285,7 +286,7 @@ class FinetuneService:
 
         # 调用SFT-backend的API接口
         logger.info(f'start export sft job: {job_id}, user: {user.get("user_name")}')
-        sft_ret = SFTBackend.publish_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id.hex,
+        sft_ret = SFTBackend.publish_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id,
                                          model_name=finetune.model_name)
         if not sft_ret[0]:
             logger.error(f'export sft job error: job_id: {job_id}, err: {sft_ret[1]}')
@@ -314,7 +315,7 @@ class FinetuneService:
         return resp_200(data=finetune)
 
     @classmethod
-    def cancel_publish_job(cls, job_id: UUID, user: Any) -> UnifiedResponseModel[Finetune]:
+    def cancel_publish_job(cls, job_id: str, user: Any) -> UnifiedResponseModel[Finetune]:
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
         if not finetune:
@@ -328,7 +329,7 @@ class FinetuneService:
 
         # 调用SFT-backend的API接口
         logger.info(f'start cancel export sft job: {job_id}, user: {user.get("user_name")}')
-        sft_ret = SFTBackend.cancel_publish_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id.hex,
+        sft_ret = SFTBackend.cancel_publish_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id,
                                                 model_name=finetune.model_name)
         if not sft_ret[0]:
             logger.error(f'cancel export sft job error: job_id: {job_id}, err: {sft_ret[1]}')
@@ -370,7 +371,7 @@ class FinetuneService:
             cls.sync_job_status(finetune, finetune.sft_endpoint)
 
     @classmethod
-    def get_job_info(cls, job_id: UUID) -> UnifiedResponseModel:
+    def get_job_info(cls, job_id: str) -> UnifiedResponseModel:
         """ 获取训练中任务的实时信息 """
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
@@ -418,11 +419,11 @@ class FinetuneService:
         """ 从SFT-backend服务同步任务状态 """
         if finetune.status != FinetuneStatus.TRAINING.value:
             return True
-        logger.info(f'start sync job status: {finetune.id.hex}')
+        logger.info(f'start sync job status: {finetune.id}')
 
-        sft_ret = SFTBackend.get_job_status(host=parse_server_host(sft_endpoint), job_id=finetune.id.hex)
+        sft_ret = SFTBackend.get_job_status(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job status error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'get sft job status error: job_id: {finetune.id}, err: {sft_ret[1]}')
             return False
         if sft_ret[1]['status'] == SFTBackend.JOB_FINISHED:
             finetune.status = FinetuneStatus.SUCCESS.value
@@ -439,9 +440,9 @@ class FinetuneService:
 
         # 查询任务执行日志和报告
         logger.info('start query sft job log and report')
-        sft_ret = SFTBackend.get_job_log(host=parse_server_host(sft_endpoint), job_id=finetune.id.hex)
+        sft_ret = SFTBackend.get_job_log(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job log error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'get sft job log error: job_id: {finetune.id}, err: {sft_ret[1]}')
         log_data = sft_ret[1]['log_data'].encode('utf-8')
         # 上传日志文件到minio上
         log_path = cls.upload_job_log(finetune, io.BytesIO(log_data), len(log_data))
@@ -449,9 +450,9 @@ class FinetuneService:
 
         # 查询任务评估报告
         logger.info('start query sft job report')
-        sft_ret = SFTBackend.get_job_metrics(host=parse_server_host(sft_endpoint), job_id=finetune.id.hex)
+        sft_ret = SFTBackend.get_job_metrics(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job report error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'get sft job report error: job_id: {finetune.id}, err: {sft_ret[1]}')
         else:
             finetune.report = sft_ret[1]['report']
 
@@ -488,14 +489,14 @@ class FinetuneService:
             return True
         published_model = ModelDeployDao.find_model(finetune.model_id)
         if not published_model:
-            logger.error(f'published model not found, job_id: {finetune.id.hex}, model_id: {finetune.model_id}')
+            logger.error(f'published model not found, job_id: {finetune.id}, model_id: {finetune.model_id}')
             return False
 
         # 调用接口修改已发布模型的名称
-        sft_ret = SFTBackend.change_model_name(parse_server_host(finetune.sft_endpoint), finetune.id.hex,
+        sft_ret = SFTBackend.change_model_name(parse_server_host(finetune.sft_endpoint), finetune.id,
                                                published_model.model, model_name)
         if not sft_ret[0]:
-            logger.error(f'change model name error: job_id: {finetune.id.hex}, err: {sft_ret[1]}')
+            logger.error(f'change model name error: job_id: {finetune.id}, err: {sft_ret[1]}')
             return False
 
         # 修改可预训练的模型名称

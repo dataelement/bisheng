@@ -269,7 +269,7 @@ class GraphEngine:
         # compile langgraph
         self.graph = self.graph_builder.compile(checkpointer=MemorySaver(),
                                                 interrupt_before=interrupt_nodes)
-        self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
+        self.graph_config['recursion_limit'] = max((len(nodes) - len(end_nodes) - 1) * self.max_steps, 1) + len(end_nodes) + 1
 
         # import datetime
         # with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",

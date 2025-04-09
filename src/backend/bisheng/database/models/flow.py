@@ -3,8 +3,8 @@
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
-from uuid import UUID, uuid4
 
+from bisheng.utils import generate_uuid
 from pydantic import validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update
@@ -23,9 +23,9 @@ class FlowStatus(Enum):
     ONLINE = 2
 
 class FlowType(Enum):
-    FLOW= 1
-    ASSISTANT= 5
-    WORKFLOW= 10
+    FLOW = 1
+    ASSISTANT = 5
+    WORKFLOW = 10
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
@@ -46,7 +46,6 @@ class FlowBase(SQLModelSerializable):
 
     @validator('data')
     def validate_json(v):
-        # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
         if not isinstance(v, dict):
@@ -62,21 +61,16 @@ class FlowBase(SQLModelSerializable):
 
 
 class Flow(FlowBase, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
     data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    # style: Optional['FlowStyle'] = Relationship(
-    #     back_populates='flow',
-    #     # use "uselist=False" to make it a one-to-one relationship
-    #     sa_relationship_kwargs={'uselist': False},
-    # )
 
 
 class FlowCreate(FlowBase):
-    flow_id: Optional[UUID]
+    flow_id: Optional[str]
 
 
 class FlowRead(FlowBase):
-    id: UUID
+    id: str
     user_name: Optional[str]
     version_id: Optional[int]
 
@@ -106,7 +100,7 @@ class FlowDao(FlowBase):
             flow_version = FlowVersion(name='v0',
                                        is_current=1,
                                        data=flow_info.data,
-                                       flow_id=flow_info.id.hex,
+                                       flow_id=flow_info.id,
                                        create_time=datetime.now(),
                                        user_id=flow_info.user_id,
                                        flow_type=flow_type)
@@ -122,7 +116,7 @@ class FlowDao(FlowBase):
             session.delete(flow_info)
             # 删除对应的版本信息
             update_statement = update(FlowVersion).where(
-                FlowVersion.flow_id == flow_info.id.hex).values(is_delete=1)
+                FlowVersion.flow_id == flow_info.id).values(is_delete=1)
             session.exec(update_statement)
             session.commit()
             return flow_info
@@ -130,7 +124,7 @@ class FlowDao(FlowBase):
     @classmethod
     def get_flow_by_id(cls, flow_id: str) -> Optional[Flow]:
         with session_getter() as session:
-            statement = select(Flow).where(Flow.id == UUID(flow_id))
+            statement = select(Flow).where(Flow.id == flow_id)
             return session.exec(statement).first()
 
     @classmethod
@@ -285,7 +279,7 @@ class FlowDao(FlowBase):
                                  limit=limit,flow_type=flow_type)
 
     @classmethod
-    def filter_flows_by_ids(cls, flow_ids: List[UUID], keyword: str = None, page: int = 0, limit: int = 0,flow_type:int=FlowType.FLOW.value) \
+    def filter_flows_by_ids(cls, flow_ids: List[str], keyword: str = None, page: int = 0, limit: int = 0,flow_type:int=FlowType.FLOW.value) \
             -> (List[Flow], int):
         """
         通过技能ID过滤技能列表，只返回简略信息，不包含data
@@ -318,8 +312,8 @@ class FlowDao(FlowBase):
         return flow
 
     @classmethod
-    def get_all_apps(cls, name: str | None, status: int | None, id_list: list, flow_type: int | None, user_id: int | None, id_extra: list | None,
-                     page: int = 0, limit: int = 0) -> (List[Dict], int):
+    def get_all_apps(cls, name: str = None, status: int = None, id_list: list = None, flow_type: int = None,
+                     user_id: int = None, id_extra: list = None, page: int = 0, limit: int = 0) -> (List[Dict], int):
         """ 获取所有的应用 包含技能、助手、工作流 """
         sub_query = select(Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id, Flow.status, Flow.create_time, Flow.update_time).union_all(
             select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value, Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time, Assistant.update_time).where(Assistant.is_delete==0)).subquery()

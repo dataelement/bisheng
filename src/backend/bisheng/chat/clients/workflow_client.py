@@ -1,8 +1,8 @@
 import asyncio
 import json
-import uuid
 from typing import Dict, Optional
 
+from bisheng.utils import generate_uuid
 from fastapi import Request, WebSocket, status
 from loguru import logger
 
@@ -10,11 +10,10 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.workflow import WorkflowEventType
-from bisheng.api.v1.schemas import ChatResponse
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowStatus
-from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
+from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -33,6 +32,7 @@ class WorkflowClient(BaseClient):
         self.ws_closed = False
 
     async def close(self, force_stop=False):
+        # 不是用户主动停止的话，设置ws关闭标志，但是不需要中止workflow的执行
         if not force_stop:
             self.ws_closed = True
         # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
@@ -41,32 +41,6 @@ class WorkflowClient(BaseClient):
                 self.workflow.set_workflow_stop()
         else:
             await self.send_response('processing', 'close', '')
-
-    async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
-        if not self.chat_id:
-            return
-
-        message = ChatMessageDao.insert_one(ChatMessage(**{
-            'user_id': self.user_id,
-            'chat_id': self.chat_id,
-            'flow_id': self.client_id,
-            'type': ChatMessageType.WORKFLOW.value,
-
-            'is_bot': chat_response.is_bot,
-            'source': chat_response.source,
-            'message': chat_response.message if isinstance(chat_response.message, str) else json.dumps(
-                chat_response.message, ensure_ascii=False
-            ),
-            'extra': chat_response.extra,
-            'category': chat_response.category,
-        }))
-        return message.id
-
-    async def update_chat_message(self, message_id: int, message: dict | str):
-        db_message = ChatMessageDao.get_message_by_id(message_id)
-        if db_message:
-            db_message.message = message if isinstance(message, str) else json.dumps(message)
-            ChatMessageDao.update_message_model(db_message)
 
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
@@ -88,14 +62,17 @@ class WorkflowClient(BaseClient):
             return
         self.latest_history = ChatMessageDao.get_latest_message_by_chatid(self.chat_id)
         if not self.latest_history:
-            # 新建会话，记录审计日志
+            # 用户点击了新建会话，记录审计日志
             AuditLogService.create_chat_workflow(self.login_user, get_request_ip(self.request), self.client_id)
 
     async def check_status(self, message: dict, is_init: bool = False) -> (bool, str):
+        """
+        bool: 表示是否需要重新执行workflow
+        """
         # chat ws connection first handle
         workflow_id = message.get('flow_id', self.client_id)
         self.chat_id = message.get('chat_id', '')
-        unique_id = uuid.uuid4().hex
+        unique_id = generate_uuid()
         if self.chat_id:
             await self.init_history()
             unique_id = f'{self.chat_id}_async_task_id'

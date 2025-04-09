@@ -5,7 +5,6 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
-from uuid import UUID
 
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.knowledge_imp import decide_vectorstores
@@ -162,8 +161,8 @@ class AssistantAgent(AssistantUtils):
         tool_type_info = all_tool_type.get(tool.type)
         if not tool_type_info:
             raise Exception(f'获取工具类型失败，tool_type_id: {tool.type}')
-        extra_json = json.loads(tool.extra)
-        extra_json.update(json.loads(tool_type_info.extra))
+        extra_json = json.loads(tool.extra) if tool.extra else {}
+        extra_json.update(json.loads(tool_type_info.extra) if tool_type_info.extra else {})
         return OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, json.dumps(extra_json),
                                                        tool_type_info.server_host,
                                                        tool_type_info.auth_method,
@@ -292,8 +291,8 @@ class AssistantAgent(AssistantUtils):
                                                                 callbacks)
                 tools.extend(knowledge_tool)
             else:
-                tmp_flow_id = UUID(link.flow_id).hex
-                one_flow_data = flow_id2data.get(UUID(link.flow_id))
+                tmp_flow_id = link.flow_id
+                one_flow_data = flow_id2data.get(link.flow_id)
                 tool_name = f'flow_{link.flow_id}'
                 if not one_flow_data:
                     logger.warning('act=init_tools not find flow_id: {}', link.flow_id)
@@ -311,7 +310,7 @@ class AssistantAgent(AssistantUtils):
                                                       artifacts=artifacts,
                                                       process_file=True,
                                                       flow_id=tmp_flow_id,
-                                                      chat_id=self.assistant.id.hex)
+                                                      chat_id=self.assistant.id)
                     built_object = await graph.abuild()
                     logger.info('act=init_flow_tool build_end')
                     flow_tool = Tool(name=tool_name,

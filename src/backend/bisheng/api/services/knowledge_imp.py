@@ -66,9 +66,11 @@ class KnowledgeUtils:
     @classmethod
     def aggregate_chunk_metadata(cls, chunk: str, metadata: dict) -> str:
         # 拼接chunk和metadata中的数据，获取新的chunk
-        return f"{{<file_title>{metadata.get('source', '')}</file_title>\
-            \n<file_abstract>{metadata.get('title', '')}</file_abstract>\
-                \n<paragraph_content>{chunk}</paragraph_content>}}"
+        res = f"{{<file_title>{metadata.get('source', '')}</file_title>\n"
+        if metadata.get('title', ''):
+            res += f"<file_abstract>{metadata.get('title', '')}</file_abstract>\n"
+        res += f"<paragraph_content>{chunk}</paragraph_content>}}"
+        return res
 
     @classmethod
     def split_chunk_metadata(cls, chunk: str) -> str:

@@ -1,7 +1,7 @@
 import functools
 import json
 from base64 import b64decode
-from typing import List
+from typing import List, Dict
 
 import rsa
 from bisheng.api.errcode.base import UnAuthorizedError
@@ -11,10 +11,11 @@ from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
-from bisheng.database.models.role import AdminRole
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -30,6 +31,7 @@ class UserPayload:
     def __init__(self, **kwargs):
         self.user_id = kwargs.get('user_id')
         self.user_role = kwargs.get('role')
+        self.group_cache = {}
         if self.user_role != 'admin':  # 非管理员用户，需要获取他的角色列表
             roles = UserRoleDao.get_user_roles(self.user_id)
             self.user_role = [one.role_id for one in roles]
@@ -107,6 +109,22 @@ class UserPayload:
                 return True
         return False
 
+    def get_user_groups(self, user_id: int) -> List[Dict]:
+        """ 查询用户的角色列表 """
+        user_groups = UserGroupDao.get_user_group(user_id)
+        user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
+        res = []
+        for i in range(len(user_group_ids) - 1, -1, -1):
+            if self.group_cache.get(user_group_ids[i]):
+                res.append(self.group_cache.get(user_group_ids[i]))
+                del user_group_ids[i]
+        # 将没有缓存的角色信息查询数据库
+        if user_group_ids:
+            group_list = GroupDao.get_group_by_ids(user_group_ids)
+            for group_info in group_list:
+                self.group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
+                res.append(self.group_cache.get(group_info.id))
+        return res
 
 class UserService:
 

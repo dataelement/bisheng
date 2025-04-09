@@ -31,7 +31,7 @@ class RtcAssistantAgent(AssistantAgent):
 
     @classmethod
     async def create(cls, assistant: Assistant) -> "RtcAssistantAgent":
-        if ins := cls.load(assistant.id.hex):
+        if ins := cls.load(assistant.id):
             return ins
         else:
             ins = cls(assistant)
@@ -44,7 +44,7 @@ class RtcAssistantAgent(AssistantAgent):
         return cls.MemoryCache.get(assistant_id)
 
     def save(self):
-        self.MemoryCache.set(self.assistant.id.hex, self)
+        self.MemoryCache.set(self.assistant.id, self)
 
     async def init_abilities(self):
         """初始化能力"""
@@ -114,7 +114,7 @@ class RtcAssistantAgent(AssistantAgent):
                 logger.warning('act=init_tools skip not online flow_id: {}', datum.id)
                 continue
             tool_description = f'{datum.name}:{datum.description}'
-            fake_chat_id = self.assistant.id.hex
+            fake_chat_id = self.assistant.id
             graph = await build_flow_no_yield(graph_data=datum.data, artifacts={}, process_file=True, flow_id=datum.id,
                                               chat_id=fake_chat_id)
             built_obj = await graph.abuild()

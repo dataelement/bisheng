@@ -117,7 +117,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         with session_getter() as session:
             return session.query(KnowledgeFile.id, KnowledgeFile.object_name).filter(
                 KnowledgeFile.knowledge_id == knowledge_id).order_by(
-                    KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
+                KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
 
     @classmethod
     def count_file_by_knowledge_id(cls, knowledge_id: int):
@@ -207,6 +207,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.where(KnowledgeFile.status == status)
         with session_getter() as session:
             return session.scalar(statement)
+
+    @classmethod
+    def get_knowledge_ids_by_name(cls, file_name: str) -> List[int]:
+        statement = select(KnowledgeFile.knowledge_id).where(KnowledgeFile.file_name.like(f'%{file_name}%')).group_by(
+            KnowledgeFile.knowledge_id)
+        with session_getter() as session:
+            return session.exec(statement).all()
 
 
 class QAKnoweldgeDao(QAKnowledgeBase):

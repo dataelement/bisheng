@@ -4,7 +4,6 @@ import math
 import os
 import time
 from typing import Any, Dict, List
-from uuid import uuid4
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.knowledge import (KnowledgeChunkError, KnowledgeExistError,
@@ -32,6 +31,7 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
+from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
 from bisheng.worker.knowledge import file_worker
@@ -129,12 +129,18 @@ class KnowledgeService(KnowledgeUtils):
                 db_knowledge.collection_name = f'partition_{embedding}_knowledge_{suffix_id}'
             else:
                 # 默认collectionName
-                db_knowledge.collection_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
-        db_knowledge.index_name = f'col_{int(time.time())}_{str(uuid4())[:8]}'
+                db_knowledge.collection_name = f'col_{int(time.time())}_{generate_uuid()[:8]}'
+        db_knowledge.index_name = f'col_{int(time.time())}_{generate_uuid()[:8]}'
 
         # 插入到数据库
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
+
+        # 创建milvus的collection_name和es的index_name
+        embeddings = decide_embeddings(db_knowledge.model)
+        vector_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+        embeddings = FakeEmbedding()
+        es_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
 
         # 处理创建知识库的后续操作
         cls.create_knowledge_hook(request, login_user, db_knowledge)
@@ -838,7 +844,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict.pop('create_time')
         knowldge_dict['update_time'] = ''
         knowldge_dict['user_id'] = login_user.user_id
-        knowldge_dict['index_name'] = f'col_{int(time.time())}_{str(uuid4())[:8]}'
+        knowldge_dict['index_name'] = f'col_{int(time.time())}_{generate_uuid()[:8]}'
         knowldge_dict['name'] = f'{knowledge.name} 副本'
         knowldge_dict['state'] = 0
         knowledge_new = Knowledge(**knowldge_dict)

@@ -2,13 +2,14 @@ import asyncio
 import concurrent.futures
 import json
 import time
-import uuid
 from collections import defaultdict
 from queue import Queue
 from typing import Any, Dict, List
-from uuid import UUID
 
-from websockets.exceptions import ConnectionClosedError
+from bisheng.utils import generate_uuid
+from bisheng_langchain.input_output.output import Report
+from fastapi import Request, WebSocket, WebSocketDisconnect, status
+from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
@@ -22,16 +23,15 @@ from bisheng.chat.clients.workflow_client import WorkflowClient
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.chat.utils import process_node_data
 from bisheng.database.base import session_getter
-from bisheng.database.models.flow import Flow
+from bisheng.database.models.flow import Flow, FlowType, FlowDao
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.graph.utils import find_next_node
 from bisheng.processing.process import process_tweaks
 from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
 from bisheng.utils.util import get_cache_key
-from bisheng_langchain.input_output.output import Report
-from fastapi import Request, WebSocket, WebSocketDisconnect, status
-from loguru import logger
+
 
 
 class ChatHistory(Subject):
@@ -41,10 +41,10 @@ class ChatHistory(Subject):
         self.history: Dict[str, List[ChatMessage]] = defaultdict(list)
 
     def add_message(
-        self,
-        client_id: str,
-        chat_id: str,
-        message: ChatMessage,
+            self,
+            client_id: str,
+            chat_id: str,
+            message: ChatMessage,
     ):
         """Add a message to the chat history."""
         t1 = time.time()
@@ -200,7 +200,7 @@ class ChatManager:
             work_type: WorkType,
             websocket: WebSocket,
             graph_data: dict = None):
-        client_key = uuid.uuid4().hex
+        client_key = generate_uuid()
         if work_type == WorkType.GPTS:
             chat_client = ChatClient(request,
                                      client_key,
@@ -258,12 +258,12 @@ class ChatManager:
             self.clear_client(client_key)
 
     async def handle_websocket(
-        self,
-        flow_id: str,
-        chat_id: str,
-        websocket: WebSocket,
-        user_id: int,
-        gragh_data: dict = None,
+            self,
+            flow_id: str,
+            chat_id: str,
+            websocket: WebSocket,
+            user_id: int,
+            gragh_data: dict = None,
     ):
         # 建立连接，并存储映射，兼容不复用ws 场景
         key_list = set([get_cache_key(flow_id, chat_id)])
@@ -425,8 +425,16 @@ class ChatManager:
                         'user_id': user_id,
                         'user_name': UserDao.get_user(user_id).user_name,
                     })
+                    flow_info = FlowDao.get_flow_by_id(flow_id)
+                    MessageSessionDao.insert_one(MessageSession(
+                        chat_id=chat_id,
+                        flow_id=flow_id,
+                        flow_name=flow_info.name,
+                        flow_type=FlowType.FLOW.value,
+                        user_id=user_id,
+                    ))
                     AuditLogService.create_chat_flow(login_user, get_request_ip(websocket),
-                                                     flow_id)
+                                                     flow_id, flow_info)
         start_resp.type = 'start'
 
         # should input data
@@ -611,7 +619,7 @@ class ChatManager:
         graph = await build_flow_no_yield(graph_data=graph_data,
                                           artifacts=artifacts,
                                           process_file=True,
-                                          flow_id=UUID(flow_id).hex,
+                                          flow_id=flow_id,
                                           chat_id=chat_id,
                                           user_name=db_user.user_name)
         await graph.abuild()

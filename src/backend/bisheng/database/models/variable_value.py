@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Optional, List
-from uuid import UUID
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -11,7 +10,7 @@ from sqlmodel import Field, select, or_
 
 
 class VariableBase(SQLModelSerializable):
-    flow_id: UUID = Field(index=True, description='所属的技能')
+    flow_id: str = Field(index=True, description='所属的技能')
     version_id: int = Field(description='所属的技能版本')
     node_id: str = Field(index=True, description='所属的node')
     variable_name: Optional[str] = Field(index=True, default=None, description='变量名')

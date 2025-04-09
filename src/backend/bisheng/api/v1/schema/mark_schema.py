@@ -1,6 +1,4 @@
-from datetime import datetime
 from typing import List, Optional
-from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -13,5 +11,5 @@ class MarkData(BaseModel):
     session_id: str
     task_id: int
     status: int
-    flow_type:Optional[str]
+    flow_type:Optional[int]
 
