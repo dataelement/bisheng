@@ -561,6 +561,8 @@ def post_import_file(*,
         return HTTPException(status_code=500, detail='知识库为普通知识库')
 
     insert_result = []
+    error_result = []
+    have_question = []
     for file_url in file_list:
         df = pd.read_excel(file_url)
         columns = df.columns.to_list()
@@ -569,23 +571,36 @@ def post_import_file(*,
             continue
         data = df.T.to_dict().values()
         insert_data = []
-        for dd in data:
-            d = QAKnowledgeUpsert(
+        have_data = []
+        all_questions = set()
+        for index,dd in enumerate(data):
+            tmp_questions = set()
+            QACreate = QAKnowledgeUpsert(
             user_id = login_user.user_id,
             knowledge_id = qa_knowledge_id,
             answers = [dd['答案']],
             questions = [dd['问题']],
-            source = 1,
+            source = 4,
             status = 1)
+            tmp_questions.add(QACreate.questions[0])
             for key,value in dd.items():
                 if key.startswith('相似问题'):
-                    if value is not np.nan:
-                        d.questions.append(value)
-            insert_data.append(d)
+                    if value is not np.nan and value and value is not None and str(value) != 'nan' and str(value) != 'null':
+                        if value not in tmp_questions:
+                            QACreate.questions.append(value)
+                            tmp_questions.add(value)
+
+            db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
+            if db_q and not QACreate.id or len(tmp_questions & all_questions) > 0:
+                have_data.append(index)
+            else:
+                insert_data.append(QACreate)
+                all_questions = all_questions | tmp_questions
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
         insert_result.append(result)
+        error_result.append(have_data)
 
-    return resp_200({"result": insert_result})
+    return resp_200({"result": insert_result,"errors": error_result})
 
 
 
