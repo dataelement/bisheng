@@ -33,7 +33,7 @@ loguru = "^0.7.1"
 fastapi_jwt_auth = "^0.5.0"
 captcha = "^0.5.0"
 rsa = "4.9"
-pydantic = "^1.10.18"
+pydantic = "^1.10.21"
 numexpr = "^2.8.6"
 pypinyin = "0.50.0"
 celery = { extras = ["redis"], version = "^5.3.6" }

@@ -418,6 +418,38 @@ class EvaluationLLMConfig(BaseModel):
     model_id: Optional[int] = Field(description='评测功能默认模型的ID')
 
 
+class Icon(BaseModel):
+    enabled: bool
+    image: str
+
+
+class WSModel(BaseModel):
+    key: str
+    id: str
+    name: str
+    displayName: str
+
+
+class WSPrompt(BaseModel):
+    enabled: bool
+    prompt: str
+    model: str
+
+
+class WorkstationConfig(BaseModel):
+    sidebarIcon: Icon
+    assistantIcon: Icon
+    sidebarSlogan: str = Field(description='侧边栏slogan')
+    welcomeMessage: str = Field()
+    functionDescription: str = Field()
+    inputPlaceholder: str
+    models: List[WSModel]
+    voiceInput: WSPrompt
+    webSearch: WSPrompt
+    knowledgeBase: WSPrompt
+    fileUpload: WSPrompt
+
+
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='知识库ID')

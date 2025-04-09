@@ -2,17 +2,15 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional, Union
 
-from pydantic import BaseModel
-from sqlmodel import Field, or_, select, Column, DateTime, delete, func, text, update
-from sqlmodel.sql.expression import Select, SelectOfScalar
-
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-
+from pydantic import BaseModel
+from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
+from sqlmodel.sql.expression import Select, SelectOfScalar
 
 
 class KnowledgeTypeEnum(Enum):
@@ -121,10 +119,8 @@ class KnowledgeDao(KnowledgeBase):
             # 同时模糊检索知识库内的文件名称来查询对应的知识库
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
-                statement = statement.where(or_(
-                    Knowledge.name.like(f'%{name}%'),
-                    Knowledge.id.in_(file_knowledge_ids)
-                ))
+                statement = statement.where(
+                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
             else:
                 statement = statement.where(Knowledge.name.like(f'%{name}%'))
         if page and limit:
@@ -242,17 +238,18 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def generate_all_knowledge_filter(cls, statement, name: str = None, knowledge_type: KnowledgeTypeEnum = None):
+    def generate_all_knowledge_filter(cls,
+                                      statement,
+                                      name: str = None,
+                                      knowledge_type: KnowledgeTypeEnum = None):
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
             # 同时模糊检索知识库内的文件名称来查询对应的知识库
             file_knowledge_ids = KnowledgeFileDao.get_knowledge_ids_by_name(name)
             if file_knowledge_ids:
-                statement = statement.where(or_(
-                    Knowledge.name.like(f'%{name}%'),
-                    Knowledge.id.in_(file_knowledge_ids)
-                ))
+                statement = statement.where(
+                    or_(Knowledge.name.like(f'%{name}%'), Knowledge.id.in_(file_knowledge_ids)))
             else:
                 statement = statement.where(Knowledge.name.like(f'%{name}%'))
         return statement
@@ -264,9 +261,9 @@ class KnowledgeDao(KnowledgeBase):
                           page: int = 0,
                           limit: int = 0) -> List[Knowledge]:
         statement = select(Knowledge).where(Knowledge.state > 0)
-        statement = cls.generate_all_knowledge_filter(
-            statement, name=name, knowledge_type=knowledge_type
-        )
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
 
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
@@ -279,9 +276,9 @@ class KnowledgeDao(KnowledgeBase):
                             name: str = None,
                             knowledge_type: KnowledgeTypeEnum = None) -> int:
         statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
-        statement = cls.generate_all_knowledge_filter(
-            statement, name=name, knowledge_type=knowledge_type
-        )
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
         with session_getter() as session:
             return session.scalar(statement)
 
