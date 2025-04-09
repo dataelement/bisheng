@@ -533,7 +533,7 @@ def post_import_file(*,
             if key.startswith('相似问题'):
                 d.questions.append(value)
         insert_data.append(d)
-    if size and size>0 and offset and offset>=0:
+    if size and size>0 and offset>=0:
         if offset > len(insert_data):
             insert_data = []
         else:
