@@ -396,7 +396,9 @@
         "sizeExceedsLimit": "超过50M,已移除",
         "editDictionary": "编辑词典",
         "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。",
-        "chunkOverlap": "切分文本重叠长度"
+        "chunkOverlap": "切分文本重叠长度",
+        "preCheckFailed": "文件不符合规范，请重新上传",
+        "preCheckError": "文件不符合规范，请重新上传"
     },
     "report": {
         "reportTemplate": "报告模板",
