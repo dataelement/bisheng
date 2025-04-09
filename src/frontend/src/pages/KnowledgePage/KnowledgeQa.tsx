@@ -84,7 +84,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             type: 1
         }).then(res => {
             // @ts-ignore
-            window.libname = name
+            window.libname = [name, desc];
             navigate("/filelib/qalib/" + res.id);
             setOpen(false)
             setSaveLoad(false);

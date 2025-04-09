@@ -108,5 +108,6 @@
     "similarityQuestion": "相似问题（仅显示前十条）",
     "similarityQuestionEmpty": "暂无相似问题",
     "errorMsg": "文件解析成功，其中{{value}}条问题上传失败，请检查文件后再试",
-    "successMsg": "文件上传成功"
+    "successMsg": "文件上传成功",
+    "saved": "保存成功"
 }
