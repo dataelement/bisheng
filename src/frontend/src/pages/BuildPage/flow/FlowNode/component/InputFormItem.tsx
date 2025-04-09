@@ -45,6 +45,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     const oldFormTypeRef = useRef('')
 
     const oldVarNameRef = useRef("");
+    const oldcontentNameRef = useRef("");
+    const oldPathNameRef = useRef("");
     useEffect(() => {
         editRef.current = false
         if (initialData) {
@@ -72,6 +74,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             editRef.current = true
             oldFormTypeRef.current = formType
             oldVarNameRef.current = variableName;
+            oldcontentNameRef.current = filecontent;
+            oldPathNameRef.current = filepath;
         }
     }, [initialData]);
 
@@ -144,8 +148,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filecontent.length > 50) {
                 newErrors.filecontent = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.key === formData.filecontent) &&
-                formData.filecontent !== oldVarNameRef.current
+                existingOptions?.some(opt => !opt.multiple && opt.file_content === formData.filecontent) &&
+                formData.filecontent !== oldcontentNameRef.current
             ) {
                 newErrors.filecontent = t("variableNameExists");
             }
@@ -158,8 +162,8 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filepath.length > 50) {
                 newErrors.filepath = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.key === formData.filepath) &&
-                formData.filepath !== oldVarNameRef.current
+                existingOptions?.some(opt => !opt.multiple && opt.file_path === formData.filepath) &&
+                formData.filepath !== oldPathNameRef.current
             ) {
                 newErrors.filepath = t("variableNameExists");
             }
@@ -270,7 +274,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         </div>
         <div>
             <Label className="bisheng-label">{t("options")}</Label>
-            <DragOptions scroll options={formData.options} onChange={updateOptions} />
+            <DragOptions edit scroll options={formData.options} onChange={updateOptions} />
             {errors.options && <p className="text-red-500 text-sm">{errors.options}</p>}
         </div>
         <div className="flex items-center space-x-2">
@@ -439,6 +443,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
     };
 
     // 提交表单数据，添加或更新表单项
+    const scrollRef = useRef(null);
     const handleSubmit = (_data) => {
         const {
             allowMultiple,
@@ -472,6 +477,9 @@ export default function InputFormItem({ data, onChange, onValidate }) {
                 file_path,
                 options,
             });
+            setTimeout(() => {
+                scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
+            }, 0);
         }
         onChange(data.value);
         setFoucsUpdate(!foucsUpdate);
@@ -512,6 +520,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             {data.value.length > 0 && (
                 <DragOptions
                     scroll
+                    ref={scrollRef}
                     options={data.value.map((el) => ({
                         key: el.key,
                         text: el.type === FormType.File && !el.multiple ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,

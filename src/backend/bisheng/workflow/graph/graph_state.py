@@ -68,10 +68,15 @@ class GraphState(BaseModel):
 
         # 数组变量的处理
         if variable_val_index:
-            variable_val_index = int(variable_val_index)
-            if not isinstance(variable_val, list) or len(variable_val) <= variable_val_index:
-                raise Exception(f'variable {contact_key} is not array or index out of range')
-            return variable_val[variable_val_index]
+            if isinstance(variable_val, list):
+                variable_val_index = int(variable_val_index)
+                if len(variable_val) <= variable_val_index:
+                    raise Exception(f'variable {contact_key} index out of range')
+                return variable_val[variable_val_index]
+            elif isinstance(variable_val, dict):
+                return variable_val.get(variable_val_index)
+            else:
+                raise Exception(f'variable {contact_key} is not a list or dict, not support #index')
 
         return variable_val
 
@@ -83,10 +88,8 @@ class GraphState(BaseModel):
             var_key, variable_val_index = var_key.split('#')
             old_value = self.get_variable(node_id, var_key)
             if not old_value:
-                old_value = ['' for i in variable_val_index]
-            if len(old_value) <= int(variable_val_index):
-                old_value.extend(['' for i in range(int(variable_val_index) - len(old_value) + 1)])
-            old_value[int(variable_val_index)] = value
+                old_value = {}
+            old_value[variable_val_index] = value
             value = old_value
         self.set_variable(node_id, var_key, value)
 
@@ -98,6 +101,6 @@ class GraphState(BaseModel):
                 ret[f'{node_id}.{key}'] = self.get_variable(node_id, key)
                 # 特殊处理下 preset_question key
                 if key == 'preset_question':
-                    for one in range(len(value)):
-                        ret[f'{node_id}.{key}#{one}'] = value[one]
+                    for k, v in value.items():
+                        ret[f'{node_id}.{key}#{k}'] = v
         return ret

@@ -16,7 +16,7 @@ import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 
-export default function ChatMessages({ audit = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick, flow  }) {
+export default function ChatMessages({ audit = false, mark = false, logo, useName, disableBtn = false, guideWord, loadMore, onMarkClick, msgVNode, flow }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -44,12 +44,23 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
         scrollLockRef.current = false
         queryLockRef.current = false
     }, [chatId])
-
+    const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
     useEffect(() => {
-        if (scrollLockRef.current) return
-        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }, [messages])
+        if (scrollLockRef.current) return;
 
+        const now = Date.now();
+        const throttleTime = 1200; // 1秒
+
+        // 如果距离上次执行的时间小于 throttleTime，则直接返回
+        if (now - lastScrollTimeRef.current < throttleTime) {
+            return;
+        }
+
+        // 执行滚动操作
+        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+        // 更新上次执行的时间戳
+        lastScrollTimeRef.current = now;
+    }, [messages])
     
     /**
      * 滚动到指定消息
@@ -82,8 +93,6 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
         return viollationMessages.pop();
     }, [chatId, messages]);
 
-    
-
     // 消息滚动加载
     const queryLockRef = useRef(false)
     useEffect(() => {
@@ -100,7 +109,7 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
 
             const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
             // 距离底部 600px内，开启自动滚动
-            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 600
+            scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400
 
             if (messagesRef.current.scrollTop <= 90) {
                 console.log('请求 :>> ', 1);
@@ -129,13 +138,13 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
             let q = ''
             while (index > -1) {
                 const qItem = msgs[--index]
-                if (['question', 'user_input'].includes(qItem?.category)) {
+                if (['question', 'input'].includes(qItem?.category)) {
                     q = qItem.message[qItem.chatKey] || qItem.message
                     break
                 }
             }
             return { q, a }
-        } else if (['question', 'user_input'].includes(item?.category)) {
+        } else if (['question', 'input'].includes(item?.category)) {
             const q = item.message[item.chatKey] || item.message
             let a = ''
             while (msgs[++index]) {
@@ -154,7 +163,7 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
             messagesList.map((msg, index) => {
                 // output节点特殊msg
                 switch (msg.category) {
-                    case 'user_input':
+                    case 'input':
                         return null
                     case 'question':
                         return <div
@@ -167,36 +176,35 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
                     case 'output_msg':
                     case 'stream_msg':
                         return <div
-                            id={`msg-${msg.id}`}
-                            key={msg.id}
-                            className="message-item"><MessageBs
-                                audit={audit}
-                                mark={mark}
-                                logo={logo}
-                                flow={flow}
-                                key={msg.message_id}
-                                data={msg}
-                                onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
-                                onSource={(data) => { sourceRef.current?.openModal(data) }}
-                                onMarkClick={() => onMarkClick('answer', msg.message_id, findQa(messagesList, index))}
-                            /></div>;
+                        id={`msg-${msg.id}`}
+                        key={msg.id}
+                        className="message-item"><MessageBs
+                            audit={audit}
+                            mark={mark}
+                            logo={logo}
+                            disableBtn={disableBtn}
+                            key={msg.message_id}
+                            data={msg}
+                            msgVNode={msgVNode}
+                            onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
+                            onSource={(data) => { sourceRef.current?.openModal(data) }}
+                            onMarkClick={() => onMarkClick('answer', msg.message_id, findQa(messagesList, index))}
+                        /></div>;
                     case 'separator':
                         return <div
-                            id={`msg-${msg.id}`}
-                            key={msg.id}
-                            className="message-item"><Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} /></div>;
+                        id={`msg-${msg.id}`}
+                        key={msg.id}
+                        className="message-item"><Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} /></div>;
                     case 'output_choose_msg':
                         return <div
                             id={`msg-${msg.id}`}
                             key={msg.id}
-                            className="message-item"><MessageBsChoose key={msg.message_id} data={msg} logo={logo}
-                                flow={flow} /></div>;
+                            className="message-item"><MessageBsChoose key={msg.message_id} data={msg} logo={logo} flow={flow} /></div>;
                     case 'output_input_msg':
                         return <div
                             id={`msg-${msg.id}`}
                             key={msg.id}
-                            className="message-item"><MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo}
-                                flow={flow} /></div>;
+                            className="message-item"><MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} flow={flow} /></div>;
                     case 'node_run':
                         // TODO
                         return <div

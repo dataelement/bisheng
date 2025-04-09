@@ -43,9 +43,9 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
     const validateNodes = useNodeEvent(flow)
     const addNotification = useFlowStore((state) => state.addNotification);
 
-    const handleRunClick = () => {
+    const handleRunClick = async () => {
         // 记录错误日志
-        const errors = validateNodes()
+        const errors = await validateNodes()
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',
@@ -62,7 +62,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
     }
 
     const handleOnlineClick = async () => {
-        const errors = validateNodes()
+        const errors = await validateNodes()
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',
@@ -140,11 +140,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         setOpen(false)
         const nFlow = cloneDeep(flow)
         // 删除report节点文档key
-        nFlow.nodes.forEach(node => {
-            if (node.data.type === 'report') {
-                node.data.group_params[0].params[0].value.version_key = ''
-            }
-        })
+        // nFlow.nodes.forEach(node => {
+        //     if (node.data.type === 'report') {
+        //         node.data.group_params[0].params[0].value.version_key = ''
+        //     }
+        // })
         const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
             JSON.stringify(nFlow)
         )}`;
@@ -199,6 +199,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         // 累加版本 vx ++
         const maxNo = lastVersionIndexRef.current + 1
         const { nodes, edges, viewport } = flow
+        // 复制报告节点中报告模板
+        // for (let i = 0; i < nodes.length; i++) {
+        //     const node = nodes[i];
+        //     await copyReportTemplate(node.data)
+        // }
         const res = await captureAndAlertRequestErrorHoc(
             createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: { nodes, edges, viewport }, original_version_id: version.id })
         )
@@ -277,6 +282,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                     onClick={() => {
                         setTabType('api');
                         onTabChange('api');
+                        testRef.current.close()
                     }}>
                     {t('externalRelease')}
                 </Button>
@@ -375,9 +381,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
             <CreateApp ref={updateAppModalRef} onSave={(base) => {
                 captureAndAlertRequestErrorHoc(onlineWorkflow({
                     ...f,
-                    name: base.name,
-                    description: base.description,
-                    logo: base.logo
+                    ...base
                 }).then(res => {
                     f.name = base.name
                     f.description = base.description
@@ -461,11 +465,18 @@ const useNodeEvent = (flow) => {
         };
     }, []);
 
-    return () => {
+    return async () => {
         let errors = [];
-        Object.keys(nodeValidateEntitiesRef.current).forEach(key => {
-            errors = [...errors, ...nodeValidateEntitiesRef.current[key]()];
+        // 使用 map 来收集所有的 Promise
+        const promises = Object.keys(nodeValidateEntitiesRef.current).map(async (key) => {
+            const result = await nodeValidateEntitiesRef.current[key]();  // 等待验证结果
+
+            // 如果有错误，合并到 errors 数组中
+            if (result && result.length > 0) {
+                errors = [...errors, ...result];
+            }
         });
+        await Promise.all(promises);
 
         // event func
         const sendEvent = (ids) => {

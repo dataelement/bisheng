@@ -1,4 +1,7 @@
 import json
+import os
+import shutil
+import tempfile
 from typing import Any
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
@@ -129,10 +132,13 @@ class InputNode(BaseNode):
         # 3、解析文件
         metadatas = []
         texts = []
-        filepath = ''
+        original_file_path = ''
         file_id = md5_hash(f'{key}:{value[0]}')
         for one_file_url in value:
             filepath, file_name = file_download(one_file_url)
+            if not original_file_path:
+                original_file_path = os.path.join(tempfile.gettempdir(), f'{file_id}.{file_name.split(".")[-1]}')
+                shutil.copyfile(filepath, original_file_path)
             texts, metadatas, parse_type, partitions = read_chunk_text(filepath, file_name,
                                                                        ['\n\n', '\n'],
                                                                        ['after', 'after'], 1000, 500)
@@ -160,5 +166,5 @@ class InputNode(BaseNode):
         return {
             key_info['key']: metadatas[0],
             key_info['file_content']: "\n".join(texts),
-            key_info['file_path']: filepath
+            key_info['file_path']: original_file_path
         }

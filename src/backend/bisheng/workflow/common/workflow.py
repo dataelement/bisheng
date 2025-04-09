@@ -7,3 +7,4 @@ class WorkflowStatus(Enum):
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
     INPUT = 'INPUT'
+    INPUT_OVER = 'INPUT_OVER'  # 已输入状态

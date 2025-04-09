@@ -214,6 +214,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
                 }
                 ws.onclose = (event) => {
                     console.log('error event :>> ', event);
+                    onLoad()
                     // wsRef.current = null
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })
@@ -276,8 +277,9 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
         if (data.category === 'node_run') {
             insetNodeRun(data)
             return sendNodeLogEvent(data)
-        }
-        if (data.category === 'user_input') {
+        } else if (data.category === "guide_word") {
+            data.message.msg = data.message.guide_word
+        } else if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
             // 待用户输入
