@@ -510,8 +510,8 @@ def get_export_url(*,
 def post_import_file(*,
                      qa_knowledge_id: int,
                      file_url: str = Body(..., embed=True),
-                     size: Optional[int] = None,
-                     offset: Optional[int] = None,
+                     size: Optional[int] = Body(default=0, embed=True),
+                     offset: Optional[int] = Body(default=0, embed=True),
                      login_user: UserPayload = Depends(get_login_user)):
     df = pd.read_excel(file_url)
     columns = df.columns.to_list()
@@ -533,11 +533,14 @@ def post_import_file(*,
             if key.startswith('相似问题'):
                 d.questions.append(value)
         insert_data.append(d)
-    if size and size>0 and offset>=0:
-        if offset > len(insert_data):
-            insert_data = []
-        else:
-            insert_data = insert_data[offset:size]
+    try:
+        if size>0 and offset>=0:
+            if offset >= len(insert_data):
+                insert_data = []
+            else:
+                insert_data = insert_data[offset:size]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=e)
     return resp_200({"result": insert_data})
 
 @router.post('/qa/import/{qa_knowledge_id}', status_code=200)
