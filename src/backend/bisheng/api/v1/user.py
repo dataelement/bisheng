@@ -102,6 +102,10 @@ async def sso(*, user: UserCreate):
             UserGroupDao.add_default_user_group(user_exist.user_id)
 
         access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
+
+        # 设置登录用户当前的cookie, 比jwt有效期多一个小时
+        redis_client.set(USER_CURRENT_SESSION.format(user_exist.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+
         return resp_200({'access_token': access_token, 'refresh_token': refresh_token})
     else:
         raise ValueError('不支持接口')
