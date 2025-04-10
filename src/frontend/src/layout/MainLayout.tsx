@@ -95,7 +95,6 @@ export default function MainLayout() {
 
                         {/* @ts-ignore */}
                         <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
-                        {'测试环境！'}
                     </Link>
                 </div>
                 <div>
