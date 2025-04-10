@@ -4,7 +4,7 @@ import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -15,6 +15,7 @@ import { useMessageStore } from "./messageStore";
 import { Badge } from "@/components/bs-ui/badge";
 import { ShieldAlert } from "lucide-react";
 import { TitleLogo } from "../cardComponent";
+import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 
 // 颜色列表
 const colorList = [
@@ -32,6 +33,12 @@ const colorList = [
 ]
 
 export default function MessageBs({ mark = false, audit = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any, flow: any }) {
+    const [remark, setRemark] = useState("");
+    
+    useEffect(() => {
+        setRemark(data.remark || '')
+    },[ data.remark ])
+
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -133,8 +140,9 @@ export default function MessageBs({ mark = false, audit = false, msgVNode = null
                         mark={mark}
                         id={data.id}
                         data={data.liked}
-                        msgVNode={msgVNode}
                         onUnlike={onUnlike}
+                        // 审计 & 运营页面展示差评
+                        msgVNode={audit && data.remark && <MsgVNodeCom message={remark} />}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
                     />

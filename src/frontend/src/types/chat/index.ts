@@ -28,4 +28,6 @@ export type ChatMessageType = {
   review_reason: string;
   /** 消息状态 */
   review_status: number;
+  /** 差评 */
+  remark: string;
 };

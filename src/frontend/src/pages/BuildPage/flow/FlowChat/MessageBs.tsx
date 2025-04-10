@@ -176,7 +176,8 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
-                        msgVNode={<MsgVNodeCom message="自定义2" />}
+                        // 审计 & 运营页面展示差评
+                        msgVNode={audit && data.remark && <MsgVNodeCom message={data.remark} />}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
