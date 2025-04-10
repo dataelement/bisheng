@@ -23,6 +23,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
     const questionsRef = useRef(null)
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const [inputForm, setInputForm] = useState(null) // input表单
+    const messageIdRef = useRef('') // 当前输入框节点messageId
     const [formShow, setFormShow] = useState(false) // input表单显示
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
@@ -117,7 +118,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
             files: fileIds,
             category: "question",
             extra: '',
-            message_id: '',
+            message_id: messageIdRef.current,
             source: 0
         })
         // msg to store
@@ -144,7 +145,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
                 [inputNodeIdRef.current]: {
                     data,
                     message: msg,
-                    message_id: '',
+                    message_id: messageIdRef.current,
                     category: 'question',
                     extra: '',
                     source: 0
@@ -282,6 +283,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
         } else if (data.category === 'input') {
             const { node_id, input_schema } = data.message
             inputNodeIdRef.current = node_id
+            messageIdRef.current = data.message_id
             // 待用户输入
             input_schema.tab === 'form_input'
                 ? (setInputForm(input_schema), setFormShow(true))
