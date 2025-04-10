@@ -62,11 +62,9 @@ class RoleGroupService():
         user_admin = UserGroupDao.get_groups_admins(list(groups_dict.keys()))
         user_operation = UserGroupDao.get_groups_operations(list(groups_dict.keys()))
         user_audit = UserGroupDao.get_groups_audits(list(groups_dict.keys()))
-        users_dict = {}
-        if user_admin:
-            user_ids = [user.user_id for user in user_admin] + [user.user_id for user in user_operation] + [user.user_id for user in user_audit]
-            users = UserDao.get_user_by_ids(user_ids)
-            users_dict = {user.user_id: user for user in users}
+        user_ids = [user.user_id for user in user_admin] + [user.user_id for user in user_operation] + [user.user_id for user in user_audit]
+        users = UserDao.get_user_by_ids(user_ids)
+        users_dict = {user.user_id: user for user in users}
 
         for group in groups_dict.values():
             group.group_admins = [
