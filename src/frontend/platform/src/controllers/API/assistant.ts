@@ -89,6 +89,12 @@ export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom'): 
     return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
 };
 
+// 获取mcp服务集合
+export const getAssistantMcpApi = async (): Promise<any> => {
+    // TODO 转换数据结构与getAssistantToolsApi一致,方便ui处理
+    return await axios.get(`/api/v1/assistant/tool_list?is_preset=false`)
+}
+
 // 修改内置工具配置
 export const updateAssistantToolApi = async (tool_id, extra) => {
     return await axios.post(`/api/v1/assistant/tool/config`, { tool_id, extra })

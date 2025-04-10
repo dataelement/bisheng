@@ -16,34 +16,44 @@ import { Plus } from "lucide-react"
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-const TestDialog = forwardRef((props: any, ref) => {
+interface TestDialogProps {
+    tool: any;
+    formState: any;
+}
+
+const TestDialog = forwardRef<{
+    open: (item, tool, formState) => void
+}, TestDialogProps>((props: any, ref) => {
     const { t } = useTranslation()
     const [testShow, setTestShow] = useState(false)
     const [apiData, setApiData] = useState<any>({})
     const toolRef = useRef<any>({})
-    const formRef = useRef<any>({})
-    const formRuleRef = useRef<any>({})
-    const formStateRef = useRef<any>({})
+
+    const formRef = useRef<{
+        values: Record<string, string>;
+        rules: Record<string, boolean>;
+        state?: any;
+    }>({ values: {}, rules: {} });
 
     useImperativeHandle(ref, () => ({
         open: (item, tool, formState) => {
             toolRef.current = tool
-            formStateRef.current = formState
+            formRef.current.state = formState
             setResult('')
             setApiData(item)
             setTestShow(true)
             // fill form
             item.api_params.forEach(param => {
-                formRef.current[param.name] = ''
-                formRuleRef.current[param.name] = param.required
+                formRef.current.values[param.name] = ''
+                formRef.current.rules[param.name] = param.required
             });
         }
     }))
     // 重置
     useEffect(() => {
         if (!testShow) {
-            formRef.current = {}
-            formRuleRef.current = {}
+            formRef.current.values = {}
+            formRef.current.rules = {}
         }
     }, [testShow])
 
@@ -53,8 +63,8 @@ const TestDialog = forwardRef((props: any, ref) => {
     const handleTest = async () => {
         // 校验
         const errors = []
-        Object.keys(formRef.current).forEach(key => {
-            if (formRuleRef.current[key] && formRef.current[key] === '') {
+        Object.keys(formRef.current.values).forEach(key => {
+            if (formRef.current.rules[key] && formRef.current.values[key] === '') {
                 errors.push(key + '为必填项')
             }
         })
@@ -75,7 +85,7 @@ const TestDialog = forwardRef((props: any, ref) => {
             auth_method: formStateRef.current.authMethod === 'apikey' ? 1 : 0,
             auth_type: formStateRef.current.authType,
             api_key: formStateRef.current.apiKey,
-            request_params: formRef.current,
+            request_params: formRef.current.values,
             api_location: formStateRef.current.apiLocation,
             parameter_name: formStateRef.current.parameter
         }).then(setResult))
@@ -104,7 +114,7 @@ const TestDialog = forwardRef((props: any, ref) => {
                                         <TableCell>{param.name}{param.required && <span className="text-red-500">*</span>}</TableCell>
                                         <TableCell>
                                             <Input onChange={(e) => {
-                                                formRef.current[param.name] = e.target.value;
+                                                formRef.current.values[param.name] = e.target.value;
                                             }}></Input>
                                         </TableCell>
                                     </TableRow>
@@ -262,7 +272,7 @@ const EditTool = forwardRef((props: any, ref) => {
             errors.push('schema不能为空');
         }
         if (formState.authMethod === "apikey") {
-            if (!formState.apiKey) {
+            if (!formState.apiKey?.trim()) {
                 errors.push('API Key不可为空');
             } else if (formState.apiKey.length > 1000) {
                 errors.push('API Key不可大于1000字符');

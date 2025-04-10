@@ -2,9 +2,9 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getAssistantMcpApi, getAssistantToolsApi } from "@/controllers/API/assistant";
 import ToolItem from "@/pages/BuildPage/tools/ToolItem";
-import { Star, User } from "lucide-react";
+import { CpuIcon, Star, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -16,7 +16,8 @@ export default function ToolsSheet({ select, onSelect, children }) {
     const [allData, setAllData] = useState([])
 
     useEffect(() => {
-        getAssistantToolsApi(type).then(res => {
+        const p = type === 'mcp' ? getAssistantMcpApi() : getAssistantToolsApi(type)
+        p.then(res => {
             setAllData(res)
             setKeyword('')
         })
@@ -60,6 +61,14 @@ export default function ToolsSheet({ select, onSelect, children }) {
                             >
                                 <Star />
                                 <span>{t('tools.customTools')}</span>
+                            </div>
+                            <div
+                                className={`mt-1 flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "mcp" && "bg-muted-foreground/10"
+                                    }`}
+                                onClick={() => setType("mcp")}
+                            >
+                                <CpuIcon />
+                                <span>MCP工具</span>
                             </div>
                         </div>
                     </div>

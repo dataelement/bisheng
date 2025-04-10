@@ -31,6 +31,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
 
     const nodeTemps = useMemo(() => {
         if (!tempData) return []
+        // TODO 追加MCP工具
         return tempData.reduce((list, temp) => {
             if (disabledNodes.includes(temp.type)) return list
             const newNode = getNodeDataByTemp(temp)
