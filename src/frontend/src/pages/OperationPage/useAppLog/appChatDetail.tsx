@@ -66,13 +66,12 @@ export default function AppChatDetail() {
                 </div>
             </div>
             <div className="h-[calc(100vh-132px)]">
-                {/* TODO：ZZY 缺失flow */}
                 {type === AppNumType.FLOW
                     ? <ChatMessages
-                        audit logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg
+                        operation logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg
                         (fid, true)}  mark={false} onMarkClick={null}></ChatMessages>
                     : <MessagePanne
-                        audit
+                        operation
                         logo=''
                         useName=''
                         guideWord=''

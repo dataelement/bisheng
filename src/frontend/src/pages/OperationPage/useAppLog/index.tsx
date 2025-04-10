@@ -80,7 +80,11 @@ export default function AppUseLog({ initFilter, clearFilter }) {
 
 
     // 进详情页前缓存 page, 临时方案
-    const handleCachePage = () => {
+    const handleCachePage = (el) => {
+        // 是否违规
+        localStorage.setItem('reviewStatus', el.review_status.toString());
+        // 搜索的历史记录
+        localStorage.setItem('operationKeyword', filters.keyword);
         window.OperationPage = page;
     };
 
@@ -173,7 +177,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         el.chat_id && <Link
                                             to={`/operation/chatLog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                             className="no-underline hover:underline text-primary"
-                                            onClick={handleCachePage}
+                                            onClick={() => handleCachePage(el)}
                                         >{t('lib.details')}</Link>
                                     }
                                 </TableCell>

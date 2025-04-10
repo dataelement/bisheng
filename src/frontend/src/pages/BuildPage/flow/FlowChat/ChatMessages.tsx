@@ -16,21 +16,17 @@ import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 
-export default function ChatMessages({ audit = false, mark = false, logo, useName, disableBtn = false, guideWord, loadMore, onMarkClick, msgVNode, flow }) {
+export default function ChatMessages({ operation = false, audit = false, mark = false, logo, useName, disableBtn = false, guideWord, loadMore, onMarkClick, msgVNode, flow }) {
     const { t } = useTranslation()
-    const { chatId, messages, hisMessages } = useMessageStore()
+    const { chatId, messages, historyEnd, hisMessages } = useMessageStore()
 
-    // 新增状态记录是否需要特殊滚动
-    const [shouldScrollToTarget, setShouldScrollToTarget] = useState({
-    search: false,
-    violation: false
-    });
+    const [isViolation, setIsViolation] = useState(false);
+    const [keyword, setKeyword] = useState('');
+
     // 用于目标消息定位
-    const targetMessageRef = useRef(null);
     const scrollTimeoutRef = useRef(null);
     // 仅第一次加载进行滚动
     const [isFirstLoad, setIsFirstLoad] = useState(true);
-
 
     // 反馈
     const thumbRef = useRef(null)
@@ -40,10 +36,60 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
     // 自动滚动
     const messagesRef = useRef(null)
     const scrollLockRef = useRef(false)
+
     useEffect(() => {
         scrollLockRef.current = false
         queryLockRef.current = false
     }, [chatId])
+
+    useEffect(() => {
+        // 只有审计和运营页面存在滚动过去的逻辑
+        if (!audit && !operation) return;
+        // 当前是否存在违规
+        const reviewStatus = localStorage.getItem('reviewStatus');
+        setIsViolation(reviewStatus === '3');
+        // 当前是否存在搜索关键词带入
+        let keyword = '';
+        if (audit) {
+            keyword = localStorage.getItem('auditKeyword');
+        }
+        if (operation) {
+            keyword = localStorage.getItem('operationKeyword');
+        }
+        setKeyword(keyword);
+    })
+
+    
+    useEffect(() => {
+        // 页面校验： 只有审计和运营页面存在滚动过去的逻辑
+        if (!audit && !operation) return;
+        // 逻辑校验： 只有第一次进入 同时消息列表有数据 才进行滚动
+        if (!isFirstLoad && !messages.length) return;
+        
+        if (keyword) {
+            const lastMsg = findKeywordMsg();
+            if (lastMsg) {
+                scrollToMessage(lastMsg);
+                setIsFirstLoad(false);
+            } else {
+                // 没加载完则进行加载
+                !historyEnd && loadMore();
+            }
+            return;
+        }
+        if (isViolation) {
+            const lastViolation = findLastViolation();
+            if (lastViolation) {
+                scrollToMessage(lastViolation);
+                setIsFirstLoad(false);
+            } else {
+                // 没加载完则进行加载
+                !historyEnd && loadMore();
+            }
+            return;
+        }
+    }, [messages, isViolation, keyword, isFirstLoad])
+
     const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
     useEffect(() => {
         if (scrollLockRef.current) return;
@@ -67,12 +113,13 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
      * @param {Message} message
      */
     const scrollToMessage = useCallback((message) => {
+        console.log('目标滚动的msg', message);
         if (!message) return;
         
         const element = document.getElementById(`msg-${message.id}`);
         if (!element) return;
         
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
         element.classList.add('highlight-message');
         
         if (scrollTimeoutRef.current) {
@@ -89,24 +136,23 @@ export default function ChatMessages({ audit = false, mark = false, logo, useNam
      * @returns {Message|null}
      */
     const findLastViolation = useCallback(() => {
-        const viollationMessages = messagesList.filter(item => item.review_reason);
-        return viollationMessages.pop();
+        const violationMessages = messagesList.filter(item => item.review_reason);
+        return violationMessages.pop();
     }, [chatId, messages]);
+
+    const findKeywordMsg = useCallback(() => {
+        const lastHasKeywordMsg = messagesList.findLast(item =>
+            item.message?.msg?.includes?.(keyword) || 
+            item.message?.includes?.(keyword)
+        );
+        return lastHasKeywordMsg;
+    }, [keyword, messages])
 
     // 消息滚动加载
     const queryLockRef = useRef(false)
     useEffect(() => {
         function handleScroll() {
             if (queryLockRef.current) return
-            const lastViolation = findLastViolation();
-           // if (isFirstLoad && audit && lastViolation) {
-            //     console.log('滚动', isFirstLoad);
-            //     // 这里写违规消息和历史记录搜索的滚动逻辑
-            //     scrollToMessage(lastViolation);
-            //     setIsFirstLoad(false);
-            //     return;
-           // }
-
             const { scrollTop, clientHeight, scrollHeight } = messagesRef.current
             // 距离底部 600px内，开启自动滚动
             scrollLockRef.current = (scrollHeight - scrollTop - clientHeight) > 400

@@ -32,7 +32,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBs({ mark = false, audit = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any, flow: any }) {
+export default function MessageBs({ operation = false, mark = false, audit = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any, flow: any }) {
     const [remark, setRemark] = useState("");
     
     useEffect(() => {
@@ -101,7 +101,7 @@ export default function MessageBs({ mark = false, audit = false, msgVNode = null
                     <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
                 </div>
             </div>
-            {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
+            {(operation || audit) && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
                     {<TitleLogo url={flow?.logo} className="" id={flow?.id}></TitleLogo>}
@@ -142,7 +142,7 @@ export default function MessageBs({ mark = false, audit = false, msgVNode = null
                         data={data.liked}
                         onUnlike={onUnlike}
                         // 审计 & 运营页面展示差评
-                        msgVNode={audit && data.remark && <MsgVNodeCom message={remark} />}
+                        msgVNode={(audit || operation) && data.remark && <MsgVNodeCom message={remark} />}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
                     />
