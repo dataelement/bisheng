@@ -420,34 +420,37 @@ class EvaluationLLMConfig(BaseModel):
 
 class Icon(BaseModel):
     enabled: bool
-    image: str
+    image: Optional[str]
 
 
 class WSModel(BaseModel):
-    key: str
+    key: Optional[str]
     id: str
-    name: str
-    displayName: str
+    name: Optional[str]
+    displayName: Optional[str]
 
 
 class WSPrompt(BaseModel):
     enabled: bool
-    prompt: str
-    model: str
+    prompt: Optional[str]
+    model: Optional[str]
+    tool: Optional[str]
+    bingKey: Optional[str]
+    bingUrl: Optional[str]
 
 
 class WorkstationConfig(BaseModel):
     sidebarIcon: Icon
     assistantIcon: Icon
-    sidebarSlogan: str = Field(description='侧边栏slogan')
-    welcomeMessage: str = Field()
-    functionDescription: str = Field()
-    inputPlaceholder: str
-    models: List[WSModel]
-    voiceInput: WSPrompt
-    webSearch: WSPrompt
-    knowledgeBase: WSPrompt
-    fileUpload: WSPrompt
+    sidebarSlogan: Optional[str] = Field(description='侧边栏slogan')
+    welcomeMessage: Optional[str] = Field()
+    functionDescription: Optional[str] = Field()
+    inputPlaceholder: Optional[str]
+    models: Optional[Union[List[WSModel], str]]
+    voiceInput: Optional[WSPrompt]
+    webSearch: Optional[WSPrompt]
+    knowledgeBase: Optional[WSPrompt]
+    fileUpload: Optional[WSPrompt]
 
 
 # 文件切分请求基础参数

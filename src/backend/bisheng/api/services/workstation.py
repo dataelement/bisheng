@@ -1,13 +1,21 @@
 import asyncio
 import json
+from datetime import datetime
+from typing import Optional
 
-from bisheng.api.services import llm
+from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.session import MessageSession
+from bisheng.utils.minio_client import MinioClient
 from fastapi import BackgroundTasks, Request
+from openai import BaseModel
+
+minio_client = MinioClient()
 
 
 class WorkStationService:
@@ -51,12 +59,9 @@ class WorkStationService:
                                               user_id=login_user.user_id,
                                               model=model.embedding_model_id)
 
-            knowledge = KnowledgeService.create_knowledge(request,
-                                                          UserPayload(user_id=login_user.user_id),
-                                                          knowledgeCreate)
+            knowledge = KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)
         else:
             knowledge = knowledge[0]
-
         req_data = KnowledgeFileProcess(knowledge_id=knowledge.id,
                                         file_list=[KnowledgeFileOne(file_path=file_path)])
         res = KnowledgeService.process_knowledge_file(request,
@@ -76,7 +81,7 @@ class WorkStationService:
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                     KnowledgeTypeEnum.PRIVATE)
         if not knowledge:
-            return {'total': 0, 'list': []}
+            return [], 0
         res, total, _ = KnowledgeService.get_knowledge_files(
             request,
             UserPayload(user_id=login_user.user_id),
@@ -84,6 +89,76 @@ class WorkStationService:
             page=page,
             page_size=size)
         return res, total
+
+    @classmethod
+    def queryChunksFromDB(cls, question: str, login_user: UserPayload):
+        knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
+                                                    KnowledgeTypeEnum.PRIVATE)
+
+        if not knowledge:
+            return []
+
+        search_kwargs = {'partition_key': knowledge[0].id}
+        embedding = knowledge_imp.decide_embeddings(knowledge[0].model)
+        vectordb = knowledge_imp.decide_vectorstores(knowledge[0].collection_name, 'Milvus',
+                                                     embedding)
+        vectordb.partition_key = knowledge[0].id
+        content = vectordb.as_retriever(search_kwargs=search_kwargs)._get_relevant_documents(
+            question, run_manager=None)
+        if content:
+            content = [
+                knowledge_imp.KnowledgeUtils.chunk2promt(c.page_content, c.metadata)
+                for c in content
+            ]
+        else:
+            content = []
+        return content
+
+
+class WorkstationMessage(BaseModel):
+    messageId: str
+    conversationId: str
+    createdAt: datetime
+    isCreatedByUser: bool
+    model: Optional[str]
+    parentMessageId: Optional[str]
+    sender: str
+    text: str
+    updateAt: datetime
+
+    @classmethod
+    def from_chat_message(cls, message: ChatMessage):
+        return cls(
+            messageId=message.id,
+            conversationId=message.chat_id,
+            createdAt=message.create_time,
+            updateAt=message.update_time,
+            isCreatedByUser=not message.is_bot,
+            model=None,
+            parentMessageId=json.loads(message.extra).get('parentMessageId'),
+            sender=message.sender,
+            text=message.message,
+        )
+
+
+class WorkstationConversation(BaseModel):
+    conversationId: str
+    user: str
+    createdAt: datetime
+    updateAt: datetime
+    model: Optional[str]
+    title: Optional[str]
+
+    @classmethod
+    def from_chat_session(cls, session: MessageSession):
+        return cls(
+            conversationId=session.chat_id,
+            user=session.user_id,
+            createdAt=session.create_time,
+            updateAt=session.update_time,
+            model=None,
+            title=session.flow_name,
+        )
 
 
 class SSECallbackClient:

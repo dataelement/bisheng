@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -46,10 +47,13 @@ class APIChatCompletion(BaseModel):
 
 
 class delta(BaseModel):
-    id: str
+    id: Optional[str]
     delta: Dict
 
 
 class SSEResponse(BaseModel):
     event: str
     data: delta
+
+    def toString(self) -> str:
+        return f'event: message\ndata: {json.dumps(self.dict())}\n\n'

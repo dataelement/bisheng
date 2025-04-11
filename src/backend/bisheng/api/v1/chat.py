@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services import chat_imp
@@ -77,7 +77,8 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: Optional[int] = Query(..., description='标注任务ID'),
+                      task_id: Optional[int] = Query(default=None, description='标注任务ID'),
+                      flow_type: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
@@ -131,7 +132,12 @@ def get_app_chat_list(*,
             flow_ids = group_flow_ids
 
     # 获取会话列表
-    res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+    res = MessageSessionDao.filter_session(
+        flow_ids=flow_ids,
+        user_ids=user_ids,
+        flow_type=flow_type,
+        include_delete=False,
+    )
     total = len(res)
 
     # 查询会话的状态
@@ -171,6 +177,29 @@ def get_app_chat_list(*,
     result = result[(page_num - 1) * page_size:page_num * page_size]
 
     return resp_200(PageList(list=result, total=total))
+
+
+@router.post('/chat/conversation/rename')
+def rename(conversationId: str = Body(..., description='会话id', embed=True),
+           name: str = Body(..., description='会话名称', embed=True),
+           login_user: UserPayload = Depends(get_login_user)):
+    conversation = MessageSessionDao.get_one(conversationId)
+    conversation.flow_name = name
+    MessageSessionDao.insert_one(conversation)
+    return resp_200()
+
+
+@router.post('/chat/conversation/copy')
+def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
+    conversation = MessageSessionDao.get_one(conversationId)
+    conversation.chat_id = uuid4().hex
+    conversation = MessageSessionDao.insert_one(conversation)
+    msg_list = ChatMessageDao.get_messages_by_chat_id(conversationId)
+    if msg_list:
+        for msg in msg_list:
+            msg.chat_id = conversation.chat_id
+            msg.id = None
+            ChatMessageDao.insert_one(msg)
 
 
 @router.get('/chat/history',

@@ -1,11 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List
-
-from sqlmodel import Field, Column, DateTime, text, select, func, update
+from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from sqlmodel import Column, DateTime, Field, func, select, text, update
 
 
 class SensitiveStatus(Enum):
@@ -25,10 +24,13 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
     copied: Optional[int] = Field(default=0, description='已复制的消息数量')
     sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description='审查状态')
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
+        sa_column=Column(DateTime,
+                         nullable=False,
+                         index=True,
+                         server_default=text('CURRENT_TIMESTAMP'),
                          onupdate=text('CURRENT_TIMESTAMP')))
 
 
@@ -48,7 +50,8 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     def delete_session(cls, chat_id: str):
-        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
+            is_delete=True)
         with session_getter() as session:
             session.exec(statement)
             session.commit()
@@ -60,11 +63,18 @@ class MessageSessionDao(MessageSessionBase):
             return session.exec(statement).first()
 
     @classmethod
-    def generate_filter_session_statement(cls, statement, chat_ids: List[str] = None,
+    def generate_filter_session_statement(cls,
+                                          statement,
+                                          chat_ids: List[str] = None,
                                           sensitive_status: List[SensitiveStatus] = None,
-                                          flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
-                                          start_date: datetime = None, end_date: datetime = None,
-                                          include_delete: bool = True, exclude_chats: List[str] = None):
+                                          flow_ids: List[str] = None,
+                                          user_ids: List[int] = None,
+                                          feedback: str = None,
+                                          start_date: datetime = None,
+                                          end_date: datetime = None,
+                                          include_delete: bool = True,
+                                          exclude_chats: List[str] = None,
+                                          flow_type: int = None):
         if chat_ids:
             statement = statement.where(MessageSession.chat_id.in_(chat_ids))
         if flow_ids:
@@ -80,7 +90,7 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.where(MessageSession.copied > 0)
 
         if not include_delete:
-            statement = statement.where(MessageSession.is_delete == False)
+            statement = statement.where(MessageSession.is_delete is False)
         if exclude_chats:
             statement = statement.where(MessageSession.chat_id.not_in(exclude_chats))
         if start_date:
@@ -88,17 +98,39 @@ class MessageSessionDao(MessageSessionBase):
         if end_date:
             statement = statement.where(MessageSession.create_time <= end_date)
         if sensitive_status:
-            statement = statement.where(MessageSession.sensitive_status.in_([one.value for one in sensitive_status]))
+            statement = statement.where(
+                MessageSession.sensitive_status.in_([one.value for one in sensitive_status]))
+        if flow_type:
+            statement = statement.where(MessageSession.flow_type == flow_type)
+        # 过滤掉被删除的会话
         return statement
 
     @classmethod
-    def filter_session(cls, chat_ids: List[str] = None, sensitive_status: List[SensitiveStatus] = None,
-                       flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
-                       start_date: datetime = None, end_date: datetime = None, include_delete: bool = True,
-                       exclude_chats: List[str] = None, page: int = 0, limit: int = 0) -> List[MessageSession]:
+    def filter_session(cls,
+                       chat_ids: List[str] = None,
+                       sensitive_status: List[SensitiveStatus] = None,
+                       flow_ids: List[str] = None,
+                       user_ids: List[int] = None,
+                       feedback: str = None,
+                       start_date: datetime = None,
+                       end_date: datetime = None,
+                       include_delete: bool = True,
+                       exclude_chats: List[str] = None,
+                       page: int = 0,
+                       limit: int = 0,
+                       flow_type: int = None) -> List[MessageSession]:
         statement = select(MessageSession)
-        statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status, flow_ids, user_ids,
-                                                          feedback, start_date, end_date, include_delete, exclude_chats)
+        statement = cls.generate_filter_session_statement(statement,
+                                                          chat_ids,
+                                                          sensitive_status,
+                                                          flow_ids,
+                                                          user_ids,
+                                                          feedback,
+                                                          start_date,
+                                                          end_date,
+                                                          include_delete,
+                                                          exclude_chats,
+                                                          flow_type=flow_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(MessageSession.create_time.desc())
@@ -106,13 +138,20 @@ class MessageSessionDao(MessageSessionBase):
             return session.exec(statement).all()
 
     @classmethod
-    def filter_session_count(cls, chat_ids: List[str] = None, sensitive_status: List[SensitiveStatus] = None,
-                             flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,
-                             start_date: datetime = None, end_date: datetime = None, include_delete: bool = True,
+    def filter_session_count(cls,
+                             chat_ids: List[str] = None,
+                             sensitive_status: List[SensitiveStatus] = None,
+                             flow_ids: List[str] = None,
+                             user_ids: List[int] = None,
+                             feedback: str = None,
+                             start_date: datetime = None,
+                             end_date: datetime = None,
+                             include_delete: bool = True,
                              exclude_chats: List[str] = None) -> int:
         statement = select(func.count(MessageSession.chat_id))
-        statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status, flow_ids, user_ids,
-                                                          feedback, start_date, end_date, include_delete, exclude_chats)
+        statement = cls.generate_filter_session_statement(statement, chat_ids, sensitive_status,
+                                                          flow_ids, user_ids, feedback, start_date,
+                                                          end_date, include_delete, exclude_chats)
         with session_getter() as session:
             return session.scalar(statement)
 
