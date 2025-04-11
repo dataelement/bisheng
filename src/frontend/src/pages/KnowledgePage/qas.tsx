@@ -651,8 +651,8 @@ export default function QasPage() {
                     </div>
                     <div className="flex gap-4 items-center">
                         <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                        <Button className="px-8" onClick={() => importRef.current.open()}>{t('importQa')}</Button>
-                        <Button className="px-8" onClick={() => {
+                        <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>{t('importQa')}</Button>
+                        <Button variant="outline" className="px-8" onClick={() => {
                             getQaFile(id).then(res => {
                                 const fileUrl = res.file_list[0];
                                 downloadFile(checkSassUrl(fileUrl), `${libInfo.name}.xlsx`);
