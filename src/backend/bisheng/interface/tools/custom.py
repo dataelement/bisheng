@@ -32,7 +32,7 @@ class Function(BaseModel):
         return validate.create_function(self.code, function_name)
 
 
-class PythonFunctionTool(Function, Tool):
+class PythonFunctionTool(Tool):
     """Python function"""
 
     name: str = 'Custom Tool'

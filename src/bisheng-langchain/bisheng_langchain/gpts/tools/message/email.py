@@ -1,11 +1,9 @@
-import os
 import smtplib
-from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Optional
+from typing import Any
 
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)

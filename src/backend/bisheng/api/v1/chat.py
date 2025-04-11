@@ -71,9 +71,7 @@ async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depe
                              media_type='text/event-stream')
 
 
-@router.get('/chat/app/list',
-            response_model=UnifiedResponseModel[PageList[AppChatList]],
-            status_code=200)
+@router.get('/chat/app/list')
 def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
@@ -174,9 +172,7 @@ def get_app_chat_list(*,
     return resp_200(PageList(list=result, total=total))
 
 
-@router.get('/chat/history',
-            response_model=UnifiedResponseModel[List[ChatMessageRead]],
-            status_code=200)
+@router.get('/chat/history')
 def get_chatmessage(*,
                     chat_id: str,
                     flow_id: str,
@@ -381,7 +377,7 @@ def comment_resp(*, data: ChatInput):
     return resp_200(message='操作成功')
 
 
-@router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
+@router.get('/chat/list')
 def get_session_list(*,
                       page: Optional[int] = 1,
                       limit: Optional[int] = 10,
@@ -414,9 +410,7 @@ def get_session_list(*,
 
 
 # 获取所有已上线的技能和助手
-@router.get('/chat/online',
-            response_model=UnifiedResponseModel[List[FlowGptsOnlineList]],
-            status_code=200)
+@router.get('/chat/online')
 def get_online_chat(*,
                     keyword: Optional[str] = None,
                     tag_id: Optional[int] = None,
@@ -495,9 +489,7 @@ async def chat(
             await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=messsage)
 
 
-@router.post('/build/init/{flow_id}',
-             response_model=UnifiedResponseModel[InitResponse],
-             status_code=201)
+@router.post('/build/init/{flow_id}')
 async def init_build(*,
                      graph_data: dict,
                      flow_id: str,
@@ -533,7 +525,7 @@ async def init_build(*,
         return HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get('/build/{flow_id}/status', response_model=UnifiedResponseModel[BuiltResponse])
+@router.get('/build/{flow_id}/status')
 async def build_status(flow_id: str,
                        chat_id: Optional[str] = None,
                        version_id: Optional[int] = Query(default=None, description='技能版本ID')):

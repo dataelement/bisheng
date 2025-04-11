@@ -7,6 +7,8 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
+from pydantic import model_validator, Field
+
 from bisheng_langchain.utils.requests import Requests
 # import requests
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
@@ -15,7 +17,6 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage, ToolMessage)
 from langchain.utils import get_from_dict_or_env
-from langchain_core.pydantic_v1 import Field, root_validator
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
@@ -169,9 +170,10 @@ class ChatQWen(BaseChatModel):
     class Config:
         """Configuration for this pydantic object."""
 
-        allow_population_by_field_name = True
+        validate_by_name = True
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values['api_key'] = get_from_dict_or_env(values, 'api_key', 'QWEN_API_KEY')

@@ -2,13 +2,11 @@ import logging
 import os
 from typing import Any, Dict, Mapping, Optional, Tuple, Type, Union
 
-from langchain.pydantic_v1 import BaseModel, Field
-from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from langchain_community.utils.openai import is_openai_v1
 from langchain_core.callbacks import CallbackManagerForToolRun
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env, get_pydantic_field_names
+from pydantic import model_validator, BaseModel, Field
 
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
 
@@ -63,9 +61,10 @@ class DallEAPIWrapper(BaseModel):
     class Config:
         """Configuration for this pydantic object."""
 
-        extra = Extra.forbid
+        extra = 'forbid'
 
-    @root_validator(pre=True)
+    @model_validator(mode='before')
+    @classmethod
     def build_extra(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Build extra kwargs from additional params that were passed in."""
         all_required_field_names = get_pydantic_field_names(cls)
@@ -91,7 +90,8 @@ class DallEAPIWrapper(BaseModel):
         values["model_kwargs"] = extra
         return values
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values["openai_api_key"] = get_from_dict_or_env(values, "openai_api_key", "OPENAI_API_KEY")

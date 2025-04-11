@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from langchain_core.embeddings import Embeddings
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field
+from pydantic import BaseModel, Extra, Field
 DEFAULT_Multilingual_MODEL = "intfloat/multilingual-e5-large"
 
 

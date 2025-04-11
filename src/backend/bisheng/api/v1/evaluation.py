@@ -15,7 +15,7 @@ from bisheng.cache.utils import convert_encoding_cchardet
 router = APIRouter(prefix='/evaluation', tags=['Skills'], dependencies=[Depends(get_login_user)])
 
 
-@router.get('', response_model=UnifiedResponseModel[List[Evaluation]])
+@router.get('')
 def get_evaluation(*,
                    page: Optional[int] = Query(default=1, gt=0, description='页码'),
                    limit: Optional[int] = Query(default=10, gt=0, description='每页条数'),
@@ -27,7 +27,7 @@ def get_evaluation(*,
     return EvaluationService.get_evaluation(user, page, limit)
 
 
-@router.post('', response_model=UnifiedResponseModel[EvaluationRead], status_code=201)
+@router.post('')
 def create_evaluation(*,
                       file: UploadFile,
                       prompt: str = Form(),
@@ -78,7 +78,7 @@ def delete_evaluation(*, evaluation_id: int, Authorize: AuthJWT = Depends()):
     return EvaluationService.delete_evaluation(evaluation_id, user_payload=user)
 
 
-@router.get('/result/file/download', response_model=UnifiedResponseModel)
+@router.get('/result/file/download')
 async def get_download_url(*,
                            file_url: str,
                            Authorize: AuthJWT = Depends()):

@@ -29,7 +29,7 @@ router = APIRouter(prefix='/assistant', tags=['Assistant'])
 chat_manager = ChatManager()
 
 
-@router.get('', response_model=UnifiedResponseModel[List[AssistantInfo]])
+@router.get('')
 def get_assistant(*,
                   name: str = Query(default=None, description='助手名称，模糊匹配, 包含描述的模糊匹配'),
                   tag_id: int = Query(default=None, description='标签ID'),
@@ -41,13 +41,13 @@ def get_assistant(*,
 
 
 # 获取某个助手的详细信息
-@router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
+@router.get('/info/{assistant_id}')
 def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user)):
     """获取助手信息"""
     return AssistantService.get_assistant_info(assistant_id, login_user)
 
 
-@router.post('/delete', response_model=UnifiedResponseModel)
+@router.post('/delete')
 def delete_assistant(*,
                      request: Request,
                      assistant_id: str,
@@ -56,7 +56,7 @@ def delete_assistant(*,
     return AssistantService.delete_assistant(request, login_user, assistant_id)
 
 
-@router.post('', response_model=UnifiedResponseModel[AssistantInfo])
+@router.post('')
 async def create_assistant(*,
                            request: Request,
                            req: AssistantCreateReq,
@@ -70,7 +70,7 @@ async def create_assistant(*,
         return resp_500(message=f'创建助手出错：{str(e)}')
 
 
-@router.put('', response_model=UnifiedResponseModel[AssistantInfo])
+@router.put('')
 async def update_assistant(*,
                            request: Request,
                            req: AssistantUpdateReq,
@@ -79,7 +79,7 @@ async def update_assistant(*,
     return await AssistantService.update_assistant(request, login_user, req)
 
 
-@router.post('/status', response_model=UnifiedResponseModel)
+@router.post('/status')
 async def update_status(*,
                         request: Request,
                         assistant_id: str = Body(description='助手唯一ID', alias='id'),
@@ -129,7 +129,7 @@ async def auto_update_assistant(*, task_id: str = Query(description='优化任�
 
 
 # 更新助手的提示词
-@router.post('/prompt', response_model=UnifiedResponseModel)
+@router.post('/prompt')
 async def update_prompt(*,
                         assistant_id: str = Body(description='助手唯一ID', alias='id'),
                         prompt: str = Body(description='用户使用的prompt'),
@@ -137,7 +137,7 @@ async def update_prompt(*,
     return AssistantService.update_prompt(assistant_id, prompt, login_user)
 
 
-@router.post('/flow', response_model=UnifiedResponseModel)
+@router.post('/flow')
 async def update_flow_list(*,
                            assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            flow_list: List[str] = Body(description='用户选择的技能列表'),
@@ -145,7 +145,7 @@ async def update_flow_list(*,
     return AssistantService.update_flow_list(assistant_id, flow_list, login_user)
 
 
-@router.post('/tool', response_model=UnifiedResponseModel)
+@router.post('/tool')
 async def update_tool_list(*,
                            assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            tool_list: List[int] = Body(description='用户选择的工具列表'),
@@ -186,7 +186,7 @@ async def chat(*,
             await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=message)
 
 
-@router.get('/tool_list', response_model=UnifiedResponseModel)
+@router.get('/tool_list')
 def get_tool_list(*,
                   is_preset: Optional[bool] = None,
                   login_user: UserPayload = Depends(get_login_user)):
@@ -194,7 +194,7 @@ def get_tool_list(*,
     return resp_200(AssistantService.get_gpts_tools(login_user, is_preset))
 
 
-@router.post('/tool/config', response_model=UnifiedResponseModel)
+@router.post('/tool/config')
 async def update_tool_config(*,
                              login_user: UserPayload = Depends(get_admin_user),
                              tool_id: int = Body(description='工具类别唯一ID'),
@@ -204,7 +204,7 @@ async def update_tool_config(*,
     return resp_200(data=data)
 
 
-@router.post('/tool_schema', response_model=UnifiedResponseModel)
+@router.post('/tool_schema')
 async def get_tool_schema(*,
                           download_url: Optional[str] = Body(default=None,
                                                              description='下载url不为空的话优先用下载url'),
@@ -266,7 +266,7 @@ async def get_tool_schema(*,
         return resp_500(message='openapi schema解析失败：' + str(e))
 
 
-@router.post('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
+@router.post('/tool_list')
 def add_tool_type(*,
                   req: Dict = Body(default={}, description='openapi解析后的工具对象'),
                   login_user: UserPayload = Depends(get_login_user)):
@@ -275,7 +275,7 @@ def add_tool_type(*,
     return AssistantService.add_gpts_tools(login_user, req)
 
 
-@router.put('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
+@router.put('/tool_list')
 def update_tool_type(*,
                      login_user: UserPayload = Depends(get_login_user),
                      req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
@@ -284,13 +284,13 @@ def update_tool_type(*,
     return AssistantService.update_gpts_tools(login_user, req)
 
 
-@router.delete('/tool_list', response_model=UnifiedResponseModel)
+@router.delete('/tool_list')
 def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
     """ 删除自定义工具 """
     return AssistantService.delete_gpts_tools(login_user, req.tool_type_id)
 
 
-@router.post('/tool_test', response_model=UnifiedResponseModel)
+@router.post('/tool_test')
 async def test_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
     """ 测试自定义工具 """
     extra = json.loads(req.extra)

@@ -1,5 +1,5 @@
 from loguru import logger
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from typing import Any
 from .base import APIToolBase
 from .base import MultArgsSchemaTool

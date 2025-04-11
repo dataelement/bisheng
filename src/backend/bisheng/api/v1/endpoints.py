@@ -137,8 +137,8 @@ async def process_flow_old(
 
 
 # For backwards compatibility we will keep the old endpoint
-# @router.post('/predict/{flow_id}', response_model=UnifiedResponseModel[ProcessResponse])
-@router.post('/process', response_model=UnifiedResponseModel[ProcessResponse])
+# @router.post('/predict/{flow_id}')
+@router.post('/process')
 async def process_flow(
         flow_id: Annotated[UUID, Body(embed=True)],
         inputs: Optional[dict] = None,
@@ -319,9 +319,7 @@ async def upload_icon_workflow(request: Request,
     return resp_200(data=resp)
 
 
-@router.post('/upload/{flow_id}',
-             response_model=UnifiedResponseModel[UploadFileResponse],
-             status_code=201)
+@router.post('/upload/{flow_id}')
 async def create_upload_file(file: UploadFile, flow_id: str):
     # Cache file
     try:

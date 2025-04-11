@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 import requests
-from langchain.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
 
 from .base import MultArgsSchemaTool

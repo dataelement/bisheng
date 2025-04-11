@@ -47,8 +47,8 @@ class SubmitFinalAnswer(BaseModel):
     final_answer: str = Field(..., description="The final answer to the user")
 
 class QueryDBTool(BaseTool):
-    name = "db_query_tool"
-    description = """Execute a SQL query against the database and get back the result.
+    name: str = "db_query_tool"
+    description: str = """Execute a SQL query against the database and get back the result.
         If the query is not correct, an error message will be returned.
         If an error is returned, rewrite the query, check the query, and try again."""
 
@@ -241,8 +241,8 @@ class SqlAgentInput(BaseModel):
 
 
 class SqlAgentTool(BaseTool):
-    name = "sql_agent"
-    description = "回答与 SQL 数据库有关的问题。给定用户问题，将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
+    name: str = "sql_agent"
+    description: str = "回答与 SQL 数据库有关的问题。给定用户问题，将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
     args_schema: Type[BaseModel] = SqlAgentInput
     api_wrapper: SqlAgentAPIWrapper
 

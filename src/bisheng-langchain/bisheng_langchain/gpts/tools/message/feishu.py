@@ -1,8 +1,7 @@
 from typing import Any, Optional, Type
 
 import requests
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
-from loguru import logger
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)
@@ -23,7 +22,7 @@ class InputArgs(BaseModel):
 
 
 class FeishuMessageTool(BaseModel):
-    API_BASE_URL = "https://open.feishu.cn/open-apis"
+    API_BASE_URL: str = "https://open.feishu.cn/open-apis"
     app_id: str = Field(description="app_id")
     app_secret: str = Field(description="app_secret")
 

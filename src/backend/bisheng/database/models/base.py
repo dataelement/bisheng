@@ -23,9 +23,7 @@ def orjson_dumps(v, *, default=None, sort_keys=False, indent_2=True):
 class SQLModelSerializable(SQLModel):
 
     class Config:
-        orm_mode = True
-        json_loads = orjson.loads
-        json_dumps = orjson_dumps
+        from_attributes = True
 
     def to_dict(self):
         result = self.model_dump()

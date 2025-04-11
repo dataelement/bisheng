@@ -12,7 +12,7 @@ from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, root_validator, validator, model_validator, field_validator
 
 
 class CaptchaInput(BaseModel):
@@ -55,7 +55,7 @@ class InputRequest(BaseModel):
 
 
 class TweaksRequest(BaseModel):
-    tweaks: Optional[Dict[str, Dict[str, str]]] = Field(default_factory=dict)
+    tweaks: Optional[Dict[str, Dict[str, str]]] = Field(default_factory=dict, description='List of dictionaries')
 
 
 class UpdateTemplateRequest(BaseModel):
@@ -66,7 +66,7 @@ class UpdateTemplateRequest(BaseModel):
 DataT = TypeVar('DataT')
 
 
-class UnifiedResponseModel(Generic[DataT], BaseModel):
+class UnifiedResponseModel(BaseModel, Generic[DataT]):
     """统一响应模型"""
     status_code: int
     status_message: str
@@ -163,7 +163,8 @@ class ChatResponse(ChatMessage):
     is_bot: bool = True
     category: str = 'processing'
 
-    @validator('type')
+    @field_validator('type')
+    @classmethod
     def validate_message_type(cls, v):
         """
         end_cover: 结束并覆盖上一条message
@@ -184,7 +185,8 @@ class FileResponse(ChatMessage):
     type: str = 'file'
     is_bot: bool = True
 
-    @validator('data_type')
+    @field_validator('data_type')
+    @classmethod
     def validate_data_type(cls, v):
         if v not in ['image', 'csv']:
             raise ValueError('data_type must be image or csv')
@@ -427,8 +429,9 @@ class FileProcessBase(BaseModel):
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
 
-    @root_validator
-    def check_separator_rule(cls, values):
+    @model_validator(mode='before')
+    @classmethod
+    def check_separator_rule(cls, values: Any):
         if values['separator'] is None:
             values['separator'] = ['\n\n', '\n']
         if values['separator_rule'] is None:

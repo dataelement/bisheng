@@ -53,7 +53,7 @@ async def clean_inactive_queues(queue: defaultdict, timeout_threshold: timedelta
 
 # 维护一个连接池
 connection_pool = defaultdict(TimedQueue)
-clean_inactive_queues(connection_pool, timedelta(minutes=5))
+# clean_inactive_queues(connection_pool, timedelta(minutes=5))
 
 
 async def get_connection(uri, identifier):

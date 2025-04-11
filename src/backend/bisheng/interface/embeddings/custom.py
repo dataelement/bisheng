@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import numpy as np
 from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, LLMServer,
@@ -6,9 +6,8 @@ from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, 
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
 from langchain.embeddings.base import Embeddings
-from langchain_core.pydantic_v1 import BaseModel
 from loguru import logger
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -57,7 +56,7 @@ class BishengEmbedding(BaseModel, Embeddings):
     model_kwargs: dict = Field(default={}, description='embedding模型调用参数')
 
     embeddings: Optional[Embeddings] = Field(default=None)
-    llm_node_type = {
+    llm_node_type: Dict = {
         # 开源推理框架
         LLMServerType.OLLAMA.value: 'OllamaEmbeddings',
         LLMServerType.XINFERENCE.value: 'OpenAIEmbeddings',
@@ -80,7 +79,7 @@ class BishengEmbedding(BaseModel, Embeddings):
 
     class Config:
         """Configuration for this pydantic object."""
-        allow_population_by_field_name = True
+        validate_by_name = True
         arbitrary_types_allowed = True
 
     def __init__(self, **kwargs):

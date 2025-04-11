@@ -3,7 +3,7 @@ from typing import Any, Dict, Type
 
 import requests
 
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)

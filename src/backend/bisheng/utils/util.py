@@ -5,6 +5,8 @@ from functools import wraps
 from typing import Dict, Optional
 from urllib.parse import urlparse
 
+from pydantic import BaseModel
+
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
 from bisheng.utils import constants
 from docstring_parser import parse  # type: ignore
@@ -70,8 +72,8 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
 
             variables = {'_type': _type}
 
-            if '__fields__' in _class.__dict__:
-                for class_field_items, value in _class.__fields__.items():
+            if getattr(_class, 'model_fields'):
+                for class_field_items, value in _class.model_fields.items():
                     if class_field_items in ['callback_manager']:
                         continue
                     variables[class_field_items] = {}
@@ -217,7 +219,7 @@ def format_dict(d, name: Optional[str] = None):
         if key == '_type':
             continue
 
-        _type = value['type']
+        _type = value['type'] if 'type' in value else value['annotation']
 
         if not isinstance(_type, str):
             _type = type_to_string(_type)
