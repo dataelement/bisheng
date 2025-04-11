@@ -216,7 +216,7 @@ export default function ChatMessages({ operation = false, audit = false, mark = 
                             id={`msg-${msg.id}`}
                             key={msg.id}
                             className="message-item">
-                            <MessageUser audit={audit} mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />
+                            <MessageUser operation={operation} audit={audit} mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />
                         </div>;
                     case 'guide_word':
                     case 'output_msg':
@@ -225,6 +225,7 @@ export default function ChatMessages({ operation = false, audit = false, mark = 
                         id={`msg-${msg.id}`}
                         key={msg.id}
                         className="message-item"><MessageBs
+                            operation={operation}
                             audit={audit}
                             mark={mark}
                             logo={logo}
@@ -252,7 +253,6 @@ export default function ChatMessages({ operation = false, audit = false, mark = 
                             key={msg.id}
                             className="message-item"><MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} flow={flow} /></div>;
                     case 'node_run':
-                        // TODO
                         return <div
                             id={`msg-${msg.id}`}
                             key={msg.id}

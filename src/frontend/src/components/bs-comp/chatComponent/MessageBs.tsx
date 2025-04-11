@@ -137,6 +137,7 @@ export default function MessageBs({ operation = false, mark = false, audit = fal
                             message: data.message || data.thought,
                         })} />
                     <MessageButtons
+                        onlyRead={(audit || operation)}
                         mark={mark}
                         id={data.id}
                         data={data.liked}

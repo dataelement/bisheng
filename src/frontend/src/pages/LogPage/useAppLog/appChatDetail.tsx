@@ -68,7 +68,7 @@ export default function AppChatDetail() {
                 {/* TODO； 这里加flow参数 展示头像  zzy */}
                 {type === AppNumType.FLOW
                     ? <ChatMessages audit logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
-                    : <MessagePanne logo='' useName='' guideWord='' audit
+                    : <MessagePanne audit logo='' useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                     ></MessagePanne>
                 }

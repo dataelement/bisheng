@@ -63,7 +63,7 @@ const ReasoningLog = ({ loading, msg = '' }) => {
         </div>
     </div>
 }
-export default function MessageBs({ audit, mark = false, logo, data, onUnlike = () => { }, onSource, disableBtn = false, onMarkClick, flow }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({operation, audit, mark = false, logo, data, onUnlike = () => { }, onSource, disableBtn = false, onMarkClick, flow }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -130,7 +130,7 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
                         <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
                     </div>
                 </div>
-                {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
+                {(audit || operation) && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
                         {/* TODO */}
@@ -172,12 +172,12 @@ export default function MessageBs({ audit, mark = false, logo, data, onUnlike = 
                         })}
                     />
                     {!disableBtn && <MessageButtons
-                        onlyRead={audit}
+                        onlyRead={(audit || operation)}
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
                         // 审计 & 运营页面展示差评
-                        msgVNode={audit && data.remark && <MsgVNodeCom message={data.remark} />}
+                        msgVNode={(audit || operation) && data.remark && <MsgVNodeCom message={data.remark} />}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
