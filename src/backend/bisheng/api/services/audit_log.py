@@ -41,7 +41,7 @@ class AuditLogService:
                       system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_power_group(login_user.user_id)]
             # 不是任何用戶组的管理员
             if not groups:
                 return UnAuthorizedError.return_resp()
@@ -58,7 +58,7 @@ class AuditLogService:
     def get_all_operators(cls, login_user: UserPayload) -> Any:
         groups = []
         if not login_user.is_admin():
-            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [one.group_id for one in UserGroupDao.get_user_power_group(login_user.user_id)]
 
         data = AuditLogDao.get_all_operators(groups)
         res = []
@@ -443,8 +443,9 @@ class AuditLogService:
         """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 """
         flow_ids = [UUID(one).hex for one in flow_ids]
         group_admins = []
+        logger.info(f"flow_ids {flow_ids} | group_ids {group_ids}")
         if not user.is_admin():
-            user_groups = UserGroupDao.get_user_admin_group(user.user_id)
+            user_groups = UserGroupDao.get_user_power_group(user.user_id)
             # 不是用户组管理员，没有权限
             if not user_groups:
                 raise UnAuthorizedError.http_exception()
@@ -486,9 +487,19 @@ class AuditLogService:
     @classmethod
     def get_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
                          feedback, review_status, page, page_size, keyword=None) -> (list, int):
-        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
-        if not flag:
-            return [], 0
+        # flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        # if not flag:
+        #     return [], 0
+        filter_flow_ids = flow_ids
+        all_user = UserGroupDao.get_groups_user(group_ids)
+        logger.info(f"get_session_list user_ids {user_ids} | all_user {all_user}")
+        user_ids = [str(uid) for uid in user_ids]
+        all_user = [str(one) for one in all_user]
+        if len(user_ids) == 0:
+            user_ids = all_user
+        else:
+            user_ids = list(set(user_ids) & set(all_user))
+        logger.info(f"get_session_list user_ids {user_ids} | group_ids {group_ids}")
         chat_ids = None
         if keyword:
             where = select(ChatMessage).where(ChatMessage.message.like(f'%{keyword}%'),ChatMessage.category == 'question')

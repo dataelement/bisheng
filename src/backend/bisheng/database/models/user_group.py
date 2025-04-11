@@ -93,6 +93,10 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_user_power_group(cls, user_id: int) -> List[UserGroup]:
+        return cls.get_user_admin_group(user_id) + cls.get_user_operation_group(user_id) + cls.get_user_audit_group(user_id)
+
+    @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
         with session_getter() as session:
             user_group = UserGroup.validate(user_group)

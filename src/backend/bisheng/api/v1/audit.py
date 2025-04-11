@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
+from loguru import logger
 from fastapi import APIRouter, Query, Depends, Request, Body
 
 from bisheng.api.services.audit_log import AuditLogService
@@ -65,13 +66,15 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
                      keyword: Optional[str] = Query(default=None,description='历史记录')):
     """ 筛选所有会话列表 """
     if not login_user.is_admin():
-        all_group = UserGroupDao.get_user_operation_groups(login_user.user_id)
+        all_group = UserGroupDao.get_user_audit_groups(login_user.user_id)
+        all_group = [one.group_id for one in all_group]
         if len(group_ids) == 0:
             group_ids = all_group
         else:
             group_ids = list(set(group_ids) & set(all_group))
         if len(group_ids) == 0:
-            group_ids = [""]
+            group_ids = ["-1"]
+    logger.info(f"get_session_list Flow IDs: {flow_ids} | Group IDs: {group_ids}")
     data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                    feedback, review_status, page, page_size, keyword)
     return resp_200(data={
@@ -111,12 +114,14 @@ async def get_session_chart(request: Request, login_user: UserPayload = Depends(
     """ 按照用户组聚合统计会话数据 """
     if not login_user.is_admin():
         all_group = UserGroupDao.get_user_audit_groups(login_user.user_id)
+        all_group = [one.group_id for one in all_group]
         if len(group_ids) == 0:
             group_ids = all_group
         else:
             group_ids = list(set(group_ids) & set(all_group))
         if len(group_ids) == 0:
-            group_ids = [""]
+            group_ids = ["-1"]
+    logger.info(f"Login User: {login_user} | Flow IDs: {flow_ids} | Group IDs: {group_ids}")
     data, total = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date,
                                                     order_field, order_type, page, page_size)
     return resp_200(data={
@@ -134,12 +139,13 @@ async def export_session_chart(request: Request, login_user: UserPayload = Depen
     """ 根据筛选条件导出最终的结果 """
     if not login_user.is_admin():
         all_group = UserGroupDao.get_user_audit_groups(login_user.user_id)
+        all_group = [one.group_id for one in all_group]
         if len(group_ids) == 0:
             group_ids = all_group
         else:
             group_ids = list(set(group_ids) & set(all_group))
         if len(group_ids) == 0:
-            group_ids = [""]
+            group_ids = ["-1"]
     url = AuditLogService.export_session_chart(login_user, flow_ids, group_ids, start_date, end_date, )
     return resp_200(data={
         'url': url
