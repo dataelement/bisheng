@@ -203,7 +203,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNamePrompt'), variant: 'error' });
         }
-        if (!form.department) {
+        if (!form.department && !data.group_name) {
             return toast({ title: t('prompt'), description: '上级用户组不可为空', variant: 'error' });
         }
         const flag = onBeforeChange(form.groupName)
