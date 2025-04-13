@@ -725,17 +725,32 @@ class AuditLogService:
         #     return [], 0
 
         filter_flow_ids = flow_ids
+        logger.info(f"get_session_chart: filter_flow_ids={filter_flow_ids} group_ids={group_ids}")
         all_user = UserGroupDao.get_groups_user(group_ids)
-        logger.info(f"get_session_list all_user {all_user}")
         all_user = [str(one) for one in all_user]
         if len(all_user) == 0:
             return [], 0
-
-        res, total = ChatMessageDao.get_chat_info_group_by_app(filter_flow_ids, start_date, end_date, order_field,
+        logger.info(f"get_session_list all_user {all_user}")
+        # like_num = MessageSessionDao.get_flow_group_like_num(flow_ids=[one.hex for one in flow_ids], user_ids=all_user)
+        # flow_group_like_num = {}
+        # for one in like_num:
+        #     if one['flow_id'] not in flow_group_like_num:
+        #         flow_group_like_num[one['flow_id']] = {}
+        #     if one['group_id'] not in flow_group_like_num[one['flow_id']]:
+        #         flow_group_like_num[one['flow_id']][one['group_id']] = {"likes":0,"dislikes":0}
+        #     flow_group_like_num[one['flow_id']][one['group_id']]['likes'] += one['likes']
+        #     flow_group_like_num[one['flow_id']][one['group_id']]['dislikes'] += one['dislikes']
+        #
+        # logger.info(f"get_session_list flow_group_like_num {flow_group_like_num}")
+        res, total = ChatMessageDao.get_chat_info_group(filter_flow_ids, start_date, end_date, order_field,
                                                                order_type, page, page_size,all_user)
+
+        logger.info(f"get_session_list total={total} res={res}")
+
         if len(res) == 0:
             return res, total
         flow_ids = [one['flow_id'] for one in res]
+
         # 获取这些应用所属的分组信息
         app_groups = GroupResourceDao.get_resources_group(None, [one.hex for one in flow_ids])
         app_groups_map = {}
@@ -766,7 +781,6 @@ class AuditLogService:
             else:
                 continue
             group_ids = app_groups_map.get(one['flow_id'].hex, [])
-
             one['name'] = flow_name
             one['group_info'] = [{
                 'id': group_id,

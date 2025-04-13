@@ -10,6 +10,7 @@ from sqlmodel import Field, delete, select, JSON, Column, DateTime, String, Text
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.session import ReviewStatus
+from bisheng.database.models.user_group import UserGroup
 
 
 class ChatMessageType(Enum):
@@ -376,6 +377,69 @@ class ChatMessageDao(MessageBase):
                 'input_num': one[3],
                 'output_num': one[4],
                 'violations_num': one[5]
+            } for one in res_list
+        ]
+        return res, total
+
+    @classmethod
+    def get_chat_info_group(cls, flow_ids: List[str], start_date: datetime, end_date: datetime, order_field: str,
+                                   order_type: str, page: int, page_size: int,user_ids: List[str]=None):
+        """ 获取会话的一些信息，根据技能来聚合 """
+        count_stat = select(func.count(func.distinct(ChatMessage.flow_id))).select_from(ChatMessage).join(
+            UserGroup, ChatMessage.user_id == UserGroup.group_id)
+        # 构建主查询，明确指定连接的起始表和连接条件
+        sql = select(
+            ChatMessage.flow_id,
+            UserGroup.group_id,
+            func.count(func.distinct(ChatMessage.chat_id)).label('session_num'),
+            func.sum(case((ChatMessage.category == 'question', 1), else_=0)).label('input_num'),
+            func.sum(case((ChatMessage.category != 'question', 1), else_=0)).label('output_num'),
+            func.sum(case((ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1), else_=0)).label(
+                'violations_num'),
+            func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.UNRATED.value, 1),
+                          else_=0)).label('unrateds'),
+            func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.LIKED.value, 1),
+                          else_=0)).label('likes'),
+            func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
+                          else_=0)).label('dislikes')
+        ).select_from(ChatMessage).join(UserGroup, ChatMessage.user_id == UserGroup.group_id)
+
+        if flow_ids:
+            sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
+            count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
+        if start_date:
+            sql = sql.where(ChatMessage.create_time >= start_date)
+            count_stat = count_stat.where(ChatMessage.create_time >= start_date)
+        if end_date:
+            sql = sql.where(ChatMessage.create_time <= end_date)
+            count_stat = count_stat.where(ChatMessage.create_time <= end_date)
+        if user_ids:
+            sql = sql.where(ChatMessage.user_id.in_(user_ids))
+            count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
+
+        sql = sql.group_by(ChatMessage.flow_id,UserGroup.group_id)
+        if order_field and order_type:
+            sql = sql.order_by(text(f'{order_field} {order_type}'))
+            pass
+        else:
+            sql = sql.order_by(func.min(ChatMessage.create_time).desc())
+        if page and page_size:
+            sql = sql.offset((page - 1) * page_size).limit(page_size)
+
+        with session_getter() as session:
+            res_list = session.exec(sql).all()
+            total = session.scalar(count_stat)
+        res = [
+            {
+                'flow_id': one[0],
+                'group_id': one[1],
+                'session_num': one[2],
+                'input_num': one[3],
+                'output_num': one[4],
+                'violations_num': one[5],
+                'unrateds':one[6],
+                'likes':one[7],
+                'dislikes':one[8]
             } for one in res_list
         ]
         return res, total
