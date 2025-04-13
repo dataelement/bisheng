@@ -22,9 +22,11 @@ from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRea
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import AdminRole, RoleDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.services.session.service import SessionService
 
 
 class RoleGroupService():
@@ -551,6 +553,10 @@ class RoleGroupService():
             if not groups:
                 return [], 0
 
+        all_user = UserGroupDao.get_groups_user(groups)
+        if len(all_user) == 0:
+            return [], 0
+        MessageSessionDao.generate_filter_session_statement(all_user)
         resource_ids = []
         # 说明是用户组管理员，需要过滤获取到对应组下的资源
         if groups:

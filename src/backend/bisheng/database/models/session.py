@@ -93,6 +93,11 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.where(MessageSession.review_status.in_([one.value for one in review_status]))
         return statement
 
+    def get_user_flow(self,user_ids: list[int]) -> Optional[int]:
+        statement = select(func.distinct(MessageSession.flow_id)).where(MessageSession.user_id.in_(user_ids))
+        with session_getter() as session:
+            return session.exec(statement).all()
+
     @classmethod
     def filter_session(cls, chat_ids: List[str] = None, review_status: List[ReviewStatus] = None,
                        flow_ids: List[str] = None, user_ids: List[int] = None, feedback: str = None,

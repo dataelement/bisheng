@@ -4,6 +4,7 @@ from typing import Optional, List
 from loguru import logger
 from fastapi import APIRouter, Query, Depends, Request, Body
 
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schema.audit import ReviewSessionConfig
@@ -73,7 +74,7 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
         else:
             group_ids = list(set(group_ids) & set(all_group))
         if len(group_ids) == 0:
-            group_ids = ["-1"]
+            return UnAuthorizedError.return_resp()
     logger.info(f"get_session_list Flow IDs: {flow_ids} | Group IDs: {group_ids}")
     data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                    feedback, review_status, page, page_size, keyword)
@@ -120,7 +121,7 @@ async def get_session_chart(request: Request, login_user: UserPayload = Depends(
         else:
             group_ids = list(set(group_ids) & set(all_group))
         if len(group_ids) == 0:
-            group_ids = ["-1"]
+            return UnAuthorizedError.return_resp()
     logger.info(f"Login User: {login_user} | Flow IDs: {flow_ids} | Group IDs: {group_ids}")
     data, total = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date,
                                                     order_field, order_type, page, page_size)
@@ -145,7 +146,7 @@ async def export_session_chart(request: Request, login_user: UserPayload = Depen
         else:
             group_ids = list(set(group_ids) & set(all_group))
         if len(group_ids) == 0:
-            group_ids = ["-1"]
+            return UnAuthorizedError.return_resp()
     url = AuditLogService.export_session_chart(login_user, flow_ids, group_ids, start_date, end_date, )
     return resp_200(data={
         'url': url

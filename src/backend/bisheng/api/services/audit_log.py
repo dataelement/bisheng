@@ -499,6 +499,8 @@ class AuditLogService:
             user_ids = all_user
         else:
             user_ids = list(set(user_ids) & set(all_user))
+        if len(user_ids) == 0:
+            return False, []
         logger.info(f"get_session_list user_ids {user_ids} | group_ids {group_ids}")
         chat_ids = None
         if keyword:
@@ -718,12 +720,19 @@ class AuditLogService:
                           page_size: int = 0) -> (List, int):
 
         """ 获取会话聚合数据 """
-        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
-        if not flag:
+        # flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        # if not flag:
+        #     return [], 0
+
+        filter_flow_ids = flow_ids
+        all_user = UserGroupDao.get_groups_user(group_ids)
+        logger.info(f"get_session_list all_user {all_user}")
+        all_user = [str(one) for one in all_user]
+        if len(all_user) == 0:
             return [], 0
 
         res, total = ChatMessageDao.get_chat_info_group_by_app(filter_flow_ids, start_date, end_date, order_field,
-                                                               order_type, page, page_size)
+                                                               order_type, page, page_size,all_user)
         if len(res) == 0:
             return res, total
         flow_ids = [one['flow_id'] for one in res]

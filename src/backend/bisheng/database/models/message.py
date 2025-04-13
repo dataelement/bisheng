@@ -331,7 +331,7 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_chat_info_group_by_app(cls, flow_ids: List[str], start_date: datetime, end_date: datetime, order_field: str,
-                                   order_type: str, page: int, page_size: int):
+                                   order_type: str, page: int, page_size: int,user_ids: List[str]=None):
         """ 获取会话的一些信息，根据技能来聚合 """
         count_stat = select(func.count(func.distinct(ChatMessage.flow_id)))
         sql = select(
@@ -352,6 +352,9 @@ class ChatMessageDao(MessageBase):
         if end_date:
             sql = sql.where(ChatMessage.create_time <= end_date)
             count_stat = count_stat.where(ChatMessage.create_time <= end_date)
+        if user_ids:
+            sql = sql.where(ChatMessage.user_id.in_(user_ids))
+            count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
 
         sql = sql.group_by(ChatMessage.flow_id)
         if order_field and order_type:
