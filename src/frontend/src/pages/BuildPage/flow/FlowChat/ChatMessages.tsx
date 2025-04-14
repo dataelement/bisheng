@@ -225,6 +225,7 @@ export default function ChatMessages({ operation = false, audit = false, mark = 
                         id={`msg-${msg.id}`}
                         key={msg.id}
                         className="message-item"><MessageBs
+                            flow={flow}
                             operation={operation}
                             audit={audit}
                             mark={mark}
