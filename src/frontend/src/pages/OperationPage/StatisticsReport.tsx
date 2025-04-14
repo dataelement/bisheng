@@ -94,6 +94,28 @@ export default function StatisticsReport({ onBack, onJump }) {
         setGoodValue(v)
     }
 
+    function calculatePercentage(row, goodValue = '1') {
+        // 1. 检查 row 是否存在且包含必要的属性
+        if (!row || typeof row !== 'object') return '0%';
+        
+        // 2. 确保所有值都是有效数字
+        const likes = Number(row.likes) || 0;
+        const dislikes = Number(row.dislikes) || 0;
+        const outputNum = Number(row.output_num) || 0; // 防止除以零
+        
+        // 3. 计算有效值
+        const numerator = goodValue === '1' ? likes : (outputNum - dislikes);
+        
+        // 4. 安全除法计算
+        if (outputNum <= 0) return '0%'; // 避免除以零
+        
+        // 5. 计算百分比并限制范围在 0-100% 之间
+        const percentage = Math.min(100, Math.max(0, (numerator / outputNum) * 100));
+        
+        // 6. 格式化为百分比字符串（保留2位小数）
+        return percentage.toFixed(2) + '%';
+      }
+
     return (
         <div className="relative py-4">
             {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -178,7 +200,7 @@ export default function StatisticsReport({ onBack, onJump }) {
                                     {/* 差评数 */}
                                     <TableCell>{row.dislikes}</TableCell>
                                     {/* 应用满意度 (根据好评数分类来看)*/}
-                                    <TableCell>{((((goodValue === '1' ? row.likes : row.not_dislikes) / row.input_num) * 100).toFixed(2)) + '%'}</TableCell>
+                                    <TableCell>{calculatePercentage(row, goodValue)}</TableCell>
                                     {/* 会话数 */}
                                     <TableCell>
                                         <a className="cursor-pointer text-primary" onClick={() => {
