@@ -178,7 +178,7 @@ export default function StatisticsReport({ onBack, onJump }) {
                                     {/* 差评数 */}
                                     <TableCell>{row.dislikes}</TableCell>
                                     {/* 应用满意度 (根据好评数分类来看)*/}
-                                    <TableCell>{((((goodValue === '1' ? row.likes : row.not_dislikes) / row.output_num) * 100).toFixed(2)) + '%'}</TableCell>
+                                    <TableCell>{((((goodValue === '1' ? row.likes : row.not_dislikes) / row.input_num) * 100).toFixed(2)) + '%'}</TableCell>
                                     {/* 会话数 */}
                                     <TableCell>
                                         <a className="cursor-pointer text-primary" onClick={() => {
