@@ -34,6 +34,8 @@ class LLMNode(BaseNode):
         # 初始化llm对象
         self._stream = True
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
+                                               temperature=self.node_params.get(
+                                                   'temperature', 0.3),
                                                params={'stream': self._stream},
                                                cache=False)
 
