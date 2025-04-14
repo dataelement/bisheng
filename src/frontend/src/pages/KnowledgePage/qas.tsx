@@ -235,7 +235,7 @@ const ImportQa = forwardRef( function ({ knowlageId, onChange } : any, ref) {
                         <Label>{t('sampleFile')}:</Label>
                          <Button variant="link" className="px-1" onClick={() => {
                             getQaFile('template').then(res => {
-                                const fileUrl = res.file_list[0];
+                                const fileUrl = res.url;
                                 downloadFile(checkSassUrl(fileUrl), t('qaSample'));
                             })
                          }}>
