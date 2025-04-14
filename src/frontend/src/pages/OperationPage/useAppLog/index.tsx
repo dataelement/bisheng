@@ -49,7 +49,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                 ...filters,
                 appName: [{ label: initFilter.name, value: initFilter.flow_id }],
                 userGroup: initFilter.group_info[0].id,
-                result: '3'
+                // result: '3'
             }
             setFilters(param)
             filterData(param)
