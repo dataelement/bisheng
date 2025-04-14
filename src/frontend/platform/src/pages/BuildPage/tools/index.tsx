@@ -2,7 +2,7 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { userContext } from "@/contexts/userContext";
-import { getAssistantMcpApi, getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getAssistantMcpApi, getAssistantToolsApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -190,17 +190,20 @@ const useMcpRefrensh = () => {
         async refresh() {
             setLoading(true);
             // api
-            setTimeout(() => {
+            const res = await refreshAssistantMcpApi()
+            console.log('刷新 :>> ', res);
+            if (res) {
                 message({
                     variant: "success",
                     description: "刷新成功"
                 })
+            } else {
                 message({
                     variant: "error",
                     description: "{xxx MCP服务器名称}工具获取失败，请重试"
                 })
-                setLoading(false);
-            }, 1000);
+            }
+            setLoading(false);
         }
     }
 }

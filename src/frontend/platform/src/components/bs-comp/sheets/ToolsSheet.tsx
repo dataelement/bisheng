@@ -2,7 +2,7 @@ import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
-import { getAssistantMcpApi, getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import ToolItem from "@/pages/BuildPage/tools/ToolItem";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -16,8 +16,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
     const [allData, setAllData] = useState([])
 
     useEffect(() => {
-        const p = type === 'mcp' ? getAssistantMcpApi() : getAssistantToolsApi(type)
-        p.then(res => {
+        getAssistantToolsApi(type).then(res => {
             setAllData(res)
             setKeyword('')
         })

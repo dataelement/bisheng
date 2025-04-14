@@ -80,19 +80,28 @@ export const getChatOnlineApi = async (page, keyword, tag_id) => {
 
 
 // 获取工具集合
-export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom'): Promise<any> => {
+// 之前的is_preset字段改为了枚举
+// 0：自定义api工具
+// 1：预置工具
+// 2：mcp工具
+export const getAssistantToolsApi = async (type: 'all' | 'default' | 'custom' | 'mcp'): Promise<any> => {
     const queryStr = {
         all: '',
-        default: '?is_preset=true',
-        custom: '?is_preset=false'
+        default: '?is_preset=1',
+        custom: '?is_preset=0',
+        mcp: '?is_preset=2'
     }
     return await axios.get(`/api/v1/assistant/tool_list${queryStr[type]}`)
 };
 
 // 获取mcp服务集合
 export const getAssistantMcpApi = async (): Promise<any> => {
-    // TODO 转换数据结构与getAssistantToolsApi一致,方便ui处理
-    return await axios.get(`/api/v1/assistant/tool_list?is_preset=false`)
+    return getAssistantToolsApi('mcp')
+}
+
+// 刷新mcp服务
+export const refreshAssistantMcpApi = async (): Promise<any> => {
+    return await axios.post(`/api/v1/assistant/mcp/refresh`)
 }
 
 // 修改内置工具配置
