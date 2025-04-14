@@ -9,6 +9,7 @@ from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schema.audit import ReviewSessionConfig
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.group import GroupDao
+from bisheng.database.models.session import ReviewStatus
 from bisheng.database.models.user_group import UserGroupDao
 
 router = APIRouter(prefix='/operation', tags=['Operation'])
@@ -37,6 +38,7 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
         group_ids = list(set(group_ids) & set(all_group))
     if len(group_ids) == 0:
         return UnAuthorizedError.return_resp()
+    review_status = [ReviewStatus(review_status)] if review_status else []
     data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                    feedback, review_status, page, page_size, keyword)
     return resp_200(data={

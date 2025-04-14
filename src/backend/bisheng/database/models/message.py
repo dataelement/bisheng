@@ -405,7 +405,7 @@ class ChatMessageDao(MessageBase):
             (func.sum(case((ChatMessage.category == 'question', 1), else_=0)) - func.sum(
                 case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
                      else_=0))).label('not_dislikes')
-        ).select_from(ChatMessage).join(UserGroup, ChatMessage.user_id == UserGroup.group_id)
+        ).select_from(ChatMessage).join(UserGroup, ChatMessage.user_id == UserGroup.user_id)
 
         if flow_ids:
             sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
@@ -430,7 +430,7 @@ class ChatMessageDao(MessageBase):
             sql = sql.offset((page - 1) * page_size).limit(page_size)
 
         from sqlalchemy.dialects import mysql
-        print("Compiled SQL:", sql.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        print("get_chat_info_group Compiled SQL:", sql.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
 
         with session_getter() as session:
             res_list = session.exec(sql).all()

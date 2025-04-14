@@ -203,6 +203,7 @@ def del_chat_id(*,
     session_chat = MessageSessionDao.get_one(chat_id)
     if not session_chat or session_chat.is_delete:
         return resp_200(message='删除成功')
+    session_chat.flow_id = session_chat.flow_id.replace('-','')
     # 处理临时数据
     col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
     logger.info('tmp_delete_milvus col={}', col_name)
