@@ -548,7 +548,7 @@ export type BsConfig = {
   inputPlaceholder: string;
   models: Array<{
     key: string;
-    id: number;
+    id: string;
     name: string;
     displayName: string;
   }>;
@@ -817,7 +817,7 @@ export const initialModelsConfig: TModelsConfig = {
 export const EndpointURLs: { [key in EModelEndpoint]: string } = {
   [EModelEndpoint.openAI]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.openAI}`,
   [EModelEndpoint.google]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.google}`,
-  [EModelEndpoint.custom]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.custom}`,
+  [EModelEndpoint.custom]: `${__APP_ENV__.BASE_URL}/api/v1/workstation/chat/completions`,
   [EModelEndpoint.anthropic]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.anthropic}`,
   [EModelEndpoint.gptPlugins]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.gptPlugins}`,
   [EModelEndpoint.azureOpenAI]: `${__APP_ENV__.BASE_URL}/api/ask/${EModelEndpoint.azureOpenAI}`,

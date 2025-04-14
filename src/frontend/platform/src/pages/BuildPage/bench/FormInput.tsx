@@ -20,14 +20,14 @@ export const FormInput = ({
     placeholder?: string;
     isTextarea?: boolean;
 }) => (
-    <div className="mb-6">
+    <div className={`mb-6 ${isTextarea ? '' : 'pr-96'}`}>
         {typeof label === 'string' ? <p className="text-lg font-bold mb-2">{label}</p> : label}
         {isTextarea ? (
             <Textarea
                 value={value}
                 placeholder={placeholder}
                 onChange={(e) => onChange(e.target.value)}
-                className="mt-3"
+                className="mt-3 min-h-48"
             />
         ) : (
             <Input

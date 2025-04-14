@@ -663,6 +663,15 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
   return await axios.get(`/api/v1/finetune/gpu`);
 }
 
+// 工作台配置
+export async function setWorkstationConfigApi(data): Promise<any> {
+  return await axios.post(`api/v1/workstation/config`, data);
+}
+export async function getWorkstationConfigApi(): Promise<any> {
+  return await axios.get(`api/v1/workstation/config`);
+}
+
+
 /***************************
  * ************ 溯源 ************ 
  */

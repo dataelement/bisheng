@@ -60,12 +60,12 @@ export const getKnowledgeColumns = (
       cell: ({ row }) => {
         return (
           <div className="flex items-center gap-3">
-            {/* <div
+            <div
               className="cursor-pointer rounded-md px-2 py-1 hover:bg-gray-100"
-              onClick={() => handleDownload(row.original)}
+              onClick={() => handleDownload(row.original.object_name, row.original.file_name)}
             >
               <Download className="h-5 w-5" />
-            </div> */}
+            </div>
             <div
               className="cursor-pointer rounded-md text-red-700 px-2 py-1 hover:bg-gray-100"
               onClick={() => handleDelete(row.original.id)}

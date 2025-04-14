@@ -2,8 +2,12 @@
 import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
 import { Label } from "@/components/bs-ui/label";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
-import { useState } from "react";
+import { locationContext } from "@/contexts/locationContext";
+import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { useContext, useEffect, useState } from "react";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
@@ -17,9 +21,12 @@ export interface FormErrors {
     functionDescription: string;
     inputPlaceholder: string;
     modelNames: string[] | string[][];
+    webSearch?: Record<string, string>; // 新增动态错误存储
+    model: string; ƒ
 }
 
 export interface ChatConfigForm {
+    menuShow: boolean;
     sidebarIcon: {
         enabled: boolean;
         image: string;
@@ -92,9 +99,14 @@ export default function index() {
 
     return (
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
-            <Card className="max-w-[985px]">
+            <Card className="">
                 <CardContent className="pt-4 relative  ">
-                    <div className="w-full pr-96  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                    <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <ToggleSection
+                            title="菜单授权-工作台入口"
+                            enabled={formData.menuShow}
+                            onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
+                        >{null}</ToggleSection>
                         {/* Icon Uploads */}
                         <p className="text-lg font-bold mb-2">图标上传</p>
                         <div className="flex gap-8 mb-6">
@@ -106,7 +118,7 @@ export default function index() {
                                 onUpload={(fileUrl) => uploadAvator(fileUrl, 'sidebar')}
                             />
                             <IconUploadSection
-                                label="助手图标"
+                                label="欢迎页面图标&对话头像"
                                 enabled={formData.assistantIcon.enabled}
                                 image={formData.assistantIcon.image}
                                 onToggle={(enabled) => toggleFeature('assistantIcon', enabled)}
@@ -157,6 +169,7 @@ export default function index() {
                             <ModelManagement
                                 models={formData.models}
                                 errors={errors.modelNames}
+                                error={errors.model}
                                 onAdd={addModel}
                                 onRemove={(index) => {
                                     const newModels = [...formData.models];
@@ -203,6 +216,7 @@ export default function index() {
                                     ...prev,
                                     webSearch: { ...prev.webSearch, [field]: value }
                                 }))}
+                                errors={errors.webSearch} // 传递错误信息
                             />
                         </ToggleSection>
 
@@ -246,7 +260,7 @@ export default function index() {
                     </div>
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-4 right-4">
-                        <Preview />
+                        <Preview onBeforView={handleSave} />
                         <Button onClick={handleSave}>保存</Button>
                     </div>
                 </CardContent>
@@ -260,6 +274,7 @@ export default function index() {
 
 const useChatConfig = () => {
     const [formData, setFormData] = useState<ChatConfigForm>({
+        menuShow: true,
         sidebarIcon: { enabled: true, image: '' },
         assistantIcon: { enabled: true, image: '' },
         sidebarSlogan: '',
@@ -293,9 +308,19 @@ const useChatConfig = () => {
         knowledgeBase: { enabled: true, prompt: '' },
         fileUpload: {
             enabled: true,
-            prompt: '[file name]: {file_name}\n...',
+            prompt: `[file name]: {file_name}
+[file content begin]
+{file_content}
+[file content end]
+{question}`,
         },
     });
+
+    useEffect(() => {
+        getWorkstationConfigApi().then((res) => {
+            res && setFormData(res);
+        })
+    }, [])
 
     const [errors, setErrors] = useState<FormErrors>({
         sidebarSlogan: '',
@@ -329,6 +354,7 @@ const useChatConfig = () => {
             welcomeMessage: '',
             functionDescription: '',
             inputPlaceholder: '',
+            model: '',
             modelNames: [],
         };
 
@@ -356,6 +382,10 @@ const useChatConfig = () => {
         }
 
         // Validate models
+        if (formData.models.length === 0) {
+            newErrors.model = '至少添加一个模型';
+            isValid = false;
+        }
         const modelNameErrors: string[][] = [];
         formData.models.forEach((model, index) => {
             const displayName = model.displayName.trim();
@@ -363,7 +393,7 @@ const useChatConfig = () => {
 
             // 检查是否为空
             if (!displayName) {
-                error = ['', '模型名称不能为空'];
+                error = ['', '模型显示名称不能为空'];
             }
             // 检查长度
             else if (displayName.length > 30) {
@@ -395,39 +425,71 @@ const useChatConfig = () => {
             }
         });
 
+        // Validate web search
+        if (formData.webSearch.enabled) {
+            const webSearchErrors: Record<string, string> = {};
+
+            // 根据当前工具动态校验
+            switch (formData.webSearch.tool) {
+                case 'bing':
+                    if (!formData.webSearch.bingKey.trim()) {
+                        webSearchErrors.bingKey = '必填字段';
+                        isValid = false;
+                    }
+                    if (!formData.webSearch.bingUrl.trim()) {
+                        webSearchErrors.bingUrl = '必填字段';
+                        isValid = false;
+                    }
+                    break;
+                // 未来其他工具的校验可以在这里扩展
+            }
+
+            if (Object.keys(webSearchErrors).length) {
+                newErrors.webSearch = webSearchErrors;
+            }
+        }
+
         newErrors.modelNames = modelNameErrors;
 
         setErrors(newErrors);
         return isValid;
     };
 
+    const { toast } = useToast()
+    const { reloadConfig } = useContext(locationContext)
     const handleSave = async () => {
         if (!validateForm()) {
             return;
         }
 
-        try {
-            // Prepare the data to be saved
-            const dataToSave = {
-                ...formData,
-                // Ensure sidebar slogan has a default value
-                sidebarSlogan: formData.sidebarSlogan.trim() || 'Deepseek',
-                welcomeMessage: formData.welcomeMessage.trim() || '我是 DeepSeek，很高兴见到你！',
-                functionDescription: formData.functionDescription.trim() || '我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～',
-                inputPlaceholder: formData.inputPlaceholder.trim() || '使用默认“给Deepseek发送消息',
-            };
 
-            // Here you would typically make an API call to save the data
-            // For example:
-            // const response = await api.saveChatConfig(dataToSave);
-            console.log('Saving data:', dataToSave);
+        // Prepare the data to be saved
+        const dataToSave = {
+            ...formData,
+            // Ensure sidebar slogan has a default value
+            sidebarSlogan: formData.sidebarSlogan.trim() || 'Deepseek',
+            welcomeMessage: formData.welcomeMessage.trim() || '我是 DeepSeek，很高兴见到你！',
+            functionDescription: formData.functionDescription.trim() || '我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～',
+            inputPlaceholder: formData.inputPlaceholder.trim() || '给Deepseek发送消息',
+        };
 
-            // Show success message or handle response
-            // toast.success('配置保存成功');
-        } catch (error) {
-            console.error('保存失败:', error);
-            // toast.error('保存失败');
-        }
+        // Here you would typically make an API call to save the data
+        // For example:
+        // const response = await api.saveChatConfig(dataToSave);
+        console.log('Saving data:', dataToSave);
+
+        captureAndAlertRequestErrorHoc(setWorkstationConfigApi(dataToSave)).then((res) => {
+            if (res) {
+                // Show success message or handle response
+                toast({
+                    variant: 'success',
+                    description: '配置保存成功',
+                })
+                reloadConfig()
+            }
+        })
+
+        return true
     };
 
     return {

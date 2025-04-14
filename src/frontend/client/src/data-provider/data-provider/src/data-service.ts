@@ -1,14 +1,15 @@
+import { data } from './../../../components/Chat/Menus/Models/fakeData';
 import type { AxiosResponse } from 'axios';
-import type * as t from './types';
 import * as endpoints from './api-endpoints';
-import * as a from './types/assistants';
-import * as m from './types/mutations';
-import * as q from './types/queries';
-import * as f from './types/files';
 import * as config from './config';
 import request from './request';
-import * as s from './schemas';
 import * as r from './roles';
+import * as s from './schemas';
+import type * as t from './types';
+import * as a from './types/assistants';
+import * as f from './types/files';
+import * as m from './types/mutations';
+import * as q from './types/queries';
 
 export function abortRequestWithMessage(
   endpoint: string,
@@ -34,7 +35,7 @@ export function getMessagesByConvoId(conversationId: string): Promise<s.TMessage
   if (conversationId === 'new') {
     return Promise.resolve([]);
   }
-  return request.get(endpoints.messages(conversationId));
+  return request.get(endpoints.messages(conversationId)).then(res => res.data);
 }
 
 export function getSharedMessages(shareId: string): Promise<t.TSharedMessagesResponse> {
@@ -118,14 +119,35 @@ export function deletePreset(arg: s.TPreset | undefined): Promise<m.PresetDelete
 }
 
 export function getSearchEnabled(): Promise<boolean> {
+  return Promise.resolve(true);
   return request.get(endpoints.searchEnabled());
 }
 
 export function getUser(): Promise<t.TUser> {
-  return request.get(endpoints.user());
+  return request.get(endpoints.user()).then(res => {
+    const { user_id, user_name, create_time, update_time } = res.data;
+    return {
+      "_id": user_id,
+      "name": user_name,
+      "username": user_name,
+      "email": user_name,
+      "emailVerified": true,
+      "avatar": null,
+      "provider": "local",
+      "role": "USER",
+      "plugins": [],
+      "termsAccepted": false,
+      "backupCodes": [],
+      "refreshToken": [],
+      "createdAt": create_time,
+      "updatedAt": update_time,
+      "id": user_id
+    }
+  });
 }
 
 export function getUserBalance(): Promise<string> {
+  return Promise.resolve('');
   return request.get(endpoints.balance());
 }
 
@@ -146,7 +168,10 @@ export const register = (payload: t.TRegisterUser) => {
 };
 
 export const userKeyQuery = (name: string): Promise<t.TCheckUserKeyResponse> =>
-  request.get(endpoints.userKeyQuery(name));
+  Promise.resolve({
+    expiresAt: null
+  });
+// request.get(endpoints.userKeyQuery(name));
 
 export const getLoginGoogle = () => {
   return request.get(endpoints.loginGoogle());
@@ -183,66 +208,89 @@ export const updateUserPlugins = (payload: t.TUpdateUserPlugins) => {
 /* Config */
 
 export const getStartupConfig = (): Promise<config.TStartupConfig> => {
-  return request.get(endpoints.config());
-};
-
-export const getBishengConfig = (): Promise<config.BsConfig> => {
   // return request.get(endpoints.config());
   return Promise.resolve({
-    "sidebarIcon": {
-      "enabled": true,
-      "image": "https://bisheng.dataelem.com/application-start-logo.png"
-    },
-    "assistantIcon": {
-      "enabled": true,
-      "image": "https://bisheng.dataelem.com/user.png"
-    },
-    "sidebarSlogan": "Deepseek",
-    "welcomeMessage": "我是 DeepSeek，很高兴见到你！",
-    "functionDescription": "我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～",
-    "inputPlaceholder": "给Deepseek发送消息",
-    "models": [
-      {
-        "key": "88ae",
-        "id": 26,
-        "name": "",
-        "displayName": "chatgpt"
-      },
-      {
-        "key": "777f",
-        "id": 25,
-        "name": "",
-        "displayName": "deepseek"
-      }
+    "appTitle": "LibreChat",
+    "socialLogins": [
+      "github",
+      "google",
+      "discord",
+      "openid",
+      "facebook",
+      "apple"
     ],
-    "voiceInput": {
-      "enabled": false,
-      "model": ""
+    "discordLoginEnabled": false,
+    "facebookLoginEnabled": false,
+    "githubLoginEnabled": false,
+    "googleLoginEnabled": false,
+    "appleLoginEnabled": false,
+    "openidLoginEnabled": false,
+    "openidLabel": "Continue with OpenID",
+    "openidImageUrl": "",
+    "serverDomain": "http://localhost:3080",
+    "emailLoginEnabled": true,
+    "registrationEnabled": true,
+    "socialLoginEnabled": false,
+    "emailEnabled": false,
+    "passwordResetEnabled": false,
+    "checkBalance": false,
+    "showBirthdayIcon": false,
+    "helpAndFaqURL": "https://librechat.ai",
+    "interface": {
+      "endpointsMenu": true,
+      "modelSelect": true,
+      "parameters": true,
+      "presets": true,
+      "sidePanel": true,
+      "privacyPolicy": {
+        "externalUrl": "https://librechat.ai/privacy-policy",
+        "openNewTab": true
+      },
+      "termsOfService": {
+        "externalUrl": "https://librechat.ai/tos",
+        "openNewTab": true,
+        "modalAcceptance": true,
+        "modalTitle": "Terms of Service for LibreChat",
+        "modalContent": "# Terms and Conditions for LibreChat\n\n*Effective Date: February 18, 2024*\n\nWelcome to LibreChat, the informational website for the open-source AI chat platform, available at https://librechat.ai. These Terms of Service (\"Terms\") govern your use of our website and the services we offer. By accessing or using the Website, you agree to be bound by these Terms and our Privacy Policy, accessible at https://librechat.ai//privacy.\n\n## 1. Ownership\n\nUpon purchasing a package from LibreChat, you are granted the right to download and use the code for accessing an admin panel for LibreChat. While you own the downloaded code, you are expressly prohibited from reselling, redistributing, or otherwise transferring the code to third parties without explicit permission from LibreChat.\n\n## 2. User Data\n\nWe collect personal data, such as your name, email address, and payment information, as described in our Privacy Policy. This information is collected to provide and improve our services, process transactions, and communicate with you.\n\n## 3. Non-Personal Data Collection\n\nThe Website uses cookies to enhance user experience, analyze site usage, and facilitate certain functionalities. By using the Website, you consent to the use of cookies in accordance with our Privacy Policy.\n\n## 4. Use of the Website\n\nYou agree to use the Website only for lawful purposes and in a manner that does not infringe the rights of, restrict, or inhibit anyone else's use and enjoyment of the Website. Prohibited behavior includes harassing or causing distress or inconvenience to any person, transmitting obscene or offensive content, or disrupting the normal flow of dialogue within the Website.\n\n## 5. Governing Law\n\nThese Terms shall be governed by and construed in accordance with the laws of the United States, without giving effect to any principles of conflicts of law.\n\n## 6. Changes to the Terms\n\nWe reserve the right to modify these Terms at any time. We will notify users of any changes by email. Your continued use of the Website after such changes have been notified will constitute your consent to such changes.\n\n## 7. Contact Information\n\nIf you have any questions about these Terms, please contact us at contact@librechat.ai.\n\nBy using the Website, you acknowledge that you have read these Terms of Service and agree to be bound by them.\n"
+      },
+      "bookmarks": true,
+      "prompts": true,
+      "multiConvo": true,
+      "agents": true,
+      "temporaryChat": true,
+      "runCode": true,
+      "customWelcome": "Welcome to LibreChat! Enjoy your experience."
     },
-    "webSearch": {
-      "enabled": true,
-      "tool": "bing",
-      "bingKey": "",
-      "bingUrl": "https://api.bing.microsoft.com/v7.0/search",
-      "prompt": "# 以下内容是基于用户发送的消息的搜索结果:\n{search_results}\n在我给你的搜索结果中，每个结果都是[webpage X begin]...[webpage X end]格式的，X代表每篇文章的数字索引。请在适当的情况下在句子末尾引用上下文。请按照引用编号[citation:X]的格式在答案中对应部分引用上下文。如果一句话源自多个上下文，请列出所有相关的引用编号，例如[citation:3][citation:5]，切记不要将引用集中在最后返回引用编号，而是在答案对应部分列出。\n在回答时，请注意以下几点：\n- 今天是{cur_date}。\n- 并非搜索结果的所有内容都与用户的问题密切相关，你需要结合问题，对搜索结果进行甄别、筛选。\n- 对于列举类的问题（如列举所有航班信息），尽量将答案控制在10个要点以内，并告诉用户可以查看搜索来源、获得完整信息。优先提供信息完整、最相关的列举项；如非必要，不要主动告诉用户搜索结果未提供的内容。\n- 对于创作类的问题（如写论文），请务必在正文的段落中引用对应的参考编号，例如[citation:3][citation:5]，不能只在文章末尾引用。你需要解读并概括用户的题目要求，选择合适的格式，充分利用搜索结果并抽取重要信息，生成符合用户要求、极具思想深度、富有创造力与专业性的答案。你的创作篇幅需要尽可能延长，对于每一个要点的论述要推测用户的意图，给出尽可能多角度的回答要点，且务必信息量大、论述详尽。\n- 如果回答很长，请尽量结构化、分段落总结。如果需要分点作答，尽量控制在5个点以内，并合并相关的内容。\n- 对于客观类的问答，如果问题的答案非常简短，可以适当补充一到两句相关信息，以丰富内容。\n- 你需要根据用户要求和回答内容选择合适、美观的回答格式，确保可读性强。\n- 你的回答应该综合多个相关网页来回答，不能重复引用一个网页。\n- 除非用户要求，否则你回答的语言需要和用户提问的语言保持一致。\n\n# 用户消息为：\n{question}"
-    },
-    "knowledgeBase": {
-      "enabled": true,
-      "prompt": ""
-    },
-    "fileUpload": {
-      "enabled": true,
-      "prompt": "[file name]: {file_name}\n..."
-    },
-    "host": "https://bisheng.dataelem.com"
+    "sharedLinksEnabled": true,
+    "publicSharedLinksEnabled": true,
+    "instanceProjectId": "67c96484a4e95437007d43eb",
+    "ldap": {
+      "enabled": false
+    }
   })
 };
 
+export const getBishengConfig = (): Promise<config.BsConfig> => {
+  return request.get(endpoints.bsConfig()).then(res => res.data);
+};
+
 export const getAIEndpoints = (): Promise<t.TEndpointsConfig> => {
-  return request.get(endpoints.aiEndpoints());
+  // return request.get(endpoints.aiEndpoints());
+  return Promise.resolve({
+    Deepseek: {
+      "order": 9999,
+      "type": "custom",
+      "userProvide": false,
+      "userProvideURL": false,
+      "modelDisplayLabel": "Deepseek"
+    }
+  })
 };
 
 export const getModels = async (): Promise<t.TModelsConfig> => {
+  return Promise.resolve({
+    Deepseek: ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"]
+  })
   return request.get(endpoints.models());
 };
 
@@ -391,6 +439,7 @@ export const callTool = <T extends m.ToolId>({
 };
 
 export const getToolCalls = (params: q.GetToolCallParams): Promise<q.ToolCallResults> => {
+  return Promise.resolve([]);
   return request.get(
     endpoints.agents({
       path: 'tools/calls',
@@ -402,10 +451,12 @@ export const getToolCalls = (params: q.GetToolCallParams): Promise<q.ToolCallRes
 /* Files */
 
 export const getFiles = (): Promise<f.TFile[]> => {
+  return Promise.resolve([]);
   return request.get(endpoints.files());
 };
 
 export const getFileConfig = (): Promise<f.FileConfig> => {
+  return Promise.resolve({});
   return request.get(`${endpoints.files()}/config`);
 };
 
@@ -414,12 +465,12 @@ export const uploadImage = (
   signal?: AbortSignal | null,
 ): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.images(), data, requestConfig);
+  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => res.data);
 };
 
 export const uploadFile = (data: FormData, signal?: AbortSignal | null): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.files(), data, requestConfig);
+  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => res.data);
 };
 
 /* actions */
@@ -642,7 +693,7 @@ export function forkConversation(payload: t.TForkConvoRequest): Promise<t.TForkC
 
 export function deleteConversation(payload: t.TDeleteConversationRequest) {
   //todo: this should be a DELETE request
-  return request.post(endpoints.deleteConversation(), { arg: payload });
+  return request.delete(endpoints.deleteConversation() + payload.conversationId);
 }
 
 export function clearAllConversations(): Promise<unknown> {
@@ -656,7 +707,32 @@ export const listConversations = (
   const pageNumber = (params?.pageNumber ?? '1') || '1'; // Default to page 1 if not provided
   const isArchived = params?.isArchived ?? false; // Default to false if not provided
   const tags = params?.tags || []; // Default to an empty array if not provided
-  return request.get(endpoints.conversations(pageNumber, isArchived, tags));
+  return request.get(endpoints.conversations(pageNumber, isArchived, tags)).then(res => {
+    const { list, total } = res.data
+    return {
+      conversations: list.map(conv => ({
+        "conversationId": conv.chat_id,
+        "createdAt": conv.create_time,
+        "endpoint": "",
+        "endpointType": "",
+        "expiredAt": null,
+        "files": [],
+        "isArchived": false,
+        "messages": [],
+        "model": "",
+        "resendFiles": true,
+        "tags": [],
+        "title": conv.flow_name,
+        "updatedAt": conv.create_time,
+        "user": conv.user_id,
+        "__v": 0,
+        "_id": conv.chat_id,
+      })),
+      pageNumber: pageNumber,
+      pageSize: 40,
+      pages: Math.round(total / 40)
+    }
+  });
 };
 
 export const listConversationsByQuery = (
@@ -690,7 +766,10 @@ export function getConversationById(id: string): Promise<s.TConversation> {
 export function updateConversation(
   payload: t.TUpdateConversationRequest,
 ): Promise<t.TUpdateConversationResponse> {
-  return request.post(endpoints.updateConversation(), { arg: payload });
+  return request.post(endpoints.updateConversation(), {
+    conversationId: payload.conversationId,
+    name: payload.title
+  });
 }
 
 export function archiveConversation(
@@ -700,7 +779,7 @@ export function archiveConversation(
 }
 
 export function genTitle(payload: m.TGenTitleRequest): Promise<m.TGenTitleResponse> {
-  return request.post(endpoints.genTitle(), payload);
+  return request.post(endpoints.genTitle(), payload).then(res => res.data);
 }
 
 export function getPrompt(id: string): Promise<{ prompt: t.TPrompt }> {
@@ -765,6 +844,33 @@ export function getRandomPrompts(
 
 /* Roles */
 export function getRole(roleName: string): Promise<r.TRole> {
+  if (roleName === 'USER') return Promise.resolve({
+    "_id": "67c9645671e602aa6aece753",
+    "name": "USER",
+    "BOOKMARKS": {
+      "USE": true
+    },
+    "PROMPTS": {
+      "SHARED_GLOBAL": false,
+      "USE": true,
+      "CREATE": true
+    },
+    "AGENTS": {
+      "SHARED_GLOBAL": false,
+      "USE": true,
+      "CREATE": true
+    },
+    "MULTI_CONVO": {
+      "USE": true
+    },
+    "TEMPORARY_CHAT": {
+      "USE": true
+    },
+    "RUN_CODE": {
+      "USE": true
+    },
+    "__v": 0
+  });
   return request.get(endpoints.getRole(roleName));
 }
 
@@ -862,4 +968,7 @@ export function queryKnowledge(payload: t.TVerify2FARequest): Promise<f.TFile[]>
 }
 export function deleteKnowledge(id: string): Promise<t.TConversationTagResponse> {
   return request.delete(endpoints.deleteKnowledge(id));
+}
+export function getFileDownloadApi(name: string): Promise<f.TFile> {
+  return request.get('/api/v1/download?object_name=' + name);
 }

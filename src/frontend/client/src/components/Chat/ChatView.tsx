@@ -23,7 +23,7 @@ function ChatView({ index = 0 }: { index?: number }) {
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
 
   const fileMap = useFileMapContext();
-  console.log('fileMap :>> ', fileMap);
+  // console.log('fileMap :>> ', fileMap);
 
   // his messages
   const { data: messagesTree = null, isLoading } = useGetMessagesByConvoId(conversationId ?? '', {

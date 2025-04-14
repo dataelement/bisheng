@@ -18,12 +18,14 @@ export interface Model {
 export const ModelManagement = ({
     models,
     errors,
+    error,
     onAdd,
     onRemove,
     onModelChange,
     onNameChange,
 }: {
     models: Model[];
+    error: string;
     errors: string[][];
     onAdd: () => void;
     onRemove: (index: number) => void;
@@ -76,5 +78,6 @@ export const ModelManagement = ({
         <Button variant="outline" className="border-none size-7 bg-gray-200" size="icon" onClick={onAdd}>
             <Plus className="size-5" />
         </Button>
+        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
 };

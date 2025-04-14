@@ -4,6 +4,7 @@ import type { TMessageProps } from '~/common';
 // eslint-disable-next-line import/no-cycle
 import MultiMessage from '~/components/Chat/Messages/MultiMessage';
 import ContentRender from './ContentRender';
+import { useGetBsConfig } from '~/data-provider';
 
 const MessageContainer = React.memo(
   ({
@@ -35,6 +36,7 @@ export default function MessageContent(props: TMessageProps) {
     isSubmittingFamily,
   } = useMessageProcess({ message: props.message });
   const { message, currentEditId, setCurrentEditId } = props;
+  const { data: bsConfig } = useGetBsConfig()
 
   if (!message || typeof message !== 'object') {
     return null;
@@ -65,7 +67,7 @@ export default function MessageContent(props: TMessageProps) {
           </div>
         ) : (
           <div className="m-auto justify-center p-4 py-2 md:gap-6 ">
-            <ContentRender {...props} />
+            <ContentRender iconURL={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} {...props} />
           </div>
         )}
       </MessageContainer>

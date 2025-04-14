@@ -377,7 +377,7 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
   const label = useMemo(() => {
     if (!options) return ''
     if (!value) onChange(options[0].id + '')
-    return options.find(opt => opt.id === value)?.displayName
+    return options.find(opt => Number(opt.id) === value)?.displayName
   }, [options, value])
 
   return <Select onValueChange={onChange}>

@@ -2,7 +2,7 @@ import type { TFile } from '~/data-provider/data-provider/src';
 import { dataService } from '~/data-provider/data-provider/src';
 import { useState } from 'react';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle } from '~/components';
-import { useGetKnowledgeFiles } from '~/data-provider';
+import { useGetDownloadUrl, useGetKnowledgeFiles } from '~/data-provider';
 import { useLocalize } from '~/hooks';
 import { DataTableKnowledge, getKnowledgeColumns } from './Table';
 
@@ -28,13 +28,13 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
     refetchInterval: 10000, // 10s一刷新
   });
 
-  
-  const handleDownload = (row: any) => {
-    // TODO: implement download logic
+  const handleDownload = async (object_name: string, filename: string) => {
+    const res = await useGetDownloadUrl(object_name)
+
     try {
       const link = document.createElement('a');
-      link.href = row.filePath;
-      link.download = row.fileName;
+      link.href = res.data;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

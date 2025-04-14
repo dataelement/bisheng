@@ -100,3 +100,8 @@ export const useGetKnowledgeFiles = <TData = t.TFile[] | boolean>(
     enabled: (config?.enabled ?? true) === true && queriesEnabled,
   });
 };
+
+// 获取下载链接
+export const useGetDownloadUrl = (object_name: string) => {
+  return dataService.getFileDownloadApi(object_name);
+};

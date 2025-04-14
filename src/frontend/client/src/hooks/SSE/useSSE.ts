@@ -96,7 +96,10 @@ export default function useSSE(
 
     const sse = new SSE(payloadData.server, {
       payload: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: {
+        'Content-Type': 'application/json',
+        // Authorization: `Bearer ${token}`
+      },
     });
 
     sse.addEventListener('attachment', (e: MessageEvent) => {
@@ -189,17 +192,17 @@ export default function useSSE(
       if (e.responseCode === 401) {
         /* token expired, refresh and retry */
         try {
-          const refreshResponse = await request.refreshToken();
-          const token = refreshResponse?.token ?? '';
-          if (!token) {
-            throw new Error('Token refresh failed.');
-          }
+          // const refreshResponse = await request.refreshToken();
+          // const token = refreshResponse?.token ?? '';
+          // if (!token) {
+          //   throw new Error('Token refresh failed.');
+          // }
           sse.headers = {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            // Authorization: `Bearer ${token}`,
           };
 
-          request.dispatchTokenUpdatedEvent(token);
+          // request.dispatchTokenUpdatedEvent(token);
           sse.stream();
           return;
         } catch (error) {

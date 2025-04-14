@@ -108,40 +108,50 @@ customAxios.interceptors.response.use(
       console.warn('401 error, refreshing token');
       originalRequest._retry = true;
 
-      if (isRefreshing) {
-        try {
-          const token = await new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          });
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          return await customAxios(originalRequest);
-        } catch (err) {
-          return Promise.reject(err);
-        }
+      if (import.meta.env.MODE === 'production') {
+        location.href = location.origin
       }
+      // } else {
+      //   if (location.pathname.indexOf('login') === -1) {
+      //     // location.href = '/workbench/login';
+      //   }
+      // }
+      // location.href = '/'
 
-      isRefreshing = true;
+      // if (isRefreshing) {
+      //   try {
+      //     const token = await new Promise((resolve, reject) => {
+      //       failedQueue.push({ resolve, reject });
+      //     });
+      //     // originalRequest.headers['Authorization'] = 'Bearer ' + token;
+      //     return await customAxios(originalRequest);
+      //   } catch (err) {
+      //     return Promise.reject(err);
+      //   }
+      // }
+
+      // isRefreshing = true;
 
       try {
-        const response = await refreshToken(
-          // Handle edge case where we get a blank screen if the initial 401 error is from a refresh token request
-          originalRequest.url?.includes('api/auth/refresh') === true ? true : false,
-        );
+        // const response = await refreshToken(
+        //   // Handle edge case where we get a blank screen if the initial 401 error is from a refresh token request
+        //   originalRequest.url?.includes('api/auth/refresh') === true ? true : false,
+        // );
 
-        const token = response?.token ?? '';
+        // const token = response?.token ?? '';
 
-        if (token) {
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
-          dispatchTokenUpdatedEvent(token);
-          processQueue(null, token);
-          return await customAxios(originalRequest);
-        } else if (window.location.href.includes('share/')) {
-          console.log(
-            `Refresh token failed from shared link, attempting request to ${originalRequest.url}`,
-          );
-        } else {
-          window.location.href = '/login';
-        }
+        // if (token) {
+        //   originalRequest.headers['Authorization'] = 'Bearer ' + token;
+        //   dispatchTokenUpdatedEvent(token);
+        //   processQueue(null, token);
+        //   return await customAxios(originalRequest);
+        // } else if (window.location.href.includes('share/')) {
+        //   console.log(
+        //     `Refresh token failed from shared link, attempting request to ${originalRequest.url}`,
+        //   );
+        // } else {
+        //   window.location.href = '/login';
+        // }
       } catch (err) {
         processQueue(err as AxiosError, null);
         return Promise.reject(err);
