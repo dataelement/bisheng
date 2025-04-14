@@ -731,17 +731,6 @@ class AuditLogService:
         if len(all_user) == 0:
             return [], 0
         logger.info(f"get_session_list all_user {all_user}")
-        # like_num = MessageSessionDao.get_flow_group_like_num(flow_ids=[one.hex for one in flow_ids], user_ids=all_user)
-        # flow_group_like_num = {}
-        # for one in like_num:
-        #     if one['flow_id'] not in flow_group_like_num:
-        #         flow_group_like_num[one['flow_id']] = {}
-        #     if one['group_id'] not in flow_group_like_num[one['flow_id']]:
-        #         flow_group_like_num[one['flow_id']][one['group_id']] = {"likes":0,"dislikes":0}
-        #     flow_group_like_num[one['flow_id']][one['group_id']]['likes'] += one['likes']
-        #     flow_group_like_num[one['flow_id']][one['group_id']]['dislikes'] += one['dislikes']
-        #
-        # logger.info(f"get_session_list flow_group_like_num {flow_group_like_num}")
         res, total = ChatMessageDao.get_chat_info_group(filter_flow_ids, start_date, end_date, order_field,
                                                                order_type, page, page_size,all_user)
 
@@ -782,10 +771,11 @@ class AuditLogService:
                 continue
             group_ids = app_groups_map.get(one['flow_id'].hex, [])
             one['name'] = flow_name
-            one['group_info'] = [{
-                'id': group_id,
-                'group_name': group_info_map[group_id].group_name if group_info_map.get(group_id) else group_id
-            } for group_id in group_ids]
+            # one['group_info'] = [{
+            #     'id': group_id,
+            #     'group_name': group_info_map[group_id].group_name if group_info_map.get(group_id) else group_id
+            # } for group_id in group_ids]
+            one['group_info'] = [ {"id":one['id'],"group_name":one['name']} for one in user.get_user_groups(one['user_id'])]
             result.append(one)
 
         return result, total
@@ -795,7 +785,7 @@ class AuditLogService:
                              end_date: datetime) -> str:
         """ 导出用户选择的统计数据 """
         result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
-        excel_data = [['用户组', '应用名称', '会话数', '用户输入消息数', '应用输出消息数', '违规消息数']]
+        excel_data = [['用户组', '应用名称', '会话数', '用户输入消息数', '应用输出消息数', '违规消息数', "好评数1", "好评数2", "差评数"]]
         for one in result:
             excel_data.append([
                 ','.join([tmp['group_name'] for tmp in one['group_info']]),
@@ -803,7 +793,10 @@ class AuditLogService:
                 one['session_num'],
                 one['input_num'],
                 one['output_num'],
-                one['violations_num']
+                one['violations_num'],
+                one['likes'],
+                one['not_dislikes'],
+                one['dislikes'],
             ])
 
         wb = Workbook()

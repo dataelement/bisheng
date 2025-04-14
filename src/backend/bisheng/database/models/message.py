@@ -404,7 +404,8 @@ class ChatMessageDao(MessageBase):
                           else_=0)).label('dislikes'),
             (func.sum(case((ChatMessage.category == 'question', 1), else_=0)) - func.sum(
                 case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
-                     else_=0))).label('not_dislikes')
+                     else_=0))).label('not_dislikes'),
+            func.min(ChatMessage.user_id).label("user_id")
         ).select_from(ChatMessage).join(UserGroup, ChatMessage.user_id == UserGroup.user_id)
 
         if flow_ids:
@@ -446,7 +447,8 @@ class ChatMessageDao(MessageBase):
                 'unrateds':one[6],
                 'likes':one[7],
                 'dislikes':one[8],
-                'not_dislikes': one[9]
+                'not_dislikes': one[9],
+                'user_id': one[10],
             } for one in res_list
         ]
         return res, total
