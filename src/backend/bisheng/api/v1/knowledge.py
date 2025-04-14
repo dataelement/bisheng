@@ -409,8 +409,8 @@ def qa_auto_question(
 
 @router.get('/qa/export/template', status_code=200)
 def get_export_url():
-    title = ["问题","答案","相似问题1","相似问题2"]
-    df = pd.DataFrame(columns=[title])
+    data = [{"问题":"","答案":"","相似问题1":"","相似问题2":""}]
+    df = pd.DataFrame(data)
     bio = BytesIO()
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)

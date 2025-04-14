@@ -386,7 +386,7 @@ def get_chatlist_list(*,
         chat_ids.append(one.chat_id)
         flow_ids.append(one.flow_id)
     flow_list = FlowDao.get_flow_by_ids(flow_ids)
-    assistant_list = AssistantDao.get_assistants_by_ids([UUID(one) for one in flow_ids])
+    assistant_list = AssistantDao.get_assistants_by_ids([UUID(one.replace("-",'')) for one in flow_ids])
     logo_map = {one.id.hex: BaseService.get_logo_share_link(one.logo) for one in flow_list}
     logo_map.update({one.id.hex: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
     latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,category='user_input')
@@ -397,7 +397,7 @@ def get_chatlist_list(*,
             flow_id=one.flow_id,
             flow_name=one.flow_name,
             flow_type=one.flow_type,
-            logo=logo_map.get(one.flow_id, ''),
+            logo=logo_map.get(one.flow_id.replace("-",''), ''),
             latest_message=latest_messages.get(one.chat_id, None),
             create_time=one.create_time,
             update_time=one.update_time) for one in res
