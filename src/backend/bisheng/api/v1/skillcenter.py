@@ -68,9 +68,13 @@ def read_template(page_size: Optional[int] = None,
         with session_getter() as session:
             template_session = session.exec(sql)
         templates = template_session.mappings().all()
+        res = []
+        for one in templates:
+            res.append(Template.model_validate(one))
+        return resp_200(res)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return resp_200(templates)
 
 
 @router.post('/template/{id}')

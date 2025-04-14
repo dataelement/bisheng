@@ -2,10 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
+
+from bisheng.database.base import session_getter
+from bisheng.database.constants import ToolPresetType
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class AuthMethod(Enum):
@@ -16,30 +18,31 @@ class AuthMethod(Enum):
 class AuthType(Enum):
     BASIC = "basic"
     BEARER = "bearer"
-    CUSTOM= "custom"
+    CUSTOM = "custom"
 
 
 class GptsToolsBase(SQLModelSerializable):
     name: str = Field(sa_column=Column(String(length=125), index=True))
-    logo: Optional[str] = Field(sa_column=Column(String(length=512), index=False))
-    desc: Optional[str] = Field(sa_column=Column(String(length=2048), index=False))
+    logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
+    desc: Optional[str] = Field(default=None, sa_column=Column(String(length=2048), index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
     type: int = Field(default=0, description='所属类别的ID')
-    is_preset: bool = Field(default=True)
+    is_preset: int = Field(default=ToolPresetType.API.value, description="工具的类别，历史原因字段就不改名了")
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
-    api_params: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='用来存储api参数等信息')
-    user_id: Optional[int] = Field(index=True, description='创建用户ID， null表示系统创建')
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='用来存储api参数等信息')
+    user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
+    create_time: Optional[datetime] = Field(default=None,
+                                            sa_column=Column(DateTime, nullable=False,
+                                                             server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None,
+                                            sa_column=Column(DateTime,
+                                                             nullable=False,
+                                                             server_default=text('CURRENT_TIMESTAMP'),
+                                                             onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class GptsToolsTypeBase(SQLModelSerializable):
-    id: Optional[int] = Field(index=True, primary_key=True)
+    id: Optional[int] = Field(default=None, index=True, primary_key=True)
     name: str = Field(default='', index=True, description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
     extra: Optional[str] = Field(default='', sa_column=Column(String(length=2048)),
@@ -47,23 +50,25 @@ class GptsToolsTypeBase(SQLModelSerializable):
     description: str = Field(default='', description="工具类别的描述")
     server_host: Optional[str] = Field(default='', description="自定义工具的访问根地址，必须以http或者https开头")
     auth_method: Optional[int] = Field(default=0, description="工具类别的鉴权方式")
-    api_key: Optional[str] = Field(default='', description="工具鉴权的api_key",sa_column=Column(String(length=2048)),max_length=1000)
+    api_key: Optional[str] = Field(default='', description="工具鉴权的api_key", sa_column=Column(String(length=2048)),
+                                   max_length=1000)
     auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="工具鉴权的鉴权方式")
-    is_preset: Optional[int] = Field(default=0, description="是否是预置工具类别")
-    user_id: Optional[int] = Field(index=True, description='创建用户ID， null表示系统创建')
+    is_preset: Optional[int] = Field(default=ToolPresetType.API.value, description="工具的类别，历史原因字段就不改名了")
+    user_id: Optional[int] = Field(default=None, index=True, description='创建用户ID， null表示系统创建')
     is_delete: int = Field(default=0, description='1 表示逻辑删除')
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None,
+                                            sa_column=Column(DateTime, nullable=False,
+                                                             server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None,
+                                            sa_column=Column(DateTime,
+                                                             nullable=False,
+                                                             server_default=text('CURRENT_TIMESTAMP'),
+                                                             onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
-    extra: Optional[str] = Field(sa_column=Column(String(length=2048), index=False),
+    extra: Optional[str] = Field(default=None, sa_column=Column(String(length=2048), index=False),
                                  description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
                                              '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -77,7 +82,7 @@ class GptsToolsType(GptsToolsTypeBase, table=True):
 
 class GptsToolsTypeRead(GptsToolsTypeBase):
     openapi_schema: Optional[str] = Field(default="", description="工具类别的schema内容，符合openapi规范的数据")
-    children: Optional[List[GptsTools]] = Field(default=[], description="工具类别下的工具列表")
+    children: Optional[List[GptsTools]] = Field(default=list, description="工具类别下的工具列表")
     parameter_name: Optional[str] = Field(default="", description="自定义请求头参数名")
     api_location: Optional[str] = Field(default="", description="自定义请求头参数位置 header or query")
 
@@ -111,9 +116,24 @@ class GptsToolsDao(GptsToolsBase):
             return data
 
     @classmethod
+    def update_tool_list(cls, data: List[GptsTools]) -> List[GptsTools]:
+        with session_getter() as session:
+            for one in data:
+                session.add(one)
+            session.commit()
+            return data
+
+    @classmethod
     def delete_tool(cls, data: GptsTools) -> GptsTools:
         data.is_delete = 1
         return cls.update_tools(data)
+
+    @classmethod
+    def delete_tool_by_ids(cls, tool_ids: List[int]) -> None:
+        with session_getter() as session:
+            statement = update(GptsTools).where(GptsTools.id.in_(tool_ids)).values(is_delete=1)
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def get_one_tool(cls, tool_id: int) -> GptsTools:
@@ -135,7 +155,7 @@ class GptsToolsDao(GptsToolsBase):
         with session_getter() as session:
             statement = select(GptsTools).where(
                 or_(GptsTools.user_id == user_id,
-                    GptsTools.is_preset == 1)).where(GptsTools.is_delete == 0)
+                    GptsTools.is_preset == ToolPresetType.PRESET.value)).where(GptsTools.is_delete == 0)
             if page and page_size:
                 statement = statement.offset((page - 1) * page_size).limit(page_size)
             statement = statement.order_by(GptsTools.create_time.desc())
@@ -171,12 +191,13 @@ class GptsToolsDao(GptsToolsBase):
         获得所有的预置工具类别
         """
         with session_getter() as session:
-            statement = select(GptsToolsType).where(GptsToolsType.is_preset == 1, GptsToolsType.is_delete == 0)
+            statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
+                                                    GptsToolsType.is_delete == 0)
             return session.exec(statement).all()
 
     @classmethod
-    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int], include_preset: bool = True) \
-            -> List[GptsToolsType]:
+    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
+                           is_preset: ToolPresetType = None) -> List[GptsToolsType]:
         """
         获取用户可见的所有工具类别
         """
@@ -190,7 +211,9 @@ class GptsToolsDao(GptsToolsBase):
         else:
             filters.append(GptsToolsType.user_id == user_id)
         if include_preset:
-            filters.append(GptsToolsType.is_preset == 1)
+            filters.append(GptsToolsType.is_preset == ToolPresetType.PRESET.value)
+        if is_preset is not None:
+            statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
         with session_getter() as session:
             return session.exec(statement).all()
@@ -204,8 +227,8 @@ class GptsToolsDao(GptsToolsBase):
         statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
         count_statement = select(func.count(GptsToolsType.id)).where(GptsToolsType.is_delete == 0)
         if not include_preset:
-            statement = statement.where(GptsToolsType.is_preset == 0)
-            count_statement = count_statement.where(GptsToolsType.is_preset == 0)
+            statement = statement.where(GptsToolsType.is_preset != ToolPresetType.PRESET.value)
+            count_statement = count_statement.where(GptsToolsType.is_preset != ToolPresetType.PRESET.value)
 
         if tool_type_ids:
             statement = statement.where(GptsToolsType.id.in_(tool_type_ids))
@@ -313,13 +336,13 @@ class GptsToolsDao(GptsToolsBase):
             session.exec(
                 update(GptsToolsType).filter(
                     GptsToolsType.id == tool_type_id,
-                    GptsToolsType.is_preset == 0,
+                    GptsToolsType.is_preset != ToolPresetType.PRESET.value,
                 ).values(is_delete=1)
             )
             session.exec(
                 update(GptsTools).filter(
                     GptsTools.type == tool_type_id,
-                    GptsToolsType.is_preset == False
+                    GptsToolsType.is_preset != ToolPresetType.PRESET.value
                 ).values(is_delete=1)
             )
             session.commit()

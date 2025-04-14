@@ -19,10 +19,11 @@ from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData, UnifiedResponseModel, resp_200, resp_500)
 from bisheng.cache import InMemoryCache
+from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
-from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsRead, GptsToolsTypeRead, GptsTools
+from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -368,11 +369,11 @@ class AssistantService(BaseService, AssistantUtils):
         return resp_200()
 
     @classmethod
-    def get_gpts_tools(cls, user: UserPayload, is_preset: Optional[bool] = None) -> List[GptsToolsTypeRead]:
+    def get_gpts_tools(cls, user: UserPayload, is_preset: Optional[int] = None) -> List[GptsToolsTypeRead]:
         """ 获取用户可见的工具列表 """
         # 获取用户可见的工具类别
         tool_type_ids_extra = []
-        if not is_preset:
+        if is_preset != ToolPresetType.PRESET.value:
             # 获取自定义工具列表时，需要包含用户可用的工具列表
             user_role = UserRoleDao.get_user_roles(user.user_id)
             if user_role:
@@ -383,12 +384,13 @@ class AssistantService(BaseService, AssistantUtils):
         # 获取用户可见的所有工具列表
         if is_preset is None:
             all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra)
-        elif is_preset:
+        elif is_preset == ToolPresetType.PRESET.value:
             # 获取预置工具列表
             all_tool_type = GptsToolsDao.get_preset_tool_type()
         else:
             # 获取用户可见的自定义工具列表
-            all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra, False)
+            all_tool_type = GptsToolsDao.get_user_tool_type(user.user_id, tool_type_ids_extra, False,
+                                                            ToolPresetType(is_preset))
         tool_type_id = [one.id for one in all_tool_type]
         res = []
         tool_type_children = {}
@@ -443,7 +445,7 @@ class AssistantService(BaseService, AssistantUtils):
             one.id = None
             one.user_id = user.user_id
             one.is_delete = 0
-            one.is_preset = False
+            one.is_preset = req.is_preset
 
         # 添加工具类别和对应的 工具列表
         res = GptsToolsDao.insert_tool_type(req)
@@ -496,8 +498,8 @@ class AssistantService(BaseService, AssistantUtils):
         exist_tool_type.api_key = req.api_key
         exist_tool_type.auth_type = req.auth_type
         exist_tool_type.openapi_schema = req.openapi_schema
-        tool_extra = {"api_location":req.api_location,"parameter_name":req.parameter_name}
-        exist_tool_type.extra= json.dumps(tool_extra, ensure_ascii=False)
+        tool_extra = {"api_location": req.api_location, "parameter_name": req.parameter_name}
+        exist_tool_type.extra = json.dumps(tool_extra, ensure_ascii=False)
 
         children_map = {}
         for one in req.children:
@@ -532,7 +534,7 @@ class AssistantService(BaseService, AssistantUtils):
         for one in children_map.values():
             one.id = None
             one.user_id = user.user_id
-            one.is_preset = False
+            one.is_preset = exist_tool_type.is_preset
             one.is_delete = 0
             add_children.append(one)
 
@@ -549,7 +551,7 @@ class AssistantService(BaseService, AssistantUtils):
         exist_tool_type = GptsToolsDao.get_one_tool_type(tool_type_id)
         if not exist_tool_type:
             return resp_200()
-        if exist_tool_type.is_preset:
+        if exist_tool_type.is_preset == ToolPresetType.PRESET.value:
             return ToolTypeIsPresetError.return_resp()
         # 判断是否有更新权限
         if not user.access_check(exist_tool_type.user_id, str(exist_tool_type.id), AccessType.GPTS_TOOL_WRITE):

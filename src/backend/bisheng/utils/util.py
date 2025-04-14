@@ -213,7 +213,7 @@ def format_dict(d, name: Optional[str] = None):
     Returns:
         A new dictionary with the desired modifications applied.
     """
-
+    need_remove_key = []
     # Process remaining keys
     for key, value in d.items():
         if key == '_type':
@@ -295,6 +295,13 @@ def format_dict(d, name: Optional[str] = None):
             value['options'] = constants.ANTHROPIC_MODELS
             value['list'] = True
             value['value'] = constants.ANTHROPIC_MODELS[0]
+
+        if 'value' in value and type(value['value']) == set:
+            value['value'] = list(value['value'])
+        if 'value' in value and inspect.isfunction(value['value']):
+            need_remove_key.append(key)
+    for one in need_remove_key:
+        del d[one]
     return d
 
 

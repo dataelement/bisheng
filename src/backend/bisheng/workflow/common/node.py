@@ -24,7 +24,7 @@ class NodeType(Enum):
 class NodeParams(BaseModel):
     key: str = Field(default="", description="变量的key")
     label: Optional[str] = Field("", description="变量描述文本")
-    value: Optional[Any] = Field(description="变量的值")
+    value: Optional[Any] = Field(None, description="变量的值")
 
     # 变量类型 -> 数据格式的详情参考 https://dataelem.feishu.cn/wiki/IfBvwwvfFiHjuQkjFJgcxzoGnxb
     type: Optional[str] = Field("", description="变量类型")

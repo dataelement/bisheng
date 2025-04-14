@@ -12,12 +12,12 @@ DefaultGroup = 2
 
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='前端展示名称', unique=True)
-    remark: Optional[str] = Field(index=False)
-    create_user: Optional[int] = Field(index=True, description="创建用户的ID")
-    update_user: Optional[int] = Field(description="更新用户的ID")
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    remark: Optional[str] = Field(default=None, index=False)
+    create_user: Optional[int] = Field(default=None, index=True, description="创建用户的ID")
+    update_user: Optional[int] = Field(default=None, description="更新用户的ID")
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
+    update_time: Optional[datetime] = Field(default=None,
         sa_column=Column(DateTime,
                          nullable=False,
                          server_default=text('CURRENT_TIMESTAMP'),
@@ -30,17 +30,17 @@ class Group(GroupBase, table=True):
 
 
 class GroupRead(GroupBase):
-    id: Optional[int]
-    group_admins: Optional[List[Dict]]
+    id: Optional[int] = None
+    group_admins: Optional[List[Dict]] = None
 
 
 class GroupUpdate(GroupBase):
-    role_name: Optional[str]
-    remark: Optional[str]
+    role_name: Optional[str] = None
+    remark: Optional[str] = None
 
 
 class GroupCreate(GroupBase):
-    group_admins: Optional[List[int]]
+    group_admins: Optional[List[int]] = None
 
 
 class GroupDao(GroupBase):

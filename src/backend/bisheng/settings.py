@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Union
 import yaml
 from cryptography.fernet import Fernet
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 from sqlmodel import select
 
 
@@ -87,10 +87,7 @@ class WorkflowConf(BaseModel):
 
 
 class Settings(BaseModel):
-    class Config:
-        validate_assignment = True
-        arbitrary_types_allowed = True
-        extra = 'ignore'
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 
     chains: dict = {}
     agents: dict = {}

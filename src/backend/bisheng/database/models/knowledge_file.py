@@ -3,12 +3,13 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
-from pydantic import validator
+from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, String, or_, text
 from sqlmodel import Field, delete, func, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class KnowledgeFileStatus(Enum):
@@ -23,10 +24,10 @@ class ParseType(Enum):
 
 
 class KnowledgeFileBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(index=True)
+    user_id: Optional[int] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     file_name: str = Field(index=True)
-    md5: Optional[str] = Field(index=False)
+    md5: Optional[str] = Field(default=None, index=False)
     parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
                                       index=False,
                                       description='采用什么模式解析的文件')
@@ -35,37 +36,32 @@ class KnowledgeFileBase(SQLModelSerializable):
     status: Optional[int] = Field(default=KnowledgeFileStatus.PROCESSING.value,
                                   index=False,
                                   description='1: 解析中；2: 解析成功；3: 解析失败')
-    object_name: Optional[str] = Field(index=False, description='文件在minio存储的对象名称')
-    extra_meta: Optional[str] = Field(index=False)
+    object_name: Optional[str] = Field(default=None, index=False, description='文件在minio存储的对象名称')
+    extra_meta: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=512)))
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class QAKnowledgeBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(index=True)
+    user_id: Optional[int] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
-    source: Optional[int] = Field(index=False, description='0: 未知 1: 手动；2: 审计, 3: api')
-    status: Optional[int] = Field(index=False, description='1: 解析中；2: 解析成功；3: 解析失败')
-    extra_meta: Optional[str] = Field(index=False)
-    remark: Optional[str] = Field(sa_column=Column(String(length=512)))
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    source: Optional[int] = Field(default=0, index=False, description='0: 未知 1: 手动；2: 审计, 3: api')
+    status: Optional[int] = Field(default=1, index=False, description='1: 解析中；2: 解析成功；3: 解析失败')
+    extra_meta: Optional[str] = Field(default=None, index=False)
+    remark: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
-    @validator('questions')
-    def validate_json(v):
+    @field_validator('questions')
+    @classmethod
+    def validate_json(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
@@ -74,8 +70,9 @@ class QAKnowledgeBase(SQLModelSerializable):
 
         return v
 
-    @validator('answers')
-    def validate_answer(v):
+    @field_validator('answers')
+    @classmethod
+    def validate_answer(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v

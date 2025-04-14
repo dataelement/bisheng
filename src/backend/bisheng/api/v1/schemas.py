@@ -90,7 +90,7 @@ def resp_500(code: int = 500,
 class ProcessResponse(BaseModel):
     """Process response schema."""
 
-    result: Any
+    result: Any = None
     # task: Optional[TaskResponse] = None
     session_id: Optional[str] = None
     backend: Optional[str] = None
@@ -121,7 +121,7 @@ class ChatList(BaseModel):
     create_time: datetime = None
     update_time: datetime = None
     flow_type: int = None
-    latest_message: ChatMessageRead = None
+    latest_message: Optional[ChatMessageRead] = None
     logo: Optional[str] = None
 
 
@@ -180,7 +180,7 @@ class ChatResponse(ChatMessage):
 class FileResponse(ChatMessage):
     """File response schema."""
 
-    data: Any
+    data: Any = None
     data_type: str
     type: str = 'file'
     is_bot: bool = True
@@ -212,9 +212,9 @@ class BuiltResponse(BaseModel):
 class UploadFileResponse(BaseModel):
     """Upload file response schema."""
 
-    flowId: Optional[str]
+    flowId: Optional[str] = None
     file_path: str
-    relative_path: Optional[str]  # minio的相对路径，即object_name
+    relative_path: Optional[str] = None  # minio的相对路径，即object_name
 
 
 class StreamData(BaseModel):
@@ -281,10 +281,10 @@ class AssistantSimpleInfo(BaseModel):
     user_id: int
     user_name: str
     status: int
-    flow_type: Optional[int]
+    flow_type: Optional[int] = None
     write: Optional[bool] = Field(default=False)
-    group_ids: Optional[List[int]]
-    tags: Optional[List[Tag]]
+    group_ids: Optional[List[int]] = None
+    tags: Optional[List[Tag]] = None
     create_time: datetime
     update_time: datetime
 
@@ -395,14 +395,14 @@ class LLMServerInfo(LLMServerBase):
 
 
 class KnowledgeLLMConfig(BaseModel):
-    embedding_model_id: Optional[int] = Field(description='知识库默认embedding模型的ID')
-    source_model_id: Optional[int] = Field(description='知识库溯源模型的ID')
-    extract_title_model_id: Optional[int] = Field(description='文档知识库提取标题模型的ID')
-    qa_similar_model_id: Optional[int] = Field(description='QA知识库相似问模型的ID')
+    embedding_model_id: Optional[int] = Field(None, description='知识库默认embedding模型的ID')
+    source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
+    extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
+    qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
 
 
 class AssistantLLMItem(BaseModel):
-    model_id: Optional[int] = Field(description='模型的ID')
+    model_id: Optional[int] = Field(None, description='模型的ID')
     agent_executor_type: Optional[str] = Field(default='ReAct',
                                                description='执行模式。function call 或者 ReAct')
     knowledge_max_content: Optional[int] = Field(default=15000, description='知识库检索最大字符串数')
@@ -413,11 +413,11 @@ class AssistantLLMItem(BaseModel):
 
 class AssistantLLMConfig(BaseModel):
     llm_list: Optional[List[AssistantLLMItem]] = Field(default=[], description='助手可选的LLM列表')
-    auto_llm: Optional[AssistantLLMItem] = Field(description='助手画像自动优化模型的配置')
+    auto_llm: Optional[AssistantLLMItem] = Field(None, description='助手画像自动优化模型的配置')
 
 
 class EvaluationLLMConfig(BaseModel):
-    model_id: Optional[int] = Field(description='评测功能默认模型的ID')
+    model_id: Optional[int] = Field(None, description='评测功能默认模型的ID')
 
 
 # 文件切分请求基础参数

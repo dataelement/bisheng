@@ -7,7 +7,7 @@ from bisheng.interface.importing import import_by_type
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
 from langchain.embeddings.base import Embeddings
 from loguru import logger
-from pydantic import Field, BaseModel
+from pydantic import ConfigDict, Field, BaseModel
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -76,11 +76,7 @@ class BishengEmbedding(BaseModel, Embeddings):
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None)
     server_info: Optional[LLMServer] = Field(default=None)
-
-    class Config:
-        """Configuration for this pydantic object."""
-        validate_by_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(validate_by_name=True, arbitrary_types_allowed=True)
 
     def __init__(self, **kwargs):
         from bisheng.interface.initialize.loading import instantiate_embedding

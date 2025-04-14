@@ -1,12 +1,13 @@
 from datetime import datetime
 from typing import Optional, List
 
+# if TYPE_CHECKING:
+from pydantic import field_validator
+from sqlalchemy import Column, DateTime, text
+from sqlmodel import Field, select
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-# if TYPE_CHECKING:
-from pydantic import validator
-from sqlalchemy import Column, DateTime, text
-from sqlmodel import Field, select, or_
 
 
 class VariableBase(SQLModelSerializable):
@@ -17,16 +18,14 @@ class VariableBase(SQLModelSerializable):
     value_type: int = Field(index=False, description='变量类型，1=文本 2=list 3=file')
     is_option: int = Field(index=False, default=1, description='是否必填 1=必填 0=非必填')
     value: str = Field(index=False, default=0, description='变量值，当文本的时候，传入文本长度')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
-    @validator('variable_name')
-    def validate_length(v):
+    @field_validator('variable_name')
+    @classmethod
+    def validate_length(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
@@ -35,8 +34,9 @@ class VariableBase(SQLModelSerializable):
 
         return v
 
-    @validator('value')
-    def validate_value(v):
+    @field_validator('value')
+    @classmethod
+    def validate_value(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
@@ -103,4 +103,3 @@ class VariableDao(Variable):
                 session.add(new_version)
             session.commit()
             return old_version
-

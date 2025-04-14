@@ -1,14 +1,12 @@
 from bisheng.workflow.callback.event import NodeEndData
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 from bisheng.workflow.nodes.output.output import OutputNode
 
 
 class OutputFakeNode(BaseModel):
     """ 用来处理output的中断，判断是否需要用户的输入 """
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str
     output_node: OutputNode

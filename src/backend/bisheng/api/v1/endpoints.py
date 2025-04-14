@@ -41,7 +41,8 @@ router = APIRouter(tags=['Base'])
 @router.get('/all')
 def get_all():
     """获取所有参数"""
-    return resp_200(get_all_types_dict())
+    all_types = get_all_types_dict()
+    return resp_200(all_types)
 
 
 @router.get('/env')
