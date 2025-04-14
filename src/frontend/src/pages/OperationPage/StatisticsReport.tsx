@@ -88,7 +88,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         setTimeout(() => setPage(1), 0);
     };
 
-    const [goodValue, setGoodValue] = useState(undefined)
+    const [goodValue, setGoodValue] = useState('1')
     const handleChangeGood = (v) => {
         console.log('---------v', v)
         setGoodValue(v)
@@ -128,15 +128,15 @@ export default function StatisticsReport({ onBack, onJump }) {
                         <TableRow>
                             <TableHead>用户组</TableHead>
                             <TableHead>应用名称</TableHead>
-                            <TableHead onClick={() => handleSort('session_num')}>
+                            <TableHead onClick={() => handleSort(goodValue === '1' ? 'likes' : 'not_dislikes')}>
                                 <div className="flex items-center gap-x-1">
                                     好评数
-                                    {sortConfig.key === 'session_num' ? (
+                                    {['likes', 'not_dislikes'].includes(sortConfig.key) ? (
                                         <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
                                     ) : (
                                         <ChevronsUpDown size={18} />
                                     )}
-                                <GoodEvaluateSelect  onChange={handleChangeGood} value={goodValue}/>
+                                <GoodEvaluateSelect onChange={handleChangeGood} value={goodValue}/>
                                 </div>
                             </TableHead>
                             <TableHead onClick={() => handleSort('input_num')}>
@@ -153,7 +153,7 @@ export default function StatisticsReport({ onBack, onJump }) {
                             <TableHead onClick={() => handleSort('violations_num')}>
                                 <div className="flex items-center gap-x-1">
                                     会话数
-                                    {sortConfig.key === 'violations_num' ? (
+                                    {sortConfig.key === 'session_num' ? (
                                         <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
                                     ) : (
                                         <ChevronsUpDown size={18} />
@@ -173,14 +173,18 @@ export default function StatisticsReport({ onBack, onJump }) {
                                 <TableRow key={idx}>
                                     <TableCell>{row.group_info.map(el => el.group_name).join(',')}</TableCell>
                                     <TableCell>{row.name}</TableCell>
-                                    <TableCell>{row.session_num}</TableCell>
-                                    <TableCell>{row.input_num}</TableCell>
-                                    <TableCell>{row.output_num}</TableCell>
+                                    {/* 好评数（区分分类1 分类2） */}
+                                    <TableCell>{goodValue === '1' ? row.likes : row.not_dislikes}</TableCell>
+                                    {/* 差评数 */}
+                                    <TableCell>{row.dislikes}</TableCell>
+                                    {/* 应用满意度 (根据好评数分类来看)*/}
+                                    <TableCell>{((((goodValue === '1' ? row.likes : row.not_dislikes) / row.output_num) * 100).toFixed(2)) + '%'}</TableCell>
+                                    {/* 会话数 */}
                                     <TableCell>
                                         <a className="cursor-pointer text-primary" onClick={() => {
                                             onJump(row)
                                             onBack()
-                                        }}>{row.violations_num}</a>
+                                        }}>{row.session_num}</a>
                                     </TableCell>
                                 </TableRow>
                             ))
