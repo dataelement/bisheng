@@ -12,7 +12,7 @@ from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, root_validator, validator, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class CaptchaInput(BaseModel):
@@ -143,24 +143,24 @@ class ChatMessage(BaseModel):
     message: Union[str, None, dict, list] = ''
     type: str = 'human'
     category: str = 'processing'  # system processing answer tool
-    intermediate_steps: str = None
+    intermediate_steps: Optional[str] = None
     files: Optional[list] = []
-    user_id: int = None
-    message_id: int | str = None
+    user_id: Optional[int] = None
+    message_id: Optional[int | str] = None
     source: int = 0
-    sender: str = None
-    receiver: dict = None
+    sender: Optional[str] = None
+    receiver: Optional[dict] = None
     liked: int = 0
     extra: Optional[str | dict] = '{}'
-    flow_id: str = None
-    chat_id: str = None
+    flow_id: Optional[str] = None
+    chat_id: Optional[str] = None
 
 
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
     intermediate_steps: str = ''
-    is_bot: bool = True
+    is_bot: bool | int = True
     category: str = 'processing'
 
     @field_validator('type')
@@ -170,8 +170,8 @@ class ChatResponse(ChatMessage):
         end_cover: 结束并覆盖上一条message
         """
         if v not in [
-                'start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover',
-                'over'
+            'start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover',
+            'over'
         ]:
             raise ValueError('type must be start, stream, end, error, info, or file')
         return v

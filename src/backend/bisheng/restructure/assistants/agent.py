@@ -75,7 +75,7 @@ class RtcAssistantAgent(AssistantAgent):
         return tools, flows, knowledge
 
     def split_preset_personal(self, tools: tp.List[GptsTools]):
-        """区分预定义tool和自定义tool"""
+        """区分预定义tool和自定义tool、mcptool"""
         preset_tools = []
         personal_tools = []
         for one in tools:

@@ -64,17 +64,17 @@ class SqlAgentAPIWrapper(BaseModel):
     llm: BaseLanguageModel = Field(description="llm to use for sql agent")
     sql_address: str = Field(description="sql database address for SQLDatabase uri")
 
-    db: Optional[SQLDatabase]
-    list_tables_tool: Optional[BaseTool]
-    get_schema_tool: Optional[BaseTool]
-    db_query_tool: Optional[BaseTool]
-    query_check: Optional[Any]
-    query_gen: Optional[Any]
-    workflow: Optional[StateGraph]
-    app: Optional[Any]
-    schema_llm: Optional[Any]
-    query_check_llm: Optional[Any]
-    query_gen_llm: Optional[Any]
+    db: Optional[SQLDatabase] = None
+    list_tables_tool: Optional[BaseTool] = None
+    get_schema_tool: Optional[BaseTool] = None
+    db_query_tool: Optional[BaseTool] = None
+    query_check: Optional[Any] = None
+    query_gen: Optional[Any] = None
+    workflow: Optional[StateGraph] = None
+    app: Optional[Any] = None
+    schema_llm: Optional[Any] = None
+    query_check_llm: Optional[Any] = None
+    query_gen_llm: Optional[Any] = None
 
     class Config:
         arbitrary_types_allowed = True
