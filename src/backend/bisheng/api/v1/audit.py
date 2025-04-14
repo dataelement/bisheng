@@ -79,7 +79,7 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
     if len(group_ids) == 0:
         return UnAuthorizedError.return_resp()
 
-    logger.info(f"get_session_list Flow IDs: {flow_ids} | Group IDs: {group_ids}")
+    logger.info(f"get_session_list Flow IDs: {flow_ids} | Group IDs: {group_ids} | review_status : {review_status}")
     data, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                    feedback, review_status, page, page_size, keyword)
     return resp_200(data={

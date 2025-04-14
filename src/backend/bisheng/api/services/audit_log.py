@@ -795,7 +795,7 @@ class AuditLogService:
                              end_date: datetime) -> str:
         """ 导出用户选择的统计数据 """
         result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
-        excel_data = [['用户组', '应用名称', '会话数', '用书输入消息数', '应用输出消息数', '违规消息数']]
+        excel_data = [['用户组', '应用名称', '会话数', '用户输入消息数', '应用输出消息数', '违规消息数']]
         for one in result:
             excel_data.append([
                 ','.join([tmp['group_name'] for tmp in one['group_info']]),

@@ -401,7 +401,10 @@ class ChatMessageDao(MessageBase):
             func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.LIKED.value, 1),
                           else_=0)).label('likes'),
             func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
-                          else_=0)).label('dislikes')
+                          else_=0)).label('dislikes'),
+            (func.sum(case((ChatMessage.category == 'question', 1), else_=0)) - func.sum(
+                case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
+                     else_=0))).label('not_dislikes')
         ).select_from(ChatMessage).join(UserGroup, ChatMessage.user_id == UserGroup.group_id)
 
         if flow_ids:
@@ -426,6 +429,9 @@ class ChatMessageDao(MessageBase):
         if page and page_size:
             sql = sql.offset((page - 1) * page_size).limit(page_size)
 
+        from sqlalchemy.dialects import mysql
+        print("Compiled SQL:", sql.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+
         with session_getter() as session:
             res_list = session.exec(sql).all()
             total = session.scalar(count_stat)
@@ -439,7 +445,8 @@ class ChatMessageDao(MessageBase):
                 'violations_num': one[5],
                 'unrateds':one[6],
                 'likes':one[7],
-                'dislikes':one[8]
+                'dislikes':one[8],
+                'not_dislikes': one[9]
             } for one in res_list
         ]
         return res, total

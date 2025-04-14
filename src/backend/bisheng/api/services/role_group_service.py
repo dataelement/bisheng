@@ -552,11 +552,12 @@ class RoleGroupService():
             groups = [str(one.group_id) for one in UserGroupDao.get_user_audit_group(login_user.user_id)]
             if not groups:
                 return [], 0
+        else:
+            groups = [str(one.id) for one in GroupDao.get_all_group()]
 
         all_user = UserGroupDao.get_groups_user(groups)
         if len(all_user) == 0:
             return [], 0
-        MessageSessionDao.generate_filter_session_statement(all_user)
         resource_ids = []
         # 说明是用户组管理员，需要过滤获取到对应组下的资源
         if groups:
@@ -577,6 +578,8 @@ class RoleGroupService():
             groups = [str(one.group_id) for one in UserGroupDao.get_user_operation_group(login_user.user_id)]
             if not groups:
                 return [], 0
+        else:
+            groups = [str(one.id) for one in GroupDao.get_all_group()]
 
         resource_ids = []
         # 说明是用户组管理员，需要过滤获取到对应组下的资源
