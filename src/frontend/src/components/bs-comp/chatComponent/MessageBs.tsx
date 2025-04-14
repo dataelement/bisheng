@@ -104,7 +104,7 @@ export default function MessageBs({ operation = false, mark = false, audit = fal
             {(operation || audit) && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {<TitleLogo url={flow?.logo} className="" id={flow?.id}></TitleLogo>}
+                    {<TitleLogo url={flow?.logo} className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden" id={flow?.id}></TitleLogo>}
                     {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>
