@@ -464,13 +464,13 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
 
 // Excel校验函数
 const excelPreCheck = async (file) => {
-    // 检查是否是Excel文件
-    const ext = file.name.split('.').pop().toLowerCase();
-    if (!['xlsx', 'xls'].includes(ext)) {
-        return { valid: true }; // 非Excel文件跳过校验
-    }
-    
     return new Promise((resolve) => {
+        // 检查是否是Excel文件
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!['xlsx', 'xls'].includes(ext)) {
+            return { valid: false, message: '请上传xlsx、xls类型的文件' }; // 非Excel文件跳过校验
+        }
+        
         const reader = new FileReader();
         
         reader.onload = (e) => {
