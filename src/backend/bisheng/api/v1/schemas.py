@@ -272,6 +272,11 @@ class AssistantUpdateReq(BaseModel):
     flow_list: List[str] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
     knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
 
+    @field_validator('model_name', mode='before')
+    @classmethod
+    def convert_model_name(cls, v):
+        return str(v)
+
 
 class AssistantSimpleInfo(BaseModel):
     id: str
@@ -290,9 +295,9 @@ class AssistantSimpleInfo(BaseModel):
 
 
 class AssistantInfo(AssistantBase):
-    tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
-    flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
-    knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')
+    tool_list: List[GptsToolsRead] = Field(default_factory=list, description='助手的工具ID列表')
+    flow_list: List[FlowRead] = Field(default_factory=list, description='助手的技能ID列表')
+    knowledge_list: List[KnowledgeRead] = Field(default_factory=list, description='知识库ID列表')
 
 
 class FlowVersionCreate(BaseModel):
@@ -305,8 +310,8 @@ class FlowVersionCreate(BaseModel):
 
 class FlowCompareReq(BaseModel):
     inputs: Any = Field(default=None, description='技能运行所需要的输入')
-    question_list: List[str] = Field(default=[], description='测试case列表')
-    version_list: List[int] = Field(default=[], description='对比版本ID列表')
+    question_list: List[str] = Field(default_factory=list, description='测试case列表')
+    version_list: List[int] = Field(default_factory=list, description='对比版本ID列表')
     node_id: str = Field(default=None, description='需要对比的节点唯一ID')
     thread_num: Optional[int] = Field(default=1, description='对比线程数')
 
@@ -344,7 +349,7 @@ class OpenAIChatCompletionReq(BaseModel):
     n: int = Field(default=1, description='返回的答案个数, 助手侧默认为1，暂不支持多个回答')
     stream: bool = Field(default=False, description='是否开启流式回复')
     temperature: float = Field(default=0.0, description='模型温度, 传入0或者不传表示不覆盖')
-    tools: List[dict] = Field(default=[], description='工具列表, 助手暂不支持，使用助手的配置')
+    tools: List[dict] = Field(default_factory=list, description='工具列表, 助手暂不支持，使用助手的配置')
 
 
 class OpenAIChoice(BaseModel):
@@ -382,7 +387,7 @@ class LLMServerCreateReq(BaseModel):
     limit_flag: Optional[bool] = Field(default=False, description='是否开启每日调用次数限制')
     limit: Optional[int] = Field(default=0, description='每日调用次数限制')
     config: Optional[dict] = Field(default=None, description='服务提供方配置')
-    models: Optional[List[LLMModelCreateReq]] = Field(default=[], description='服务提供方下的模型列表')
+    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
 
 
 class LLMModelInfo(LLMModelBase):
@@ -390,8 +395,8 @@ class LLMModelInfo(LLMModelBase):
 
 
 class LLMServerInfo(LLMServerBase):
-    id: Optional[int]
-    models: List[LLMModelInfo] = Field(default=[], description='模型列表')
+    id: Optional[int] = None
+    models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
 
 
 class KnowledgeLLMConfig(BaseModel):
@@ -412,7 +417,7 @@ class AssistantLLMItem(BaseModel):
 
 
 class AssistantLLMConfig(BaseModel):
-    llm_list: Optional[List[AssistantLLMItem]] = Field(default=[], description='助手可选的LLM列表')
+    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list, description='助手可选的LLM列表')
     auto_llm: Optional[AssistantLLMItem] = Field(None, description='助手画像自动优化模型的配置')
 
 
@@ -423,8 +428,8 @@ class EvaluationLLMConfig(BaseModel):
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='知识库ID')
-    separator: Optional[List[str]] = Field(default=['\n\n', '\n'], description='切分文本规则, 不传则为默认')
-    separator_rule: Optional[List[str]] = Field(default=['after', 'after'],
+    separator: Optional[List[str]] = Field(default=None, description='切分文本规则, 不传则为默认')
+    separator_rule: Optional[List[str]] = Field(default=None,
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')

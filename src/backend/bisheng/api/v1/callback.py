@@ -14,6 +14,7 @@ from langchain.schema import AgentFinish, LLMResult
 from langchain.schema.agent import AgentAction
 from langchain.schema.document import Document
 from langchain.schema.messages import BaseMessage
+from langchain_core.messages import ToolMessage
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py
@@ -495,8 +496,9 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                             extra=json.dumps({'run_id': kwargs.get('run_id').hex}))
         await self.websocket.send_json(resp.dict())
 
-    async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
+    async def on_tool_end(self, output: ToolMessage, **kwargs: Any) -> Any:
         """Run when tool ends running."""
+        output = output.content
         logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 

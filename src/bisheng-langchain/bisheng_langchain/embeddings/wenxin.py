@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 # import numpy as np
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
-from pydantic import model_validator, BaseModel, Field
+from pydantic import ConfigDict, model_validator, BaseModel, Field
 from requests.exceptions import HTTPError
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
@@ -55,7 +55,7 @@ class WenxinEmbeddings(BaseModel, Embeddings):
 
     """
 
-    client: Optional[Any]  #: :meta private:
+    client: Optional[Any] = None  #: :meta private:
     model: str = 'embedding-v1'
 
     deployment: Optional[str] = 'default'
@@ -72,11 +72,7 @@ class WenxinEmbeddings(BaseModel, Embeddings):
 
     model_kwargs: Optional[Dict[str, Any]] = Field(default_factory=dict)
     """Holds any model parameters valid for `create` call not explicitly specified."""
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = 'forbid'
+    model_config = ConfigDict(extra='forbid')
 
     @model_validator(mode='before')
     @classmethod

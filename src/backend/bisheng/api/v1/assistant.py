@@ -192,9 +192,11 @@ async def chat(*,
 
 @router.get('/tool_list')
 def get_tool_list(*,
-                  is_preset: Optional[int] = None,
+                  is_preset: Optional[int | bool] = None,
                   login_user: UserPayload = Depends(get_login_user)):
     """查询所有可见的tool 列表"""
+    if is_preset is not None and type(is_preset) == bool:
+        is_preset = ToolPresetType.PRESET.value if is_preset else ToolPresetType.API.value
     return resp_200(AssistantService.get_gpts_tools(login_user, is_preset))
 
 

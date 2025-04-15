@@ -9,7 +9,7 @@ from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import BaseMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt.tool_executor import ToolExecutor
+from langgraph.prebuilt import ToolNode
 from langgraph.utils.runnable import RunnableCallable
 
 
@@ -64,10 +64,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledS
         The `CompiledStateGraph` object.
     """
 
-    if isinstance(tools, ToolExecutor):
-        tool_executor = tools
-    else:
-        tool_executor = ToolExecutor(tools)
+    tool_executor = ToolNode(tools=tools)
 
     state = _get_agent_state(input_schema)
 

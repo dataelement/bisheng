@@ -6,7 +6,7 @@ from venv import logger
 import requests
 from langchain.schema.document import Document
 from langchain.vectorstores.base import VectorStore, VectorStoreRetriever
-from pydantic import model_validator, Field
+from pydantic import ConfigDict, model_validator, Field
 
 if TYPE_CHECKING:
     from langchain.callbacks.manager import (
@@ -25,11 +25,7 @@ class VectorStoreFilterRetriever(VectorStoreRetriever):
         'mmr',
     )
     access_url: str = None
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @model_validator(mode='before')
     @classmethod

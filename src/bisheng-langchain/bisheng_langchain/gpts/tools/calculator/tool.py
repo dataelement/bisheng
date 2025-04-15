@@ -10,7 +10,7 @@ from sympy import *
 class CalculatorInput(BaseModel):
     expression: str = Field(
         description="The input to this tool should be a mathematical expression using only Python's built-in mathematical operators.",
-        example='200*7',
+        examples=['200*7'],
     )
 
 

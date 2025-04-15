@@ -1,6 +1,6 @@
 from typing import Any, Dict, Tuple, Type, Union
 
-from pydantic import model_validator, BaseModel, Extra, Field
+from pydantic import ConfigDict, model_validator, BaseModel, Field
 
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
 from langchain_core.tools import BaseTool, Tool
@@ -33,11 +33,7 @@ class APIToolBase(BaseModel):
     params: Dict[str, Any] = {}
     input_key: str = 'keyword'
     args_schema: Type[BaseModel] = ApiArg
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode='before')
     @classmethod

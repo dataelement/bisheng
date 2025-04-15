@@ -7,7 +7,7 @@ import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 import requests
-from pydantic import model_validator, Field
+from pydantic import ConfigDict, model_validator, Field
 
 from bisheng_langchain.utils.requests import Requests
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
@@ -139,11 +139,7 @@ class BaseHostChatLLM(BaseChatModel):
     verbose: Optional[bool] = False
 
     decoupled: Optional[bool] = False
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        validate_by_name = True
+    model_config = ConfigDict(validate_by_name=True)
 
     @model_validator(mode='before')
     @classmethod

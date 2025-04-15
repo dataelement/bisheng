@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
-from pydantic import model_validator, Field
+from pydantic import ConfigDict, model_validator, Field
 
 from bisheng_langchain.utils import requests
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
@@ -138,11 +138,7 @@ class ProxyChatLLM(BaseChatModel):
     when using one of the many model providers that expose an OpenAI-like
     API but with different models. In those cases, in order to avoid erroring
     when tiktoken is called, you can specify a model name to use here."""
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        validate_by_name = True
+    model_config = ConfigDict(validate_by_name=True)
 
     @model_validator(mode='before')
     @classmethod

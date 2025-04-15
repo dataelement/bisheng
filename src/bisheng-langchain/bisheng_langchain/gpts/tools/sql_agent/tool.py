@@ -11,7 +11,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.constants import END, START
 from langgraph.graph import add_messages, StateGraph
 from langgraph.prebuilt import ToolNode
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 
 class State(TypedDict):
@@ -75,9 +75,7 @@ class SqlAgentAPIWrapper(BaseModel):
     schema_llm: Optional[Any] = None
     query_check_llm: Optional[Any] = None
     query_gen_llm: Optional[Any] = None
-
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

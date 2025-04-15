@@ -82,7 +82,7 @@ class GptsToolsType(GptsToolsTypeBase, table=True):
 
 class GptsToolsTypeRead(GptsToolsTypeBase):
     openapi_schema: Optional[str] = Field(default="", description="工具类别的schema内容，符合openapi规范的数据")
-    children: Optional[List[GptsTools]] = Field(default=list, description="工具类别下的工具列表")
+    children: Optional[List[GptsTools]] = Field(default_factory=list, description="工具类别下的工具列表")
     parameter_name: Optional[str] = Field(default="", description="自定义请求头参数名")
     api_location: Optional[str] = Field(default="", description="自定义请求头参数位置 header or query")
 

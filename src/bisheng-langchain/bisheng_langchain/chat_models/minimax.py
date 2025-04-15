@@ -12,7 +12,7 @@ from langchain.schema import ChatGeneration, ChatResult
 from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, FunctionMessage,
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
-from pydantic import model_validator, Field
+from pydantic import ConfigDict, model_validator, Field
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
@@ -141,11 +141,7 @@ class ChatMinimaxAI(BaseChatModel):
     when tiktoken is called, you can specify a model name to use here."""
 
     verbose: Optional[bool] = False
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        validate_by_name = True
+    model_config = ConfigDict(validate_by_name=True)
 
     @model_validator(mode='before')
     @classmethod

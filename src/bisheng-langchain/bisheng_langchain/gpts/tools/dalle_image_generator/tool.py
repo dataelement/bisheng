@@ -6,7 +6,7 @@ from langchain_community.utils.openai import is_openai_v1
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools import BaseTool
 from langchain_core.utils import get_from_dict_or_env, get_pydantic_field_names
-from pydantic import model_validator, BaseModel, Field
+from pydantic import ConfigDict, model_validator, BaseModel, Field
 
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
 
@@ -24,7 +24,7 @@ class DallEAPIWrapper(BaseModel):
     2. save your OPENAI_API_KEY in an environment variable
     """
 
-    client: Any  #: :meta private:
+    client: Any = None  #: :meta private:
     async_client: Any = Field(default=None, exclude=True)  #: :meta private:
     model_name: str = Field(default="dall-e-2", alias="model")
     model_kwargs: Dict[str, Any] = Field(default_factory=dict)
@@ -57,11 +57,7 @@ class DallEAPIWrapper(BaseModel):
     http_async_client: Union[Any, None] = None
     """Optional httpx.AsyncClient. Only used for async invocations. Must specify 
         http_client as well if you'd like a custom client for sync invocations."""
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = 'forbid'
+    model_config = ConfigDict(extra='forbid')
 
     @model_validator(mode='before')
     @classmethod

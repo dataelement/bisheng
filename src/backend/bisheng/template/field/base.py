@@ -30,7 +30,7 @@ class TemplateField(BaseModel):
     suffixes: list[str] = []
 
     fileTypes: list[str] = []
-    file_types: list[str] = Field(default=[], serialization_alias='fileTypes')
+    file_types: list[str] = Field(default_factory=list, serialization_alias='fileTypes')
     """List of file types associated with the field. Default is an empty list. (duplicate)"""
 
     file_path: Optional[str] = ''

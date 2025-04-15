@@ -239,7 +239,7 @@ class CodeInterpreterToolArguments(BaseModel):
 
     python_code: str = Field(
         ...,
-        example="print('Hello World')",
+        examples=["print('Hello World')"],
         description=(
             'The pure python script to be evaluated. '
             'The contents will be in main.py. '

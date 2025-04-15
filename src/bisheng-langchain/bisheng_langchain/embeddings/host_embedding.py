@@ -42,7 +42,7 @@ class HostEmbeddings(BaseModel, Embeddings):
     """host embedding models.
     """
 
-    client: Optional[Any]  #: :meta private:
+    client: Optional[Any] = None  #: :meta private:
     """Model name to use."""
     model: str = 'embedding-host'
     host_base_url: str = None

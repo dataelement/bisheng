@@ -27,7 +27,7 @@ class HuggingFaceGteEmbeddings(BaseModel, Embeddings):
             )
     """
 
-    client: Any  #: :meta private:
+    client: Any = None  #: :meta private:
     model_name: str = DEFAULT_Multilingual_MODEL
     """Model name to use."""
     cache_folder: Optional[str] = None
