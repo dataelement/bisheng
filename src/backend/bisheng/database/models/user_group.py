@@ -276,6 +276,15 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_user_admin_groups(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是管理员的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
+            return session.exec(statement).all()
+
+    @classmethod
     def update_user_groups(cls, user_groups: List[UserGroup]) -> List[UserGroup]:
         with session_getter() as session:
             session.add_all(user_groups)
