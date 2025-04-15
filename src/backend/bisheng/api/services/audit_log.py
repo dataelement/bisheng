@@ -9,6 +9,7 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 from openpyxl.workbook import Workbook
 from redbeat import RedBeatSchedulerEntry
+from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
@@ -491,6 +492,9 @@ class AuditLogService:
         # if not flag:
         #     return [], 0
         filter_flow_ids = flow_ids
+        for one in flow_ids:
+            if one != one.replace("-",""):
+                filter_flow_ids.append(one.replace("-",""))
         all_user = UserGroupDao.get_groups_user(group_ids)
         logger.info(f"get_session_list user_ids {user_ids} | all_user {all_user}")
         user_ids = [str(uid) for uid in user_ids]
@@ -504,15 +508,22 @@ class AuditLogService:
         logger.info(f"get_session_list user_ids {user_ids} | group_ids {group_ids}")
         chat_ids = None
         if keyword:
-            where = select(ChatMessage).where(ChatMessage.message.like(f'%{keyword}%'),ChatMessage.category == 'question')
+            keyword2 = keyword.encode("unicode_escape").decode().replace("\\u","%")
+            where = select(ChatMessage).where(or_(
+                ChatMessage.message.like(f'%{keyword}%'),
+                ChatMessage.message.like(f'%{keyword2}%')
+                ),ChatMessage.category == 'question')
             if filter_flow_ids:
                 where = select(ChatMessage).where(ChatMessage.flow_id.in_(filter_flow_ids))
+            from sqlalchemy.dialects import mysql
+            print("get_session_list Compiled SQL:",where.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
             with session_getter() as session:
                 chat_res = session.exec(where).all()
                 chat_ids = [one.chat_id for one in chat_res]
                 if len(chat_ids) == 0:
                     chat_ids = [""]
                 chat_ids = list(set(chat_ids))
+        print(f"get_session_list chat_ids {chat_ids}")
         res = MessageSessionDao.filter_session(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
         total = MessageSessionDao.filter_session_count(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
 
@@ -725,6 +736,9 @@ class AuditLogService:
         #     return [], 0
 
         filter_flow_ids = flow_ids
+        for one in flow_ids:
+            if one != one.replace('-',''):
+                filter_flow_ids.append(one.replace('-',''))
         logger.info(f"get_session_chart: filter_flow_ids={filter_flow_ids} group_ids={group_ids}")
         all_user = UserGroupDao.get_groups_user(group_ids)
         all_user = [str(one) for one in all_user]
