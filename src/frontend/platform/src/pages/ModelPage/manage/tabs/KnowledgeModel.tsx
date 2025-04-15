@@ -13,7 +13,6 @@ import { useTranslation } from "react-i18next";
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
 
     const defaultValue = useMemo(() => {
-        console.log('12312 :>> ', 12312);
         let _defaultValue = []
         if (!value) return _defaultValue
         options.some(option => {

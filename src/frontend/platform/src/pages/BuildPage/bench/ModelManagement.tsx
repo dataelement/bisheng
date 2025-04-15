@@ -34,11 +34,12 @@ export const ModelManagement = ({
 }) => {
     const { llmOptions } = useAssistantLLmModel()
 
-    useEffect(() => {
-        models.forEach((model, index) => {
-            !model.id && llmOptions.length && onModelChange(index, llmOptions[0].children[0].value)
-        })
-    }, [models, llmOptions])
+    // useEffect(() => {
+    // 如果模型列表为空，则自动添加一个模型
+    // models.forEach((model, index) => {
+    //     !model.id && llmOptions.length && onModelChange(index, llmOptions[0].children[0].value)
+    // })
+    // }, [models, llmOptions])
 
     return <div className="mt-2 border p-4 rounded-md bg-muted">
         <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 40px" }}>

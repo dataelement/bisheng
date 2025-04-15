@@ -22,7 +22,8 @@ export interface FormErrors {
     inputPlaceholder: string;
     modelNames: string[] | string[][];
     webSearch?: Record<string, string>; // 新增动态错误存储
-    model: string; ƒ
+    model: string;
+    kownledgeBase: string;
 }
 
 export interface ChatConfigForm {
@@ -229,9 +230,9 @@ export default function index() {
                                 label={<Label className="bisheng-label">个人知识库搜索提示词</Label>}
                                 isTextarea
                                 value={formData.knowledgeBase.prompt}
-                                error={''}
+                                error={errors.kownledgeBase}
                                 placeholder="deepseek官网上传文件提示词"
-                                maxLength={9999}
+                                maxLength={30000}
                                 onChange={(val) => setFormData(prev => ({
                                     ...prev,
                                     knowledgeBase: { ...prev.knowledgeBase, prompt: val }
@@ -305,7 +306,12 @@ const useChatConfig = () => {
 # 用户消息为：
 {question}`,
         },
-        knowledgeBase: { enabled: true, prompt: '' },
+        knowledgeBase: {
+            enabled: true, prompt: `[file name]: {file_name}
+[file content begin]
+{file_content}
+[file content end]
+{question}` },
         fileUpload: {
             enabled: true,
             prompt: `[file name]: {file_name}
@@ -354,6 +360,7 @@ const useChatConfig = () => {
             welcomeMessage: '',
             functionDescription: '',
             inputPlaceholder: '',
+            kownledgeBase: '',
             model: '',
             modelNames: [],
         };
@@ -381,6 +388,11 @@ const useChatConfig = () => {
             isValid = false;
         }
 
+        if (formData.knowledgeBase.prompt.length > 30000) {
+            newErrors.kownledgeBase = '最多30000个字符';
+            isValid = false;
+        }
+
         // Validate models
         if (formData.models.length === 0) {
             newErrors.model = '至少添加一个模型';
@@ -394,6 +406,8 @@ const useChatConfig = () => {
             // 检查是否为空
             if (!displayName) {
                 error = ['', '模型显示名称不能为空'];
+            } else if (!model.id) {
+                error = ['模型不能为空', ''];
             }
             // 检查长度
             else if (displayName.length > 30) {
@@ -412,7 +426,7 @@ const useChatConfig = () => {
                             if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
                                 error[1] = '显示名称不能重复'
                             }
-                            if (error[0] && error[1]) {
+                            if (error[0] || error[1]) {
                                 return true;
                             }
                         }

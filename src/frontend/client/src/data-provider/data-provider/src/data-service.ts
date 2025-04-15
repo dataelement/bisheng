@@ -465,7 +465,10 @@ export const uploadImage = (
   signal?: AbortSignal | null,
 ): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => res.data);
+  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
+    // res.data.temp_file_id = data.get('file_id')
+    return res.data
+  });
 };
 
 export const uploadFile = (data: FormData, signal?: AbortSignal | null): Promise<f.TFileUpload> => {

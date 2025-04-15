@@ -78,7 +78,7 @@ export const tokenizer = () => '/api/tokenizer';
 
 export const login = () => '/api/auth/login';
 
-export const logout = () => '/api/auth/logout';
+export const logout = () => '/api/v1/user/logout';
 
 export const register = () => '/api/auth/register';
 
@@ -155,7 +155,7 @@ export const agents = ({ path = '', options }: { path?: string; options?: object
 
 export const files = () => '/api/files';
 
-export const images = () => `/api/v1/knowledge/upload`;
+export const images = () => `/api/v1/workstation/files`;
 
 export const avatar = () => `${images()}/avatar`;
 

@@ -42,6 +42,7 @@ export const WebSearchConfig = ({
             <Label className="bisheng-label text-sky-900 mt-4 block">Bing Subscription Key <span className="text-red-500">*</span></Label>
             <div className="mt-3">
                 <Input
+                    type="password"
                     value={config.bingKey}
                     onChange={(e) => onChange('bingKey', e.target.value)}
                 />

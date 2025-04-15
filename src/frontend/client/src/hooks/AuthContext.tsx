@@ -96,7 +96,7 @@ const AuthContextProvider = ({
         token: undefined,
         isAuthenticated: false,
         user: undefined,
-        redirect: data.redirect ?? bsConfig?.host,
+        redirect: location.origin // data.redirect ?? bsConfig?.host,
       });
     },
     onError: (error) => {

@@ -204,7 +204,7 @@ export default function useChatFunctions({
       search_enabled,
       knowledge_enabled,
     });
-    const responseSender = getSender({ ...endpointOption });
+    const responseSender = chatModel.name // getSender({ ...endpointOption });
 
     const currentMsg: TMessage = {
       text,

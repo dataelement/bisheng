@@ -214,12 +214,12 @@ export default function DataTableKnowledge<TData, TValue>({
 
       <div className="flex items-center justify-end gap-2 py-4">
         <div className="ml-2 flex-1 truncate text-xs text-muted-foreground sm:ml-4 sm:text-sm">
-          <span className="hidden sm:inline">
+          {/* <span className="hidden sm:inline">
             {localize('com_files_number_selected', {
               0: `${table.getFilteredSelectedRowModel().rows.length}`,
               1: `${table.getFilteredRowModel().rows.length}`,
             })}
-          </span>
+          </span> */}
           <span className="sm:hidden">
             {`${table.getFilteredSelectedRowModel().rows.length}/${table.getFilteredRowModel().rows.length
               }`}
@@ -236,7 +236,7 @@ export default function DataTableKnowledge<TData, TValue>({
           variant="outline"
           size="sm"
           onClick={() => onPage(page - 1)}
-          disabled={!table.getCanPreviousPage()}
+          disabled={page === 1}
         >
           {localize('com_ui_prev')}
         </Button>
@@ -245,7 +245,7 @@ export default function DataTableKnowledge<TData, TValue>({
           variant="outline"
           size="sm"
           onClick={() => onPage(page + 1)}
-          disabled={!table.getCanNextPage()}
+          disabled={page === table.getPageCount()}
         >
           {localize('com_ui_next')}
         </Button>

@@ -1,8 +1,9 @@
 // src/features/chat-config/components/IconUploadSection.tsx
 import Avator from "@/components/bs-ui/input/avator";
 import { Label } from "@/components/bs-ui/label";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import imageCompression from 'browser-image-compression';
+import Compressor from "compressorjs";
 import { Plus } from "lucide-react";
 
 const MaxFileSize = 999 * 1024 * 1024; // 999MB
@@ -20,29 +21,31 @@ export const IconUploadSection = ({
     onUpload: (url: string) => void;
 }) => {
 
+    const { toast } = useToast();
+
     const handleFileChange = async (file: File | null) => {
         if (!file) return onUpload('');
-        const options = {
-            maxSizeMB: 300,          // 最大文件大小 (MB)
-            maxWidthOrHeight: 300, // 最大宽度/高度
-            useWebWorker: false,     // 使用 WebWorker 加速
-            fileType: 'image/jpeg', // 输出格式 (可选)
-        };
 
-        try {
-            const compressedBlob = await imageCompression(file, options);
-            const compressedFile = new File(
-                [compressedBlob],
-                file.name,
-                { type: file.type }
-            );
-            uploadFileWithProgress(compressedFile, (progress) => { }, 'icon', '').then(res => {
-                onUpload(res.file_path)
-            });
-        } catch (error) {
-            console.error('压缩失败:', error);
-            return file; // 失败时返回原文件
-        }
+        new Compressor(file, {
+            quality: 0.6, // 压缩质量（0-1）
+            maxWidth: 300,
+            maxHeight: 300,
+            success(result) {
+                // 压缩后的文件（result 是 Blob 类型）
+                const compressedFile = new File([result], file.name, { type: result.type });
+                uploadFileWithProgress(compressedFile, (progress) => { }, 'icon', '').then(res => {
+                    onUpload(res.file_path)
+                });
+            },
+            error(err) {
+                console.error("压缩失败:", err);
+                toast({
+                    title: '上传失败,请检查文件格式',
+                    description: err.message,
+                    variant: 'error'
+                })
+            },
+        });
     }
 
     return <div>

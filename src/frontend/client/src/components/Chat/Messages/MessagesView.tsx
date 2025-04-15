@@ -83,9 +83,9 @@ export default function MessagesView({
           </div>
         </div>
         {/* 开启新对话 */}
-        <div className='absolute bottom-0 w-full flex justify-center mb-6 '>
+        <div className='absolute bottom-12 h-0 w-full flex justify-center'>
           <button
-            className="flex items-center justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-1 font-medium text-blue-main hover:bg-blue-200"
+            className="flex items-center h-8 justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-1 font-medium text-blue-main hover:bg-blue-200"
             onClick={() => {
               newConvo();
               navigate('/c/new');

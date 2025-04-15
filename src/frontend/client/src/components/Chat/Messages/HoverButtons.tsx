@@ -114,7 +114,8 @@ export default function HoverButtons({
           )}
         />
       )} */}
-      {isEditableEndpoint && (
+      {/* 隐藏编辑按钮 */}
+      {/* {isEditableEndpoint && (
         <button
           id={`edit-${message.messageId}`}
           className={cn(
@@ -131,7 +132,7 @@ export default function HoverButtons({
         >
           <EditIcon size="19" />
         </button>
-      )}
+      )} */}
       <button
         className={cn(
           'ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible',

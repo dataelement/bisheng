@@ -30,7 +30,7 @@ export default function SearchWebUrls({ webs }) {
                     <DialogTitle>搜索结果</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <div className="overflow-scroll h-96">
+                    <div className="overflow-scroll h-96 dark:text-gray-300">
                         {webs.map((web) => <WebItem key={web.url} {...web} />)}
                     </div>
                 </div>
@@ -48,7 +48,7 @@ export const WebItem = ({ url, title, snippet }: { url: string; title: string; s
 
     return (
         <div className="max-w-xs">
-            <a href={url} target="_blank" className="block p-2 hover:bg-gray-50">
+            <a href={url} target="_blank" className="block p-2 hover:bg-gray-50 dark:hover:bg-gray-700 ">
                 <div className="cursor-pointer">
                     {/* URL */}
                     <span className="text-sm text-gray-400">{url}</span>
