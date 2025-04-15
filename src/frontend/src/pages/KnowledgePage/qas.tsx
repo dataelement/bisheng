@@ -107,9 +107,6 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
     const close = () => {
         setOpen(false);
     };
-
-    console.log('innerquestionas', questions);
-    
     return (
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[625px]">
@@ -121,7 +118,7 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
                         <TableHead>{t('similarityQuestion')}</TableHead>
                     </TableRow>
                     <TableBody>
-                        {questions.map((el, index) => {
+                        {(questions || []).slice(0, 10).map((el, index) => {
                             return (
                                 <TableRow key={index}>
                                     <TableCell className="font-medium">
