@@ -180,7 +180,7 @@
         "contactAdmin": "请联系管理员上线助手",
         "deleteSure": "确认删除该工具？",
         "modelRequired": "模型为空",
-        "avatar": "技能头像",
+        "avatar": "技能头像（限制文件大小5MB）",
         "switchTo": "切换到"
     },
     "chat": {
@@ -525,7 +525,7 @@
         "txtFile": "txt文件",
         "sensitiveWordMatch": "敏感词匹配",
         "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。",
-        "uploadAvator": "上传头像",
+        "uploadAvator": "上传头像（限制文件大小5MB）",
         "fileSizeLimit": "文件大小不能超过",
         "fileTypeLimit": "文件类型不符合要求：",
         "fieldRequired": "此字段是必填项",
@@ -548,7 +548,7 @@
         "apiKey": "API密钥",
         "azureEndpoint": "Azure端点",
         "apiVersion": "API版本",
-        "assistantAvatar": "助手头像",
+        "assistantAvatar": "助手头像（限制文件大小5MB）",
         "confirmDeleteSkill": "确认删除该技能?",
         "confirmDeleteFlow": "确认删除该工作流?",
         "confirmDeleteAssistant": "确认删除该助手?",

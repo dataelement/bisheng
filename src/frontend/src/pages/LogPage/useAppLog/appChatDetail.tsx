@@ -65,7 +65,6 @@ export default function AppChatDetail() {
                 </div>
             </div>
             <div className="h-[calc(100vh-132px)]">
-                {/* TODO； 这里加flow参数 展示头像  zzy */}
                 {type === AppNumType.FLOW
                     ? <ChatMessages audit logo={''} useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
                     : <MessagePanne audit logo='' useName='' guideWord=''
