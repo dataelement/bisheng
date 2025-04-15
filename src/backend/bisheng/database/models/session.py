@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
+from pydantic import validator
 from sqlmodel import Field, Column, DateTime, text, select, update, func
 
 from bisheng.database.base import session_getter
@@ -33,6 +34,11 @@ class MessageSessionBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
                          onupdate=text('CURRENT_TIMESTAMP')))
+
+    @validator("flow_id",pre=True)
+    @classmethod
+    def handle_flow_id(cls, v: str):
+        return v.replace('-','')
 
 
 class MessageSession(MessageSessionBase, table=True):
