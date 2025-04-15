@@ -5,7 +5,8 @@ import { useGetBannerQuery } from '~/data-provider';
 import store from '~/store';
 
 export const Banner = ({ onHeightChange }: { onHeightChange?: (height: number) => void }) => {
-  const { data: banner } = useGetBannerQuery();
+  // const { data: banner } = useGetBannerQuery();
+  const banner = null;
   const [hideBannerHint, setHideBannerHint] = useRecoilState<string[]>(store.hideBannerHint);
   const bannerRef = useRef<HTMLDivElement>(null);
 

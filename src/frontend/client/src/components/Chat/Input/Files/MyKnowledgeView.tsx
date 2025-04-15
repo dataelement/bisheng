@@ -1,8 +1,9 @@
-import type { TFile } from '~/data-provider/data-provider/src';
-import { dataService } from '~/data-provider/data-provider/src';
+import axios from 'axios';
 import { useState } from 'react';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle } from '~/components';
-import { useGetKnowledgeFiles } from '~/data-provider';
+import { useGetDownloadUrl, useGetKnowledgeFiles } from '~/data-provider';
+import type { TFile } from '~/data-provider/data-provider/src';
+import { dataService } from '~/data-provider/data-provider/src';
 import { useLocalize } from '~/hooks';
 import { DataTableKnowledge, getKnowledgeColumns } from './Table';
 
@@ -28,19 +29,28 @@ export default function MyKnowledgeView({ open, onOpenChange }) {
     refetchInterval: 10000, // 10s一刷新
   });
 
-  
-  const handleDownload = (row: any) => {
-    // TODO: implement download logic
-    try {
-      const link = document.createElement('a');
-      link.href = row.filePath;
-      link.download = row.fileName;
-      document.body.appendChild(link);
+  const handleDownload = async (object_name: string, filename: string) => {
+    const res = await useGetDownloadUrl(object_name)
+
+    return axios.get(res.data, { responseType: "blob" }).then((res: any) => {
+      const blob = new Blob([res.data]);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
       link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Download failed:', error);
-    }
+      URL.revokeObjectURL(link.href);
+    }).catch(console.error);
+
+    // try {
+    //   const link = document.createElement('a');
+    //   link.href = res.data;
+    //   link.download = filename;
+    //   document.body.appendChild(link);
+    //   link.click();
+    //   document.body.removeChild(link);
+    // } catch (error) {
+    //   console.error('Download failed:', error);
+    // }
   };
 
   const handleDelete = async (id) => {

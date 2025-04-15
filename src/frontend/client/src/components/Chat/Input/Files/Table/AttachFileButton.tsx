@@ -24,7 +24,7 @@ const AttachFileButton = ({
         aria-label={localize('com_sidepanel_attach_files')}
         disabled={isUploadDisabled}
         className={cn(
-          'flex items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50',
+          'flex items-center justify-center rounded-full p-1 transition-colors',
         )}
         description={localize('com_sidepanel_attach_files')}
         onKeyDownCapture={(e) => {

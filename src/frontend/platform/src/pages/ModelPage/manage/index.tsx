@@ -88,6 +88,7 @@ export default function Management() {
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [loading, setLoading] = useState(false)
+    const { refetch } = useAssistantLLmModel()
 
     const reload = async () => {
         setLoading(true)
@@ -113,7 +114,9 @@ export default function Management() {
 
     // off&online
     const handleCheck = (index, bool, id) => {
-        captureAndAlertRequestErrorHoc(changeLLmServerStatus(id, bool))
+        captureAndAlertRequestErrorHoc(changeLLmServerStatus(id, bool).then(res => {
+            refetch()
+        }))
         data[index].models = data[index].models.map(el => el.id === id ? { ...el, online: bool } : el)
         setData([...data])
     }
@@ -187,7 +190,7 @@ export function useAssistantLLmModel() {
                 const serverLlmItem = { value: server.id, label: server.name, children: [] }
                 server.models.forEach(model => {
                     const item = {
-                        value: model.id,
+                        value: String(model.id),
                         label: model.model_name
                     }
                     if (!model.online) return

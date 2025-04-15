@@ -45,6 +45,7 @@ const MessageIcon = memo(
       [endpointsConfig, endpoint],
     );
 
+    // 模型头像
     if (iconData?.isCreatedByUser !== true && iconURL != null ) {
       return (
         <ConvoIconURL
@@ -60,6 +61,7 @@ const MessageIcon = memo(
       );
     }
 
+    // 用户头像
     return (
       <Icon
         isCreatedByUser={iconData?.isCreatedByUser ?? false}

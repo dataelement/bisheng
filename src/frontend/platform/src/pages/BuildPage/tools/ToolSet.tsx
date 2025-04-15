@@ -51,7 +51,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 // }
                 setFormData(config);
             } else {
-                // resetFormData();
+                setFormData({});
             }
             setOpen(true);
         }

@@ -297,7 +297,7 @@ export const getResponseSender = (endpointOption: t.TEndpointOption): string => 
       return modelDisplayLabel;
     }
 
-    return 'AI';
+    return '';
   }
 
   return '';

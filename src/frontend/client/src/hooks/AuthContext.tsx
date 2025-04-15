@@ -42,6 +42,9 @@ const AuthContextProvider = ({
   const { data: adminRole = null } = useGetRole(SystemRoles.ADMIN, {
     enabled: !!(isAuthenticated && user?.role === SystemRoles.ADMIN),
   });
+  useEffect(() => {
+    setUserContext({ token, isAuthenticated: !!user, user, redirect: '/c/new' });
+  }, [user])
 
   const navigate = useNavigate();
   const { data: bsConfig } = useGetBsConfig()
@@ -93,7 +96,7 @@ const AuthContextProvider = ({
         token: undefined,
         isAuthenticated: false,
         user: undefined,
-        redirect: data.redirect ?? bsConfig?.host,
+        redirect: location.origin // data.redirect ?? bsConfig?.host,
       });
     },
     onError: (error) => {
@@ -106,10 +109,11 @@ const AuthContextProvider = ({
       });
     },
   });
-  const refreshToken = useRefreshTokenMutation();
+  // const refreshToken = useRefreshTokenMutation();
 
   const logout = useCallback(() => logoutUser.mutate(undefined), [logoutUser]);
-  const userQuery = useGetUserQuery({ enabled: !!(token ?? '') });
+  const userQuery = useGetUserQuery();
+  // const userQuery = useGetUserQuery({ enabled: !!(token ?? '') });
 
   const login = (data: t.TLoginUser) => {
     loginUser.mutate(data);
@@ -120,27 +124,27 @@ const AuthContextProvider = ({
       console.log('Test mode. Skipping silent refresh.');
       return;
     }
-    refreshToken.mutate(undefined, {
-      onSuccess: (data: t.TRefreshTokenResponse | undefined) => {
-        const { user, token = '' } = data ?? {};
-        if (token) {
-          setUserContext({ token, isAuthenticated: true, user });
-        } else {
-          console.log('Token is not present. User is not authenticated.');
-          if (authConfig?.test === true) {
-            return;
-          }
-          navigate('/login');
-        }
-      },
-      onError: (error) => {
-        console.log('refreshToken mutation error:', error);
-        if (authConfig?.test === true) {
-          return;
-        }
-        navigate('/login');
-      },
-    });
+    // refreshToken.mutate(undefined, {
+    //   onSuccess: (data: t.TRefreshTokenResponse | undefined) => {
+    //     const { user, token = '' } = data ?? {};
+    //     if (token) {
+    //       setUserContext({ token, isAuthenticated: true, user });
+    //     } else {
+    //       console.log('Token is not present. User is not authenticated.');
+    //       if (authConfig?.test === true) {
+    //         return;
+    //       }
+    //       navigate('/login');
+    //     }
+    //   },
+    //   onError: (error) => {
+    //     console.log('refreshToken mutation error:', error);
+    //     if (authConfig?.test === true) {
+    //       return;
+    //     }
+    //     navigate('/login');
+    //   },
+    // });
   }, []);
 
   useEffect(() => {

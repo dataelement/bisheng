@@ -5,7 +5,8 @@ import * as s from './schemas';
 export default function createPayload(submission: t.TSubmission) {
   const { conversation, userMessage, endpointOption, isEdited, isContinued, isTemporary } =
     submission;
-  const { conversationId } = s.tConvoUpdateSchema.parse(conversation);
+  // const { conversationId } = s.tConvoUpdateSchema.parse(conversation);
+  const { conversationId } = conversation;
   const { endpoint, endpointType } = endpointOption as {
     endpoint: s.EModelEndpoint;
     endpointType?: s.EModelEndpoint;

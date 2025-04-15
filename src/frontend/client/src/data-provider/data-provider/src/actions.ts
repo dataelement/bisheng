@@ -242,7 +242,7 @@ class RequestExecutor {
       const basicToken = Buffer.from(api_key).toString('base64');
       this.authHeaders['Authorization'] = `Basic ${basicToken}`;
     } else if (isApiKey && authorization_type === AuthorizationTypeEnum.Bearer) {
-      this.authHeaders['Authorization'] = `Bearer ${api_key}`;
+      // this.authHeaders['Authorization'] = `Bearer ${api_key}`;
     } else if (
       isApiKey &&
       authorization_type === AuthorizationTypeEnum.Custom &&
@@ -268,7 +268,7 @@ class RequestExecutor {
 
       // If valid, use it
       this.authToken = oauth_access_token;
-      this.authHeaders['Authorization'] = `Bearer ${this.authToken}`;
+      // this.authHeaders['Authorization'] = `Bearer ${this.authToken}`;
     }
     return this;
   }

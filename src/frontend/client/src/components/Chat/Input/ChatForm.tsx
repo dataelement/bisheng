@@ -1,44 +1,37 @@
-import { memo, useRef, useMemo, useEffect, useState } from 'react';
+import { FileText, GlobeIcon, Rotate3DIcon } from 'lucide-react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
+import { Button, TextareaAutosize } from '~/components/ui';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
+import { useGetBsConfig, useGetFileConfig } from '~/data-provider';
 import {
-  supportsFiles,
-  mergeFileConfig,
-  isAssistantsEndpoint,
-  fileConfig as defaultFileConfig,
   BsConfig,
+  fileConfig as defaultFileConfig,
+  isAssistantsEndpoint,
+  mergeFileConfig,
+  supportsFiles,
 } from '~/data-provider/data-provider/src';
 import {
-  useChatContext,
-  useChatFormContext,
+  useAutoSave,
+  useHandleKeyUp,
+  useLocalize,
+  useQueryParams,
+  useRequiresKey,
+  useSubmitMessage,
+  useTextarea,
+} from '~/hooks';
+import {
   useAddedChatContext,
   useAssistantsMapContext,
+  useChatContext,
+  useChatFormContext,
 } from '~/Providers';
-import {
-  useLocalize,
-  useTextarea,
-  useAutoSave,
-  useRequiresKey,
-  useHandleKeyUp,
-  useQueryParams,
-  useSubmitMessage,
-} from '~/hooks';
-import { cn, removeFocusRings, checkIfScrollable } from '~/utils';
-import FileFormWrapper from './Files/FileFormWrapper';
-import { Button, TextareaAutosize } from '~/components/ui';
-import { useGetBsConfig, useGetFileConfig } from '~/data-provider';
-import { TemporaryChat } from './TemporaryChat';
-import TextareaHeader from './TextareaHeader';
-import PromptsCommand from './PromptsCommand';
-import AudioRecorder from './AudioRecorder';
-import { mainTextareaId } from '~/common';
-import CollapseChat from './CollapseChat';
-import StreamAudio from './StreamAudio';
-import StopButton from './StopButton';
-import SendButton from './SendButton';
-import Mention from './Mention';
 import store from '~/store';
-import { Globe, GlobeIcon, Rotate3DIcon, FileText, SparkleIcon } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
+import { checkIfScrollable, cn, removeFocusRings } from '~/utils';
+import CollapseChat from './CollapseChat';
+import FileFormWrapper from './Files/FileFormWrapper';
+import SendButton from './SendButton';
+import StopButton from './StopButton';
 
 const ChatForm = ({ index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
@@ -282,7 +275,9 @@ const ChatForm = ({ index = 0 }) => {
           </div>
           {/* 深度思考 联网 */}
           <div className="absolute bottom-2 left-5 flex gap-2">
-            <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => setChatModel({ id: Number(val), name: 'xx' })} />
+            <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => {
+              setChatModel({ id: Number(val), name: bsConfig?.models?.find(item => item.id === val)?.displayName || '' })
+            }} />
             {/* <div className="absolute bottom-2 left-5 flex gap-2">
             <Button
               type="button"
@@ -376,8 +371,15 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
 
   const label = useMemo(() => {
     if (!options) return ''
+    // 默认选中第一个
     if (!value) onChange(options[0].id + '')
-    return options.find(opt => opt.id === value)?.displayName
+    const currentOpt = options.find(opt => Number(opt.id) === value)
+    if (currentOpt) {
+      return currentOpt.displayName
+    } else {
+      onChange(options[0].id + '')
+      return ''
+    }
   }, [options, value])
 
   return <Select onValueChange={onChange}>

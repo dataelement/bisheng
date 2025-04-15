@@ -189,7 +189,7 @@ const Citation = ({ data, children }) => {
         <WebItem {...data} />
       </div>
     }
-    className="bg-gray-100 inline-flex size-5 items-center justify-center rounded-full transition-colors duration-200 hover:bg-surface-hover"
+    className="bg-gray-100 dark:bg-gray-600 inline-flex size-5 items-center justify-center rounded-full transition-colors duration-200 hover:bg-surface-hover"
     onClick={() => {
       window.open(data.url, '_blank')
     }}

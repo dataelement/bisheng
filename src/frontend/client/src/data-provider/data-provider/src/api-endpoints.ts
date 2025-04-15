@@ -1,7 +1,7 @@
 import type { AssistantsEndpoint } from './schemas';
 
 export const health = () => '/health';
-export const user = () => '/api/user';
+export const user = () => '/api/v1/user/info';
 
 export const balance = () => '/api/balance';
 
@@ -10,7 +10,7 @@ export const userPlugins = () => '/api/user/plugins';
 export const deleteUser = () => '/api/user/delete';
 
 export const messages = (conversationId: string, messageId?: string) =>
-  `/api/messages/${conversationId}${messageId != null && messageId ? `/${messageId}` : ''}`;
+  `/api/v1/workstation/messages/${conversationId}${messageId != null && messageId ? `/${messageId}` : ''}`;
 
 const shareRoot = '/api/share';
 export const shareMessages = (shareId: string) => `${shareRoot}/${shareId}`;
@@ -43,22 +43,21 @@ export const abortRequest = (endpoint: string) => `/api/ask/${endpoint}/abort`;
 export const conversationsRoot = '/api/convos';
 
 export const conversations = (pageNumber: string, isArchived?: boolean, tags?: string[]) =>
-  `${conversationsRoot}?pageNumber=${pageNumber}${isArchived === true ? '&isArchived=true' : ''
-  }${tags?.map((tag) => `&tags=${tag}`).join('')}`;
+  `/api/v1/chat/app/list?flow_type=15&page=${pageNumber}1&limit=40${tags?.map((tag) => `&tags=${tag}`).join('')}`;
 
 export const conversationById = (id: string) => `${conversationsRoot}/${id}`;
 
-export const genTitle = () => `${conversationsRoot}/gen_title`;
+export const genTitle = () => `/api/v1/workstation/gen_title`;
 
-export const updateConversation = () => `${conversationsRoot}/update`;
+export const updateConversation = () => `/api/v1/chat/conversation/rename`;
 
-export const deleteConversation = () => `${conversationsRoot}/clear`;
+export const deleteConversation = () => `/api/v1/chat/`;
 
 export const importConversation = () => `${conversationsRoot}/import`;
 
 export const forkConversation = () => `${conversationsRoot}/fork`;
 
-export const duplicateConversation = () => `${conversationsRoot}/duplicate`;
+export const duplicateConversation = () => `/api/v1/chat/conversation/copy`;
 
 export const search = (q: string, pageNumber: string) =>
   `/api/search?q=${q}&pageNumber=${pageNumber}`;
@@ -79,7 +78,7 @@ export const tokenizer = () => '/api/tokenizer';
 
 export const login = () => '/api/auth/login';
 
-export const logout = () => '/api/auth/logout';
+export const logout = () => '/api/v1/user/logout';
 
 export const register = () => '/api/auth/register';
 
@@ -101,7 +100,7 @@ export const resendVerificationEmail = () => '/api/user/verify/resend';
 export const plugins = () => '/api/plugins';
 
 export const config = () => '/api/config';
-export const bsConfig = () => '/api/config';
+export const bsConfig = () => '/api/v1/workstation/config';
 
 export const prompts = () => '/api/prompts';
 
@@ -156,7 +155,7 @@ export const agents = ({ path = '', options }: { path?: string; options?: object
 
 export const files = () => '/api/files';
 
-export const images = () => `${files()}/images`;
+export const images = () => `/api/v1/workstation/files`;
 
 export const avatar = () => `${images()}/avatar`;
 
@@ -245,6 +244,7 @@ export const regenerateBackupCodes = () => '/api/auth/2fa/backup/regenerate';
 export const verifyTwoFactorTemp = () => '/api/auth/2fa/verify-temp';
 
 // 知识库模块
-export const knowledgeUpload = () => '/api/knowledge/upload';
-export const queryKnowledge = () => '/api/knowledge/query';
-export const deleteKnowledge = (_id: string) => `/api/knowledge/file?id=${_id}`;
+export const knowledgeUpload = () => '/api/v1/workstation/knowledgeUpload';
+export const queryKnowledge = () => '/api/v1/workstation/queryKnowledge';
+// export const queryKnowledge = () => '/api/knowledge/query';
+export const deleteKnowledge = (_id: string) => `/api/v1/workstation/deleteKnowledge?file_id=${_id}`;

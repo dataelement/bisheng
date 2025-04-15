@@ -1,45 +1,47 @@
-import { useMemo } from 'react';
-import { createAvatar } from '@dicebear/core';
 import { initials } from '@dicebear/collection';
+import { createAvatar } from '@dicebear/core';
+import { useEffect, useState } from 'react';
 import type { TUser } from '~/data-provider/data-provider/src';
 
 const avatarCache: Record<string, string> = {};
-
 const useAvatar = (user: TUser | undefined) => {
-  return useMemo(() => {
+  const [avatarUri, setAvatarUri] = useState('');
+
+  useEffect(() => {
     if (!user?.username) {
-      return '';
+      setAvatarUri('');
+      return;
     }
 
+    // 如果已有头像或缓存，直接使用
     if (user.avatar) {
-      return user.avatar;
+      setAvatarUri(user.avatar);
+      return;
     }
 
-    const { username } = user;
-
-    if (avatarCache[username]) {
-      return avatarCache[username];
+    if (avatarCache[user.username]) {
+      setAvatarUri(avatarCache[user.username]);
+      return;
     }
 
+    // 生成新头像
     const avatar = createAvatar(initials, {
-      seed: username,
+      seed: user.username,
       fontFamily: ['Verdana'],
       fontSize: 36,
     });
 
-    let avatarDataUri = '';
     avatar
       .toDataUri()
       .then((dataUri) => {
-        avatarDataUri = dataUri;
-        avatarCache[username] = dataUri; // Store in cache
+        avatarCache[user.username] = dataUri; // 更新缓存
+        setAvatarUri(dataUri); // 触发重新渲染
       })
-      .catch((error) => {
-        console.error('Failed to generate avatar:', error);
-      });
+      .catch(console.error);
 
-    return avatarDataUri;
-  }, [user]);
+  }, [user?.username, user?.avatar]); // 依赖项优化
+
+  return avatarUri;
 };
 
 export default useAvatar;

@@ -69,7 +69,13 @@ class KnowledgeUtils:
         res = f"{{<file_title>{metadata.get('source', '')}</file_title>\n"
         if metadata.get('title', ''):
             res += f"<file_abstract>{metadata.get('title', '')}</file_abstract>\n"
-        res += f"<paragraph_content>{chunk}</paragraph_content>}}"
+        res += f'<paragraph_content>{chunk}</paragraph_content>}}'
+        return res
+
+    @classmethod
+    def chunk2promt(cls, chunk: str, metadata: dict) -> str:
+        # 拼接chunk和metadata中的数据，获取新的chunk
+        res = f"[file name]:{metadata.get('source', '')}\n[file content begin]\n{chunk}[file content end]\n"
         return res
 
     @classmethod

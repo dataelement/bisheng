@@ -9,7 +9,6 @@ export default function Search() {
   const localize = useLocalize();
   const fileMap = useFileMapContext();
   const { searchQuery, searchQueryRes } = useSearchContext();
-console.log('99999 :>> ', 99999);
   const { containerRef } = useNavScrolling({
     setShowLoading: () => ({}),
     hasNextPage: searchQueryRes?.hasNextPage,

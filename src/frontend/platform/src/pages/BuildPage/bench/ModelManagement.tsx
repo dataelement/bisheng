@@ -18,12 +18,14 @@ export interface Model {
 export const ModelManagement = ({
     models,
     errors,
+    error,
     onAdd,
     onRemove,
     onModelChange,
     onNameChange,
 }: {
     models: Model[];
+    error: string;
     errors: string[][];
     onAdd: () => void;
     onRemove: (index: number) => void;
@@ -32,11 +34,12 @@ export const ModelManagement = ({
 }) => {
     const { llmOptions } = useAssistantLLmModel()
 
-    useEffect(() => {
-        models.forEach((model, index) => {
-            !model.id && llmOptions.length && onModelChange(index, llmOptions[0].children[0].value)
-        })
-    }, [models, llmOptions])
+    // useEffect(() => {
+    // 如果模型列表为空，则自动添加一个模型
+    // models.forEach((model, index) => {
+    //     !model.id && llmOptions.length && onModelChange(index, llmOptions[0].children[0].value)
+    // })
+    // }, [models, llmOptions])
 
     return <div className="mt-2 border p-4 rounded-md bg-muted">
         <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 40px" }}>
@@ -76,5 +79,6 @@ export const ModelManagement = ({
         <Button variant="outline" className="border-none size-7 bg-gray-200" size="icon" onClick={onAdd}>
             <Plus className="size-5" />
         </Button>
+        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
 };

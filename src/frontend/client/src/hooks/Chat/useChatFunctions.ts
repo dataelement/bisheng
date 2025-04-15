@@ -81,7 +81,7 @@ export default function useChatFunctions({
 
   const queryClient = useQueryClient();
   const { getExpiry } = useUserKey(conversation?.endpoint ?? '');
-  const model = useShouGangModel()
+  // const model = useShouGangModel()
 
   const ask: TAskFunction = (
     {
@@ -198,13 +198,13 @@ export default function useChatFunctions({
     // }
 
     const endpointOption = Object.assign({
-      endpoint: modelType === 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B' ? 'vllm' : 'Deepseek', // 临时修改
+      endpoint: '', // 临时修改
       endpointType: 'custom',
-      model: custom_model === 'deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B' ? model : custom_model,
+      model: chatModel.id + '',
       search_enabled,
       knowledge_enabled,
     });
-    const responseSender = getSender({ ...endpointOption });
+    const responseSender = chatModel.name // getSender({ ...endpointOption });
 
     const currentMsg: TMessage = {
       text,
@@ -349,16 +349,4 @@ export default function useChatFunctions({
     ask,
     regenerate,
   };
-}
-
-
-const useShouGangModel = () => {
-  const [model, setModel] = useState('deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B');
-  const { data } = useGetModelsQuery()
-  useEffect(() => {
-    if (data) {
-      setModel(data['vllm'][0])
-    }
-  }, [data])
-  return model
 }

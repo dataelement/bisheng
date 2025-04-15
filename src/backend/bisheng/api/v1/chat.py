@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services import chat_imp
@@ -25,8 +25,8 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao, LikedType
-from bisheng.database.models.session import SensitiveStatus, MessageSessionDao, MessageSession
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, LikedType
+from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
@@ -38,7 +38,6 @@ from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, 
 from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
 from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
@@ -78,7 +77,8 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: Optional[int] = Query(..., description='标注任务ID'),
+                      task_id: Optional[int] = Query(default=None, description='标注任务ID'),
+                      flow_type: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
@@ -132,7 +132,12 @@ def get_app_chat_list(*,
             flow_ids = group_flow_ids
 
     # 获取会话列表
-    res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+    res = MessageSessionDao.filter_session(
+        flow_ids=flow_ids,
+        user_ids=user_ids,
+        flow_type=flow_type,
+        include_delete=False,
+    )
     total = len(res)
 
     # 查询会话的状态
@@ -169,9 +174,32 @@ def get_app_chat_list(*,
                 continue
         result.append(tmp)
 
-    result = result[(page_num - 1) * page_size: page_num * page_size]
+    result = result[(page_num - 1) * page_size:page_num * page_size]
 
     return resp_200(PageList(list=result, total=total))
+
+
+@router.post('/chat/conversation/rename')
+def rename(conversationId: str = Body(..., description='会话id', embed=True),
+           name: str = Body(..., description='会话名称', embed=True),
+           login_user: UserPayload = Depends(get_login_user)):
+    conversation = MessageSessionDao.get_one(conversationId)
+    conversation.flow_name = name
+    MessageSessionDao.insert_one(conversation)
+    return resp_200()
+
+
+@router.post('/chat/conversation/copy')
+def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
+    conversation = MessageSessionDao.get_one(conversationId)
+    conversation.chat_id = uuid4().hex
+    conversation = MessageSessionDao.insert_one(conversation)
+    msg_list = ChatMessageDao.get_messages_by_chat_id(conversationId)
+    if msg_list:
+        for msg in msg_list:
+            msg.chat_id = conversation.chat_id
+            msg.id = None
+            ChatMessageDao.insert_one(msg)
 
 
 @router.get('/chat/history',
@@ -212,14 +240,15 @@ def del_chat_id(*,
     if session_chat.flow_type == FlowType.ASSISTANT.value:
         assistant_info = AssistantDao.get_one_assistant(session_chat.flow_id)
         if assistant_info:
-            AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
+            AuditLogService.delete_chat_assistant(login_user, get_request_ip(request),
+                                                  assistant_info)
     else:
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(session_chat.flow_id)
         if flow_info and flow_info.flow_type == FlowType.FLOW.value:
-                AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
+            AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
         elif flow_info:
-                AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
+            AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
 
     # 设置会话的删除状态
     MessageSessionDao.delete_session(chat_id)
@@ -266,28 +295,30 @@ def add_chat_messages(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(flow_id)
         if flow_info:
-            MessageSessionDao.insert_one(MessageSession(
-                chat_id=chat_id,
-                flow_id=flow_id,
-                flow_type=FlowType.FLOW.value,
-                flow_name=flow_info.name,
-                user_id=login_user.user_id,
-                sensitive_status=SensitiveStatus.VIOLATIONS.value,
-            ))
-            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id, flow_info)
-        else:
-            assistant_info = AssistantDao.get_one_assistant(flow_id)
-            if assistant_info:
-                MessageSessionDao.insert_one(MessageSession(
+            MessageSessionDao.insert_one(
+                MessageSession(
                     chat_id=chat_id,
                     flow_id=flow_id,
-                    flow_type=FlowType.ASSISTANT.value,
-                    flow_name=assistant_info.name,
+                    flow_type=FlowType.FLOW.value,
+                    flow_name=flow_info.name,
                     user_id=login_user.user_id,
                     sensitive_status=SensitiveStatus.VIOLATIONS.value,
                 ))
-                AuditLogService.create_chat_assistant(login_user, get_request_ip(request),
-                                                      flow_id)
+            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id,
+                                             flow_info)
+        else:
+            assistant_info = AssistantDao.get_one_assistant(flow_id)
+            if assistant_info:
+                MessageSessionDao.insert_one(
+                    MessageSession(
+                        chat_id=chat_id,
+                        flow_id=flow_id,
+                        flow_type=FlowType.ASSISTANT.value,
+                        flow_name=assistant_info.name,
+                        user_id=login_user.user_id,
+                        sensitive_status=SensitiveStatus.VIOLATIONS.value,
+                    ))
+                AuditLogService.create_chat_assistant(login_user, get_request_ip(request), flow_id)
 
     return resp_200(message='添加成功')
 
@@ -383,11 +414,14 @@ def comment_resp(*, data: ChatInput):
 
 @router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
 def get_session_list(*,
-                      page: Optional[int] = 1,
-                      limit: Optional[int] = 10,
-                      login_user: UserPayload = Depends(get_login_user)):
+                     page: Optional[int] = 1,
+                     limit: Optional[int] = 10,
+                     login_user: UserPayload = Depends(get_login_user)):
 
-    res = MessageSessionDao.filter_session(user_ids=[login_user.user_id], page=page, limit=limit, include_delete=False)
+    res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
+                                           page=page,
+                                           limit=limit,
+                                           include_delete=False)
     chat_ids = []
     flow_ids = []
     for one in res:
@@ -397,19 +431,18 @@ def get_session_list(*,
     assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
     logo_map = {one.id: BaseService.get_logo_share_link(one.logo) for one in flow_list}
     logo_map.update({one.id: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
-    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,
-                                                                    exclude_category=WorkflowEventType.UserInput.value)
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(
+        chat_ids, exclude_category=WorkflowEventType.UserInput.value)
     latest_messages = {one.chat_id: one for one in latest_messages}
     return resp_200([
-        ChatList(
-            chat_id=one.chat_id,
-            flow_id=one.flow_id,
-            flow_name=one.flow_name,
-            flow_type=one.flow_type,
-            logo=logo_map.get(one.flow_id, ''),
-            latest_message=latest_messages.get(one.chat_id, None),
-            create_time=one.create_time,
-            update_time=one.update_time) for one in res
+        ChatList(chat_id=one.chat_id,
+                 flow_id=one.flow_id,
+                 flow_name=one.flow_name,
+                 flow_type=one.flow_type,
+                 logo=logo_map.get(one.flow_id, ''),
+                 latest_message=latest_messages.get(one.chat_id, None),
+                 create_time=one.create_time,
+                 update_time=one.update_time) for one in res
     ])
 
 
@@ -423,7 +456,8 @@ def get_online_chat(*,
                     page: Optional[int] = 1,
                     limit: Optional[int] = 10,
                     user: UserPayload = Depends(get_login_user)):
-    data, _ = WorkFlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value, tag_id, None, page, limit)
+    data, _ = WorkFlowService.get_all_flows(user, keyword, FlowStatus.ONLINE.value, tag_id, None,
+                                            page, limit)
     return resp_200(data=data)
 
 

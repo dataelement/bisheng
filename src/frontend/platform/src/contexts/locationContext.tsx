@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useEffect, useState } from "react";
-import { getAppConfig } from "../controllers/API";
+import { getAppConfig, getWorkstationConfigApi } from "../controllers/API";
 
 //types for location context
 type locationContextType = {
@@ -69,8 +69,9 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   })
 
   const loadConfig = () => {
-    getAppConfig().then(res => {
+    Promise.all([getWorkstationConfigApi(), getAppConfig()]).then(([bench, res]) => {
       setAppConfig({
+        benchMenu: bench?.menuShow || false,
         isDev: res.env === 'dev',
         libAccepts: res.uns_support,
         officeUrl: res.office_url,
@@ -111,7 +112,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         extraComponent,
         setExtraComponent,
         appConfig,
-        reloadConfig: loadConfig
+        reloadConfig: loadConfig,
       }}
     >
       {children}
