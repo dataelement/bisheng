@@ -314,10 +314,12 @@ class UserGroupDao(UserGroupBase):
             statement = delete(UserGroup).where(
                 UserGroup.group_id == group_id).where(
                 UserGroup.user_id.in_(operation_ids)).where(
-                UserGroup.is_group_admin == 0,UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+                UserGroup.is_group_admin == 0).where(
+                UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
             session.exec(statement)
             session.commit()
 
+    @classmethod
     def delete_group_audits(cls, group_id: int, audit_ids: List[int]) -> None:
         """
         批量删除用户组的audits
@@ -326,7 +328,8 @@ class UserGroupDao(UserGroupBase):
             statement = delete(UserGroup).where(
                 UserGroup.group_id == group_id).where(
                 UserGroup.user_id.in_(audit_ids)).where(
-                UserGroup.is_group_admin == 0, UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
+                UserGroup.is_group_admin == 0).where(
+                UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
             session.exec(statement)
             session.commit()
 
