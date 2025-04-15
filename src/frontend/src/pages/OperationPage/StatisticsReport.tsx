@@ -72,8 +72,12 @@ export default function StatisticsReport({ onBack, onJump }) {
             start_date,
             end_date,
         };
+        const startDate = start_date.split(' ')?.[0];
+        const endDate = end_date.split(' ')?.[0];
+        const fileName =  `运营报表_${startDate}_${endDate}.xlsx`
+
         getOperationReportDownloadLinkApi(params).then(res => {
-            downloadFile(__APP_ENV__.BASE_URL + res.url, '统计报表.xlsx')
+            downloadFile(__APP_ENV__.BASE_URL + res.url, fileName)
         })
     };
 
