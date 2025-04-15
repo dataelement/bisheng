@@ -491,7 +491,10 @@ def get_export_url(*,
                 if key not in all_title:
                     all_title.append(key)
                 qa_dict_list[-1][key] = question
-        df = pd.DataFrame(qa_dict_list)
+        if len(qa_dict_list) != 0:
+            df = pd.DataFrame(qa_dict_list)
+        else:
+            df = pd.DataFrame([{"问题": "", "答案": "", "相似问题1": "", "相似问题2": ""}])
         df = df[all_title]
         bio = BytesIO()
         with pd.ExcelWriter(bio, engine="openpyxl") as writer:
