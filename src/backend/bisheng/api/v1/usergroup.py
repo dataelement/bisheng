@@ -54,7 +54,7 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
         groups = []
     else:
         # 查询下是否是其他用户组的管理员
-        user_groups = UserGroupDao.get_user_operation_group(login_user.user_id)
+        user_groups = UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)
         groups = []
         for one in user_groups:
             groups.append(one.group_id)
@@ -74,7 +74,7 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
         groups = []
     else:
         # 查询下是否是其他用户组的管理员
-        user_groups = UserGroupDao.get_user_audit_group(login_user.user_id)
+        user_groups = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
         groups = []
         for one in user_groups:
             groups.append(one.group_id)

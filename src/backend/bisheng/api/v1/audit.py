@@ -69,7 +69,7 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
                      keyword: Optional[str] = Query(default=None,description='历史记录')):
     """ 筛选所有会话列表 """
     if not login_user.is_admin():
-        all_group = UserGroupDao.get_user_audit_groups(login_user.user_id) + UserGroupDao.get_user_admin_groups(login_user.user_id)
+        all_group = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
         all_group = [str(one.group_id) for one in all_group]
     else:
         all_group = [str(one.id) for one in GroupDao.get_all_group()]
@@ -120,7 +120,7 @@ async def get_session_chart(request: Request, login_user: UserPayload = Depends(
                             page_size: Optional[int] = Query(default=10, description='每页条数')):
     """ 按照用户组聚合统计会话数据 """
     if not login_user.is_admin():
-        all_group = UserGroupDao.get_user_audit_groups(login_user.user_id) + UserGroupDao.get_user_admin_groups(login_user.user_id)
+        all_group = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
         all_group = [str(one.group_id) for one in all_group]
     else:
         all_group = [str(one.id) for one in GroupDao.get_all_group()]
@@ -147,7 +147,7 @@ async def export_session_chart(request: Request, login_user: UserPayload = Depen
                                end_date: Optional[datetime] = Query(default=None, description='结束时间')):
     """ 根据筛选条件导出最终的结果 """
     if not login_user.is_admin():
-        all_group = UserGroupDao.get_user_audit_groups(login_user.user_id) + UserGroupDao.get_user_admin_groups(login_user.user_id)
+        all_group = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
         all_group = [str(one.group_id) for one in all_group]
     else:
         all_group = [str(one.id) for one in GroupDao.get_all_group()]

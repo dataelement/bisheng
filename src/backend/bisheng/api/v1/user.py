@@ -231,11 +231,11 @@ async def list_user(*,
     if not login_user.is_admin():
         # 查询下是否是其他用户组的管理员
         if group_role_type == 'audit':
-            user_audit_groups = UserGroupDao.get_user_audit_group(login_user.user_id)
+            user_audit_groups = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
             user_audit_groups = [one.group_id for one in user_audit_groups]
             groups = user_audit_groups
         elif group_role_type == 'operation':
-            user_operation_groups = UserGroupDao.get_user_operation_group(login_user.user_id)
+            user_operation_groups = UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)
             user_operation_groups = [one.group_id for one in user_operation_groups]
             groups = user_operation_groups
         else:

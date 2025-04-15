@@ -549,7 +549,7 @@ class RoleGroupService():
         """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
         groups = []
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_audit_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)]
             if not groups:
                 return [], 0
         else:
@@ -575,7 +575,7 @@ class RoleGroupService():
         """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
         groups = []
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_operation_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)]
             if not groups:
                 return [], 0
         else:
