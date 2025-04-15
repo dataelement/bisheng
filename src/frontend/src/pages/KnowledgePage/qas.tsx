@@ -42,6 +42,7 @@ const defaultQa = {
 function QaTable({ dataList }) {
     const { t } = useTranslation('knowledge');
     const similarityQuestions = useRef(null);
+    const [questions, setQuestions] = useState<string[]>([]);
     return (
       <div>
         <Table>
@@ -72,16 +73,17 @@ function QaTable({ dataList }) {
                                             description: t('similarityQuestionEmpty')
                                         });
                                     }
+                                    setQuestions(questions);
                                     //打开相似问题预览窗口
                                     similarityQuestions.current.open();
                                 }}>
                                     {t('view')}
                                 </Button>
                             </TableCell>
-                            <SimilarityProblemModal ref={similarityQuestions} questions={questions}/>
                         </TableRow>
                     )})
                 }
+                <SimilarityProblemModal ref={similarityQuestions} questions={questions}/>
             </TableBody>
         </Table>
       </div>
@@ -106,6 +108,8 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
         setOpen(false);
     };
 
+    console.log('innerquestionas', questions);
+    
     return (
         <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
             <DialogContent className="sm:max-w-[625px]">
