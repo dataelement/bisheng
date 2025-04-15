@@ -5,6 +5,7 @@ from uuid import UUID
 
 from loguru import logger
 from pydantic import BaseModel
+from sqlalchemy import and_
 from sqlmodel import Field, delete, select, JSON, Column, DateTime, String, Text, case, func, or_, text, update, not_
 
 from bisheng.database.base import session_getter
@@ -392,19 +393,39 @@ class ChatMessageDao(MessageBase):
             ChatMessage.flow_id,
             UserGroup.group_id,
             func.count(func.distinct(ChatMessage.chat_id)).label('session_num'),
-            func.sum(case((ChatMessage.category == 'question', 1), else_=0)).label('input_num'),
-            func.sum(case((ChatMessage.category != 'question', 1), else_=0)).label('output_num'),
-            func.sum(case((ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1), else_=0)).label(
-                'violations_num'),
-            func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.UNRATED.value, 1),
-                          else_=0)).label('unrateds'),
-            func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.LIKED.value, 1),
-                          else_=0)).label('likes'),
-            func.sum(case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
-                          else_=0)).label('dislikes'),
-            (func.sum(case((ChatMessage.category == 'question', 1), else_=0)) - func.sum(
-                case((ChatMessage.category != 'question' and ChatMessage.liked == LikedType.DISLIKED.value, 1),
-                     else_=0))).label('not_dislikes'),
+            func.sum(case(
+                (ChatMessage.category == 'question', 1),
+                else_=0
+            )).label('input_num'),
+            func.sum(case(
+                (and_(ChatMessage.category != 'question', ChatMessage.category != 'user_input',ChatMessage.category != 'input'), 1),
+                else_=0
+            )).label('output_num'),
+            func.sum(case(
+                (ChatMessage.review_status == ReviewStatus.VIOLATIONS.value, 1),
+                else_=0
+            )).label('violations_num'),
+            func.sum(case(
+                (and_(ChatMessage.category != 'question', ChatMessage.liked == LikedType.UNRATED.value), 1),
+                else_=0
+            )).label('unrateds'),
+            func.sum(case(
+                (and_(ChatMessage.category != 'question', ChatMessage.liked == LikedType.LIKED.value), 1),
+                else_=0
+            )).label('likes'),
+            func.sum(case(
+                (and_(ChatMessage.category != 'question', ChatMessage.liked == LikedType.DISLIKED.value), 1),
+                else_=0
+            )).label('dislikes'),
+            func.sum(case(
+                (and_(
+                    ChatMessage.category != 'question',
+                    ChatMessage.category != 'user_input',
+                    ChatMessage.category != 'input',
+                    ChatMessage.liked != LikedType.DISLIKED.value
+                ), 1),
+                else_=0
+            )).label('not_dislikes'),
             func.min(ChatMessage.user_id).label("user_id")
         ).select_from(ChatMessage).join(UserGroup, ChatMessage.user_id == UserGroup.user_id)
 
@@ -449,6 +470,8 @@ class ChatMessageDao(MessageBase):
                 'dislikes':one[8],
                 'not_dislikes': one[9],
                 'user_id': one[10],
+                'satisfaction':one[7] / one[4] if one[4]!=0 and one[7] != 0 else 1,
+                'not_nosatisfaction':one[9] / one[4] if one[4]!=0 and one[9] != 0 else 1,
             } for one in res_list
         ]
         return res, total
