@@ -9,6 +9,7 @@ export const FormInput = ({
     error,
     placeholder = '',
     maxLength,
+    type = 'text',
     onChange,
     isTextarea = false,
 }: {
@@ -17,6 +18,7 @@ export const FormInput = ({
     error: string;
     maxLength: number;
     onChange: (value: string) => void;
+    type?: string;
     placeholder?: string;
     isTextarea?: boolean;
 }) => (
@@ -32,6 +34,7 @@ export const FormInput = ({
         ) : (
             <Input
                 value={value}
+                type={type}
                 placeholder={placeholder}
                 onChange={(e) => onChange(e.target.value)}
                 className="mt-3"

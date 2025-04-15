@@ -114,11 +114,10 @@ export const excelMimeTypes =
 export const textMimeTypes =
   /^(text\/(x-c|x-csharp|x-c\+\+|x-java|html|markdown|x-php|x-python|x-script\.python|x-ruby|x-tex|plain|css|vtt|javascript|csv))$/;
 
-export const applicationMimeTypes =
-  /^(application\/(epub\+zip|csv|json|pdf|x-tar|typescript|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet)|xml|zip))$/;
-
-export const imageMimeTypes = /^image\/(jpeg|gif|png|webp)$/;
-
+  export const applicationMimeTypes =
+  /^(application\/(epub\+zip|csv|json|pdf|x-tar|typescript|msword|vnd\.ms-powerpoint|vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|presentationml\.presentation|spreadsheetml\.sheet)|xml|zip))$/;
+export const imageMimeTypes = /^image\/(jpeg|gif|png|webp|bmp)$/;
+// 默认上传文件类型
 export const supportedMimeTypes = [
   textMimeTypes,
   excelMimeTypes,

@@ -41,6 +41,7 @@ export interface ChatConfigForm {
     functionDescription: string;
     inputPlaceholder: string;
     models: Model[];
+    maxTokens: number;
     voiceInput: {
         enabled: boolean;
         model: string;
@@ -132,7 +133,7 @@ export default function index() {
                             label={<Label className="bisheng-label">左侧边栏slogan</Label>}
                             value={formData.sidebarSlogan}
                             error={errors.sidebarSlogan}
-                            placeholder="Deepseek"
+                            placeholder=""
                             maxLength={15}
                             onChange={(v) => handleInputChange('sidebarSlogan', v, 15)}
                         />
@@ -141,7 +142,7 @@ export default function index() {
                             label="欢迎语设置"
                             value={formData.welcomeMessage}
                             error={errors.welcomeMessage}
-                            placeholder="我是 DeepSeek，很高兴见到你！"
+                            placeholder="我是 xx，很高兴见到你！"
                             maxLength={1000}
                             onChange={(v) => handleInputChange('welcomeMessage', v, 1000)}
                         />
@@ -159,7 +160,7 @@ export default function index() {
                             label="输入框提示语"
                             value={formData.inputPlaceholder}
                             error={errors.inputPlaceholder}
-                            placeholder="给Deepseek发送消息"
+                            placeholder="给xx发送消息"
                             maxLength={1000}
                             onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
                         />
@@ -181,6 +182,15 @@ export default function index() {
                                 onNameChange={(index, name) => {
                                     handleModelNameChange(index, name);
                                 }}
+                            />
+                            <FormInput
+                                label={<Label className="bisheng-label block pt-2">Max_tokens</Label>}
+                                type="number"
+                                value={formData.maxTokens}
+                                error={''}
+                                placeholder="请输入模型的最大token数"
+                                maxLength={1000}
+                                onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
                             />
                         </div>
 
@@ -231,7 +241,7 @@ export default function index() {
                                 isTextarea
                                 value={formData.knowledgeBase.prompt}
                                 error={errors.kownledgeBase}
-                                placeholder="deepseek官网上传文件提示词"
+                                placeholder=""
                                 maxLength={30000}
                                 onChange={(val) => setFormData(prev => ({
                                     ...prev,
@@ -283,6 +293,7 @@ const useChatConfig = () => {
         functionDescription: '',
         inputPlaceholder: '',
         models: [{ key: generateUUID(4), id: null, name: '', displayName: '' }],
+        maxTokens: 15000,
         voiceInput: { enabled: false, model: '' },
         webSearch: {
             enabled: true,
@@ -307,17 +318,11 @@ const useChatConfig = () => {
 {question}`,
         },
         knowledgeBase: {
-            enabled: true, prompt: `[file name]: {file_name}
-[file content begin]
-{file_content}
-[file content end]
+            enabled: true, prompt: `{retrieved_file_content}
 {question}` },
         fileUpload: {
             enabled: true,
-            prompt: `[file name]: {file_name}
-[file content begin]
-{file_content}
-[file content end]
+            prompt: `{file_content}
 {question}`,
         },
     });
@@ -333,6 +338,8 @@ const useChatConfig = () => {
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
+        kownledgeBase: '',
+        model: '',
         modelNames: [],
     });
 
@@ -481,10 +488,11 @@ const useChatConfig = () => {
         const dataToSave = {
             ...formData,
             // Ensure sidebar slogan has a default value
-            sidebarSlogan: formData.sidebarSlogan.trim() || 'Deepseek',
-            welcomeMessage: formData.welcomeMessage.trim() || '我是 DeepSeek，很高兴见到你！',
-            functionDescription: formData.functionDescription.trim() || '我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～',
-            inputPlaceholder: formData.inputPlaceholder.trim() || '给Deepseek发送消息',
+            sidebarSlogan: formData.sidebarSlogan.trim(),
+            welcomeMessage: formData.welcomeMessage.trim(),
+            functionDescription: formData.functionDescription.trim(),
+            inputPlaceholder: formData.inputPlaceholder.trim(),
+            maxTokens: formData.maxTokens || 15000,
         };
 
         // Here you would typically make an API call to save the data
