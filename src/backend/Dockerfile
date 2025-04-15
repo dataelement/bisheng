@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY ./ ./
 
+# 临时先删除旧的langgraph相关的库，不然安装有bug。后续重新打包一个base镜像
+RUN pip uninstall -y langgraph langgraph-prebuilt langgraph-checkpoint langgraph-sdk
+
 RUN poetry config virtualenvs.create false
 RUN poetry update --without dev
 
