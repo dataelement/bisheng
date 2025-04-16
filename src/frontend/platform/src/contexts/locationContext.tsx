@@ -69,9 +69,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   })
 
   const loadConfig = () => {
-    Promise.all([getWorkstationConfigApi(), getAppConfig()]).then(([bench, res]) => {
+    Promise.all([getAppConfig()]).then(([res]) => {
       setAppConfig({
-        benchMenu: bench?.menuShow || false,
         isDev: res.env === 'dev',
         libAccepts: res.uns_support,
         officeUrl: res.office_url,
