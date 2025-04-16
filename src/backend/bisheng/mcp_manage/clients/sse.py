@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from mcp.client.sse import sse_client
 
 from bisheng.mcp_manage.clients.base import BaseMcpClient
@@ -17,11 +19,14 @@ class SseClient(BaseMcpClient):
         super().__init__()
         self.url = url
 
+    @asynccontextmanager
     async def get_mcp_client_transport(self):
         """
         Initialize the SSE client.
         """
-        return await self.exit_stack.enter_async_context(sse_client(url=self.url))
+        async with sse_client(url=self.url) as (read, write):
+            yield read, write
+
 
     def connect(self):
         """

@@ -1,7 +1,6 @@
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
-from anyio import ClosedResourceError
 from mcp import ClientSession
 
 
@@ -18,37 +17,25 @@ class BaseMcpClient(object):
     async def get_mcp_client_transport(self):
         raise NotImplementedError("get_mcp_client_transport() must be implemented in subclasses.")
 
-
+    @asynccontextmanager
     async def initialize(self):
         """
         Initialize the client.
         """
-        if not self.client_session:
-            read, write = await self.get_mcp_client_transport()
-            self.client_session = await self.exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-        try:
-            await self.client_session.initialize()
-        except ClosedResourceError as e:
-            # reconnect sse server
-            await self.close()
-            read, write = await self.get_mcp_client_transport()
-            self.client_session = await self.exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-            await self.client_session.initialize()
+        async with self.get_mcp_client_transport() as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session
 
     async def list_tools(self):
-        tools = await self.client_session.list_tools()
+        async with self.initialize() as client_session:
+            tools = await client_session.list_tools()
         return tools.tools
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None):
         """
         Call a tool.
         """
-        return await self.client_session.call_tool(name, arguments)
-
-    async def close(self):
-        await self.exit_stack.aclose()
-        self.client_session = None
+        async with self.initialize() as client_session:
+            resp = await client_session.call_tool(name, arguments)
+        return resp

@@ -24,9 +24,6 @@ class ClientManager:
         else:
             client = cls.client_map[client_key]
 
-        # 判断对应的client是否还处于链接状态
-        await client.initialize()
-
         return client
 
     @classmethod
@@ -35,11 +32,4 @@ class ClientManager:
         client_key = md5_hash(f'{client_type}:{kwargs}')
         if client_key not in cls.client_map:
             return
-        client = cls.client_map[client_key]
-        await client.close()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """ 释放所有的连接 """
-        for client_key in self.client_map.keys():
-            client = self.client_map[client_key]
-            await client.close()
+        del cls.client_map[client_key]
