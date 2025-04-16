@@ -69,28 +69,52 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   })
 
   const loadConfig = () => {
-    Promise.all([getWorkstationConfigApi(), getAppConfig()]).then(([bench, res]) => {
-      setAppConfig({
-        benchMenu: bench?.menuShow || false,
-        isDev: res.env === 'dev',
-        libAccepts: res.uns_support,
-        officeUrl: res.office_url,
-        dialogTips: res.dialog_tips,
-        dialogQuickSearch: res.dialog_quick_search,
-        websocketHost: res.websocket_url || window.location.host,
-        isPro: !!res.pro,
-        chatPrompt: !!res.application_usage_tips,
-        noFace: !res.show_github_and_help,
-        register: !!res.enable_registration,
-        uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
+    getAppConfig()
+      .then(res => {
+        // Set all config values that come from getAppConfig
+        setAppConfig({
+          isDev: res.env === 'dev',
+          libAccepts: res.uns_support,
+          officeUrl: res.office_url,
+          dialogTips: res.dialog_tips,
+          dialogQuickSearch: res.dialog_quick_search,
+          websocketHost: res.websocket_url || window.location.host,
+          isPro: !!res.pro,
+          chatPrompt: !!res.application_usage_tips,
+          noFace: !res.show_github_and_help,
+          register: !!res.enable_registration,
+          uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
+        });
+
+        // backend version
+        res.version && console.log(
+          "%cversion " + res.version,
+          "background-color:#024de3;color:#fff;font-weight:bold;font-size: 38px;" +
+          "padding: 6px 12px;font-family:'american typewriter';text-shadow:1px 1px 3px black;"
+        );
+
+        // Then get workstation config separately
+        return getWorkstationConfigApi()
+          .then(bench => {
+            // Only update the benchMenu property
+            setAppConfig(prev => ({
+              ...prev,
+              benchMenu: bench?.menuShow || false
+            }));
+          })
+          .catch(error => {
+            console.error('Failed to get workstation config:', error);
+            // Set default value for benchMenu if the request fails
+            setAppConfig(prev => ({
+              ...prev,
+              benchMenu: false
+            }));
+          });
       })
-      // backend version
-      res.version && console.log(
-        "%cversion " + res.version,
-        "background-color:#024de3;color:#fff;font-weight:bold;font-size: 38px;" +
-        "padding: 6px 12px;font-family:'american typewriter';text-shadow:1px 1px 3px black;"
-      );
-    })
+      .catch(error => {
+        console.error('Failed to get app config:', error);
+        // You might want to set some default values here if the main config fails
+      });
   }
 
   // 获取系统配置
