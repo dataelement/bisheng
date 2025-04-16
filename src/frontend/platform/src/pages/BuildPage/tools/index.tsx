@@ -192,7 +192,7 @@ const useMcpRefrensh = () => {
             // api
             const res = await refreshAssistantMcpApi()
             console.log('刷新 :>> ', res);
-            if (res) {
+            if (!res) {
                 message({
                     variant: "success",
                     description: "刷新成功"

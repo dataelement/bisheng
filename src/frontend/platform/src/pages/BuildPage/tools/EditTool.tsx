@@ -21,7 +21,7 @@ interface TestDialogProps {
     formState: any;
 }
 
-const TestDialog = forwardRef<{
+export const TestDialog = forwardRef<{
     open: (item, tool, formState) => void
 }, TestDialogProps>((props: any, ref) => {
     const { t } = useTranslation()

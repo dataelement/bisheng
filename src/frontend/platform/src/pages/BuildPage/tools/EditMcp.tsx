@@ -3,15 +3,14 @@ import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
 // import { createMcpServer, deleteMcpServer, getMcpTools, testMcpTool, updateMcpServer } from "@/controllers/API/mcp";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Plus } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 // 测试对话框组件
 const TestDialog = forwardRef((props, ref) => {
@@ -21,13 +20,15 @@ const TestDialog = forwardRef((props, ref) => {
     const [result, setResult] = useState("");
     const [loading, setLoading] = useState(false);
     const { message } = useToast();
+    const serverRef = useRef({});
 
     useImperativeHandle(ref, () => ({
-        open: (tool, config) => {
+        open: (tool, config, _serverRef) => {
             setToolData({ ...tool, config });
             setParams({});
             setResult("");
             setTestShow(true);
+            serverRef.current = _serverRef;
         }
     }));
 
@@ -44,13 +45,20 @@ const TestDialog = forwardRef((props, ref) => {
 
         setLoading(true);
         try {
-            // const res = await captureAndAlertRequestErrorHoc(
-            //     testMcpTool({
-            //         config: toolData.config,
-            //         toolName: toolData.name,
-            //         params
-            //     })
-            // );
+            console.log('toolData :>> ', toolData);
+            const { server_host, children, auth_method, auth_type, api_key } = serverRef.current
+
+            const res = await captureAndAlertRequestErrorHoc(
+                testMcpApi({
+                    server_host,
+                    extra: children.find(el => el.name === toolData.name).extra,
+                    auth_method,
+                    auth_type,
+                    api_key,
+                    request_params: params
+                }).then(setResult)
+            );
+            console.log('res :>> ', res);
             // setResult(JSON.stringify(res, null, 2));
         } finally {
             setLoading(false);
@@ -131,11 +139,15 @@ const McpServerDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({
         open: (server = null) => {
+            console.log('server :>> ', server);
             if (server) {
-                setFormData(server);
+                setFormData({
+                    ...server,
+                    config: server.openapi_schema
+                });
                 serverRef.current = server;
                 setIsEdit(true);
-                fetchTools(server.config);
+                fetchTools(server.openapi_schema);
             } else {
                 resetForm();
                 setIsEdit(false);
@@ -153,24 +165,14 @@ const McpServerDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
 
     // 获取工具列表
     const fetchTools = async (config) => {
+        if (!config.trim()) return;
         try {
             const jsonConfig = JSON.parse(config);
             console.log('jsonConfig :>> ', jsonConfig);
-            // const tools = await captureAndAlertRequestErrorHoc(getMcpTools(jsonConfig));
-            // setTools(tools || []);
-            setTools([{
-                name: 'xxx',
-                description: 'yyyyy',
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        name: {
-                            type: "string",
-                            required: true
-                        }
-                    }
-                }
-            }]);
+            const tools = await captureAndAlertRequestErrorHoc(getMcpServeByConfig({ file_content: config }));
+            serverRef.current = tools;
+            const apis = tools.children.map((item => JSON.parse(item.extra)));
+            setTools(apis);
         } catch (error) {
             message({ description: "配置解析失败，请检查JSON格式", variant: "warning" });
             setTools([]);
@@ -202,15 +204,17 @@ const McpServerDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
         }
 
         // 提交数据
-        // const apiMethod = isEdit ? updateMcpServer : createMcpServer;
-        // captureAndAlertRequestErrorHoc(apiMethod({
-        //     ...serverRef.current,
-        //     ...formData,
-        //     config: JSON.parse(formData.config) // 确保存储的是对象
-        // })).then(() => {
-        //     message({ description: "保存成功", variant: "success" });
-        //     setOpen(false);
-        // });
+        const apiMethod = isEdit ? updateTool : createTool;
+        captureAndAlertRequestErrorHoc(apiMethod({
+            ...serverRef.current,
+            ...formData,
+            // config: JSON.parse(formData.config), // 确保存储的是对象
+            is_preset: 2
+        })).then(() => {
+            message({ description: "保存成功", variant: "success" });
+            setOpen(false);
+            onReload()
+        });
     };
 
     // 删除服务器
@@ -219,11 +223,11 @@ const McpServerDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
             title: "确认删除",
             desc: "确认删除该 MCP 服务器？",
             onOk(next) {
-                // captureAndAlertRequestErrorHoc(deleteMcpServer(serverRef.current.id)).then(() => {
-                //     setOpen(false);
-                // onReload()
-                //     next();
-                // });
+                captureAndAlertRequestErrorHoc(deleteTool(formData.id)).then(() => {
+                    setOpen(false);
+                    onReload()
+                    next();
+                });
             }
         });
     };
@@ -311,7 +315,8 @@ const McpServerDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
                                                     variant="outline"
                                                     onClick={() => testDialogRef.current.open(
                                                         tool,
-                                                        JSON.parse(formData.config)
+                                                        JSON.parse(formData.config),
+                                                        serverRef.current
                                                     )}
                                                 >
                                                     测试
