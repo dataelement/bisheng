@@ -2,11 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text, Text
-from sqlmodel import Field, select
-
-from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
+from sqlalchemy import Column, DateTime, Text, text
+from sqlmodel import Field, select
 
 
 class ConfigKeyEnum(Enum):
@@ -17,6 +16,7 @@ class ConfigKeyEnum(Enum):
     ASSISTANT_LLM = 'assistant_llm'  # 助手默认模型配置
     EVALUATION_LLM = 'evaluation_llm'  # 评测默认模型配置
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
+    WORKSTATION = 'workstation'  # 工作台默认模型配置
 
 
 class ConfigBase(SQLModelSerializable):

@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError
+from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
+from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
@@ -46,6 +48,11 @@ filetype_load_map = {
     'pptx': UnstructuredPowerPointLoader,
 }
 
+split_handles = [
+    XlsxSplitHandle(),
+    XlsSplitHandle(),
+]
+
 
 class KnowledgeUtils:
     # 用来区分chunk和自动生产的总结内容  格式如：文件名\n文档总结\n--------\n chunk内容
@@ -62,7 +69,13 @@ class KnowledgeUtils:
         res = f"{{<file_title>{metadata.get('source', '')}</file_title>\n"
         if metadata.get('title', ''):
             res += f"<file_abstract>{metadata.get('title', '')}</file_abstract>\n"
-        res += f"<paragraph_content>{chunk}</paragraph_content>}}"
+        res += f'<paragraph_content>{chunk}</paragraph_content>}}'
+        return res
+
+    @classmethod
+    def chunk2promt(cls, chunk: str, metadata: dict) -> str:
+        # 拼接chunk和metadata中的数据，获取新的chunk
+        res = f"[file name]:{metadata.get('source', '')}\n[file content begin]\n{chunk}[file content end]\n"
         return res
 
     @classmethod
@@ -73,7 +86,8 @@ class KnowledgeUtils:
         if not chunk.startswith('{<file_title>'):
             return chunk.split(cls.chunk_split)[-1]
 
-        return chunk.split('</file_abstract>\n<paragraph_content>')[-1].rstrip('</paragraph_content>}')
+        return chunk.split('</file_abstract>\n<paragraph_content>')[-1].rstrip(
+            '</paragraph_content>}')
 
     @classmethod
     def save_preview_cache(cls,
@@ -445,50 +459,64 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
     # 加载文档内容
     logger.info(f'start_file_loader file_name={file_name}')
     parse_type = ParseType.LOCAL.value
-    if not settings.get_knowledge().get('unstructured_api_url'):
-        file_type = file_name.split('.')[-1]
-        if file_type not in filetype_load_map:
-            raise Exception('类型不支持')
-        loader = filetype_load_map[file_type](file_path=input_file)
-        partitions = []
-        documents = loader.load()
+    # excel 文件的处理单独出来
+    file_type = file_name.split('.')[-1]
+    partitions = []
+    texts = []
+    if file_type in ['xls', 'xlsx']:
+        for handle in split_handles:
+            if handle.support(file_name, input_file):
+                result = handle.handle(file_name, separator, False, chunk_size, input_file, None)
+                for content in result:
+                    if content:
+                        for paragraph in content:
+                            texts.append(
+                                Document(page_content=paragraph.get('content'), metadata={}))
+
     else:
-        loader = ElemUnstructuredLoader(
-            file_name,
-            input_file,
-            unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
-        documents = loader.load()
-        parse_type = ParseType.UNS.value
-        partitions = loader.partitions
-        partitions = parse_partitions(partitions)
+        if not settings.get_knowledge().get('unstructured_api_url'):
+            file_type = file_name.split('.')[-1]
+            if file_type not in filetype_load_map:
+                raise Exception('类型不支持')
+            loader = filetype_load_map[file_type](file_path=input_file)
+            documents = loader.load()
+        else:
+            loader = ElemUnstructuredLoader(
+                file_name,
+                input_file,
+                unstructured_api_url=settings.get_knowledge().get('unstructured_api_url'))
+            documents = loader.load()
+            parse_type = ParseType.UNS.value
+            partitions = loader.partitions
+            partitions = parse_partitions(partitions)
 
-    logger.info(f'start_extract_title file_name={file_name}')
-    if llm:
-        t = time.time()
-        for one in documents:
-            # 配置了相关llm的话，就对文档做总结
-            title = extract_title(llm, one.page_content)
-            one.metadata['title'] = title
-        logger.info('file_extract_title=success timecost={}', time.time() - t)
+        logger.info(f'start_extract_title file_name={file_name}')
+        if llm:
+            t = time.time()
+            for one in documents:
+                # 配置了相关llm的话，就对文档做总结
+                title = extract_title(llm, one.page_content)
+                one.metadata['title'] = title
+            logger.info('file_extract_title=success timecost={}', time.time() - t)
 
-    logger.info(f'start_split_text file_name={file_name}')
-    texts = text_splitter.split_documents(documents)
+        logger.info(f'start_split_text file_name={file_name}')
+        texts = text_splitter.split_documents(documents)
     raw_texts = [t.page_content for t in texts]
     logger.info(f'start_process_metadata file_name={file_name}')
     metadatas = [{
         'bbox':
-            json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
+        json.dumps({'chunk_bboxes': t.metadata.get('chunk_bboxes', '')}),
         'page':
-            t.metadata['chunk_bboxes'][0].get('page')
-            if t.metadata.get('chunk_bboxes', None) else t.metadata.get('page', 0),
+        t.metadata['chunk_bboxes'][0].get('page')
+        if t.metadata.get('chunk_bboxes', None) else t.metadata.get('page', 0),
         'source':
-            file_name,
+        file_name,
         'title':
-            t.metadata.get('title', ''),
+        t.metadata.get('title', ''),
         'chunk_index':
-            t_index,
+        t_index,
         'extra':
-            ''
+        ''
     } for t_index, t in enumerate(texts)]
     logger.info(f'file_chunk_over file_name=={file_name}')
     return raw_texts, metadatas, parse_type, partitions

@@ -13,7 +13,7 @@ class OpenApiTools(APIToolBase):
     api_location: Optional[str]
     parameter_name: Optional[str]
 
-    def get_real_path(self, path_params: dict|None):
+    def get_real_path(self, path_params: dict | None):
         path = self.params['path']
         if path_params:
             path = path.format(**path_params)
@@ -47,8 +47,10 @@ class OpenApiTools(APIToolBase):
         #     elif self.params['parameter_name']:
         #         params.update({self.params['parameter_name']:self.api_key})
         api_location = self.params.get('api_location')
-        if (api_location == "query") or (hasattr(self, 'api_location') and self.api_location == "query"):
-            parameter_name = getattr(self, 'parameter_name', None) or self.params.get('parameter_name')
+        if (api_location == 'query') or (hasattr(self, 'api_location')
+                                         and self.api_location == 'query'):
+            parameter_name = getattr(self, 'parameter_name',
+                                     None) or self.params.get('parameter_name')
             if parameter_name:
                 params.update({parameter_name: self.api_key})
         return params, json_data, path_params
