@@ -1,6 +1,7 @@
 from contextlib import AsyncExitStack
 from typing import Any
 
+from anyio import ClosedResourceError
 from mcp import ClientSession
 
 
@@ -27,8 +28,16 @@ class BaseMcpClient(object):
             self.client_session = await self.exit_stack.enter_async_context(
                 ClientSession(read, write)
             )
-
-        await self.client_session.initialize()
+        try:
+            await self.client_session.initialize()
+        except ClosedResourceError as e:
+            # reconnect sse server
+            await self.close()
+            read, write = await self.get_mcp_client_transport()
+            self.client_session = await self.exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await self.client_session.initialize()
 
     async def list_tools(self):
         tools = await self.client_session.list_tools()
@@ -41,5 +50,6 @@ class BaseMcpClient(object):
         return await self.client_session.call_tool(name, arguments)
 
     async def close(self):
+        print("!!!!!!!!!!!!!!!!!! close !!!!!!!!!!!!!!!")
         await self.exit_stack.aclose()
         self.client_session = None
