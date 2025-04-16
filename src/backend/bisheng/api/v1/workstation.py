@@ -73,7 +73,23 @@ def step_message(stepId, runId, msgId):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def final_message(conversation, title, requestMessage, responseMessage):
+def final_message(conversation, title, requestMessage, text, error, modelName):
+    responseMessage = ChatMessageDao.insert_one(
+        ChatMessage(
+            user_id=conversation.user_id,
+            chat_id=conversation.id,
+            flow_id='',
+            type='assistant',
+            is_bot=True,
+            message=text,
+            category='answer',
+            sender=modelName,
+            extra=json.dumps({
+                'parentMessageId': requestMessage.id,
+                'error': error
+            }),
+            source=0,
+        ))
     msg = json.dumps(
         {
             'final': True,
@@ -265,6 +281,8 @@ async def chat_completions(
 ):
     wsConfig = WorkStationService.get_config()
     conversationId = data.conversationId
+    model = [model for model in wsConfig.models if model.id == data.model][0]
+    modelName = model.displayName
 
     # 如果没有传入会话ID，则使用默认的会话ID
     if not conversationId:
@@ -314,111 +332,112 @@ async def chat_completions(
 
     # 处理流式输出
     async def event_stream():
+        yield user_message(message.id, conversationId, 'User', data.text)
         prompt = data.text
         web_list = []
-        if data.search_enabled:
-            # 如果开启搜索，先检查prompt 是否需要搜索
-            stepId = f'step_${uuid4().hex}'
-            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
-            searchTExt = promptSearch % data.text
-            inputs = [HumanMessage(content=searchTExt)]
-            searchRes = await bishengllm.ainvoke(searchTExt)
-            if searchRes.content == '1':
-                logger.info(f'需要联网搜索, prompt={data.text}')
-                # 如果需要联网搜索，则调用搜索接口
-                search_res, web_list = await webSearch(data.text, wsConfig.webSearch.bingKey,
-                                                       wsConfig.webSearch.bingUrl)
-                content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
-                yield SSEResponse(event='on_search_result', data=delta(id=stepId,
-                                                                       delta=content)).toString()
-                prompt = wsConfig.webSearch.prompt.format(
-                    search_results=search_res,
-                    cur_date=datetime.now().strftime('%Y-%m-%d'),
-                    question=data.text)
-        elif data.knowledge_enabled:
-            logger.info(f'knowledge, prompt={data.text}')
-            chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
-            prompt = wsConfig.knowledgeBase.prompt.format(retrieved_file_content='\n'.join(chunks),
-                                                          question=data.text)
-
-        if data.files:
-            #  获取文件全文
-            filecontent = '\n'.join([getFileContent(file.get('filepath')) for file in data.files])
-            prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent,
-                                                       question=data.text)
-
-        yield user_message(message.id, conversationId, 'User', data.text)
-
-        inputs = [HumanMessage(content=prompt)]
-        task = asyncio.create_task(
-            bishengllm.ainvoke(
-                inputs,
-                config=RunnableConfig(callbacks=[callbackHandler]),
-            ))
+        error = False
         final_res = ''
         resoning_res = ''
-        stepId = None
-        # 消息存储
-        # 处理流式输出
-        needBreak = False
-        while True:
-            try:
-                token = SSEClient.queue.get_nowait()
-                content = token.get('message').get('content')
-                reasoning_content = token.get('message').get('reasoning_content')
-                if content:
-                    if not final_res:
-                        # 第一次返回的消息
-                        stepId = 'step_' + uuid4().hex
-                        yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
-                    final_res += content
-                    content = {'content': [{'type': 'text', 'text': content}]}
-                    yield SSEResponse(event='on_message_delta',
+        try:
+            if data.search_enabled:
+                # 如果开启搜索，先检查prompt 是否需要搜索
+                stepId = f'step_${uuid4().hex}'
+                yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                searchTExt = promptSearch % data.text
+                inputs = [HumanMessage(content=searchTExt)]
+                searchRes = await bishengllm.ainvoke(searchTExt)
+                if searchRes.content == '1':
+                    logger.info(f'需要联网搜索, prompt={data.text}')
+                    # 如果需要联网搜索，则调用搜索接口
+                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch.bingKey,
+                                                           wsConfig.webSearch.bingUrl)
+                    content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
+                    yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()
+                    prompt = wsConfig.webSearch.prompt.format(
+                        search_results=search_res,
+                        cur_date=datetime.now().strftime('%Y-%m-%d'),
+                        question=data.text)
+            elif data.knowledge_enabled:
+                logger.info(f'knowledge, prompt={data.text}')
+                chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
+                prompt = wsConfig.knowledgeBase.prompt.format(
+                    retrieved_file_content='\n'.join(chunks), question=data.text)
 
-                elif reasoning_content:
-                    if not resoning_res:
-                        # 第一次返回的消息
-                        stepId = 'step_' + uuid4().hex
-                        yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
-                    resoning_res += reasoning_content
-                    content = {'type': 'think', 'think': reasoning_content}
-                    yield SSEResponse(event='on_reasoning_delta',
-                                      data=delta(id=stepId, delta=content)).toString()
-            except asyncio.QueueEmpty:
-                if needBreak:
+            if data.files:
+                #  获取文件全文
+                filecontent = '\n'.join(
+                    [getFileContent(file.get('filepath')) for file in data.files])
+                prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent,
+                                                           question=data.text)
+        except Exception as e:
+            logger.error(f'Error in processing the prompt: {e}')
+            error = True
+            final_res = 'Error in processing the prompt'
+
+        if not error:
+            inputs = [HumanMessage(content=prompt)]
+            task = asyncio.create_task(
+                bishengllm.ainvoke(
+                    inputs,
+                    config=RunnableConfig(callbacks=[callbackHandler]),
+                ))
+
+            stepId = None
+            # 消息存储
+            # 处理流式输出
+            needBreak = False
+            while True:
+                try:
+                    token = SSEClient.queue.get_nowait()
+                    content = token.get('message').get('content')
+                    reasoning_content = token.get('message').get('reasoning_content')
+                    if content:
+                        if not final_res:
+                            # 第一次返回的消息
+                            stepId = 'step_' + uuid4().hex
+                            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                        final_res += content
+                        content = {'content': [{'type': 'text', 'text': content}]}
+                        yield SSEResponse(event='on_message_delta',
+                                          data=delta(id=stepId, delta=content)).toString()
+
+                    elif reasoning_content:
+                        if not resoning_res:
+                            # 第一次返回的消息
+                            stepId = 'step_' + uuid4().hex
+                            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                        resoning_res += reasoning_content
+                        content = {'type': 'think', 'think': reasoning_content}
+                        yield SSEResponse(event='on_reasoning_delta',
+                                          data=delta(id=stepId, delta=content)).toString()
+                except asyncio.QueueEmpty:
+                    if needBreak:
+                        break
+                    await asyncio.sleep(0.3)  # 等待一段时间再继续检查队列
+                except Exception as e:
+                    logger.error(f'Error in processing the message: {e}')
+                    error = True
                     break
-                await asyncio.sleep(0.3)  # 等待一段时间再继续检查队列
 
-            # 循环获取task 结果，不等待
-            try:
-                if task.done():
-                    final_res = task.result()  # Raise any exception if the task failed
-                    needBreak = True
-            except Exception as e:
-                logger.error(f'Error in task: {e}')
-                break
+                # 循环获取task 结果，不等待
+                try:
+                    if task.done():
+                        final_res = task.result()  # Raise any exception if the task failed
+                        needBreak = True
+                except Exception as e:
+                    logger.error(f'Error in task: {e}')
+                    break
         # 结束流式输出
         if resoning_res:
             final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_res.content
         elif web_list:
             final_res = ''':::web\n''' + json.dumps(web_list) + '''\n:::''' + final_res.content
         else:
-            final_res = final_res.content
-        responseMessage = ChatMessageDao.insert_one(
-            ChatMessage(
-                user_id=login_user.user_id,
-                chat_id=conversationId,
-                flow_id='',
-                type='assistant',
-                is_bot=True,
-                message=final_res,
-                category='answer',
-                sender=bishengllm.model_name,
-                extra=json.dumps({'parentMessageId': message.id}),
-                source=0,
-            ))
-        yield final_message(conversaiton, conversaiton.flow_name, message, responseMessage)
+            final_res = final_res.content if not isinstance(final_res, str) else final_res
+
+        yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
+                            modelName)
 
         if not data.conversationId:
             # 生成title

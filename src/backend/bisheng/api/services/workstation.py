@@ -126,6 +126,8 @@ class WorkstationMessage(BaseModel):
     text: str
     updateAt: datetime
     files: Optional[list]
+    error: Optional[bool] = False
+    unfinished: Optional[bool] = False
 
     @classmethod
     def from_chat_message(cls, message: ChatMessage):
@@ -138,6 +140,8 @@ class WorkstationMessage(BaseModel):
             isCreatedByUser=not message.is_bot,
             model=None,
             parentMessageId=json.loads(message.extra).get('parentMessageId'),
+            error=json.loads(message.extra).get('error', False),
+            unfinished=json.loads(message.extra).get('unfinished', False),
             sender=message.sender,
             text=message.message,
             files=files,

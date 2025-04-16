@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.flow import FlowType
 from sqlmodel import Column, DateTime, Field, func, select, text, update
 
 
@@ -102,6 +103,9 @@ class MessageSessionDao(MessageSessionBase):
                 MessageSession.sensitive_status.in_([one.value for one in sensitive_status]))
         if flow_type:
             statement = statement.where(MessageSession.flow_type == flow_type)
+        else:
+            # 过滤掉工作站的会话, 默认不带工作站
+            statement = statement.where(MessageSession.flow_type != FlowType.WORKSTATION.value)
         # 过滤掉被删除的会话
         return statement
 
