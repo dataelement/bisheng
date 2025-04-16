@@ -9,7 +9,7 @@ import { useMessageStore } from "./messageStore";
 import { Badge } from "@/components/bs-ui/badge";
 import { ShieldAlert } from "lucide-react";
 
-export default function MessageUser({ audit, mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
+export default function MessageUser({operation, audit, mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const { t } = useTranslation()
 
     const { appConfig } = useContext(locationContext)
@@ -39,7 +39,7 @@ export default function MessageUser({ audit, mark = false, useName = '', data, o
             </div>
             <div className="text-right">
                 {/* 违规 */}
-                {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
+                {(audit || operation) && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             </div>
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
