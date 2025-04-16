@@ -199,7 +199,7 @@ volumes:
 
 kind: pipeline # 定义对象类型，还有secret和signature两种类型
 type: docker # 定义流水线类型，还有kubernetes、exec、ssh等类型
-name: cicd # 定义流水线名称
+name: feat_cicd # 定义流水线名称
 
 clone:
   disable: true
