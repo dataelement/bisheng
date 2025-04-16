@@ -15,13 +15,13 @@ export default defineConfig({
     strictPort: false,
     proxy: {
       '^/api/': {
-        target: 'http://192.168.106.116:7862',
+        target: 'http://192.168.106.116:7861',
         // target: 'http://localhost:3080',
         changeOrigin: true,
       },
       '/oauth': {
         // target: 'http://localhost:3080',
-        target: 'http://192.168.106.116:7862',
+        target: 'http://192.168.106.116:7861',
         changeOrigin: true,
       },
       '/workbench/bisheng': {
@@ -33,7 +33,7 @@ export default defineConfig({
         },
       },
       '/workbench/api': {
-        target: 'http://192.168.106.116:7862',
+        target: 'http://192.168.106.116:7861',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {

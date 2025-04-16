@@ -99,7 +99,7 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
       <div className="absolute left-0 right-0">{Header != null ? Header : null}</div>
       <div className="flex h-full flex-col items-center justify-center">
         <div className='flex items-center gap-4'>
-          <img className="overflow w-16" src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} />
+          {bsConfig?.assistantIcon.image && <img className="overflow w-16" src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} />}
           <h2 className="max-w-[75vh] px-12 text-center text-lg font-medium dark:text-white md:px-0 md:text-2xl">
             {bsConfig?.welcomeMessage}
           </h2>

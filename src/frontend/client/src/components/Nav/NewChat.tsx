@@ -100,7 +100,7 @@ export default function NewChat({
       <div className="pb-0.5 last:pb-0" style={{ transform: 'none' }}>
         <div className="mb-3 flex justify-between gap-3 px-3 py-2">
           <div className="flex items-center gap-2">
-            <img className='w-14 overflow' src={__APP_ENV__.BASE_URL + bsConfig?.sidebarIcon.image} />
+            {bsConfig?.sidebarIcon.image && <img className='w-14 overflow' src={__APP_ENV__.BASE_URL + bsConfig?.sidebarIcon.image} />}
             <div className='dark:text-gray-50'>{bsConfig?.sidebarSlogan}</div>
           </div>
           <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100">

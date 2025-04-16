@@ -441,7 +441,7 @@ const useChatConfig = () => {
             }
 
             if (error[0] || error[1]) {
-                modelNameErrors[index] = error;
+                modelNameErrors[model.key] = error;
                 isValid = false;
             }
         });
