@@ -50,6 +50,5 @@ class BaseMcpClient(object):
         return await self.client_session.call_tool(name, arguments)
 
     async def close(self):
-        print("!!!!!!!!!!!!!!!!!! close !!!!!!!!!!!!!!!")
         await self.exit_stack.aclose()
         self.client_session = None
