@@ -125,9 +125,11 @@ class WorkstationMessage(BaseModel):
     sender: str
     text: str
     updateAt: datetime
+    files: Optional[list]
 
     @classmethod
     def from_chat_message(cls, message: ChatMessage):
+        files = json.loads(message.files) if message.files else []
         return cls(
             messageId=message.id,
             conversationId=message.chat_id,
@@ -138,6 +140,7 @@ class WorkstationMessage(BaseModel):
             parentMessageId=json.loads(message.extra).get('parentMessageId'),
             sender=message.sender,
             text=message.message,
+            files=files,
         )
 
 

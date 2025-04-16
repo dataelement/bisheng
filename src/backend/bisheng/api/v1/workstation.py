@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
+from urllib.parse import unquote
 from uuid import uuid4
 
 from bisheng.api.services import knowledge_imp
@@ -12,14 +13,15 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import UnifiedResponseModel, WorkstationConfig, resp_200, resp_500
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_download_file
+from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
-from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
+from langchain_community.utilities.bing_search import BingSearchAPIWrapper
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
@@ -46,7 +48,8 @@ def user_message(msgId, conversationId, sender, text):
             'conversationId': conversationId,
             'sender': sender,
             'text': text
-        }
+        },
+        'created': True
     })
     return f'event: message\ndata: {msg}\n\n'
 
@@ -140,31 +143,27 @@ def deleteKnowledge(request: Request,
 async def upload_file(
         request: Request,
         file: UploadFile = File(...),
+        file_id: str = Body(..., description='文件ID'),
         login_user: UserPayload = Depends(get_login_user),
 ):
     """
     上传文件
     """
     # 读取文件内容
-    file_content = await file.read()
-    bytes_length = len(file_content)
-    filename = file.filename
-
     # 保存文件
-    file_path = save_download_file(file_content, 'bisheng', file.filename)
+    file_path = save_uploaded_file(file.file, 'bisheng', file.filename)
 
     # 返回文件路径
     return resp_200(
         data={
             'filepath': file_path,
-            'bytes': bytes_length,
-            'filename': filename,
+            'filename': unquote(file.filename),
             'type': file.content_type,
             'user': login_user.user_id,
             '_id': uuid4().hex,
             'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'temp_file_id': uuid4().hex,
+            'temp_file_id': file_id,
             'file_id': uuid4().hex,
             'message': 'File uploaded successfully',
             'context': 'message_attachment',
@@ -223,13 +222,12 @@ async def webSearch(query: str, bingKey: str, bingUrl: str):
     """
     联网搜索
     """
-    bingtool = load_tools(tool_params={
-        'bing_search': {
-            'bing_subscription_key': bingKey,
-            'bing_search_url': bingUrl,
-        }
-    })[0]
+    bingtool = BingSearchResults(api_wrapper=BingSearchAPIWrapper(bing_subscription_key=bingKey,
+                                                                  bing_search_url=bingUrl),
+                                 num_results=10)
     res = await bingtool.ainvoke({'query': query})
+    if isinstance(res, str):
+        res = eval(res)
     search_res = ''
     web_list = []
     for index, result in enumerate(res):
@@ -244,17 +242,20 @@ async def webSearch(query: str, bingKey: str, bingUrl: str):
     return search_res, web_list
 
 
-def getFileContent(filepath, filename):
-    #  获取文件全文
+def getFileContent(filepath):
+    """
+    获取文件内容
+    """
+    filepath_local, file_name = file_download(filepath)
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
-        filepath,
-        filename,
+        filepath_local,
+        file_name,
         ['\n\n\n\n\n'],
         [],
         102400,
         0,
     )
-    return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': filename})
+    return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 
 
 @router.post('/chat/completions')
@@ -278,19 +279,26 @@ async def chat_completions(
             ))
 
     conversaiton = MessageSessionDao.get_one(conversationId)
-    message = ChatMessageDao.insert_one(
-        ChatMessage(
-            user_id=login_user.user_id,
-            chat_id=conversationId,
-            flow_id='',
-            type='human',
-            is_bot=False,
-            sender='User',
-            extra=json.dumps({'parentMessageId': data.parentMessageId}),
-            message=data.text,
-            category='question',
-            source=0,
-        ))
+    if conversaiton is None:
+        return resp_500('会话不存在')
+
+    if data.overrideParentMessageId:
+        message = ChatMessageDao.get_message_by_id(data.overrideParentMessageId)
+    else:
+        message = ChatMessageDao.insert_one(
+            ChatMessage(
+                user_id=login_user.user_id,
+                chat_id=conversationId,
+                flow_id='',
+                type='human',
+                is_bot=False,
+                sender='User',
+                files=json.dumps(data.files) if data.files else None,
+                extra=json.dumps({'parentMessageId': data.parentMessageId}),
+                message=data.text,
+                category='question',
+                source=0,
+            ))
 
     # 掉用bishengllm 实现sse 返回
     bishengllm = BishengLLM(model_id=data.model)
@@ -307,6 +315,7 @@ async def chat_completions(
     # 处理流式输出
     async def event_stream():
         prompt = data.text
+        web_list = []
         if data.search_enabled:
             # 如果开启搜索，先检查prompt 是否需要搜索
             stepId = f'step_${uuid4().hex}'
@@ -315,9 +324,10 @@ async def chat_completions(
             inputs = [HumanMessage(content=searchTExt)]
             searchRes = await bishengllm.ainvoke(searchTExt)
             if searchRes.content == '1':
+                logger.info(f'需要联网搜索, prompt={data.text}')
                 # 如果需要联网搜索，则调用搜索接口
-                search_res, web_list = await webSearch(data.text, wsConfig.bing_subscription_key,
-                                                       wsConfig.bing_search_url)
+                search_res, web_list = await webSearch(data.text, wsConfig.webSearch.bingKey,
+                                                       wsConfig.webSearch.bingUrl)
                 content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
                 yield SSEResponse(event='on_search_result', data=delta(id=stepId,
                                                                        delta=content)).toString()
@@ -326,16 +336,17 @@ async def chat_completions(
                     cur_date=datetime.now().strftime('%Y-%m-%d'),
                     question=data.text)
         elif data.knowledge_enabled:
+            logger.info(f'knowledge, prompt={data.text}')
             chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
-            prompt = wsConfig.knowledgeBase.prompt.format(content='\n'.join(chunks),
+            prompt = wsConfig.knowledgeBase.prompt.format(retrieved_file_content='\n'.join(chunks),
                                                           question=data.text)
 
         if data.files:
             #  获取文件全文
-            filecontent = '\n'.join([
-                getFileContent(file.get('filepath'), file.get('filename')) for file in data.files
-            ])
-            prompt = wsConfig.fileUpload.prompt.format(content=filecontent, question=data.text)
+            filecontent = '\n'.join([getFileContent(file.get('filepath')) for file in data.files])
+            prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent,
+                                                       question=data.text)
+
         yield user_message(message.id, conversationId, 'User', data.text)
 
         inputs = [HumanMessage(content=prompt)]
@@ -388,7 +399,12 @@ async def chat_completions(
                 logger.error(f'Error in task: {e}')
                 break
         # 结束流式输出
-        final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_res.content if resoning_res else final_res.content  # noqa
+        if resoning_res:
+            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_res.content
+        elif web_list:
+            final_res = ''':::web\n''' + json.dumps(web_list) + '''\n:::''' + final_res.content
+        else:
+            final_res = final_res.content
         responseMessage = ChatMessageDao.insert_one(
             ChatMessage(
                 user_id=login_user.user_id,
