@@ -79,7 +79,7 @@ async def regist(*, user: UserCreate):
 
 
 @router.post('/user/sso', response_model=UnifiedResponseModel[UserRead], status_code=201)
-async def sso(*, user: UserCreate):
+async def sso(*, request: Request, user: UserCreate):
     """ 给闭源网关提供的登录接口 """
     if settings.get_system_login_method().bisheng_pro:  # 判断sso 是否打开
         account_name = user.user_name
@@ -101,6 +101,15 @@ async def sso(*, user: UserCreate):
             UserGroupDao.add_default_user_group(user_exist.user_id)
 
         access_token, refresh_token, _, _ = gen_user_jwt(user_exist)
+
+        # 设置登录用户当前的cookie, 比jwt有效期多一个小时
+        redis_client.set(USER_CURRENT_SESSION.format(user_exist.user_id), access_token, ACCESS_TOKEN_EXPIRE_TIME + 3600)
+
+        # 记录审计日志
+        AuditLogService.user_login(UserPayload(**{
+            'user_name': user_exist.user_name,
+            'user_id': user_exist.user_id,
+        }), get_request_ip(request))
         return resp_200({'access_token': access_token, 'refresh_token': refresh_token})
     else:
         raise ValueError('不支持接口')
