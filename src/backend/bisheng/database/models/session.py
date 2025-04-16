@@ -91,7 +91,7 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.where(MessageSession.copied > 0)
 
         if not include_delete:
-            statement = statement.where(MessageSession.is_delete is False)
+            statement = statement.where(MessageSession.is_delete == False)  # noqa
         if exclude_chats:
             statement = statement.where(MessageSession.chat_id.not_in(exclude_chats))
         if start_date:
