@@ -80,7 +80,8 @@ async def export_session_chart(request: Request, login_user: UserPayload = Depen
                                flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
                                group_ids: Optional[List[str]] = Query(default=[], description='用户组id列表'),
                                start_date: Optional[datetime] = Query(default=None, description='开始时间'),
-                               end_date: Optional[datetime] = Query(default=None, description='结束时间')):
+                               end_date: Optional[datetime] = Query(default=None, description='结束时间'),
+                               like_type: Optional[int] = Query(default=1, description='好评类型')):
     """ 根据筛选条件导出最终的结果 """
     if not login_user.is_admin():
         all_group = UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)
@@ -93,7 +94,7 @@ async def export_session_chart(request: Request, login_user: UserPayload = Depen
         group_ids = list(set(group_ids) & set(all_group))
     if len(group_ids) == 0:
         return UnAuthorizedError.return_resp()
-    url = AuditLogService.export_session_chart(login_user, flow_ids, group_ids, start_date, end_date, )
+    url = AuditLogService.export_operational_session_chart(login_user, flow_ids, group_ids, start_date, end_date,like_type )
     return resp_200(data={
         'url': url
     })

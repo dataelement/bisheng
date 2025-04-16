@@ -157,7 +157,7 @@ async def export_session_chart(request: Request, login_user: UserPayload = Depen
         group_ids = list(set(group_ids) & set(all_group))
     if len(group_ids) == 0:
         return UnAuthorizedError.return_resp()
-    url = AuditLogService.export_session_chart(login_user, flow_ids, group_ids, start_date, end_date, )
+    url = AuditLogService.export_audit_session_chart(login_user, flow_ids, group_ids, start_date, end_date, )
     return resp_200(data={
         'url': url
     })

@@ -504,7 +504,7 @@ class AuditLogService:
         else:
             user_ids = list(set(user_ids) & set(all_user))
         if len(user_ids) == 0:
-            return False, []
+            return  [],0
         logger.info(f"get_session_list user_ids {user_ids} | group_ids {group_ids}")
         chat_ids = None
         if keyword:
@@ -811,6 +811,86 @@ class AuditLogService:
                 one['likes'],
                 one['not_dislikes'],
                 one['dislikes'],
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+    @classmethod
+    def export_audit_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [
+            ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', '会话数(应用在给定时间区间内产生的会话数)',
+             '用户输入消息数(给定时间区间内，某应用所有会话累计的用户输入消息数)', '应用输出消息数(给定时间区间内，某应用所有会话累计的应用输出消息数)',
+             '违规消息数(给定时间区间内，某应用所有会话累计的违规消息数)']]
+        for one in result:
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                one['session_num'],
+                one['input_num'],
+                one['output_num'],
+                one['violations_num']
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+
+    @classmethod
+    def export_operational_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime,like_type) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [
+            ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', "好评数(用户给予好评的消息数量)","差评数(用户给予差评的消息数量)",
+             "应用满意度(好评数/(好评数+差评数) × 100%)","会话数(应用在给定时间区间内产生的会话数)"]]
+        for one in result:
+            if like_type == 1:
+                like = one['likes']
+                satisfaction = one['satisfaction']
+            else:
+                like = one['not_dislikes']
+                satisfaction = one['not_nosatisfaction']
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                like,
+                one['dislikes'],
+                f"{satisfaction:.2%}",
+                one['session_num']
             ])
 
         wb = Workbook()
