@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
@@ -14,7 +15,8 @@ class BaseMcpClient(object):
 
         self.client_session: ClientSession | None = None
 
-    async def get_mcp_client_transport(self):
+    @abstractmethod
+    async def get_transport(self):
         raise NotImplementedError("get_mcp_client_transport() must be implemented in subclasses.")
 
     @asynccontextmanager
@@ -22,7 +24,7 @@ class BaseMcpClient(object):
         """
         Initialize the client.
         """
-        async with self.get_mcp_client_transport() as (read, write):
+        async with self.get_transport() as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 yield session

@@ -1,4 +1,6 @@
 import asyncio
+import concurrent
+import concurrent.futures
 from typing import Any, Type
 
 from langchain_core.tools import StructuredTool
@@ -61,13 +63,14 @@ class McpTool(BaseModel):
     mcp_tool_name: str
 
     def run(self, *args, **kwargs: Any) -> Any:
-        loop = asyncio.get_event_loop()
-        future = asyncio.run_coroutine_threadsafe(self._arun(**kwargs), loop)
-        return future.result()
+        # todo call async method better when using in event pool
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            future = pool.submit(asyncio.run, self.arun(*args, **kwargs))
+            resp = future.result()
+        return resp
 
     async def arun(self, *args, **kwargs: Any) -> Any:
         """Use the tool asynchronously."""
-        print(f"================ {args}| {kwargs}")
         resp = await self.mcp_client.call_tool(self.mcp_tool_name, kwargs)
         return resp
 

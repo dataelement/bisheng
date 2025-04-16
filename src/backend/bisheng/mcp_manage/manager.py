@@ -14,6 +14,11 @@ class ClientManager:
     async def connect_mcp(cls, client_type: str, **kwargs) -> BaseMcpClient:
         """ 获取对应url的mcp连接 """
         # 初始化对应的client
+        return cls.sync_connect_mcp(client_type, **kwargs)
+
+    @classmethod
+    def sync_connect_mcp(cls, client_type: str, **kwargs) -> BaseMcpClient:
+        # 初始化对应的client
         client_key = md5_hash(f'{client_type}:{kwargs}')
         if cls.client_map.get(client_key) is None:
             if client_type == McpClientType.SSE.value:

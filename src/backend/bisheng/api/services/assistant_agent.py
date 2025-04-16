@@ -195,9 +195,19 @@ class AssistantAgent(AssistantUtils):
         """
         初始化mcp工具列表
         """
-        loop = asyncio.get_event_loop()
-        future = asyncio.run_coroutine_threadsafe(AssistantAgent.async_init_mcp_tools(tool_list, callbacks), loop)
-        return future.result()
+        tool_type_ids = [one.type for one in tool_list]
+        all_tool_type = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        all_tool_type = {one.id: one for one in all_tool_type}
+        tool_langchain = []
+        for one in tool_list:
+            tool_type = all_tool_type.get(one.type)
+            input_schema = json.loads(one.extra)
+            mcp_client = ClientManager.sync_connect_mcp(McpClientType.SSE.value, url=tool_type.server_host)
+            mcp_tool = McpTool.get_mcp_tool(name=one.tool_key, description=one.desc, mcp_client=mcp_client,
+                                            mcp_tool_name=one.name, arg_schema=input_schema['inputSchema'],
+                                            callbacks=callbacks)
+            tool_langchain.append(mcp_tool)
+        return tool_langchain
 
     @staticmethod
     async def async_init_mcp_tools(tool_list: List[GptsTools], callbacks: Callbacks = None):
@@ -211,12 +221,10 @@ class AssistantAgent(AssistantUtils):
         for one in tool_list:
             tool_type = all_tool_type.get(one.type)
             input_schema = json.loads(one.extra)
-            print("--===-------", input_schema)
             mcp_client = await ClientManager.connect_mcp(McpClientType.SSE.value, url=tool_type.server_host)
             mcp_tool = McpTool.get_mcp_tool(name=one.tool_key, description=one.desc, mcp_client=mcp_client,
                                             mcp_tool_name=one.name, arg_schema=input_schema['inputSchema'],
                                             callbacks=callbacks)
-            print("---------", mcp_tool.tool_call_schema)
             tool_langchain.append(mcp_tool)
         return tool_langchain
 
