@@ -69,6 +69,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         const params = {
             flow_ids: filters.appName.map(el => el.value),
             group_ids: filters.userGroup || undefined,
+            like_type: goodValue,
             start_date,
             end_date,
         };
@@ -92,7 +93,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         setTimeout(() => setPage(1), 0);
     };
 
-    const [goodValue, setGoodValue] = useState('1')
+    const [goodValue, setGoodValue] = useState('2')
     const handleChangeGood = (v) => {
         console.log('---------v', v)
         setGoodValue(v)
@@ -102,22 +103,8 @@ export default function StatisticsReport({ onBack, onJump }) {
         // 1. 检查 row 是否存在且包含必要的属性
         if (!row || typeof row !== 'object') return '0%';
         
-        // 2. 确保所有值都是有效数字
-        const likes = Number(row.likes) || 0;
-        const dislikes = Number(row.dislikes) || 0;
-        const outputNum = Number(row.output_num) || 0; // 防止除以零
-        
-        // 3. 计算有效值
-        const numerator = goodValue === '1' ? likes : (outputNum - dislikes);
-        
-        // 4. 安全除法计算
-        if (outputNum <= 0) return '0%'; // 避免除以零
-        
-        // 5. 计算百分比并限制范围在 0-100% 之间
-        const percentage = Math.min(100, Math.max(0, (numerator / outputNum) * 100));
-        
         // 6. 格式化为百分比字符串（保留2位小数）
-        return percentage.toFixed(2) + '%';
+        return ((goodValue === '1' ? row.satisfaction : row.not_nosatisfaction) * 100).toFixed(2) + '%';
       }
 
     return (
