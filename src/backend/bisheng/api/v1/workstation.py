@@ -73,11 +73,12 @@ def step_message(stepId, runId, msgId):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def final_message(conversation, title, requestMessage, text, error, modelName):
+def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage, text: str,
+                  error: bool, modelName: str):
     responseMessage = ChatMessageDao.insert_one(
         ChatMessage(
             user_id=conversation.user_id,
-            chat_id=conversation.id,
+            chat_id=conversation.chat_id,
             flow_id='',
             type='assistant',
             is_bot=True,
