@@ -251,7 +251,7 @@ dmypy.json
 
 # Poetry
 .testenv/*
-
+poetry.lock
 
 .githooks/prepare-commit-msg
 .langchain.db
