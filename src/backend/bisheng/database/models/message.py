@@ -5,7 +5,7 @@ from uuid import UUID
 
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import and_
+from sqlalchemy import and_, tuple_
 from sqlmodel import Field, delete, select, JSON, Column, DateTime, String, Text, case, func, or_, text, update, not_
 
 from bisheng.database.base import session_getter
@@ -386,8 +386,8 @@ class ChatMessageDao(MessageBase):
     def get_chat_info_group(cls, flow_ids: List[str], start_date: datetime, end_date: datetime, order_field: str,
                                    order_type: str, page: int, page_size: int,user_ids: List[str]=None):
         """ 获取会话的一些信息，根据技能来聚合 """
-        count_stat = select(func.count(func.distinct(ChatMessage.flow_id))).select_from(ChatMessage).join(
-            UserGroup, ChatMessage.user_id == UserGroup.group_id)
+        count_stat = select(func.count(func.distinct(func.concat(ChatMessage.flow_id,UserGroup.group_id)))).select_from(ChatMessage
+            ).join(UserGroup, ChatMessage.user_id == UserGroup.user_id)
         # 构建主查询，明确指定连接的起始表和连接条件
         sql = select(
             ChatMessage.flow_id,
@@ -453,7 +453,8 @@ class ChatMessageDao(MessageBase):
 
         from sqlalchemy.dialects import mysql
         print("get_chat_info_group Compiled SQL:", sql.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
-
+        print("get_chat_info_group Compiled SQL Count:",
+              count_stat.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         with session_getter() as session:
             res_list = session.exec(sql).all()
             total = session.scalar(count_stat)
