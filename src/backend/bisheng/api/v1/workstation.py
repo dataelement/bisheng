@@ -54,14 +54,14 @@ def user_message(msgId, conversationId, sender, text):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def step_message(stepId, runId, msgId):
+def step_message(stepId, runId, index, msgId):
     msg = json.dumps({
         'event': 'on_run_step',
         'data': {
             'id': stepId,
             'runId': runId,
             'type': 'message_creation',
-            'index': 0,
+            'index': index,
             'stepDetails': {
                 'type': 'message_creation',
                 'message_creation': {
@@ -341,12 +341,15 @@ async def chat_completions(
         resoning_res = ''
         # prompt 长度token截断
         max_token = wsConfig.maxTokens
+        runId = uuid4().hex
+        index = 0
 
         try:
             if data.search_enabled:
                 # 如果开启搜索，先检查prompt 是否需要搜索
                 stepId = f'step_${uuid4().hex}'
-                yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                index += 1
                 searchTExt = promptSearch % data.text
                 inputs = [HumanMessage(content=searchTExt)]
                 searchRes = await bishengllm.ainvoke(searchTExt)
@@ -380,7 +383,8 @@ async def chat_completions(
             final_res = 'Error in processing the prompt'
 
         if not error:
-            inputs = [HumanMessage(content=prompt)]
+            messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
+            inputs = [*messages, HumanMessage(content=prompt)]
             task = asyncio.create_task(
                 bishengllm.ainvoke(
                     inputs,
@@ -400,7 +404,8 @@ async def chat_completions(
                         if not final_res:
                             # 第一次返回的消息
                             stepId = 'step_' + uuid4().hex
-                            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                            index += 1
                         final_res += content
                         content = {'content': [{'type': 'text', 'text': content}]}
                         yield SSEResponse(event='on_message_delta',
@@ -410,7 +415,8 @@ async def chat_completions(
                         if not resoning_res:
                             # 第一次返回的消息
                             stepId = 'step_' + uuid4().hex
-                            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                            index += 1
                         resoning_res += reasoning_content
                         content = {'content': [{'type': 'think', 'think': reasoning_content}]}
                         yield SSEResponse(event='on_reasoning_delta',
