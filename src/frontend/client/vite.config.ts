@@ -33,7 +33,7 @@ export default defineConfig({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.116:7861',
+        target: 'http://192.168.106.120:3002',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
