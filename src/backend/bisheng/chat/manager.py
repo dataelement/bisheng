@@ -418,8 +418,8 @@ class ChatManager:
             await self.send_json(flow_id, chat_id, start_resp)
             # 判断下是否是首次创建会话
             if chat_id:
-                res = ChatMessageDao.get_messages_by_chat_id(chat_id=chat_id)
-                if len(res) <= 1:  # 说明是新建会话
+                exist_session = MessageSessionDao.get_one(chat_id=chat_id)
+                if not exist_session:  # 说明是新建会话
                     websocket = self.active_connections[key]
                     login_user = UserPayload(**{
                         'user_id': user_id,
