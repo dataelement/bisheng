@@ -35,7 +35,7 @@ async def get_report_file(
         version_key: str = Query("", description="minio的object_name")):
     """ 获取report节点的模板文件 """
     if not version_key:
-        # 重新生成一个version_key
+        #  重新生成一个version_key
         version_key = generate_uuid()
     else:
         version_key = version_key.split('_', 1)[0]
