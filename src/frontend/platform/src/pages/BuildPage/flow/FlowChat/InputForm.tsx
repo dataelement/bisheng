@@ -87,7 +87,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                                 <MultiSelect
                                                     multiple
                                                     className={''}
-                                                    value={multiVal}
+                                                    value={multiVal[item.key] || []}
                                                     options={
                                                         item.options.map(el => ({
                                                             label: el.text,
@@ -96,7 +96,7 @@ const InputForm = ({ data, onSubmit }: { data: WorkflowNodeParam, onSubmit: (dat
                                                     }
                                                     placeholder={'请选择'}
                                                     onChange={(v) => {
-                                                        setMultiVal(v);
+                                                        setMultiVal(prev => ({ ...prev, [item.key]: v }));
                                                         handleChange(item, v.join(','))
                                                     }}
                                                 >
