@@ -6,7 +6,7 @@ import { createHtmlPlugin } from "file:///Users/shanghang/dataelem/bisheng/src/f
 import { viteStaticCopy } from "file:///Users/shanghang/dataelem/bisheng/src/frontend/node_modules/vite-plugin-static-copy/dist/index.js";
 import svgr from "file:///Users/shanghang/dataelem/bisheng/src/frontend/node_modules/vite-plugin-svgr/dist/index.js";
 var __vite_injected_original_dirname = "/Users/shanghang/dataelem/bisheng/src/frontend";
-var target = process.env.VITE_PROXY_TARGET || "http://123.57.174.112:7860";
+var target = process.env.VITE_PROXY_TARGET || "http://192.168.106.120:3003";
 var apiRoutes = ["^/api/", "/health"];
 var proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   proxyObj[route] = {
@@ -19,7 +19,7 @@ var proxyTargets = apiRoutes.reduce((proxyObj, route) => {
   return proxyObj;
 }, {});
 proxyTargets["/bisheng"] = {
-  target: "http://127.0.0.1:9100",
+  target: "http://192.168.106.116:9000",
   changeOrigin: true,
   withCredentials: true,
   secure: false
