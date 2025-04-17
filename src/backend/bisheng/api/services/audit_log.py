@@ -56,7 +56,7 @@ class AuditLogService:
         res = {}
         for one in data:
             res[one[0]] = {'user_id': one[0], 'user_name': one[1]}
-        return resp_200(data=res)
+        return resp_200(data=list(res.values()))
 
     @classmethod
     def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
