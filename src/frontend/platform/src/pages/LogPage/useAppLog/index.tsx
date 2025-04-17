@@ -213,12 +213,13 @@ export default function AppUseLog() {
                 if ('output_with_choose_msg' === category) return `${msg.msg} :${msg.options.find(el => el.id === msg.hisValue).label}`
                 return typeof msg === 'string' ? msg : (msg.input || msg.msg)
             }
-
+            
             // 数据转换
             res.data.forEach(item => {
                 item.messages.forEach(msg => {
-                    const { message } = msg
-                    message && data.push([
+                    const { message, category } = msg
+                    const usefulMsg = !['flow', 'tool_call', 'tool_result'].includes(category) && message
+                    usefulMsg && data.push([
                         item.chat_id,
                         item.flow_name,
                         item.create_time.replace('T', ' '),

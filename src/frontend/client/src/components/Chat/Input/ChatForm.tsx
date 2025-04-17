@@ -274,7 +274,7 @@ const ChatForm = ({ index = 0 }) => {
             )}
           </div>
           {/* 深度思考 联网 */}
-          <div className="absolute bottom-2 left-5 flex gap-2">
+          <div className="absolute bottom-2 left-3 flex gap-2">
             <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => {
               setChatModel({ id: Number(val), name: bsConfig?.models?.find(item => item.id === val)?.displayName || '' })
             }} />
@@ -320,7 +320,7 @@ const ChatForm = ({ index = 0 }) => {
                 type="button"
                 variant={'outline'}
                 className={cn(
-                  'h-6 rounded-full px-2 dark:bg-transparent dark:border-gray-600',
+                  'h-7 rounded-full px-2 dark:bg-transparent dark:border-gray-600',
                   'netSearch' === searchType && buttonActiveStyle,
                 )}
                 onClick={() => {
@@ -341,7 +341,7 @@ const ChatForm = ({ index = 0 }) => {
                 type="button"
                 variant={'outline'}
                 className={cn(
-                  'h-6 rounded-full px-2 dark:bg-transparent dark:border-gray-600',
+                  'h-7 rounded-full px-2 dark:bg-transparent dark:border-gray-600',
                   'knowledgeSearch' === searchType && buttonActiveStyle,
                 )}
                 onClick={() => {
@@ -383,7 +383,7 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
   }, [options, value])
 
   return <Select onValueChange={onChange}>
-    <SelectTrigger className="h-6 rounded-full px-2 bg-white dark:bg-transparent">
+    <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent">
       <div
         className='flex gap-2'
       >

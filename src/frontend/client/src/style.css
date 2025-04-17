@@ -2588,16 +2588,6 @@ button.scroll-convo {
   outline: none;
 }
 
-:focus-visible {
-  outline: 2px solid #000;
-  outline-offset: 2px;
-}
-
-.dark :focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-}
-
 .popover-ui {
   z-index: 1000;
   display: flex;

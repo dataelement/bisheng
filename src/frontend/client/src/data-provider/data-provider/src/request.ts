@@ -109,11 +109,11 @@ customAxios.interceptors.response.use(
       originalRequest._retry = true;
 
       if (import.meta.env.MODE === 'production') {
-        location.href = location.origin
+        location.href = `${location.origin}?from=workspace`
       }
       // } else {
       //   if (location.pathname.indexOf('login') === -1) {
-      //     // location.href = '/workbench/login';
+      //     // location.href = '/workspace/login';
       //   }
       // }
       // location.href = '/'

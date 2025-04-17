@@ -214,15 +214,15 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     wsRef.current = null
                     // setStop({ show: false, disable: false })
                     console.error('链接异常error', ev);
-                    toast({
-                        title: `${t('chat.networkError')}:`,
-                        variant: 'error',
-                        description: [
-                            t('chat.networkErrorList1'),
-                            t('chat.networkErrorList2'),
-                            t('chat.networkErrorList3')
-                        ]
-                    });
+                    // toast({
+                    //     title: `${t('chat.networkError')}:`,
+                    //     variant: 'error',
+                    //     description: [
+                    //         t('chat.networkErrorList1'),
+                    //         t('chat.networkErrorList2'),
+                    //         t('chat.networkErrorList3')
+                    //     ]
+                    // });
                     setInputLock({ locked: true, reason: '' })
                 };
             } catch (err) {

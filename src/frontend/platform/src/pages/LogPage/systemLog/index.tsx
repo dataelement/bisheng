@@ -67,7 +67,7 @@ export default function SystemLog() {
     return <div className="relative">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-               <LoadingIcon />
+                <LoadingIcon />
             </div>
         )}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
@@ -79,7 +79,7 @@ export default function SystemLog() {
                         placeholder={t('log.selectUser')}
                         onLoad={loadUsers}
                         onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
-                        onChange={(values) => { setKeys({ ...keys, userIds: values }); console.log(values) }}
+                        onChange={(values) => setKeys({ ...keys, userIds: values })}
                     ></MultiSelect>
                 </div>
                 <div className="w-[200px] relative">
