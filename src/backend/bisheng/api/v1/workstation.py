@@ -339,6 +339,9 @@ async def chat_completions(
         error = False
         final_res = ''
         resoning_res = ''
+        # prompt 长度token截断
+        max_token = wsConfig.maxTokens
+
         try:
             if data.search_enabled:
                 # 如果开启搜索，先检查prompt 是否需要搜索
@@ -356,29 +359,26 @@ async def chat_completions(
                     yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()
                     prompt = wsConfig.webSearch.prompt.format(
-                        search_results=search_res,
+                        search_results=search_res[:max_token],
                         cur_date=datetime.now().strftime('%Y-%m-%d'),
                         question=data.text)
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
                 chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
                 prompt = wsConfig.knowledgeBase.prompt.format(
-                    retrieved_file_content='\n'.join(chunks), question=data.text)
+                    retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
 
             if data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
                     [getFileContent(file.get('filepath')) for file in data.files])
-                prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent,
+                prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent[:max_token],
                                                            question=data.text)
         except Exception as e:
             logger.error(f'Error in processing the prompt: {e}')
             error = True
             final_res = 'Error in processing the prompt'
-        # prompt 长度token截断
-        max_token = wsConfig.maxTokens
-        if len(prompt) > max_token:
-            prompt = prompt[:max_token]
+
         if not error:
             inputs = [HumanMessage(content=prompt)]
             task = asyncio.create_task(
