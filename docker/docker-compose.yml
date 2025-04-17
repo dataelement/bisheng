@@ -54,7 +54,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: bisheng-backend:zyrs_0.0.1
+    image: bisheng-backend:zy.25.4.18
     ports:
       - "7860:7860"
     environment:
@@ -94,7 +94,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: bisheng-frontend:zyrs_0.0.1
+    image: bisheng-frontend:zy.25.4.18
     ports:
       - "3001:3001"
     environment:
