@@ -1,4 +1,3 @@
-import { data } from './../../../components/Chat/Menus/Models/fakeData';
 import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from './config';
@@ -711,7 +710,7 @@ export const listConversations = (
   const isArchived = params?.isArchived ?? false; // Default to false if not provided
   const tags = params?.tags || []; // Default to an empty array if not provided
   return request.get(endpoints.conversations(pageNumber, isArchived, tags)).then(res => {
-    const { list, total } = res.data
+    const list = res.data
     return {
       conversations: list.map(conv => ({
         "conversationId": conv.chat_id,
@@ -733,7 +732,7 @@ export const listConversations = (
       })),
       pageNumber: pageNumber,
       pageSize: 40,
-      pages: Math.round(total / 40)
+      pages: Infinity // Math.round(total / 40)
     }
   });
 };

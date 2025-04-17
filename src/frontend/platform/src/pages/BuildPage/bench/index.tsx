@@ -105,7 +105,7 @@ export default function index() {
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ToggleSection
-                            title="菜单授权-工作台入口"
+                            title="工作台入口"
                             enabled={formData.menuShow}
                             onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
                         >{null}</ToggleSection>
@@ -184,13 +184,13 @@ export default function index() {
                                 }}
                             />
                             <FormInput
-                                label={<Label className="bisheng-label block pt-2">Max_tokens</Label>}
+                                label={<Label className="bisheng-label block pt-2">最大字符数</Label>}
                                 type="number"
                                 value={formData.maxTokens}
                                 error={''}
-                                placeholder="请输入模型的最大token数"
+                                placeholder="模型支持的最大字符数"
                                 maxLength={1000}
-                                onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
+                                onChange={(v) => handleInputChange('maxTokens', v, 100)}
                             />
                         </div>
 

@@ -76,7 +76,7 @@ const privateRouter = [
       // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
-      { path: "build/bench", element: <WorkBenchPage />, permission: 'build', onlyAdmin: true },
+      { path: "build/client", element: <WorkBenchPage />, permission: 'build', onlyAdmin: true },
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
