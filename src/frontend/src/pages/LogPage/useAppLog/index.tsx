@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { auditApi, getAuditAppListApi, getChatAnalysisConfigApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { useEffect, useState } from "react";
+import { SearchInput } from "@/components/bs-ui/input";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { getStrTime } from "../StatisticsReport";
@@ -30,6 +31,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             end_date,
             feedback: param.feedback || undefined,
             review_status: param.result || undefined,
+            keyword: param.keyword || undefined,
         })
     });
 
@@ -39,7 +41,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         userGroup: '',
         dateRange: [],
         feedback: '',
-        result: ''
+        result: '',
+        keyword: '',
     });
     useEffect(() => {
         if (initFilter) {
@@ -65,7 +68,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             userGroup: '',
             dateRange: [],
             feedback: '',
-            result: ''
+            result: '',
+            keyword: '',
         }
         setFilters(param)
         filterData(param)
@@ -84,10 +88,13 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     }, []);
 
     // 进详情页前缓存 page, 临时方案
-    const handleCachePage = () => {
-        window.LogPage = page;
+    const handleCachePage = (el) => {
+        // 是否违规
+        localStorage.setItem('reviewStatus', el.review_status.toString());
+        // 搜索的历史记录
+        localStorage.setItem('auditKeyword', filters.keyword);
+        window.OperationPage = page;
     };
-
     useEffect(() => {
         const _page = window.LogPage;
         if (_page) {
@@ -143,9 +150,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
                 <div className="flex flex-wrap gap-4">
-                    <FilterByApp value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
-                    <FilterByUser value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
-                    <FilterByUsergroup value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
+                    <FilterByApp isAudit={true} value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
+                    <FilterByUser isAudit={true} value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
+                    <FilterByUsergroup isAudit={true} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
                     <div className="w-[200px] relative">
                         <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
@@ -178,6 +185,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </Select>
                         </div>
                     }
+                    <SearchInput className="w-64" placeholder={'历史记录'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                     {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
@@ -245,7 +253,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         el.chat_id && <Link
                                             to={`/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                             className="no-underline hover:underline text-primary"
-                                            onClick={handleCachePage}
+                                            onClick={() => handleCachePage(el)}
                                         >{t('lib.details')}</Link>
                                     }
                                 </TableCell>

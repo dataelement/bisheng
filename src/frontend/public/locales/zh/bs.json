@@ -85,6 +85,9 @@
         "userGroupName": "输入用户组名称",
         "groupName": "用户组名称",
         "admins": "管理员",
+        "permissionsAdmins": "用户权限管理员",
+        "auditor": "审计员",
+        "operator": "运营员",
         "flowControl": "用户组整体流量控制",
         "AssistantFlowCtrl": "助手流量控制",
         "SkillFlowCtrl": "技能流量控制",
@@ -177,7 +180,7 @@
         "contactAdmin": "请联系管理员上线助手",
         "deleteSure": "确认删除该工具？",
         "modelRequired": "模型为空",
-        "avatar": "技能头像",
+        "avatar": "技能头像（限制文件大小5MB）",
         "switchTo": "切换到"
     },
     "chat": {
@@ -393,7 +396,9 @@
         "sizeExceedsLimit": "超过50M,已移除",
         "editDictionary": "编辑词典",
         "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。",
-        "chunkOverlap": "切分文本重叠长度"
+        "chunkOverlap": "切分文本重叠长度",
+        "preCheckFailed": "文件不符合规范，请重新上传",
+        "preCheckError": "文件不符合规范，请重新上传"
     },
     "report": {
         "reportTemplate": "报告模板",
@@ -520,7 +525,7 @@
         "txtFile": "txt文件",
         "sensitiveWordMatch": "敏感词匹配",
         "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。",
-        "uploadAvator": "上传头像",
+        "uploadAvator": "上传头像（限制文件大小5MB）",
         "fileSizeLimit": "文件大小不能超过",
         "fileTypeLimit": "文件类型不符合要求：",
         "fieldRequired": "此字段是必填项",
@@ -543,7 +548,7 @@
         "apiKey": "API密钥",
         "azureEndpoint": "Azure端点",
         "apiVersion": "API版本",
-        "assistantAvatar": "助手头像",
+        "assistantAvatar": "助手头像（限制文件大小5MB）",
         "confirmDeleteSkill": "确认删除该技能?",
         "confirmDeleteFlow": "确认删除该工作流?",
         "confirmDeleteAssistant": "确认删除该助手?",

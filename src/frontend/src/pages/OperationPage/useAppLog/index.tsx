@@ -8,9 +8,10 @@ import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { getAuditAppListApi } from "@/controllers/API/log";
+import { getChatAnalysisConfigApi, getOperationAppListApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { useEffect, useState } from "react";
+import { SearchInput } from "@/components/bs-ui/input";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { getStrTime } from "../StatisticsReport";
@@ -19,7 +20,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
     const { page, pageSize, data: datalist, total, loading, setPage, filterData, reload } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(param.dateRange || [])
-        return getAuditAppListApi({
+        return getOperationAppListApi({
             page: page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
@@ -29,6 +30,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             end_date,
             feedback: param.feedback || undefined,
             review_status: param.result || undefined,
+            keyword: param.keyword || undefined,
         })
     });
 
@@ -38,7 +40,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         userGroup: '',
         dateRange: [],
         feedback: '',
-        result: ''
+        result: '',
+        keyword: '',
     });
     useEffect(() => {
         if (initFilter) {
@@ -46,7 +49,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                 ...filters,
                 appName: [{ label: initFilter.name, value: initFilter.flow_id }],
                 userGroup: initFilter.group_info[0].id,
-                result: '3'
+                // result: '3'
             }
             setFilters(param)
             filterData(param)
@@ -64,7 +67,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             userGroup: '',
             dateRange: [],
             feedback: '',
-            result: ''
+            result: '',
+            keyword: '',
         }
         setFilters(param)
         filterData(param)
@@ -74,10 +78,32 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         setFilters(updatedFilters);
     };
 
-
+    const [showReviewResult, setShowReviewResult] = useState(true); // State to control the visibility of the review result column
+    useEffect(() => {
+        // On initial load, fetch the latest configuration and set it to formData
+        getChatAnalysisConfigApi().then(config => {
+            setShowReviewResult(config.reviewEnabled);
+        });
+    }, []);
+    
     // 进详情页前缓存 page, 临时方案
-    const handleCachePage = () => {
+    const handleCachePage = (el) => {
+        // 是否违规
+        localStorage.setItem('reviewStatus', el.review_status.toString());
+        // 搜索的历史记录
+        localStorage.setItem('operationKeyword', filters.keyword);
         window.OperationPage = page;
+    };
+
+    // Function to determine the class based on review result
+    const getResultClass = (result) => {
+        switch (result) {
+            case 1: return 'text-gray-500';  // 未审查
+            case 2: return 'text-green-500'; // 通过
+            case 3: return 'text-red-500';   // 违规
+            case 4: return 'text-orange-500';// 审查失败
+            default: return '';
+        }
     };
 
     useEffect(() => {
@@ -97,9 +123,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
                 <div className="flex flex-wrap gap-4">
-                    <FilterByApp value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
-                    <FilterByUser value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
-                    <FilterByUsergroup value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
+                    <FilterByApp isAudit={false} value={filters.appName} onChange={(value) => handleFilterChange('appName', value)} />
+                    <FilterByUser isAudit={false} value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
+                    <FilterByUsergroup isAudit={false} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
                     <div className="w-[200px] relative">
                         <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
@@ -115,6 +141,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </SelectContent>
                         </Select>
                     </div>
+                    <SearchInput className="w-64" placeholder={'历史记录'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                 </div>
@@ -126,6 +153,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead>{t('system.userGroup')}</TableHead>
                             <TableHead>{t('createTime')}</TableHead>
                             <TableHead>{t('log.userFeedback')}</TableHead>
+                            {showReviewResult && <TableHead>审查结果</TableHead>} {/* Conditionally render the review result column */}
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -162,13 +190,21 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
                                 </TableCell>
+                                {showReviewResult && (
+                                    <TableCell className={getResultClass(el.review_status)}>
+                                        {el.review_status === 1 && '未审查'}
+                                        {el.review_status === 2 && '通过'}
+                                        {el.review_status === 3 && '违规'}
+                                        {el.review_status === 4 && '审查失败'}
+                                    </TableCell>
+                                )}
 
                                 <TableCell className="text-right">
                                     {
                                         el.chat_id && <Link
                                             to={`/operation/chatLog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                             className="no-underline hover:underline text-primary"
-                                            onClick={handleCachePage}
+                                            onClick={() => handleCachePage(el)}
                                         >{t('lib.details')}</Link>
                                     }
                                 </TableCell>

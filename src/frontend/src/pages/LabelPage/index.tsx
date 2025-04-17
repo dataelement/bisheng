@@ -171,11 +171,21 @@ export default function Tasks() {
         });
     };
 
+    // 系统管理员(超管、组超管)
+    const isAdmin = useMemo(() => {
+        return user.role?.includes('admin')
+    }, [user])
+    
+    // 拥有权限管理权限
+    const hasGroupAdminRole = useMemo(() => {
+        return user.role?.includes('group_admin')
+    }, [user])
+
     return (
         <div className="relative px-2 pt-4 h-full">
             <div className="h-full overflow-y-auto pb-20">
                 <div className="flex justify-end gap-6">
-                    {['admin', 'group_admin'].includes(user.role) && <Button onClick={() => setOpen(true)}>
+                    {(isAdmin || hasGroupAdminRole) && <Button onClick={() => setOpen(true)}>
                         {t('label.createTask')}
                     </Button>}
                 </div>

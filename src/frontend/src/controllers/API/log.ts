@@ -26,6 +26,16 @@ export async function getGroupsApi(params: { keyword, page, page_size }): Promis
     return await axios.get('/api/v1/group/manage/resources', { params })
 }
 
+// 审计视角 获取用户所管理的用户组内的应用
+export async function getAuditGroupsApi(params: { keyword, page, page_size }): Promise<[]> {
+    return await axios.get('/api/v1/group/audit/resources', { params })
+}
+
+// 运营视角 获取用户所管理的用户组内的应用
+export async function getOperationGroupsApi(params: { keyword, page, page_size }): Promise<[]> {
+    return await axios.get('/api/v1/group/operation/resources', { params })
+}
+
 // 分页获取审计列表
 export async function getLogsApi({ page, pageSize, userIds, groupId = '', start, end, moduleId = '', action = '' }: {
     page: number,
@@ -204,18 +214,33 @@ export async function updateChatAnalysisConfigApi(formData: { reviewEnabled: boo
     return await axios.post('/api/v1/audit/session/config', backendData)
 }
 
-// 获取会话的统计数据
-export async function getChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
+// 审计视角 获取会话的统计数据
+export async function getAuditChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
     return await axios.get('/api/v1/audit/session/chart', {
         params,
         paramsSerializer
     })
 }
 
-// 获取报告下载链接
-export async function getReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
+
+// 审计视角 获取报告下载链接
+export async function getAuditReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
     return await axios.get('/api/v1/audit/session/chart/export', { params, paramsSerializer })
 }
+
+// 运营视角 获取会话的统计数据
+export async function getOperationChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
+    return await axios.get('/api/v1/operation/session/chart', {
+        params,
+        paramsSerializer
+    })
+}
+
+// 运营视角 获取报告下载链接
+export async function getOperationReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
+    return await axios.get('/api/v1/operation/session/chart/export', { params, paramsSerializer })
+}
+
 
 // 获取审计应用列表
 export async function getAuditAppListApi(params: {
@@ -227,7 +252,8 @@ export async function getAuditAppListApi(params: {
     feedback,
     review_status,
     page,
-    page_size
+    page_size,
+    keyword,
 }) {
     return await axios.get('/api/v1/audit/session', {
         params, paramsSerializer
@@ -246,4 +272,22 @@ export async function auditApi(params: {
     review_status
 }): Promise<[]> {
     return await axios.get('/api/v1/audit/session/review', { params, paramsSerializer })
+}
+
+// 获取运营应用列表
+export async function getOperationAppListApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status,
+    page,
+    page_size,
+    keyword,
+}) {
+    return await axios.get('/api/v1/operation/session', {
+        params, paramsSerializer
+    })
 }

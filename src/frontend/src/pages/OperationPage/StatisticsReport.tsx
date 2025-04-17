@@ -7,7 +7,7 @@ import GoodEvaluateSelect from './components/GoodEvaluateSelect';
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { getChatStatisticsApi, getReportDownloadLinkApi } from "@/controllers/API/log";
+import { getOperationChatStatisticsApi, getOperationReportDownloadLinkApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { downloadFile, formatDate } from "@/util/utils";
 import { ArrowLeft, ChevronDown, ChevronsUpDown } from "lucide-react";
@@ -34,7 +34,7 @@ export default function StatisticsReport({ onBack, onJump }) {
     const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
     const { page, pageSize, data: datalist, loading, total, setPage, reload, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(filters.dateRange)
-        return getChatStatisticsApi({
+        return getOperationChatStatisticsApi({
             flow_ids: filters.appName.map(el => el.value),
             group_ids: filters.userGroup || undefined,
             start_date,
@@ -69,11 +69,16 @@ export default function StatisticsReport({ onBack, onJump }) {
         const params = {
             flow_ids: filters.appName.map(el => el.value),
             group_ids: filters.userGroup || undefined,
+            like_type: goodValue,
             start_date,
             end_date,
         };
-        getReportDownloadLinkApi(params).then(res => {
-            downloadFile(__APP_ENV__.BASE_URL + res.url, '统计报表.xlsx')
+        const startDate = start_date.split(' ')?.[0];
+        const endDate = end_date.split(' ')?.[0];
+        const fileName =  `运营报表_${startDate}_${endDate}.xlsx`
+
+        getOperationReportDownloadLinkApi(params).then(res => {
+            downloadFile(__APP_ENV__.BASE_URL + res.url, fileName)
         })
     };
 
@@ -88,11 +93,19 @@ export default function StatisticsReport({ onBack, onJump }) {
         setTimeout(() => setPage(1), 0);
     };
 
-    const [goodValue, setGoodValue] = useState(undefined)
+    const [goodValue, setGoodValue] = useState('2')
     const handleChangeGood = (v) => {
         console.log('---------v', v)
         setGoodValue(v)
     }
+
+    function calculatePercentage(row, goodValue = '1') {
+        // 1. 检查 row 是否存在且包含必要的属性
+        if (!row || typeof row !== 'object') return '0%';
+        
+        // 6. 格式化为百分比字符串（保留2位小数）
+        return ((goodValue === '1' ? row.satisfaction : row.not_nosatisfaction) * 100).toFixed(2) + '%';
+      }
 
     return (
         <div className="relative py-4">
@@ -105,13 +118,14 @@ export default function StatisticsReport({ onBack, onJump }) {
                         <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                     </button>
                 </ShadTooltip>
+                {/* 运营视角 */}
                 <span>统计报表</span>
             </div>
             <div className="h-[calc(100vh-132px)] overflow-y-auto px-2 py-4 pb-10">
                 {/* 筛选区 */}
                 <div className="flex flex-wrap gap-4 mb-6">
-                    <FilterByApp value={filters.appName} onChange={(value) => setFilters({ ...filters, appName: value })} />
-                    <FilterByUsergroup value={filters.userGroup} onChange={(value) => setFilters({ ...filters, userGroup: value })} />
+                    <FilterByApp isAudit={false} value={filters.appName} onChange={(value) => setFilters({ ...filters, appName: value })} />
+                    <FilterByUsergroup isAudit={false} value={filters.userGroup} onChange={(value) => setFilters({ ...filters, userGroup: value })} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => setFilters({ ...filters, dateRange: value })} />
 
                     <div className="flex gap-4">
@@ -127,15 +141,15 @@ export default function StatisticsReport({ onBack, onJump }) {
                         <TableRow>
                             <TableHead>用户组</TableHead>
                             <TableHead>应用名称</TableHead>
-                            <TableHead onClick={() => handleSort('session_num')}>
+                            <TableHead onClick={() => handleSort(goodValue === '1' ? 'likes' : 'not_dislikes')}>
                                 <div className="flex items-center gap-x-1">
                                     好评数
-                                    {sortConfig.key === 'session_num' ? (
+                                    {['likes', 'not_dislikes'].includes(sortConfig.key) ? (
                                         <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
                                     ) : (
                                         <ChevronsUpDown size={18} />
                                     )}
-                                <GoodEvaluateSelect  onChange={handleChangeGood} value={goodValue}/>
+                                <GoodEvaluateSelect onChange={handleChangeGood} value={goodValue}/>
                                 </div>
                             </TableHead>
                             <TableHead onClick={() => handleSort('input_num')}>
@@ -152,7 +166,7 @@ export default function StatisticsReport({ onBack, onJump }) {
                             <TableHead onClick={() => handleSort('violations_num')}>
                                 <div className="flex items-center gap-x-1">
                                     会话数
-                                    {sortConfig.key === 'violations_num' ? (
+                                    {sortConfig.key === 'session_num' ? (
                                         <ChevronDown size={18} className={sortConfig.direction === 'asc' && 'rotate-180'} />
                                     ) : (
                                         <ChevronsUpDown size={18} />
@@ -172,14 +186,18 @@ export default function StatisticsReport({ onBack, onJump }) {
                                 <TableRow key={idx}>
                                     <TableCell>{row.group_info.map(el => el.group_name).join(',')}</TableCell>
                                     <TableCell>{row.name}</TableCell>
-                                    <TableCell>{row.session_num}</TableCell>
-                                    <TableCell>{row.input_num}</TableCell>
-                                    <TableCell>{row.output_num}</TableCell>
+                                    {/* 好评数（区分分类1 分类2） */}
+                                    <TableCell>{goodValue === '1' ? row.likes : row.not_dislikes}</TableCell>
+                                    {/* 差评数 */}
+                                    <TableCell>{row.dislikes}</TableCell>
+                                    {/* 应用满意度 (根据好评数分类来看)*/}
+                                    <TableCell>{calculatePercentage(row, goodValue)}</TableCell>
+                                    {/* 会话数 */}
                                     <TableCell>
                                         <a className="cursor-pointer text-primary" onClick={() => {
                                             onJump(row)
                                             onBack()
-                                        }}>{row.violations_num}</a>
+                                        }}>{row.session_num}</a>
                                     </TableCell>
                                 </TableRow>
                             ))

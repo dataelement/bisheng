@@ -152,6 +152,15 @@ export default function Users(params) {
         getRoles()
         return () => { setUserGroups([]); setRoles([]) }
     }, [])
+    // 系统管理员(超管、组超管)
+    const isAdmin = useMemo(() => {
+        return user.role?.includes('admin')
+    }, [user])
+    
+    // 拥有权限管理权限
+    const hasGroupAdminRole = useMemo(() => {
+        return user.role?.includes('group_admin')
+    }, [user])
 
     const operations = (el) => {
         const isSuperAdmin = el.roles.some(role => role.id === 1)
@@ -167,7 +176,7 @@ export default function Users(params) {
             {/* 编辑 */}
             <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>
             {/* 重置密码 */}
-            {(user.role === 'admin' || user.role === 'group_admin') &&
+            {(isAdmin || hasGroupAdminRole) &&
                 <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
             {/* 禁用 */}
             {
