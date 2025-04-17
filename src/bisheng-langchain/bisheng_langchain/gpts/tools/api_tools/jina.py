@@ -20,7 +20,8 @@ class JinaTool(BaseModel):
         """get url from jina api"""
         url = "https://r.jina.ai/" + target_url
 
-        if self.jina_api_key:
+        headers = None
+        if self.jina_api_key and len(self.jina_api_key)>0 :
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": "Bearer " + self.jina_api_key,
