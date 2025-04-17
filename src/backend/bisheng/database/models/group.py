@@ -37,6 +37,8 @@ class Group(GroupBase, table=True):
 
 class GroupRead(GroupBase):
     group_admins: Optional[List[Dict]]
+    group_operations: Optional[List[Dict]]
+    group_audits: Optional[List[Dict]]
 
     # 记录从根节点到当前节点的name路径  a/b/c
     parent_group_path: Optional[str]
@@ -52,6 +54,8 @@ class GroupUpdate(GroupBase):
 
 class GroupCreate(GroupBase):
     group_admins: Optional[List[int]]
+    group_operations: Optional[List[int]]
+    group_audits: Optional[List[int]]
 
 
 class GroupDao(GroupBase):

@@ -165,3 +165,8 @@ LOADERS_INFO: List[Dict[str, Any]] = [
         'allowdTypes': ['docx'],
     },
 ]
+GROUP_USER_TYPE_USER = 0 # 普通用户
+GROUP_USER_TYPE_ADMIN = 1 # 管理员
+GROUP_USER_TYPE_OPERATION = 2 # 运营人员
+GROUP_USER_TYPE_AUDIT = 3 # 审计人员
+

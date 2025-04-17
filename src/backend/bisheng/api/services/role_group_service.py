@@ -22,9 +22,11 @@ from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRea
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role import AdminRole, RoleDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.services.session.service import SessionService
 
 
 class RoleGroupService():
@@ -60,15 +62,23 @@ class RoleGroupService():
 
         # 查询user
         user_admin = UserGroupDao.get_groups_admins(list(groups_dict.keys()))
-        users_dict = {}
-        if user_admin:
-            user_ids = [user.user_id for user in user_admin]
-            users = UserDao.get_user_by_ids(user_ids)
-            users_dict = {user.user_id: user for user in users}
+        user_operation = UserGroupDao.get_groups_operations(list(groups_dict.keys()))
+        user_audit = UserGroupDao.get_groups_audits(list(groups_dict.keys()))
+        user_ids = [user.user_id for user in user_admin] + [user.user_id for user in user_operation] + [user.user_id for user in user_audit]
+        users = UserDao.get_user_by_ids(user_ids)
+        users_dict = {user.user_id: user for user in users}
 
         for group in groups_dict.values():
             group.group_admins = [
                 users_dict.get(user.user_id).model_dump() for user in user_admin
+                if user.group_id == group.id
+            ]
+            group.group_operations = [
+                users_dict.get(user.user_id).model_dump() for user in user_operation
+                if user.group_id == group.id
+            ]
+            group.group_audits = [
+                users_dict.get(user.user_id).model_dump() for user in user_audit
                 if user.group_id == group.id
             ]
             group.parent_group_path = self.get_parent_group_path(group, group_tree)
@@ -142,12 +152,20 @@ class RoleGroupService():
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
         """新建用户组"""
         group_admin = group.group_admins
+        group_operations = group.group_operations
+        group_audit = group.group_audits
         group.create_user = login_user.user_id
         group.update_user = login_user.user_id
         group = GroupDao.insert_group(group)
         if group_admin:
             logger.info('set_admin group_admins={} group_id={}', group_admin, group.id)
             self.set_group_admin(request, login_user, group_admin, group.id)
+        if group_operations:
+            logger.info('group_operations group_operations={} group_id={}', group_operations, group.id)
+            self.set_group_admin(request, login_user, group_operations, group.id)
+        if group_audit:
+            logger.info('group_audit group_audit={} group_id={}', group_audit, group.id)
+            self.set_group_admin(request, login_user, group_audit, group.id)
         self.create_group_hook(request, login_user, group)
         return group
 
@@ -353,6 +371,60 @@ class RoleGroupService():
         self.update_group_hook(request, login_user, group_info)
         return res
 
+    def set_group_operation(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+        """设置用户组运营人员"""
+        # 获取目前用户组的运营人员列表
+        user_group_operations = UserGroupDao.get_groups_operations([group_id])
+        res = []
+        need_delete_operation = []
+        need_add_operation = user_ids
+        if user_group_operations:
+            for user in user_group_operations:
+                if user.user_id in need_add_operation:
+                    res.append(user)
+                    need_add_operation.remove(user.user_id)
+                else:
+                    need_delete_operation.append(user.user_id)
+        if need_add_operation:
+            # 可以分配非组内用户为运营人员。进行用户创建
+            for user_id in need_add_operation:
+                res.append(UserGroupDao.insert_user_group_operation(user_id, group_id))
+        if need_delete_operation:
+            UserGroupDao.delete_group_operations(group_id, need_delete_operation)
+        # 修改用户组的最近修改人
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
+
+        group_info = GroupDao.get_user_group(group_id)
+        self.update_group_hook(request, login_user, group_info)
+        return res
+
+    def set_group_audit(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+        """设置用户组审计人员"""
+        # 获取目前用户组的审计人员列表
+        user_group_audits = UserGroupDao.get_groups_audits([group_id])
+        res = []
+        need_delete_audit = []
+        need_add_audit = user_ids
+        if user_group_audits:
+            for user in user_group_audits:
+                if user.user_id in need_add_audit:
+                    res.append(user)
+                    need_add_audit.remove(user.user_id)
+                else:
+                    need_delete_audit.append(user.user_id)
+        if need_add_audit:
+            # 可以分配非组内用户为审计人员。进行用户创建
+            for user_id in need_add_audit:
+                res.append(UserGroupDao.insert_user_group_audit(user_id, group_id))
+        if need_delete_audit:
+            UserGroupDao.delete_group_audits(group_id, need_delete_audit)
+        # 修改用户组的最近修改人
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
+
+        group_info = GroupDao.get_user_group(group_id)
+        self.update_group_hook(request, login_user, group_info)
+        return res
+
     def set_group_update_user(self, login_user: UserPayload, group_id: int):
         """设置用户组管理员"""
         GroupDao.update_group_update_user(group_id, login_user.user_id)
@@ -459,6 +531,55 @@ class RoleGroupService():
             groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
             if not groups:
                 return [], 0
+
+        resource_ids = []
+        # 说明是用户组管理员，需要过滤获取到对应组下的资源
+        if groups:
+            group_resources = GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
+                                                                                           ResourceTypeEnum.ASSISTANT,
+                                                                                           ResourceTypeEnum.WORK_FLOW])
+            if not group_resources:
+                return [], 0
+            resource_ids = [one.third_id for one in group_resources]
+
+        return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)
+
+    def get_audit_resources(self, request: Request, login_user: UserPayload, keyword: str, page: int,
+                             page_size: int) -> (list, int):
+        """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
+        groups = []
+        if not login_user.is_admin():
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)]
+            if not groups:
+                return [], 0
+        else:
+            groups = [str(one.id) for one in GroupDao.get_all_group()]
+
+        all_user = UserGroupDao.get_groups_user(groups)
+        if len(all_user) == 0:
+            return [], 0
+        resource_ids = []
+        # 说明是用户组管理员，需要过滤获取到对应组下的资源
+        if groups:
+            group_resources = GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
+                                                                                           ResourceTypeEnum.ASSISTANT,
+                                                                                           ResourceTypeEnum.WORK_FLOW])
+            if not group_resources:
+                return [], 0
+            resource_ids = [one.third_id for one in group_resources]
+
+        return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)
+
+    def get_operation_resources(self, request: Request, login_user: UserPayload, keyword: str, page: int,
+                             page_size: int) -> (list, int):
+        """ 获取用户所管理的用户组下的应用列表 包含技能、助手、工作流"""
+        groups = []
+        if not login_user.is_admin():
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)]
+            if not groups:
+                return [], 0
+        else:
+            groups = [str(one.id) for one in GroupDao.get_all_group()]
 
         resource_ids = []
         # 说明是用户组管理员，需要过滤获取到对应组下的资源

@@ -45,6 +45,46 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
     groups_res = RoleGroupService().get_group_list(groups)
     return resp_200({'records': groups_res})
 
+@router.get('/list_operation', response_model=UnifiedResponseModel[List[GroupRead]])
+async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取所有分组
+    """
+    if login_user.is_admin():
+        groups = []
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+
+    groups_res = RoleGroupService().get_group_list(groups)
+    return resp_200({'records': groups_res})
+
+@router.get('/list_audit', response_model=UnifiedResponseModel[List[GroupRead]])
+async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取所有分组
+    """
+    if login_user.is_admin():
+        groups = []
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+
+    groups_res = RoleGroupService().get_group_list(groups)
+    return resp_200({'records': groups_res})
+
 
 @router.get('/tree')
 async def get_all_group_tree(login_user: UserPayload = Depends(get_login_user),
@@ -203,6 +243,37 @@ async def set_group_admin(
         return UnAuthorizedError.return_resp()
     return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
 
+@router.post('/set_group_operation',
+             response_model=UnifiedResponseModel[List[UserGroupRead]],
+             status_code=200)
+async def set_group_operation(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取分组的admin，批量设置接口，覆盖历史的operation
+    """
+
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().set_group_operation(request, login_user, user_ids, group_id))
+
+@router.post('/set_group_audit',
+             response_model=UnifiedResponseModel[List[UserGroupRead]],
+             status_code=200)
+async def set_group_audit(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取分组的admin，批量设置接口，覆盖历史的audit
+    """
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
+    return resp_200(RoleGroupService().set_group_audit(request, login_user, user_ids, group_id))
+
 
 @router.post('/set_update_user', status_code=200)
 async def set_update_user(group_id: Annotated[int, Body(embed=True)],
@@ -255,6 +326,28 @@ async def get_manage_resources(*, request: Request, login_user: UserPayload = De
         "total": total
     })
 
+@router.get("/operation/resources", response_model=UnifiedResponseModel)
+async def get_operation_resources(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                               keyword: str = Query(None, description="搜索关键字"),
+                               page: int = 1,
+                               page_size: int = 10):
+    """ 获取管理的用户组下的应用列表 """
+    res, total = RoleGroupService().get_operation_resources(request, login_user, keyword, page, page_size)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
+@router.get("/audit/resources", response_model=UnifiedResponseModel)
+async def get_audit_resources(*, request: Request, login_user: UserPayload = Depends(get_login_user),
+                               keyword: str = Query(None, description="搜索关键字"),
+                               page: int = 1,
+                               page_size: int = 10):
+    """ 获取管理的用户组下的应用列表 """
+    res, total = RoleGroupService().get_audit_resources(request, login_user, keyword, page, page_size)
+    return resp_200(data={
+        "data": res,
+        "total": total
+    })
 
 @router.get("/roles", response_model=UnifiedResponseModel)
 async def get_group_roles(*,

@@ -20,6 +20,7 @@ from bisheng.api.v1.validate import router as validate_router
 from bisheng.api.v1.variable import router as variable_router
 from bisheng.api.v1.workflow import router as workflow_router
 from bisheng.api.v1.promise import router as promise_router
+from bisheng.api.v1.operation import router as operation_router
 
 __all__ = [
     'chat_router',
@@ -44,4 +45,5 @@ __all__ = [
     'workflow_router',
     'mark_router',
     'promise_router',
+    'operation_router',
 ]

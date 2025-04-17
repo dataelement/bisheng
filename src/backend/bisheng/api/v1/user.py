@@ -227,15 +227,25 @@ async def list_user(*,
                     page_num: Optional[int] = 1,
                     group_id: Annotated[List[int], Query()] = None,
                     role_id: Annotated[List[int], Query()] = None,
+                    group_role_type: Optional[str] = None,
                     login_user: UserPayload = Depends(get_login_user)):
     groups = group_id if group_id else []
     roles = role_id
     user_admin_groups = []
     if not login_user.is_admin():
         # 查询下是否是其他用户组的管理员
-        user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        user_admin_groups = [one.group_id for one in user_admin_groups]
-        groups = user_admin_groups
+        if group_role_type == 'audit':
+            user_audit_groups = UserGroupDao.get_user_audit_or_admin_group(login_user.user_id)
+            user_audit_groups = [one.group_id for one in user_audit_groups]
+            groups = user_audit_groups
+        elif group_role_type == 'operation':
+            user_operation_groups = UserGroupDao.get_user_operation_or_admin_group(login_user.user_id)
+            user_operation_groups = [one.group_id for one in user_operation_groups]
+            groups = user_operation_groups
+        else:
+            user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+            user_admin_groups = [one.group_id for one in user_admin_groups]
+            groups = user_admin_groups
         # 不是任何用户组的管理员无查看权限
         if not groups:
             raise HTTPException(status_code=500, detail='无查看权限')

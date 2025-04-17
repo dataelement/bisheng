@@ -9,6 +9,8 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 from openpyxl.workbook import Workbook
 from redbeat import RedBeatSchedulerEntry
+from sqlalchemy import or_
+from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.knowledge_imp import extract_code_blocks
@@ -17,7 +19,7 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.audit import ReviewSessionConfig
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schemas import resp_200
-from bisheng.database.base import generate_uuid
+from bisheng.database.base import generate_uuid, session_getter
 from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
@@ -25,7 +27,7 @@ from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group, GroupDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
-from bisheng.database.models.message import MessageDao, ChatMessageDao
+from bisheng.database.models.message import MessageDao, ChatMessageDao, ChatMessage
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, ReviewStatus, MessageSession
 from bisheng.database.models.user import UserDao, User
@@ -40,7 +42,7 @@ class AuditLogService:
                       system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_power_group(login_user.user_id)]
             # 不是任何用戶组的管理员
             if not groups:
                 return UnAuthorizedError.return_resp()
@@ -57,7 +59,7 @@ class AuditLogService:
     def get_all_operators(cls, login_user: UserPayload) -> Any:
         groups = []
         if not login_user.is_admin():
-            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [one.group_id for one in UserGroupDao.get_user_power_group(login_user.user_id)]
 
         data = AuditLogDao.get_all_operators(groups)
         res = []
@@ -442,8 +444,9 @@ class AuditLogService:
         """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 """
         flow_ids = [UUID(one).hex for one in flow_ids]
         group_admins = []
+        logger.info(f"flow_ids {flow_ids} | group_ids {group_ids}")
         if not user.is_admin():
-            user_groups = UserGroupDao.get_user_admin_group(user.user_id)
+            user_groups = UserGroupDao.get_user_power_group(user.user_id)
             # 不是用户组管理员，没有权限
             if not user_groups:
                 raise UnAuthorizedError.http_exception()
@@ -484,12 +487,45 @@ class AuditLogService:
 
     @classmethod
     def get_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
-                         feedback, review_status, page, page_size) -> (list, int):
-        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
-        if not flag:
-            return [], 0
-        res = MessageSessionDao.filter_session(chat_ids=None, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
-        total = MessageSessionDao.filter_session_count(chat_ids=None, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
+                         feedback, review_status, page, page_size, keyword=None) -> (list, int):
+        # flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        # if not flag:
+        #     return [], 0
+        filter_flow_ids = flow_ids
+        for one in flow_ids:
+            if one != one.replace("-",""):
+                filter_flow_ids.append(one.replace("-",""))
+        all_user = UserGroupDao.get_groups_user(group_ids)
+        logger.info(f"get_session_list user_ids {user_ids} | all_user {all_user}")
+        user_ids = [str(uid) for uid in user_ids]
+        all_user = [str(one) for one in all_user]
+        if len(user_ids) == 0:
+            user_ids = all_user
+        else:
+            user_ids = list(set(user_ids) & set(all_user))
+        if len(user_ids) == 0:
+            return  [],0
+        logger.info(f"get_session_list user_ids {user_ids} | group_ids {group_ids}")
+        chat_ids = None
+        if keyword:
+            keyword2 = keyword.encode("unicode_escape").decode().replace("\\u","%")
+            where = select(ChatMessage).where(or_(
+                ChatMessage.message.like(f'%{keyword}%'),
+                ChatMessage.message.like(f'%{keyword2}%')
+                ),ChatMessage.category == 'question')
+            if filter_flow_ids:
+                where = select(ChatMessage).where(ChatMessage.flow_id.in_(filter_flow_ids))
+            from sqlalchemy.dialects import mysql
+            print("get_session_list Compiled SQL:",where.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+            with session_getter() as session:
+                chat_res = session.exec(where).all()
+                chat_ids = [one.chat_id for one in chat_res]
+                if len(chat_ids) == 0:
+                    chat_ids = [""]
+                chat_ids = list(set(chat_ids))
+        print(f"get_session_list chat_ids {chat_ids}")
+        res = MessageSessionDao.filter_session(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
 
         res_users = []
         for one in res:
@@ -506,7 +542,11 @@ class AuditLogService:
                                       user_id=one.user_id,
                                       user_name=user_map.get(one.user_id, one.user_id),
                                       user_groups=user.get_user_groups(one.user_id),
-                                      review_status=one.review_status))
+                                      review_status=one.review_status,
+                                      create_time=one.create_time,
+                                      like_count=one.like,
+                                      dislike_count=one.dislike,
+                                      copied_count=one.copied))
 
         return result, total
 
@@ -691,15 +731,29 @@ class AuditLogService:
                           page_size: int = 0) -> (List, int):
 
         """ 获取会话聚合数据 """
-        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
-        if not flag:
-            return [], 0
+        # flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        # if not flag:
+        #     return [], 0
 
-        res, total = ChatMessageDao.get_chat_info_group_by_app(filter_flow_ids, start_date, end_date, order_field,
-                                                               order_type, page, page_size)
+        filter_flow_ids = flow_ids
+        for one in flow_ids:
+            if one != one.replace('-',''):
+                filter_flow_ids.append(one.replace('-',''))
+        logger.info(f"get_session_chart: filter_flow_ids={filter_flow_ids} group_ids={group_ids}")
+        all_user = UserGroupDao.get_groups_user(group_ids)
+        all_user = [str(one) for one in all_user]
+        if len(all_user) == 0:
+            return [], 0
+        logger.info(f"get_session_list all_user {all_user}")
+        res, total = ChatMessageDao.get_chat_info_group(filter_flow_ids, start_date, end_date, order_field,
+                                                               order_type, page, page_size,all_user)
+
+        logger.info(f"get_session_list total={total} res={res}")
+
         if len(res) == 0:
             return res, total
         flow_ids = [one['flow_id'] for one in res]
+
         # 获取这些应用所属的分组信息
         app_groups = GroupResourceDao.get_resources_group(None, [one.hex for one in flow_ids])
         app_groups_map = {}
@@ -730,12 +784,12 @@ class AuditLogService:
             else:
                 continue
             group_ids = app_groups_map.get(one['flow_id'].hex, [])
-
             one['name'] = flow_name
-            one['group_info'] = [{
-                'id': group_id,
-                'group_name': group_info_map[group_id].group_name if group_info_map.get(group_id) else group_id
-            } for group_id in group_ids]
+            # one['group_info'] = [{
+            #     'id': group_id,
+            #     'group_name': group_info_map[group_id].group_name if group_info_map.get(group_id) else group_id
+            # } for group_id in group_ids]
+            one['group_info'] = [ {"id":one['id'],"group_name":one['name']} for one in user.get_user_groups(one['user_id'])]
             result.append(one)
 
         return result, total
@@ -745,7 +799,47 @@ class AuditLogService:
                              end_date: datetime) -> str:
         """ 导出用户选择的统计数据 """
         result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
-        excel_data = [['用户组', '应用名称', '会话数', '用书输入消息数', '应用输出消息数', '违规消息数']]
+        excel_data = [['用户组', '应用名称', '会话数', '用户输入消息数', '应用输出消息数', '违规消息数', "好评数1", "好评数2", "差评数"]]
+        for one in result:
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                one['session_num'],
+                one['input_num'],
+                one['output_num'],
+                one['violations_num'],
+                one['likes'],
+                one['not_dislikes'],
+                one['dislikes'],
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+    @classmethod
+    def export_audit_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [
+            ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', '会话数(应用在给定时间区间内产生的会话数)',
+             '用户输入消息数(给定时间区间内，某应用所有会话累计的用户输入消息数)', '应用输出消息数(给定时间区间内，某应用所有会话累计的应用输出消息数)',
+             '违规消息数(给定时间区间内，某应用所有会话累计的违规消息数)']]
         for one in result:
             excel_data.append([
                 ','.join([tmp['group_name'] for tmp in one['group_info']]),
@@ -754,6 +848,49 @@ class AuditLogService:
                 one['input_num'],
                 one['output_num'],
                 one['violations_num']
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+
+    @classmethod
+    def export_operational_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime,like_type) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [
+            ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', "好评数(用户给予好评的消息数量)","差评数(用户给予差评的消息数量)",
+             "应用满意度(好评数/(好评数+差评数) × 100%)","会话数(应用在给定时间区间内产生的会话数)"]]
+        for one in result:
+            if like_type == 1:
+                like = one['likes']
+                satisfaction = one['satisfaction']
+            else:
+                like = one['not_dislikes']
+                satisfaction = one['not_nosatisfaction']
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                like,
+                one['dislikes'],
+                f"{satisfaction:.2%}",
+                one['session_num']
             ])
 
         wb = Workbook()

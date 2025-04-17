@@ -2,10 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
+from pydantic import validator
 from sqlmodel import Field, Column, DateTime, text, select, update, func
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.models.user_group import UserGroup
 
 
 class ReviewStatus(Enum):
@@ -32,6 +34,11 @@ class MessageSessionBase(SQLModelSerializable):
     update_time: Optional[datetime] = Field(
         sa_column=Column(DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
                          onupdate=text('CURRENT_TIMESTAMP')))
+
+    @validator("flow_id",pre=True)
+    @classmethod
+    def handle_flow_id(cls, v: str):
+        return v.replace('-','')
 
 
 class MessageSession(MessageSessionBase, table=True):
@@ -92,6 +99,40 @@ class MessageSessionDao(MessageSessionBase):
         if review_status:
             statement = statement.where(MessageSession.review_status.in_([one.value for one in review_status]))
         return statement
+
+    @classmethod
+    def get_user_flow(cls,user_ids: list[int]) -> Optional[int]:
+        statement = select(func.distinct(MessageSession.flow_id)).where(MessageSession.user_id.in_(user_ids))
+        with session_getter() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_flow_group_like_num(cls, flow_ids: list[str], user_ids: list[str]):
+        # 构建查询语句，明确指定连接条件
+        statement = select(
+            MessageSession.flow_id,
+            UserGroup.group_id,
+            func.sum(MessageSession.like).label('likes'),
+            func.sum(MessageSession.dislike).label('dislikes')
+        ).select_from(MessageSession).join(
+            UserGroup, MessageSession.user_id == UserGroup.user_id
+        )
+        if flow_ids:
+            statement = statement.where(MessageSession.flow_id.in_(flow_ids))
+        if user_ids:
+            statement = statement.where(MessageSession.user_id.in_(user_ids))
+        statement = statement.group_by(UserGroup.group_id,MessageSession.flow_id)
+        with session_getter() as session:
+            data = session.exec(statement).all()
+        result = []
+        for one in data:
+            result.append({
+                "flow_id":one[0],
+                "group_id":one[1],
+                "likes":one[2],
+                "dislikes":one[3]
+            })
+        return result
 
     @classmethod
     def filter_session(cls, chat_ids: List[str] = None, review_status: List[ReviewStatus] = None,

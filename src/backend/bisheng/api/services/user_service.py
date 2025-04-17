@@ -226,11 +226,22 @@ def gen_user_role(db_user: User):
             groups_roles = RoleDao.get_role_by_groups([one.group_id for one in user_groups], include_parent=True, only_bind=True)
             role_ids.extend([one.id for one in groups_roles])
         # 判断是否是用户组管理员
-        db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
-        if len(db_user_groups) > 0:
-            role = 'group_admin'
+        db_user_admin_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
+        db_user_audit_groups = UserGroupDao.get_user_audit_group(db_user.user_id)
+        db_user_operation_groups = UserGroupDao.get_user_operation_group(db_user.user_id)
+        gr = []
+        if len(db_user_audit_groups) > 0:
+            gr.append('group_audit')
+        if len(db_user_operation_groups) > 0:
+            gr.append('group_operation')
+        if len(db_user_admin_groups) > 0:
+            gr.append('group_admin')
+        if len(gr) > 0:
+            role = "|".join(gr)
         else:
             role = role_ids
+
+
     # 获取用户的菜单栏权限列表
     web_menu = RoleAccessDao.get_role_access(role_ids, AccessType.WEB_MENU)
     web_menu = list(set([one.third_id for one in web_menu]))
