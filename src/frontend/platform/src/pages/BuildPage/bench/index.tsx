@@ -14,6 +14,8 @@ import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
+import { userContext } from "@/contexts/userContext";
+import { useNavigate } from "react-router-dom";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -73,6 +75,15 @@ export default function index() {
         handleSave
     } = useChatConfig();
 
+    // 非admin角色跳走
+    const { user } = useContext(userContext);
+    const navigate = useNavigate()
+    useEffect(() => {
+        if (user.user_id && user.role !== 'admin') {
+            navigate('/build/apps')
+        }
+    }, [user])
+    
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant') => {
         setFormData(prev => ({
             ...prev,
