@@ -47,7 +47,15 @@ export const useGetBsConfig = (
   const queriesEnabled = useRecoilValue<boolean>(store.queriesEnabled);
   return useQuery<BsConfig>(
     [QueryKeys.bishengConfig],
-    () => dataService.getBishengConfig(),
+    () => dataService.getBishengConfig().then(data => {
+      // 更新favicon
+      const favicon = document.createElement('link');
+      favicon.type = 'image/x-icon';
+      favicon.rel = 'shortcut icon';
+      favicon.href = __APP_ENV__.BASE_URL + data.assistantIcon.image;
+      document.head.appendChild(favicon);
+      return data;
+    }),
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

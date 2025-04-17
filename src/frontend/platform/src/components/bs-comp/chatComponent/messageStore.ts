@@ -234,7 +234,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             // 删除重复消息
             const prevMessage = messages[currentMessageIndex - 1];
             // 有思考不覆盖 只覆盖message,保留思考
-            if (prevMessage.reasoning_log) {
+            if (prevMessage?.reasoning_log) {
                 if ((prevMessage
                     && prevMessage.message === newCurrentMessage.message
                     && prevMessage.thought === newCurrentMessage.thought)

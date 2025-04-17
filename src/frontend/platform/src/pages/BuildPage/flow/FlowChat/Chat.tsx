@@ -23,8 +23,8 @@ export default function Chat({
             <ChatMessages logo={logo} useName={useName} guideWord={guideWord} loadMore={loadMore}></ChatMessages>
             <ChatInput autoRun={autoRun} clear={clear} form={form} wsUrl={wsUrl} inputForm={inputForm} onBeforSend={onBeforSend} onLoad={() => setLoading(false)} ></ChatInput>
         </div>
-        {loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
+        {/* {loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
             <LoadingIcon className="size-24" />
-        </div>}
+        </div>} */}
     </div>
 };

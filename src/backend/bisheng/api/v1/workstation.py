@@ -375,7 +375,10 @@ async def chat_completions(
             logger.error(f'Error in processing the prompt: {e}')
             error = True
             final_res = 'Error in processing the prompt'
-
+        # prompt 长度token截断
+        max_token = wsConfig.maxTokens
+        if len(prompt) > max_token:
+            prompt = prompt[:max_token]
         if not error:
             inputs = [HumanMessage(content=prompt)]
             task = asyncio.create_task(

@@ -62,7 +62,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
     }
 
     const handleOnlineClick = async () => {
-        const errors = validateNodes()
+        const errors = await validateNodes()
         if (errors.length) {
             errors.map(el => addNotification({
                 type: 'warning',

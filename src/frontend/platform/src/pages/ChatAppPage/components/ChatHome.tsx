@@ -17,126 +17,212 @@ import MarkLabel from "./MarkLabel";
 export default function HomePage({ onSelect }) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
-    const chatListRef = useRef([])
     const navigate = useNavigate()
-    
-    const [labels, setLabels] = useState([])
-    const [open, setOpen] = useState(false)
-    const pageRef = useRef(1)
-    const [options, setOptions] = useState([])
-    const searchRef = useRef('')
-    const [flag, setFlag] = useState(null) // 解决筛选之后再次发起请求覆盖筛选数据
-    
-    const loadData = (more = false) => {
-        getChatOnlineApi(pageRef.current, searchRef.current, -1).then((res: any) => {
-            setFlag(true)
-            chatListRef.current = res
-            setOptions(more ? [...options, ...res] : res)
-        })
-    }
-    useEffect(() => {
-        debounceLoad()
-        getHomeLabelApi().then((res: any) => {
-            setLabels(res.map(d => ({ label: d.name, value: d.id, selected: true })))
-        })
-    }, [])
-    
-    const debounceLoad = useDebounce(loadData, 600, false)
-    
-    const handleSearch = (e) => {
-        pageRef.current = 1
-        searchRef.current = e.target.value
-        debounceLoad()
-    }
-    
-    const handleClose = async (bool) => {
-        const newHome = await getHomeLabelApi()
-        // @ts-ignore
-        setLabels(newHome.map(d => ({ label: d.name, value: d.id, selected: true })))
-        setOpen(bool)
-    }
-    
-    const [chooseId, setChooseId] = useState() // 筛选项样式变化
-    const handleTagSearch = (id) => {
-        setChooseId(id)
-        setFlag(false)
-        pageRef.current = 1
-        getChatOnlineApi(pageRef.current, '', id).then((res: any) => {
-            setOptions(res)
-        })
-    }
-    
-    const handleLoadMore = async () => {
-        pageRef.current++
-        await debounceLoad(true)
-    }
-    
-    const typeCnNames = {
+
+    // State for UI and data
+    const [categoryTags, setCategoryTags] = useState([])
+    const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
+    const [chatOptions, setChatOptions] = useState([])
+    const [selectedCategoryId, setSelectedCategoryId] = useState(null)
+    const [hasMoreData, setHasMoreData] = useState(false)
+
+    // Refs for pagination and search
+    const currentPageRef = useRef(1)
+    const searchQueryRef = useRef('')
+    const chatDataRef = useRef([])
+
+    // Constants
+    const CHAT_TYPE_NAMES = {
         1: t('build.skill'),
         5: t('build.assistant'),
         10: t('build.workflow')
     }
-    // const [cardBoxWidth, cardboxRef] = useAutoWidth()
-    {/* @ts-ignore */ }
-    return <div className="h-full overflow-hidden bs-chat-bg" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
-        <div className="flex justify-center place-items-center gap-20">
-            {/* @ts-ignore */}
-            <img className="w-[138px]" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
-            <p className="text-2xl leading-[50px] dark:text-[#D4D4D4]">
-                {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
-            </p>
-        </div>
-        <div className="flex justify-center">
-            <SearchInput onChange={handleSearch}
-                placeholder={t('chat.searchAssistantOrSkill')}
-                className="w-[600px] min-w-[300px] mt-[10px]" />
-        </div>
-        <div className="mt-[20px] px-12">
-            <div className="flex flex-wrap">
-                <Button variant={chooseId ? "outline" : "default"} className="mb-2 mr-4 h-7" size="sm"
-                    onClick={() => { setChooseId(null); loadData(false) }}>{t('all')}</Button>
-                {
-                    labels.map((l, index) => index <= 11 && <Button
-                        size="sm"
-                        onClick={() => handleTagSearch(l.value)}
-                        className="mr-3 mb-2 h-7" variant={l.value === chooseId ? "default" : "outline"}>{l.label}
-                    </Button>)
-                }
-                {/* @ts-ignore */}
-                {user.role === 'admin' && <SettingIcon onClick={() => setOpen(true)} className="h-[30px] w-[30px] cursor-pointer" />}
+    const BASE_IMAGE_URL = __APP_ENV__.BASE_URL
+
+    // Data fetching functions
+    const fetchChatData = async (categoryId, loadMore = false) => {
+        const response = await getChatOnlineApi(
+            currentPageRef.current,
+            searchQueryRef.current,
+            categoryId
+        )
+
+        setSelectedCategoryId(categoryId)
+        setHasMoreData(true)
+        chatDataRef.current = response
+        setChatOptions(loadMore ? [...chatOptions, ...response] : response)
+    }
+
+    const fetchCategoryTags = async () => {
+        const tags = await getHomeLabelApi()
+        setCategoryTags(tags.map(tag => ({
+            label: tag.name,
+            value: tag.id,
+            selected: true
+        })))
+    }
+
+    // Initial data load
+    useEffect(() => {
+        debounceFetchChatData(null)
+        fetchCategoryTags()
+    }, [])
+
+    const debounceFetchChatData = useDebounce(fetchChatData, 600, false)
+
+    // Event handlers
+    const handleSearch = (e) => {
+        currentPageRef.current = 1
+        searchQueryRef.current = e.target.value
+        debounceFetchChatData(selectedCategoryId)
+    }
+
+    const handleCloseLabelModal = async (shouldClose) => {
+        if (shouldClose) {
+            await fetchCategoryTags()
+            setIsLabelModalOpen(false)
+        }
+    }
+
+    const handleCategoryFilter = (categoryId) => {
+        setSelectedCategoryId(categoryId)
+        setHasMoreData(false)
+        currentPageRef.current = 1
+        fetchChatData(categoryId)
+    }
+
+    const handleLoadMore = async () => {
+        currentPageRef.current++
+        await debounceFetchChatData(selectedCategoryId, true)
+    }
+
+    const renderCategoryTags = () => (
+        <>
+            <Button
+                variant={!selectedCategoryId ? "default" : "outline"}
+                className="mb-2 mr-4 h-7"
+                size="sm"
+                onClick={() => {
+                    setHasMoreData(false)
+                    currentPageRef.current = 1
+                    fetchChatData(null, false)
+                }}
+            >
+                {t('all')}
+            </Button>
+            {categoryTags.slice(0, 12).map((tag) => (
+                <Button
+                    key={tag.value}
+                    size="sm"
+                    onClick={() => handleCategoryFilter(tag.value)}
+                    className="mr-3 mb-2 h-7"
+                    variant={tag.value === selectedCategoryId ? "default" : "outline"}
+                >
+                    {tag.label}
+                </Button>
+            ))}
+        </>
+    )
+
+    const renderChatOptions = () => {
+        if (!chatOptions.length && hasMoreData) {
+            return (
+                <div className="absolute top-1/2 left-1/2 transform text-center -translate-x-1/2 -translate-y-1/2">
+                    <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
+                    <Button className="w-[200px]" onClick={() => navigate('/build/apps')}>
+                        {t('build.onlineSA')}
+                    </Button>
+                </div>
+            )
+        }
+
+        return chatOptions.map((chat, index) => (
+            <CardComponent
+                key={index}
+                id={index + 1}
+                data={chat}
+                logo={chat.logo}
+                title={chat.name}
+                description={chat.description}
+                type="sheet"
+                icon={getChatTypeIcon(chat.flow_type)}
+                footer={renderChatTypeBadge(chat.flow_type)}
+                onClick={() => onSelect(chat)}
+            />
+        ))
+    }
+
+    const getChatTypeIcon = (type) => {
+        return type === 'flow' ? SkillIcon :
+            type === 'assistant' ? AssistantIcon : FlowIcon
+    }
+
+    const renderChatTypeBadge = (type) => (
+        <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md ${type === 1 ? 'bg-gray-950' :
+            type === 5 ? 'bg-[#fdb136]' : ''
+            }`}>
+            {CHAT_TYPE_NAMES[type]}
+        </Badge>
+    )
+
+    return (
+        <div className="h-full overflow-hidden bs-chat-bg"
+            style={{ backgroundImage: `url(${BASE_IMAGE_URL}/points.png)` }}>
+
+            <HeaderSection BASE_IMAGE_URL={BASE_IMAGE_URL} t={t} />
+
+            <div className="flex justify-center">
+                <SearchInput
+                    onChange={handleSearch}
+                    placeholder={t('chat.searchAssistantOrSkill')}
+                    className="w-[600px] min-w-[300px] mt-[10px]"
+                />
             </div>
-        </div>
-        <div className="relative overflow-y-auto h-[calc(100vh-308px)]">
-            <div className="flex flex-wrap gap-2 px-12 scrollbar-hide pt-4 pb-20" >
-                {
-                    options.length ? options.map((flow, i) => (
-                        <CardComponent key={i}
-                            id={i + 1}
-                            data={flow}
-                            logo={flow.logo}
-                            title={flow.name}
-                            description={flow.description}
-                            type="sheet"
-                            icon={flow.flow_type === 'flow' ? SkillIcon : flow.flow_type === 'assistant' ? AssistantIcon : FlowIcon}
-                            footer={
-                                <Badge className={`absolute right-0 bottom-0 rounded-none rounded-br-md  ${flow.flow_type === 1 && 'bg-gray-950'} ${flow.flow_type === 5 && 'bg-[#fdb136]'}`}>
-                                    {typeCnNames[flow.flow_type]}
-                                </Badge>
-                            }
-                            onClick={() => { onSelect(flow) }}
+
+            <div className="mt-[20px] px-12">
+                <div className="flex flex-wrap">
+                    {renderCategoryTags()}
+                    {user.role === 'admin' && (
+                        <SettingIcon
+                            onClick={() => setIsLabelModalOpen(true)}
+                            className="h-[30px] w-[30px] cursor-pointer"
                         />
-                    )) : <div className="absolute top-1/2 left-1/2 transform text-center -translate-x-1/2 -translate-y-1/2">
-                        <p className="text-sm text-muted-foreground mb-3">{t('build.empty')}</p>
-                        <Button className="w-[200px]" onClick={() => navigate('/build/apps')}>{t('build.onlineSA')}</Button>
-                    </div>
-                }
-                {flag && <LoadMore onScrollLoad={handleLoadMore} />}
+                    )}
+                </div>
             </div>
+
+            <div className="relative overflow-y-auto h-[calc(100vh-308px)]">
+                <div className="flex flex-wrap gap-2 px-12 scrollbar-hide pt-4 pb-20">
+                    {renderChatOptions()}
+                    {hasMoreData && <LoadMore onScrollLoad={handleLoadMore} />}
+                </div>
+            </div>
+
+            <MarkLabel
+                open={isLabelModalOpen}
+                home={categoryTags}
+                onClose={handleCloseLabelModal}
+            />
         </div>
-        <MarkLabel open={open} home={labels} onClose={handleClose}></MarkLabel>
-    </div>
+    )
 }
 
+const HeaderSection = ({ BASE_IMAGE_URL, t }) => (
+    <div className="flex justify-center place-items-center gap-20">
+        <img
+            className="w-[138px]"
+            src={`${BASE_IMAGE_URL}/application-start-logo.png`}
+            alt="Application Logo"
+        />
+        <p className="text-2xl leading-[50px] dark:text-[#D4D4D4]">
+            {t('chat.chooseOne')}
+            <b className="dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b>
+            <br />
+            {t('chat.start')}
+            <b className="dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
+        </p>
+    </div>
+)
 
 const useAutoWidth = () => {
     const [width, setWidth] = useState(0);

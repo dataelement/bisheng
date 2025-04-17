@@ -36,7 +36,7 @@ function AccountSettings() {
         <div>12</div>
       </Select.Select> */}
       <div
-        className="mt-text-sm mb-1 flex h-auto w-full cursor-pointer items-center gap-2 rounded-xl bg-gray-50 dark:bg-gray-800 dark:text-white p-2 text-sm transition-all duration-200 ease-in-out hover:bg-accent cursor-pointer"
+        className="border flex gap-2 text-sm px-3 py-2 mb-2 items-center rounded-xl border-[#4d6bfe] cursor-pointer hover:bg-[#eff6ff] dark:text-gray-50 dark:hover:bg-[#1e293b]"
         onClick={() => setShowKnowledge(true)}
       >
         <FileText className="icon-md" />
