@@ -412,7 +412,7 @@ async def chat_completions(
                             stepId = 'step_' + uuid4().hex
                             yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
                         resoning_res += reasoning_content
-                        content = {'type': 'think', 'think': reasoning_content}
+                        content = {'content': [{'type': 'think', 'think': reasoning_content}]}
                         yield SSEResponse(event='on_reasoning_delta',
                                           data=delta(id=stepId, delta=content)).toString()
                 except asyncio.QueueEmpty:
