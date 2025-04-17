@@ -266,7 +266,7 @@ def save_download_file(file_byte, folder_name, filename):
     md5_name = hex_dig
     file_path = folder_path / f'{md5_name}_{filename}'
     if len(file_path.encode('utf-8')) > 255:
-        file_path = folder_path / f'{md5_name}_{filename[-50:]}'
+        file_path = folder_path / f'{md5_name}_{filename[-80:]}'
     with open(file_path, 'wb') as new_file:
         new_file.write(file_byte)
     return str(file_path)
