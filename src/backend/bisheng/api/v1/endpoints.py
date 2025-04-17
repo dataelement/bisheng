@@ -328,6 +328,8 @@ async def upload_icon_workflow(request: Request,
 async def create_upload_file(file: UploadFile, flow_id: str):
     # Cache file
     try:
+        if len(file.filename) > 80:
+            file.filename = file.filename[-80:]
         file_path = save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
         if not isinstance(file_path, str):
             file_path = str(file_path)

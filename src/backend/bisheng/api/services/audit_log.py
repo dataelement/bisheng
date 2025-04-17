@@ -53,9 +53,9 @@ class AuditLogService:
             groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
 
         data = AuditLogDao.get_all_operators(groups)
-        res = []
+        res = {}
         for one in data:
-            res.append({'user_id': one[0], 'user_name': one[1]})
+            res[one[0]] = {'user_id': one[0], 'user_name': one[1]}
         return resp_200(data=res)
 
     @classmethod
