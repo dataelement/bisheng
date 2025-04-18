@@ -168,7 +168,7 @@ async def upload_file(
     """
     # 读取文件内容
     # 保存文件
-    file_path = save_uploaded_file(file.file, 'bisheng', file.filename)
+    file_path = save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(
@@ -207,7 +207,7 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
     else:
         # 如果标题不存在，则返回空值
         return resp_500(
-            "Title not found or method not implemented for the conversation\'s endpoint")
+            data="Title not found or method not implemented for the conversation\'s endpoint")
 
 
 @router.get('/messages/{conversationId}')
@@ -370,13 +370,18 @@ async def chat_completions(
                 chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
                 prompt = wsConfig.knowledgeBase.prompt.format(
                     retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
-
-            if data.files:
+            elif data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
                     [getFileContent(file.get('filepath')) for file in data.files])
                 prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent[:max_token],
                                                            question=data.text)
+            if prompt != data.text:
+                # 需要将原始消息存储
+                extra = json.loads(message.extra)
+                extra['prompt'] = prompt
+                message.extra = json.dumps(extra)
+                ChatMessageDao.insert_one(message)
         except Exception as e:
             logger.error(f'Error in processing the prompt: {e}')
             error = True
