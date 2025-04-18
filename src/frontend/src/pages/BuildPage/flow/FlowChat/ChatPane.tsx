@@ -65,6 +65,7 @@ export default function ChatPane({ autoRun = false, chatId, flow, wsUrl = '', te
     }
 
     return <Chat
+        flow={flow}
         autoRun={autoRun}
         useName=''
         guideWord=''

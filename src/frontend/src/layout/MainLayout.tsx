@@ -63,7 +63,23 @@ export default function MainLayout() {
 
     // 系统管理员(超管、组超管)
     const isAdmin = useMemo(() => {
-        return ['admin', 'group_admin'].includes(user.role)
+        return user.role?.includes('admin')
+    }, [user])
+
+    // 拥有权限管理权限
+    const hasGroupAdminRole = useMemo(() => {
+        return user.role?.includes('group_admin')
+    }, [user])
+    
+    // 拥有审批权限
+    const hasAduitRole = useMemo(() => {
+        return user.role?.includes('group_audit')
+    }, [user])
+
+    
+    // 拥有运营权限
+    const hasOperationRole = useMemo(() => {
+        return user.role?.includes('group_operation')
     }, [user])
 
     const isMenu = (menu) => {
@@ -75,6 +91,8 @@ export default function MainLayout() {
             <div className="flex justify-between h-[64px] bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'>
+                    {/*  */}
+
                         {/* @ts-ignore */}
                         <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
                     </Link>
@@ -147,7 +165,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            user.role === 'admin' && <>
+                            isAdmin && <>
                                 <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
                                 </NavLink>
@@ -171,17 +189,22 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            isAdmin && <>
+                            //管理员和审核员和用户组权限管理员 可以看到
+                            (isAdmin || hasGroupAdminRole || hasAduitRole) && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
                             </>
                         }
-                        <NavLink to='/operation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                            <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">运&nbsp;&nbsp;&nbsp;&nbsp;营</span>
-                        </NavLink>
                         {
-                            isAdmin && <>
+                            //管理员和运营员和用户组权限管理员 可以看到
+                            (isAdmin || hasGroupAdminRole || hasOperationRole) && <NavLink to='/operation' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">运&nbsp;&nbsp;&nbsp;&nbsp;营</span>
+                            </NavLink>
+                        }
+                        {
+                            //管理员和用户组权限管理员可以看到
+                            (isAdmin || hasGroupAdminRole) && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>

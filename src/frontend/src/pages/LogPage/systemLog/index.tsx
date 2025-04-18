@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
-import { getUserGroupsApi } from "@/controllers/API/user";
+import { getAuditGroupsApi, getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +16,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
-        getUserGroupsApi().then((res: any) => setGroups(res.records))
+        getAuditGroupsApi().then((res: any) => setGroups(res.records))
     }
     return { groups, loadData }
 }

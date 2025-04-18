@@ -1,3 +1,4 @@
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { WordIcon } from "@/components/bs-icons";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
@@ -28,7 +29,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
+export default function MessageBsChoose({ type = 'choose', logo, data, flow = {id: 0, logo: ''} }: { type?: string, logo: string, data: WorkflowMessage, flow: any}) {
     const { t } = useTranslation()
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
@@ -122,12 +123,13 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
             </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                    {<TitleLogo url={flow?.logo} className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden" id={flow?.id}></TitleLogo>}
+                    {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />
-                        </div>}
+                        </div>} */}
                     <div className="text-sm max-w-[calc(100%-24px)]">
                         {/* message */}
                         <div>{mkdown}</div>

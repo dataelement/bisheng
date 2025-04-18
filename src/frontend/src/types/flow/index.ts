@@ -190,6 +190,7 @@ export interface WorkflowNodeParam {
 
 /** 工作流消息结构 */
 export interface WorkflowMessage {
+  id: number;
   category: string;              // "processing"
   node_id?: string;               // Node identifier
   flow_id: string;               // Flow identifier
@@ -206,4 +207,6 @@ export interface WorkflowMessage {
   end: boolean;
   update_time: string;
   extra?: string;
+  /** 违规原因 */
+  review_reason: string;
 }

@@ -190,6 +190,26 @@ export const LoginPage = () => {
                         <Button
                             className='h-[48px] mt-[32px] dark:bg-button'
                             disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
+                        
+                        {/* TODO： 测试代码 之后删除 zzy */}
+                        {/* {
+                            showLogin ? <>
+                                <div className="text-center">
+                                    {!isLDAP && appConfig.register && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
+                                </div>
+                                <Button
+                                    className='h-[48px] mt-[32px] dark:bg-button'
+                                    disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
+                            </> :
+                                <>
+                                    <div className="text-center">
+                                        <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(true)}>{t('login.haveAccountLogin')}</a>
+                                    </div>
+                                    <Button
+                                        className='h-[48px] mt-[32px] dark:bg-button'
+                                        disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
+                                </>
+                        } */}
                         {appConfig.isPro && <LoginBridge onHasLdap={setIsLDAP} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">

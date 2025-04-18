@@ -31,7 +31,11 @@ export default function UserGroups() {
     const loadData = async () => {
         const res: any = await (appConfig.isPro ? getUserGroupsProApi : getUserGroupsApi)()
         defaultAdminsRef.current = await getAdminsApi()
-        res.records.map(g => g.group_admins = [...defaultAdminsRef.current, ...g.group_admins])
+        res.records.forEach(g => {
+            g.group_admins = [...defaultAdminsRef.current, ...g.group_admins];
+            g.group_audits = [...defaultAdminsRef.current, ...g.group_audits];
+            g.group_operations = [...defaultAdminsRef.current, ...g.group_operations];
+        })
         setUserGroups(res.records)
         tempRef.current = res.records
     }
@@ -84,7 +88,9 @@ export default function UserGroups() {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('system.groupName')}</TableHead>
-                        <TableHead>{t('system.admins')}</TableHead>
+                        <TableHead>{t('system.permissionsAdmins')}</TableHead>
+                        <TableHead>{t('system.auditor')}</TableHead>
+                        <TableHead>{t('system.operator')}</TableHead>
                         {appConfig.isPro && <TableHead className="w-[150px]">{t('system.flowControl')}</TableHead>}
                         <TableHead className="w-[160px]">上级用户组</TableHead>
                         <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
@@ -95,14 +101,19 @@ export default function UserGroups() {
                     {userGroups.map((ug: any) => (
                         <TableRow key={ug.id}>
                             <TableCell className="font-medium">{ug.group_name}</TableCell>
+                            {/* TODO: admin_user是啥？ zzy */}
                             <TableCell className="break-all">{(ug.admin_user || ug.group_admins).map(el => el.user_name).join(',')}</TableCell>
+                            <TableCell className="break-all">{(ug.admin_user || ug.group_audits).map(el => el.user_name).join(',')}</TableCell>
+                            <TableCell className="break-all">{(ug.admin_user || ug.group_operations).map(el => el.user_name).join(',')}</TableCell>
                             {appConfig.isPro && <TableCell>{ug.group_limit ? t('system.limit') : t('system.unlimited')}</TableCell>}
                             <TableCell>{ug.parent_group_path || '无'}</TableCell>
                             <TableCell>{ug.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" onClick={() => setUserGroup({
                                     ...ug,
-                                    group_admins: ug.group_admins.slice(defaultAdminsRef.current.length)
+                                    group_admins: ug.group_admins.slice(defaultAdminsRef.current.length),
+                                    group_audits: ug.group_audits.slice(defaultAdminsRef.current.length),
+                                    group_operations: ug.group_operations.slice(defaultAdminsRef.current.length),
                                 })}
                                     className="px-0 pl-6">{t('edit')}
                                 </Button>

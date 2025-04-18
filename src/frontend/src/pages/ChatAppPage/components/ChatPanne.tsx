@@ -227,7 +227,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             </div>
         } */}
     </div>
-
+    
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >
         {/* 技能会话 */}
         {
@@ -240,6 +240,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 <ChatComponent
                     form={flowSate.isForm}
                     logo={flow.logo}
+                    flow={flow}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -263,6 +264,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 </div>
                 <ChatComponent
                     stop
+                    flow={assistant}
                     logo={assistant.logo}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
@@ -283,7 +285,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
                     <span className="text-sm">{workflow.name}</span>
                 </div>
-                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
+                <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl}/>
                 <CommitmentDialog id={workflow.id} name={workflow.name} />
             </div>
         }

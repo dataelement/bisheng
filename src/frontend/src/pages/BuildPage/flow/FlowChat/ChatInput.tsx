@@ -290,7 +290,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
                 : setInputLock({ locked: false, reason: '' });
             return
         } else if (data.category === 'guide_question') {
-            return questionsRef.current.updateQuestions(data.message.filter(q => q))
+            return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
         }

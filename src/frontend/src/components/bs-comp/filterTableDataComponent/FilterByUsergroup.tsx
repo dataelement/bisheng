@@ -1,11 +1,11 @@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { getUserGroupsApi } from "@/controllers/API/user";
+import { getUserGroupsApi, getAuditGroupsApi, getOperationGroupsApi} from "@/controllers/API/user";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function FilterByUsergroup({ value, onChange }) {
+export default function FilterByUsergroup({ value, onChange, isAudit }) {
     const { t } = useTranslation()
-    const { groups, loadData } = useGroups()
+    const { groups, loadData } = useGroups(isAudit)
     return <div className="w-[200px] relative">
         <Select value={value} onValueChange={onChange}>
             <SelectTrigger className="w-[200px]">
@@ -21,10 +21,11 @@ export default function FilterByUsergroup({ value, onChange }) {
 };
 
 
-const useGroups = () => {
+const useGroups = (isAudit: boolean) => {
     const [groups, setGroups] = useState([])
-    const loadData = () => {
-        getUserGroupsApi().then((res: any) => setGroups(res.records))
+    const loadData = async () => {
+        const res: any = await (isAudit ? getAuditGroupsApi : getOperationGroupsApi)();
+        setGroups(res.records);
     }
 
     useEffect(() => {

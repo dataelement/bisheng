@@ -1,9 +1,9 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getUsersApi } from "@/controllers/API/user";
+import { getUsersApi, getUsersApiForUser } from "@/controllers/API/user";
 import { useRef, useState } from "react";
 
-export default function FilterByUser({ value, onChange }) {
-    const { users, loadUsers, searchUser, loadMoreUsers } = useUsers();
+export default function FilterByUser({ value, onChange, isAudit }) {
+    const { users, loadUsers, searchUser, loadMoreUsers } = useUsers(isAudit);
 
     return (
         <div className="w-[200px] relative">
@@ -21,7 +21,7 @@ export default function FilterByUser({ value, onChange }) {
     );
 }
 
-const useUsers = () => {
+const useUsers = (isAudit: boolean) => {
     const [users, setUsers] = useState<any[]>([]);
     const [page, setPage] = useState(1);
     const hasMoreRef = useRef(true);
@@ -31,7 +31,7 @@ const useUsers = () => {
     // Load users from the API and store in state
     const loadUsers = async (name: string) => {
         try {
-            const res = await getUsersApi({ name, page: 1, pageSize: 50 });
+            const res = await getUsersApiForUser({ name, page: 1, pageSize: 50, isAudit });
             const options = res.data.map((u: any) => ({
                 label: u.user_name,
                 value: u.user_id,
@@ -56,7 +56,7 @@ const useUsers = () => {
         if (loadLock.current) return;
         try {
             const nextPage = page + 1;
-            const res = await getUsersApi({ name: keyWordRef.current, page: nextPage, pageSize: 50 });
+            const res = await getUsersApiForUser({ name: keyWordRef.current, page: nextPage, pageSize: 50, isAudit });
             const options = res.data.map((a: any) => ({
                 label: a.user_name,
                 value: a.user_id,
