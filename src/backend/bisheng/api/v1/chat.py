@@ -133,6 +133,7 @@ def get_app_chat_list(*,
             flow_ids = group_flow_ids
 
     # 获取会话列表
+    flow_ids = [one.replace("-",'') for one in flow_ids]
     res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
     total = len(res)
 
