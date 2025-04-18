@@ -1,7 +1,6 @@
 import json
 from datetime import datetime
 from typing import Any, List, Optional
-from uuid import UUID
 
 from fastapi import Request
 from loguru import logger
@@ -50,7 +49,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags([tag_id], ResourceTypeEnum.ASSISTANT)
-            assistant_ids = [UUID(one.resource_id) for one in ret]
+            assistant_ids = [one.resource_id for one in ret]
             if not assistant_ids:
                 return resp_200(data={
                     'data': [],
@@ -68,11 +67,11 @@ class AssistantService(BaseService, AssistantUtils):
                 role_ids = [role.role_id for role in user_role]
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
                 if role_access:
-                    assistant_ids_extra = [UUID(access.third_id).hex for access in role_access]
+                    assistant_ids_extra = [access.third_id for access in role_access]
             res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
                                                      assistant_ids)
 
-        assistant_ids = [one.id.hex for one in res]
+        assistant_ids = [one.id for one in res]
         # 查询助手所属的分组
         assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
         assistant_group_dict = {}
@@ -89,8 +88,8 @@ class AssistantService(BaseService, AssistantUtils):
             simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
                 simple_assistant.write = True
-            simple_assistant.group_ids = assistant_group_dict.get(one.id.hex, [])
-            simple_assistant.tags = flow_tags.get(one.id.hex, [])
+            simple_assistant.group_ids = assistant_group_dict.get(one.id, [])
+            simple_assistant.tags = flow_tags.get(one.id, [])
             data.append(simple_assistant)
         return resp_200(data={'data': data, 'total': total})
 
@@ -106,12 +105,12 @@ class AssistantService(BaseService, AssistantUtils):
         return AssistantSimpleInfo(**simple_dict)
 
     @classmethod
-    def get_assistant_info(cls, assistant_id: UUID, login_user: UserPayload):
+    def get_assistant_info(cls, assistant_id: str, login_user: UserPayload):
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
         # 检查是否有权限获取信息
-        if not login_user.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_READ):
+        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
             return UnAuthorizedError.return_resp()
 
         tool_list = []
@@ -178,12 +177,12 @@ class AssistantService(BaseService, AssistantUtils):
             for one in user_group:
                 batch_resource.append(GroupResource(
                     group_id=one.group_id,
-                    third_id=assistant.id.hex,
+                    third_id=assistant.id,
                     type=ResourceTypeEnum.ASSISTANT.value))
             GroupResourceDao.insert_group_batch(batch_resource)
 
         # 写入审计日志
-        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id.hex)
+        AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
 
         # 写入logo缓存
         cls.get_logo_share_link(assistant.logo)
@@ -191,13 +190,13 @@ class AssistantService(BaseService, AssistantUtils):
 
     # 删除助手
     @classmethod
-    def delete_assistant(cls, request: Request, login_user: UserPayload, assistant_id: UUID) -> UnifiedResponseModel:
+    def delete_assistant(cls, request: Request, login_user: UserPayload, assistant_id: str) -> UnifiedResponseModel:
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
 
         # 判断授权
-        if not login_user.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
             return UnAuthorizedError.return_resp()
 
         AssistantDao.delete_assistant(assistant)
@@ -209,14 +208,14 @@ class AssistantService(BaseService, AssistantUtils):
         """ 清理关联的助手资源 """
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
         # 写入审计日志
-        AuditLogService.delete_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
+        AuditLogService.delete_build_assistant(login_user, get_request_ip(request), assistant.id)
 
         # 清理和用户组的关联
-        GroupResourceDao.delete_group_resource_by_third_id(assistant.id.hex, ResourceTypeEnum.ASSISTANT)
+        GroupResourceDao.delete_group_resource_by_third_id(assistant.id, ResourceTypeEnum.ASSISTANT)
         return True
 
     @classmethod
-    async def auto_update_stream(cls, assistant_id: UUID, prompt: str):
+    async def auto_update_stream(cls, assistant_id: str, prompt: str):
         """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         assistant.prompt = prompt
@@ -305,21 +304,21 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
 
         # 写入审计日志
-        AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id.hex)
+        AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id)
 
         # 写入缓存
         cls.get_logo_share_link(assistant.logo)
         return True
 
     @classmethod
-    async def update_status(cls, request: Request, login_user: UserPayload, assistant_id: UUID,
+    async def update_status(cls, request: Request, login_user: UserPayload, assistant_id: str,
                             status: int) -> UnifiedResponseModel:
         """ 更新助手的状态 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             return AssistantNotExistsError.return_resp()
         # 判断权限
-        if not login_user.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
             return UnAuthorizedError.return_resp()
         # 状态相等不做改动
         if assistant.status == status:
@@ -339,7 +338,7 @@ class AssistantService(BaseService, AssistantUtils):
         return resp_200()
 
     @classmethod
-    def update_prompt(cls, assistant_id: UUID, prompt: str, user_payload: UserPayload) -> UnifiedResponseModel:
+    def update_prompt(cls, assistant_id: str, prompt: str, user_payload: UserPayload) -> UnifiedResponseModel:
         """ 更新助手的提示词 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
@@ -354,7 +353,7 @@ class AssistantService(BaseService, AssistantUtils):
         return resp_200()
 
     @classmethod
-    def update_flow_list(cls, assistant_id: UUID, flow_list: List[str],
+    def update_flow_list(cls, assistant_id: str, flow_list: List[str],
                          user_payload: UserPayload) -> UnifiedResponseModel:
         """  更新助手的技能列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
@@ -568,7 +567,7 @@ class AssistantService(BaseService, AssistantUtils):
         return True
 
     @classmethod
-    def update_tool_list(cls, assistant_id: UUID, tool_list: List[int],
+    def update_tool_list(cls, assistant_id: str, tool_list: List[int],
                          user_payload: UserPayload) -> UnifiedResponseModel:
         """  更新助手的工具列表 """
         assistant = AssistantDao.get_one_assistant(assistant_id)
@@ -585,7 +584,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
         # 判断权限
-        if not user_payload.access_check(assistant.user_id, assistant.id.hex, AccessType.ASSISTANT_WRITE):
+        if not user_payload.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
             return UnAuthorizedError.return_resp()
 
         # 已上线不允许改动

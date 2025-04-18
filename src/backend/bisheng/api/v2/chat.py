@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.utils import set_flow_knowledge_id
@@ -13,6 +13,7 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.processing.process import process_tweaks
 from bisheng.settings import settings
+from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from fastapi import APIRouter, Body, WebSocket, status
 
@@ -49,7 +50,7 @@ async def union_websocket(flow_id: str,
         # vectordatabase update
         if knowledge_id:
             set_flow_knowledge_id(graph_data, knowledge_id)
-        trace_id = str(uuid4().hex)
+        trace_id = generate_uuid()
         with logger.contextualize(trace_id=trace_id):
             await chat_manager.handle_websocket(
                 flow_id,
@@ -106,7 +107,7 @@ def sync_message(*,
                  chat_id: str = Body(embed=True),
                  message_list: List[SyncMessage] = Body(embed=True),
                  user_id: int = Body(default=None, embed=True)):
-
+    flow_id = flow_id.hex
     user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
 
     batch_message = [

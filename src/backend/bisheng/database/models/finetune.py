@@ -1,13 +1,15 @@
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from uuid import UUID, uuid4
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel, validator
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
+from bisheng.utils import generate_uuid
+
 
 
 class TrainMethod(Enum):
@@ -83,7 +85,7 @@ class FinetuneBase(SQLModelSerializable):
 
 
 class Finetune(FinetuneBase, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
 
 
 class FinetuneList(BaseModel):
@@ -96,7 +98,7 @@ class FinetuneList(BaseModel):
 
 
 class FinetuneChangeModelName(BaseModel):
-    id: UUID = Field(description='训练任务唯一ID')
+    id: str = Field(description='训练任务唯一ID')
     model_name: str
 
 
@@ -158,7 +160,7 @@ class FinetuneDao(FinetuneBase):
         return finetune
 
     @classmethod
-    def find_job(cls, job_id: UUID) -> Finetune | None:
+    def find_job(cls, job_id: str) -> Finetune | None:
         with session_getter() as session:
             statement = select(Finetune).where(Finetune.id == job_id)
             return session.exec(statement).first()
@@ -176,7 +178,7 @@ class FinetuneDao(FinetuneBase):
             return session.exec(statement).first()
 
     @classmethod
-    def change_status(cls, job_id: UUID, old_status: int, status: int) -> bool:
+    def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
         with session_getter() as session:
             update_statement = update(Finetune).where(
                 Finetune.id == job_id, Finetune.status == old_status).values(status=status)

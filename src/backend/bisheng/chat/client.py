@@ -1,25 +1,26 @@
 import json
-from typing import Dict, Callable, List
-from uuid import UUID, uuid4
 from queue import Queue
+from typing import Dict, Callable, List
 
+from bisheng.utils import generate_uuid
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
-from loguru import logger
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
 from fastapi import WebSocket, status, Request
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage, ToolMessage
+from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.chat.types import IgnoreException, WorkType
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
-from bisheng.database.models.message import ChatMessage as ChatMessageModel
-from bisheng.database.models.message import ChatMessageDao
+from bisheng.database.models.flow import FlowType
+from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.settings import settings
-from bisheng.api.utils import get_request_ip
-from bisheng.utils.threadpool import ThreadPoolManager, thread_pool
+from bisheng.utils.threadpool import thread_pool
 
 
 class ChatClient:
@@ -36,6 +37,7 @@ class ChatClient:
         self.kwargs = kwargs
 
         # 业务自定义参数
+        self.db_assistant = None
         self.gpts_agent: AssistantAgent | None = None
         self.gpts_async_callback = None
         self.chat_history = []
@@ -57,7 +59,7 @@ class ChatClient:
         await self.websocket.send_json(message.dict())
 
     async def handle_message(self, message: Dict[any, any]):
-        trace_id = uuid4().hex
+        trace_id = generate_uuid()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
         with logger.contextualize(trace_id=trace_id):
             # 处理客户端发过来的信息, 提交到线程池内执行
@@ -106,6 +108,13 @@ class ChatClient:
         ))
         # 记录审计日志, 是新建会话
         if len(self.chat_history) <= 1:
+            MessageSessionDao.insert_one(MessageSession(
+                chat_id=self.chat_id,
+                flow_id=self.client_id,
+                flow_name=self.db_assistant.name,
+                flow_type=FlowType.ASSISTANT.value,
+                user_id=self.user_id,
+            ))
             AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 
@@ -132,7 +141,7 @@ class ChatClient:
             # 处理智能助手业务
             if self.chat_id and self.gpts_agent is None:
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
-                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
+                assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
                     raise IgnoreException('该助手已被删除')
                     # 判断下agent是否上线
@@ -140,7 +149,7 @@ class ChatClient:
                     raise IgnoreException('当前助手未上线，无法直接对话')
             elif not self.chat_id:
                 # 调试界面没测都重新生成
-                assistant = AssistantDao.get_one_assistant(UUID(self.client_id))
+                assistant = AssistantDao.get_one_assistant(self.client_id)
                 if not assistant:
                     raise IgnoreException('该助手已被删除')
         except IgnoreException as e:
@@ -149,10 +158,12 @@ class ChatClient:
             raise IgnoreException(f'get assistant info error: {str(e)}')
         try:
             if self.chat_id and self.gpts_agent is None:
+                self.db_assistant = assistant
                 # 会话业务agent通过数据库数据固定生成,不用每次变化
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
             elif not self.chat_id:
+                self.db_assistant = assistant
                 # 调试界面每次都重新生成
                 self.gpts_agent = AssistantAgent(assistant, self.chat_id)
                 await self.gpts_agent.init_assistant(self.gpts_async_callback)
@@ -224,7 +235,8 @@ class ChatClient:
         answer = ''
         while not self.stream_queue.empty():
             msg = self.stream_queue.get()
-            answer += msg
+            if msg.get('type') == 'answer':
+                answer += msg.get('content', '')
 
         # 有流式输出内容的话，记录流式输出内容到数据库
         if answer.strip():
@@ -235,7 +247,6 @@ class ChatClient:
     async def clear_stream_queue(self):
         while not self.stream_queue.empty():
             self.stream_queue.get()
-
 
     async def handle_gpts_message(self, message: Dict[any, any]):
         if not message:

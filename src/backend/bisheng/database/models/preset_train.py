@@ -1,9 +1,9 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
-from uuid import UUID, uuid4
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.utils import generate_uuid
 from sqlalchemy import func
 from sqlmodel import Column, DateTime, Field, select, text
 
@@ -25,7 +25,7 @@ class PresetTrainBase(SQLModelSerializable):
 
 
 class PresetTrain(PresetTrainBase, table=True):
-    id: UUID = Field(default_factory=uuid4, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
 
 
 class PresetTrainDao(PresetTrainBase):
@@ -48,7 +48,7 @@ class PresetTrainDao(PresetTrainBase):
         return True
 
     @classmethod
-    def find_one(cls, file_id: UUID) -> PresetTrain | None:
+    def find_one(cls, file_id: str) -> PresetTrain | None:
         with session_getter() as session:
             statement = select(PresetTrain).where(PresetTrain.id == file_id)
             return session.exec(statement).first()

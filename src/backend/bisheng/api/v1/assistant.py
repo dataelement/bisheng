@@ -1,9 +1,9 @@
 import hashlib
 import json
 from typing import Dict, List, Optional
-from uuid import UUID, uuid4
 
 import yaml
+from bisheng.utils import generate_uuid
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket,
                      WebSocketException)
@@ -42,7 +42,7 @@ def get_assistant(*,
 
 # 获取某个助手的详细信息
 @router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
-def get_assistant_info(*, assistant_id: UUID, login_user: UserPayload = Depends(get_login_user)):
+def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user)):
     """获取助手信息"""
     return AssistantService.get_assistant_info(assistant_id, login_user)
 
@@ -50,7 +50,7 @@ def get_assistant_info(*, assistant_id: UUID, login_user: UserPayload = Depends(
 @router.post('/delete', response_model=UnifiedResponseModel)
 def delete_assistant(*,
                      request: Request,
-                     assistant_id: UUID,
+                     assistant_id: str,
                      login_user: UserPayload = Depends(get_login_user)):
     """删除助手"""
     return AssistantService.delete_assistant(request, login_user, assistant_id)
@@ -82,7 +82,7 @@ async def update_assistant(*,
 @router.post('/status', response_model=UnifiedResponseModel)
 async def update_status(*,
                         request: Request,
-                        assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
+                        assistant_id: str = Body(description='助手唯一ID', alias='id'),
                         status: int = Body(description='是否上线，1:上线，0:下线'),
                         login_user: UserPayload = Depends(get_login_user)):
     return await AssistantService.update_status(request, login_user, assistant_id, status)
@@ -90,10 +90,10 @@ async def update_status(*,
 
 @router.post('/auto/task')
 async def auto_update_assistant_task(*, request: Request, login_user: UserPayload = Depends(get_login_user),
-                                     assistant_id: UUID = Body(description='助手唯一ID'),
+                                     assistant_id: str = Body(description='助手唯一ID'),
                                      prompt: str = Body(description='用户填写的提示词')):
     # 存入缓存
-    task_id = uuid4().hex
+    task_id = generate_uuid()
     redis_client.set(f'auto_update_task:{task_id}', {
         'assistant_id': assistant_id,
         'prompt': prompt,
@@ -131,7 +131,7 @@ async def auto_update_assistant(*, task_id: str = Query(description='优化任�
 # 更新助手的提示词
 @router.post('/prompt', response_model=UnifiedResponseModel)
 async def update_prompt(*,
-                        assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
+                        assistant_id: str = Body(description='助手唯一ID', alias='id'),
                         prompt: str = Body(description='用户使用的prompt'),
                         login_user: UserPayload = Depends(get_login_user)):
     return AssistantService.update_prompt(assistant_id, prompt, login_user)
@@ -139,7 +139,7 @@ async def update_prompt(*,
 
 @router.post('/flow', response_model=UnifiedResponseModel)
 async def update_flow_list(*,
-                           assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
+                           assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            flow_list: List[str] = Body(description='用户选择的技能列表'),
                            login_user: UserPayload = Depends(get_login_user)):
     return AssistantService.update_flow_list(assistant_id, flow_list, login_user)
@@ -147,7 +147,7 @@ async def update_flow_list(*,
 
 @router.post('/tool', response_model=UnifiedResponseModel)
 async def update_tool_list(*,
-                           assistant_id: UUID = Body(description='助手唯一ID', alias='id'),
+                           assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            tool_list: List[int] = Body(description='用户选择的工具列表'),
                            login_user: UserPayload = Depends(get_login_user)):
     """ 更新助手选择的工具列表 """
@@ -168,7 +168,6 @@ async def chat(*,
             Authorize._token = t
         else:
             Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-
         payload = Authorize.get_jwt_subject()
         payload = json.loads(payload)
         login_user = UserPayload(**payload)
@@ -243,10 +242,10 @@ async def get_tool_schema(*,
                                       is_delete=0,
                                       server_host=schema.default_server,
                                       openapi_schema=file_content,
-                                      api_location = schema.api_location,
-                                      parameter_name = schema.parameter_name,
-                                      auth_type = schema.auth_type,
-                                      auth_method = schema.auth_method,
+                                      api_location=schema.api_location,
+                                      parameter_name=schema.parameter_name,
+                                      auth_type=schema.auth_type,
+                                      auth_method=schema.auth_method,
                                       children=[])
         # 解析获取所有的api
         schema.parse_paths()
@@ -294,9 +293,11 @@ def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: 
 @router.post('/tool_test', response_model=UnifiedResponseModel)
 async def test_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
     """ 测试自定义工具 """
-    tool_params = OpenApiSchema.parse_openapi_tool_params_test('test', 'test', req.extra,
+    extra = json.loads(req.extra)
+    extra.update({'api_location': req.api_location, 'parameter_name': req.parameter_name})
+    tool_params = OpenApiSchema.parse_openapi_tool_params('test', 'test', json.dumps(extra),
                                                           req.server_host, req.auth_method,
-                                                          req.auth_type, req.api_key,req.api_location,req.parameter_name)
+                                                          req.auth_type, req.api_key)
 
     openapi_tool = OpenApiTools.get_api_tool('test', **tool_params)
     try:

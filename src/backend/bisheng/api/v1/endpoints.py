@@ -13,18 +13,18 @@ from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, Uploa
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
 from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.database.base import generate_uuid, session_getter
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
-from bisheng.database.models.flow import Flow
-from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.flow import FlowDao, FlowType
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
+from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
-from sqlmodel import select
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -36,6 +36,8 @@ except ImportError:
 
 # build router
 router = APIRouter(tags=['Base'])
+
+minio_client = MinioClient()
 
 
 @router.get('/all')
@@ -74,12 +76,8 @@ def get_env():
 
 @router.get('/config')
 def get_config(admin_user: UserPayload = Depends(get_admin_user)):
-    with session_getter() as session:
-        config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
-    if config:
-        config_str = config.value
-    else:
-        config_str = ''
+    db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
+    config_str = db_config.value if db_config else ''
     return resp_200(config_str)
 
 
@@ -90,11 +88,9 @@ def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
     try:
         # 校验是否符合yaml格式
         _ = yaml.safe_load(data.get('data'))
-        with session_getter() as session:
-            config = session.exec(select(Config).where(Config.key == 'initdb_config')).first()
-            config.value = data.get('data')
-            session.add(config)
-            session.commit()
+        db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
+        db_config.value = data.get('data')
+        ConfigDao.insert_config(db_config)
         redis_client.delete('config:initdb_config')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f'格式不正确, {str(e)}')
@@ -161,14 +157,12 @@ async def process_flow(
     """
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
-
+    flow_id = flow_id.hex
     logger.info(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
-    flow_id = flow_id.hex
 
     try:
-        with session_getter() as session:
-            flow = session.get(Flow, flow_id)
+        flow = FlowDao.get_flow_by_id(flow_id)
         if flow is None:
             raise ValueError(f'Flow {flow_id} not found')
         if flow.data is None:
@@ -226,14 +220,14 @@ async def process_flow(
         source, result = await judge_source(answer, source_documents, session_id, extra)
 
         try:
-            question = ChatMessage(user_id=0,
+            question = ChatMessage(user_id=1,
                                    is_bot=False,
                                    type='end',
                                    chat_id=session_id,
                                    category='question',
                                    flow_id=flow_id,
                                    message=json.dumps(inputs))
-            message = ChatMessage(user_id=0,
+            message = ChatMessage(user_id=1,
                                   is_bot=True,
                                   chat_id=session_id,
                                   flow_id=flow_id,
@@ -241,10 +235,19 @@ async def process_flow(
                                   category='answer',
                                   message=answer,
                                   source=source)
-            with session_getter() as session:
-                session.add_all([question, message])
-                session.commit()
-                session.refresh(message)
+            ChatMessageDao.insert_one(question)
+            message = ChatMessageDao.insert_one(message)
+            try:
+                MessageSessionDao.insert_one(
+                    MessageSession(
+                        chat_id=session_id,
+                        flow_id=flow_id,
+                        flow_name=flow.name,
+                        flow_type=FlowType.FLOW.value,
+                        user_id=1,
+                    ))
+            except Exception as e:
+                logger.warning(f'insert repeat session error: {e}')
 
             extra.update({'source': source, 'message_id': message.id})
 
@@ -325,6 +328,8 @@ async def upload_icon_workflow(request: Request,
 async def create_upload_file(file: UploadFile, flow_id: str):
     # Cache file
     try:
+        if len(file.filename) > 80:
+            file.filename = file.filename[-80:]
         file_path = save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
         if not isinstance(file_path, str):
             file_path = str(file_path)
@@ -332,6 +337,17 @@ async def create_upload_file(file: UploadFile, flow_id: str):
             flowId=flow_id,
             file_path=file_path,
         ))
+    except Exception as exc:
+        logger.error(f'Error saving file: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get('/download')
+async def get_download_url(object_name: str):
+    # Cache file
+    try:
+        url = minio_client.get_share_link(object_name)
+        return resp_200(url)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc

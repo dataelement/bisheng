@@ -1,11 +1,11 @@
 import os.path
-import uuid
 from typing import Any, List
 
 from bisheng.api.errcode.finetune import TrainFileNotExistError
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.preset_train import PresetTrain, PresetTrainDao
+from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
 from fastapi import UploadFile
@@ -35,7 +35,7 @@ class FinetuneFileService(BaseModel):
                            user: Any) -> UnifiedResponseModel:
         # 将训练文件上传到minio
         file_root = cls.get_upload_file_root(False)
-        file_id = uuid.uuid4().hex
+        file_id = generate_uuid()
         file_ext = os.path.basename(file_path).split('.')[-1]
         object_name = f'{file_root}/{file_id}.{file_ext}'
         MinioClient().upload_minio(object_name, file_path)
@@ -62,7 +62,7 @@ class FinetuneFileService(BaseModel):
         minio_client = MinioClient()
         ret = []
         for file in files:
-            file_id = uuid.uuid4().hex
+            file_id = generate_uuid()
             file_ext = os.path.basename(file.filename).split('.')[-1]
             file_info = PresetTrain(id=file_id,
                                     name=file.filename,
@@ -85,7 +85,7 @@ class FinetuneFileService(BaseModel):
         return PageList(list=list_res, total=total_count)
 
     @classmethod
-    def delete_preset_file(cls, file_id: uuid.UUID, user: Any) -> UnifiedResponseModel:
+    def delete_preset_file(cls, file_id: str, user: Any) -> UnifiedResponseModel:
         file_data = PresetTrainDao.find_one(file_id)
         if not file_data:
             return TrainFileNotExistError.return_resp()

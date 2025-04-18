@@ -4,7 +4,6 @@ name: cicd # 定义流水线名称
 
 clone:
   disable: true
-  
 steps: # 定义流水线执行步骤，这些步骤将顺序执行
   - name: clone
     image: alpine/git
@@ -126,22 +125,22 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - cd ./src/frontend/
       - docker login -u $docker_user -p $docker_password $docker_registry
       - docker build -t $docker_repo:$version .
-      - docker push $docker_repo:$version
+  #     - docker push $docker_repo:$version
 
-  - name: ssh deploy
-    image: appleboy/drone-ssh
-    pull: if-not-exists
-    settings:
-      host: 192.168.106.116
-      username: root
-      password:
-        from_secret: sshpwd
-      script:
-       - echo =======找到目录=======
-       - cd /opt/server/bisheng-test
-       - echo =======直接启动=======
-       - docker compose pull
-       - docker compose up -d
+  # - name: ssh deploy
+  #   image: appleboy/drone-ssh
+  #   pull: if-not-exists
+  #   settings:
+  #     host: 192.168.106.116
+  #     username: root
+  #     password:
+  #       from_secret: sshpwd
+  #     script:
+  #      - echo =======找到目录=======
+  #      - cd /opt/server/bisheng-test
+  #      - echo =======直接启动=======
+  #      - docker compose pull
+  #      - docker compose up -d
 
   - name: notify-start # notify
     pull: if-not-exists
@@ -177,7 +176,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 trigger:
   branch:
   - release
-  - feat/0.3.7rc
+  - feat/workstation
   event:
   - push
    

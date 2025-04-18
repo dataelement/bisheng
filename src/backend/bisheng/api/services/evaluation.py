@@ -1,15 +1,13 @@
 import asyncio
 import os
-import uuid
 import io
 import json
 from typing import List
 
 from bisheng.api.services.llm import LLMService
-from bisheng.interface.initialize.loading import instantiate_llm
+from bisheng.utils import generate_uuid
 from fastapi import UploadFile, HTTPException
 import pandas as pd
-from bisheng.settings import settings
 from collections import defaultdict
 from copy import deepcopy
 
@@ -133,7 +131,7 @@ class EvaluationService:
     @classmethod
     def upload_file(cls, file: UploadFile):
         minio_client = MinioClient()
-        file_id = uuid.uuid4().hex
+        file_id = generate_uuid()
         file_name = file.filename
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
@@ -144,7 +142,7 @@ class EvaluationService:
     @classmethod
     def upload_result_file(cls, df: pd.DataFrame):
         minio_client = MinioClient()
-        file_id = uuid.uuid4().hex
+        file_id = generate_uuid()
 
         csv_buffer = io.BytesIO()
         df.to_csv(csv_buffer, index=False)
@@ -200,7 +198,7 @@ class EvaluationService:
                 async for message in build_flow(graph_data=version_info.data,
                                                 artifacts=artifacts,
                                                 process_file=False,
-                                                flow_id=uuid.UUID(flow_id).hex,
+                                                flow_id=flow_id,
                                                 chat_id=None):
                     if isinstance(message, Graph):
                         graph = message

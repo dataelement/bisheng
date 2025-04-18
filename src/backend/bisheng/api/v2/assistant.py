@@ -1,6 +1,5 @@
 # 免登录的助手相关接口
 import time
-import uuid
 from typing import Optional
 from uuid import UUID
 
@@ -19,6 +18,8 @@ from bisheng.api.v1.schemas import (AssistantInfo, OpenAIChatCompletionReq,
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.settings import settings
+from bisheng.utils import generate_uuid
+
 
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
@@ -29,6 +30,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     兼容openai接口格式，所有的错误必须返回非http200的状态码
     和助手进行聊天
     """
+    assistant_id = UUID(req_data.model).hex
     logger.info(
         f'act=assistant_chat_completions assistant_id={req_data.model}, ip={get_request_ip(request)}'
     )
@@ -38,7 +40,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     except Exception as e:
         return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
     # 查找助手信息
-    res = AssistantService.get_assistant_info(UUID(req_data.model), login_user)
+    res = AssistantService.get_assistant_info(assistant_id, login_user)
     if res.status_code != 200:
         return ORJSONResponse(status_code=500,
                               content=res.status_message,
@@ -68,7 +70,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     answer = await agent.run(question, chat_history)
     answer = answer[-1].content
 
-    openai_resp_id = uuid.uuid4().hex
+    openai_resp_id = generate_uuid()
     logger.info(f'act=assistant_chat_completions_over openai_resp_id={openai_resp_id}')
     # 将结果包装成openai的数据格式
     openai_resp = OpenAIChatCompletionResp(
@@ -108,6 +110,7 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     """
     获取助手信息, 用系统配置里的default_operator.user的用户信息来做权限校验
     """
+    assistant_id = assistant_id.hex
     logger.info(f'act=get_default_operator assistant_id={assistant_id}, ip={get_request_ip(request)}')
     # 判断下配置是否打开
     if not settings.get_from_db("default_operator").get("enable_guest_access"):

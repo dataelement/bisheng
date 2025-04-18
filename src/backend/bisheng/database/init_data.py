@@ -12,8 +12,9 @@ from bisheng.database.init_config import init_config
 from bisheng.database.base import session_getter, db_service
 from bisheng.settings import settings
 from bisheng.cache.redis import redis_client
+from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.component import Component
-from bisheng.database.models.role import Role, AdminRole, DefaultRole
+from bisheng.database.models.role import Role
 from bisheng.database.models.user import User
 from bisheng.database.models.gpts_tools import GptsTools
 from bisheng.database.models.gpts_tools import GptsToolsType

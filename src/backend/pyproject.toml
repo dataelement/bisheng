@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "1.0.1"
+version = "1.1.0"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -18,7 +18,7 @@ include = ["./bisheng/*", "bisheng/**/*"]
 bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
-bisheng_langchain = "1.0.1"
+bisheng_langchain = "1.1.0"
 bisheng_pyautogen = "0.3.2"
 langchain = "^0.2.16"
 langchain_experimental = "*"
@@ -33,7 +33,7 @@ loguru = "^0.7.1"
 fastapi_jwt_auth = "^0.5.0"
 captcha = "^0.5.0"
 rsa = "4.9"
-pydantic = "^1.10.18"
+pydantic = "^1.10.21"
 numexpr = "^2.8.6"
 pypinyin = "0.50.0"
 celery = { extras = ["redis"], version = "^5.3.6" }

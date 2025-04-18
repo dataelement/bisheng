@@ -1,4 +1,5 @@
 import uuid
+from uuid import UUID
 from typing import Optional, List
 
 from bisheng.api.errcode.base import NotFoundError
@@ -23,12 +24,13 @@ router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
 
 @router.post('/invoke')
 async def invoke_workflow(request: Request,
-                          workflow_id: str = Body(..., description='工作流唯一ID'),
+                          workflow_id: UUID = Body(..., description='工作流唯一ID'),
                           stream: Optional[bool] = Body(default=True, description='是否流式调用'),
                           user_input: Optional[dict] = Body(default=None, description='用户输入', alias='input'),
                           message_id: Optional[str] = Body(default=None, description='消息ID'),
                           session_id: Optional[str] = Body(default=None, description='会话ID,一次workflow调用的唯一标识')):
     login_user = get_default_operator()
+    workflow_id = workflow_id.hex
 
     # 解析出chat_id和unique_id
     if not session_id:
@@ -62,6 +64,7 @@ async def invoke_workflow(request: Request,
             workflow.set_user_input(user_input, message_id)
             workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
 
+    logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
     async def handle_workflow_event(event_list: List):
         async for event in workflow.get_response_until_break():
             if event.category == WorkflowEventType.NodeRun.value:
@@ -97,9 +100,9 @@ async def invoke_workflow(request: Request,
 
 @router.post('/stop')
 async def stop_workflow(request: Request,
-                        workflow_id: str = Body(..., description='工作流唯一ID'),
+                        workflow_id: UUID = Body(..., description='工作流唯一ID'),
                         session_id: str = Body(description='会话ID,一次workflow调用的唯一标识')):
-
+    workflow_id = workflow_id.hex
     login_user = get_default_operator()
     chat_id = session_id.split('_', 1)[0]
     unique_id = session_id
@@ -107,13 +110,14 @@ async def stop_workflow(request: Request,
     workflow.set_workflow_stop()
     return resp_200()
 
-
 @router.websocket('/chat/{workflow_id}')
 async def workflow_ws(*,
-                      workflow_id: str = Path(..., description='工作流唯一ID'),
+                      workflow_id: UUID = Path(..., description='工作流唯一ID'),
                       websocket: WebSocket,
                       chat_id: Optional[str] = None):
+    """ 免登录链接使用 """
     try:
+        workflow_id = workflow_id.hex
         # Authorize.jwt_required(auth_from='websocket', websocket=websocket)
         # payload = Authorize.get_jwt_subject()
         login_user = get_default_operator()

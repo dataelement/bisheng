@@ -4,21 +4,25 @@ import time
 import uuid
 from typing import AsyncIterator
 
+from cachetools import TTLCache
+from langchain_core.documents import Document
+from loguru import logger
+
 from bisheng.api.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
     WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
-from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
+from bisheng.database.models.flow import FlowDao, FlowType
+from bisheng.database.models.message import ChatMessageDao, ChatMessage
+from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.settings import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
 from bisheng.workflow.common.workflow import WorkflowStatus
-from cachetools import TTLCache
-from langchain_core.documents import Document
-from loguru import logger
+
 
 
 class RedisCallback(BaseCallback):
@@ -31,6 +35,7 @@ class RedisCallback(BaseCallback):
         self.chat_id = chat_id
         self.user_id = user_id
         self.workflow = None
+        self.create_session = False
 
         # workflow status cache in memory 10 seconds
         self.workflow_cache: TTLCache = TTLCache(maxsize=1024, ttl=10)
@@ -151,7 +156,8 @@ class RedisCallback(BaseCallback):
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
-                                               {'code': WorkFlowTaskBusyError.Code, 'message': WorkFlowTaskBusyError.Msg})
+                                               {'code': WorkFlowTaskBusyError.Code,
+                                                'message': WorkFlowTaskBusyError.Msg})
                 break
             elif time.time() - status_info['time'] > 86400:
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
@@ -196,13 +202,7 @@ class RedisCallback(BaseCallback):
             else:
                 # 说明对话框输入
                 user_input_message = user_input[old_message['input_schema']['key']]
-            ChatMessageDao.insert_one(ChatMessage(
-                user_id=self.user_id,
-                chat_id=self.chat_id,
-                flow_id=self.workflow_id,
-                type=ChatMessageType.WORKFLOW.value,
-
-                is_bot=False,
+            self.save_chat_message(ChatResponse(
                 message=user_input_message,
                 category='question',
             ))
@@ -255,7 +255,7 @@ class RedisCallback(BaseCallback):
             user_id=self.user_id,
             chat_id=self.chat_id,
             flow_id=self.workflow_id,
-            type=ChatMessageType.WORKFLOW.value,
+            type=chat_response.type,
 
             is_bot=chat_response.is_bot,
             source=chat_response.source,
@@ -268,6 +268,20 @@ class RedisCallback(BaseCallback):
         # 如果是文档溯源，处理召回的chunk
         if chat_response.source not in [0, 4]:
             sync_process_source_document(source_documents, self.chat_id, message.id, chat_response.message.get('msg'))
+
+        # 判断是否需要新建会话
+        if not self.create_session and chat_response.category != WorkflowEventType.UserInput.value:
+            # 没有会话数据则新插入一个会话
+            if not MessageSessionDao.get_one(self.chat_id):
+                db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
+                MessageSessionDao.insert_one(MessageSession(
+                    chat_id=self.chat_id,
+                    flow_id=self.workflow_id,
+                    flow_name=db_workflow.name,
+                    flow_type=FlowType.WORKFLOW.value,
+                    user_id=self.user_id,
+                ))
+            self.create_session = True
 
         return message.id
 

@@ -10,15 +10,17 @@ from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileP
                                     UnifiedResponseModel, resp_200, resp_500)
 from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.api.v2.utils import get_default_operator
-from bisheng.cache.utils import save_download_file
-from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeUpdate, KnowledgeTypeEnum
+from bisheng.cache.utils import file_download, save_download_file
+from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
+                                               KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
                                                     QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from fastapi import APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Request, UploadFile, Query
+from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
+                     UploadFile)
 from starlette.responses import FileResponse
 
 # build router
@@ -44,14 +46,16 @@ def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
 @router.get('/', status_code=200)
 def get_knowledge(*,
                   request: Request,
-                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias='type'),
+                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
+                                              alias='type'),
                   name: str = None,
                   page_size: Optional[int] = 10,
                   page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     login_user = get_default_operator()
-    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name, page_num, page_size)
+    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
+                                                page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -85,14 +89,18 @@ async def upload_file(request: Request,
                       chunk_overlap: Optional[int] = Form(default=None,
                                                           description='切分文本重叠长度，不传则为默认'),
                       callback_url: Optional[str] = Form(default=None, description='回调地址'),
-                      file: UploadFile = File(...),
+                      file_url: Optional[str] = Form(default=None, description='文件地址'),
+                      file: Optional[UploadFile] = File(default=None, description='上传文件'),
                       background_tasks: BackgroundTasks = None):
-    file_name = file.filename
-    if not file_name:
-        return resp_500(message='file name must be not empty')
-    # 缓存本地
-    file_byte = await file.read()
-    file_path = save_download_file(file_byte, 'bisheng', file_name)
+    if file:
+        file_name = file.filename
+        if not file_name:
+            return resp_500(message='file name must be not empty')
+        # 缓存本地
+        file_byte = await file.read()
+        file_path = save_download_file(file_byte, 'bisheng', file_name)
+    else:
+        file_path, file_name = file_download(file_url)
 
     loging_user = get_default_operator()
     req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
@@ -216,7 +224,7 @@ async def clear_tmp_chunks_data(body: Dict):
         #  查询自动生成的
         message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
         if message:
-            collection_name = f'tmp_{message.flow_id.hex}_{chat_id}'
+            collection_name = f'tmp_{message.flow_id}_{chat_id}'
             delete_es(collection_name)
             delete_vector(collection_name, None)
 
@@ -280,7 +288,7 @@ def append_qa(*,
         return HTTPException(404, detail='qa 对没有找到')
 
     t = qa_db.dict()
-    t["answers"] = json.loads(t["answers"])
+    t['answers'] = json.loads(t['answers'])
     qa_insert = QAKnowledgeUpsert.validate(t)
     qa_insert.questions.extend(data.relative_questions)
 

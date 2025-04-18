@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Dict, Optional
-from uuid import UUID
 
 from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import JSON, Column, DateTime, text, String
@@ -14,7 +13,7 @@ class TemplateSkillBase(SQLModelSerializable):
     order_num: Optional[int] = Field(default=True)
     # 1 flow 5 assistant 10 workflow
     flow_type: Optional[int] = Field(default=1)
-    flow_id: Optional[UUID] = Field(index=False)
+    flow_id: Optional[str] = Field(index=False)
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(

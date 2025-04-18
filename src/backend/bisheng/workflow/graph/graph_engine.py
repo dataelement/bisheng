@@ -1,12 +1,6 @@
 import operator
 from typing import Annotated, Any, Dict
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import END, START
-from langgraph.graph import StateGraph
-from loguru import logger
-from typing_extensions import TypedDict
-
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
@@ -17,6 +11,11 @@ from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from bisheng.workflow.nodes.output.output_fake import OutputFakeNode
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.constants import END, START
+from langgraph.graph import StateGraph
+from loguru import logger
+from typing_extensions import TypedDict
 
 
 class TempState(TypedDict):
@@ -144,6 +143,8 @@ class GraphEngine:
         # 判断是否存在从condition节点或者output节点（选择型交互）到此节点的 两条不重复的路径
         all_branches = []
         for one in self.condition_nodes:
+            if node_id == one:
+                continue
             branches = self.edges.get_all_edges_nodes(one, node_id)
             for branch in branches:
                 if node_id not in branch:
@@ -217,7 +218,8 @@ class GraphEngine:
             self.nodes_map[node_data.id] = node_instance
             self.nodes_fan_in[node_instance.id] = self.edges.get_source_node(node_instance.id)
             if node_instance.type not in [NodeType.START.value]:
-                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(node_instance.id)
+                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(
+                    node_instance.id)
 
             # add node into langgraph
             if self.async_mode:
@@ -269,7 +271,8 @@ class GraphEngine:
         # compile langgraph
         self.graph = self.graph_builder.compile(checkpointer=MemorySaver(),
                                                 interrupt_before=interrupt_nodes)
-        self.graph_config['recursion_limit'] = (len(nodes) - len(end_nodes) - 1) * self.max_steps
+        self.graph_config['recursion_limit'] = max(
+            (len(nodes) - len(end_nodes) - 1) * self.max_steps, 1) + len(end_nodes) + 1
 
         # import datetime
         # with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",

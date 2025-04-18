@@ -1,6 +1,5 @@
 import json
 from typing import List
-from uuid import UUID
 
 from fastapi import Request, HTTPException
 from loguru import logger
@@ -76,11 +75,11 @@ class TagService:
             return True
         resource_info = None
         if resource_type == ResourceTypeEnum.ASSISTANT:
-            resource_info = AssistantDao.get_one_assistant(UUID(resource_id))
+            resource_info = AssistantDao.get_one_assistant(resource_id)
         elif resource_type == ResourceTypeEnum.FLOW:
-            resource_info = FlowDao.get_flow_by_id(UUID(resource_id).hex)
+            resource_info = FlowDao.get_flow_by_id(resource_id)
         elif resource_type == ResourceTypeEnum.WORK_FLOW:
-            resource_info = FlowDao.get_flow_by_id(UUID(resource_id).hex)
+            resource_info = FlowDao.get_flow_by_id(resource_id)
         else:
             raise HTTPException(status_code=404, detail="资源类型不支持")
         if not resource_info:
@@ -108,7 +107,7 @@ class TagService:
         """ 建立资源和标签的关联 """
         cls.check_tag_link_permission(request, login_user, resource_id, resource_type)
 
-        new_link = TagLink(tag_id=tag_id, resource_id=UUID(resource_id).hex, resource_type=resource_type.value,
+        new_link = TagLink(tag_id=tag_id, resource_id=resource_id, resource_type=resource_type.value,
                            user_id=login_user.user_id)
         try:
             new_link = TagDao.insert_tag_link(new_link)
@@ -127,7 +126,7 @@ class TagService:
         """ 删除资源和标签的关联 """
         cls.check_tag_link_permission(request, login_user, resource_id, resource_type)
 
-        return TagDao.delete_resource_tag(tag_id, UUID(resource_id).hex, resource_type)
+        return TagDao.delete_resource_tag(tag_id, resource_id, resource_type)
 
     @classmethod
     def get_home_tag(cls,

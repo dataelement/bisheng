@@ -15,6 +15,7 @@ def get_flow(request: Request, flow_id: UUID):
     """
     公开的获取技能信息的接口
     """
+    flow_id = flow_id.hex
     logger.info(f'public_get_flow  ip: {request.client.host} flow_id:{flow_id}')
     # 判断下配置是否打开
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
@@ -26,7 +27,7 @@ def get_flow(request: Request, flow_id: UUID):
         'role': ''
     })
 
-    return FlowService.get_one_flow(login_user, flow_id.hex)
+    return FlowService.get_one_flow(login_user, flow_id)
 
 
 @router.get('', status_code=200)

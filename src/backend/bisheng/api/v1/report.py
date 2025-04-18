@@ -1,9 +1,7 @@
-from uuid import UUID, uuid4
-
 from bisheng.api.v1.schemas import resp_200
 from bisheng.database.base import session_getter
 from bisheng.database.models.report import Report
-from bisheng.utils import minio_client
+from bisheng.utils import minio_client, generate_uuid
 from bisheng.utils.logger import logger
 from bisheng_langchain.utils.requests import Requests
 from fastapi import APIRouter, HTTPException
@@ -48,7 +46,6 @@ async def callback(data: dict):
 
 @router.get('/report_temp')
 async def get_template(*, flow_id: str):
-    flow_id = UUID(flow_id).hex
     with session_getter() as session:
         db_report = session.exec(
             select(Report).where(Report.flow_id == flow_id,
@@ -60,7 +57,7 @@ async def get_template(*, flow_id: str):
         file_url = minio_client.MinioClient().get_share_link(db_report.object_name)
 
     if not db_report.newversion_key or not db_report.object_name:
-        version_key = uuid4().hex
+        version_key = generate_uuid()
         db_report.newversion_key = version_key
         with session_getter() as session:
             session.add(db_report)

@@ -252,7 +252,12 @@ class SqlAgentTool(BaseTool):
             run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the tool."""
-        return self.api_wrapper.run(query)
+        try:
+            res = self.api_wrapper.run(query)
+        finally:
+            if self.api_wrapper and self.api_wrapper.db:
+                self.api_wrapper.db._engine.dispose()
+        return res
 
 
 if __name__ == '__main__':

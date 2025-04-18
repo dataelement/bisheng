@@ -1,5 +1,4 @@
 import json
-import uuid
 from typing import List
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores
@@ -9,6 +8,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFile
                                                     KnowledgeFileStatus, QAKnoweldgeDao,
                                                     QAKnowledge)
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.utils import generate_uuid
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from loguru import logger
@@ -205,7 +205,7 @@ def insert_milvus(li: List, fields: list, target: Milvus):
 def insert_es(li: List, target: ElasticKeywordsSearch):
     from elasticsearch.helpers import bulk
     res_list = []
-    ids = [str(uuid.uuid4()) for _ in li]
+    ids = [generate_uuid() for _ in li]
     requests = []
     for i, data in enumerate(li):
         text = data.pop('text')
