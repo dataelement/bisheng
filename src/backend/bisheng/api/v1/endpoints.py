@@ -37,8 +37,6 @@ except ImportError:
 # build router
 router = APIRouter(tags=['Base'])
 
-minio_client = MinioClient()
-
 
 @router.get('/all')
 def get_all():
@@ -345,6 +343,7 @@ async def create_upload_file(file: UploadFile, flow_id: str):
 @router.get('/download')
 async def get_download_url(object_name: str):
     # Cache file
+    minio_client = MinioClient()
     try:
         url = minio_client.get_share_link(object_name)
         return resp_200(url)
