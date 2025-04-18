@@ -185,6 +185,7 @@ def get_chatmessage(*,
                     login_user: UserPayload = Depends(get_login_user)):
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
+    flow_id = flow_id.replace("-",'')
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id)
     if id:
