@@ -381,7 +381,7 @@ async def chat_completions(
                 # 需要将原始消息存储
                 extra = json.loads(message.extra)
                 extra['prompt'] = prompt
-                message.extra = json.dumps(extra)
+                message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
         except Exception as e:
             logger.error(f'Error in processing the prompt: {e}')
@@ -448,7 +448,8 @@ async def chat_completions(
         if resoning_res:
             final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
         elif web_list:
-            final_res = ''':::web\n''' + json.dumps(web_list) + '''\n:::''' + final_result.content
+            final_res = ''':::web\n''' + json.dumps(
+                web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
         else:
             final_res = final_result.content if final_result else final_res
 
