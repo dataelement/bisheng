@@ -1,6 +1,6 @@
 import json
 from typing import List, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services import chat_imp
@@ -25,8 +25,8 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
 from bisheng.database.models.mark_task import MarkTaskDao
-from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, MessageDao, LikedType
-from bisheng.database.models.session import SensitiveStatus, MessageSessionDao, MessageSession
+from bisheng.database.models.message import ChatMessage, ChatMessageDao, ChatMessageRead, LikedType
+from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.graph.graph.base import Graph
@@ -76,7 +76,8 @@ def get_app_chat_list(*,
                       keyword: Optional[str] = None,
                       mark_user: Optional[str] = None,
                       mark_status: Optional[int] = None,
-                      task_id: Optional[int] = Query(..., description='标注任务ID'),
+                      task_id: Optional[int] = Query(default=None, description='标注任务ID'),
+                      flow_type: Optional[int] = None,
                       page_num: Optional[int] = 1,
                       page_size: Optional[int] = 20,
                       login_user: UserPayload = Depends(get_login_user)):
@@ -173,6 +174,49 @@ def get_app_chat_list(*,
 
 
 @router.get('/chat/history')
+def get_chatmessage(*,
+                    chat_id: str,
+                    flow_id: str,
+                    id: Optional[str] = None,
+                    page_size: Optional[int] = 20,
+                    login_user: UserPayload = Depends(get_login_user)):
+    if not chat_id or not flow_id:
+        return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
+    where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
+                                      ChatMessage.chat_id == chat_id)
+    if id:
+        where = where.where(ChatMessage.id < int(id))
+    with session_getter() as session:
+        db_message = session.exec(where.order_by(ChatMessage.id.desc()).limit(page_size)).all()
+    return resp_200(db_message)
+
+
+@router.post('/chat/conversation/rename')
+def rename(conversationId: str = Body(..., description='会话id', embed=True),
+           name: str = Body(..., description='会话名称', embed=True),
+           login_user: UserPayload = Depends(get_login_user)):
+    conversation = MessageSessionDao.get_one(conversationId)
+    conversation.flow_name = name
+    MessageSessionDao.insert_one(conversation)
+    return resp_200()
+
+
+@router.post('/chat/conversation/copy')
+def copy(conversationId: str = Body(..., description='会话id', embed=True), ):
+    conversation = MessageSessionDao.get_one(conversationId)
+    conversation.chat_id = uuid4().hex
+    conversation = MessageSessionDao.insert_one(conversation)
+    msg_list = ChatMessageDao.get_messages_by_chat_id(conversationId)
+    if msg_list:
+        for msg in msg_list:
+            msg.chat_id = conversation.chat_id
+            msg.id = None
+            ChatMessageDao.insert_one(msg)
+
+
+@router.get('/chat/history',
+            response_model=UnifiedResponseModel[List[ChatMessageRead]],
+            status_code=200)
 def get_chatmessage(*,
                     chat_id: str,
                     flow_id: str,
@@ -379,11 +423,16 @@ def comment_resp(*, data: ChatInput):
 
 @router.get('/chat/list')
 def get_session_list(*,
-                      page: Optional[int] = 1,
-                      limit: Optional[int] = 10,
-                      login_user: UserPayload = Depends(get_login_user)):
+                     page: Optional[int] = 1,
+                     limit: Optional[int] = 10,
+                     flow_type: Optional[int] = None,
+                     login_user: UserPayload = Depends(get_login_user)):
 
-    res = MessageSessionDao.filter_session(user_ids=[login_user.user_id], page=page, limit=limit, include_delete=False)
+    res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
+                                           flow_type=flow_type,
+                                           page=page,
+                                           limit=limit,
+                                           include_delete=False)
     chat_ids = []
     flow_ids = []
     for one in res:
@@ -525,7 +574,7 @@ async def init_build(*,
         return HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get('/build/{flow_id}/status')
+@router.get('/build/{flow_id}/status', response_model=UnifiedResponseModel[BuiltResponse])
 async def build_status(flow_id: str,
                        chat_id: Optional[str] = None,
                        version_id: Optional[int] = Query(default=None, description='技能版本ID')):

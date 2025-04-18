@@ -1,5 +1,6 @@
+import json
 from datetime import datetime
-from typing import List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -30,9 +31,30 @@ class APIAddQAParam(BaseModel):
 
 
 class APIChatCompletion(BaseModel):
+    clientTimestamp: str
+    conversationId: Optional[str] = None
+    error: Optional[bool] = False
+    generation: Optional[str] = ''
+    isCreatedByUser: Optional[bool] = False
+    isContinued: Optional[bool] = False
     model: str
-    messages: Optional[List[dict]] = []
-    session_id: Optional[str] = None
-    streaming: Optional[bool] = True
-    file: Optional[str] = None
-    tweaks: Optional[dict] = {}
+    text: Optional[str] = ''
+    search_enabled: Optional[bool] = False
+    knowledge_enabled: Optional[bool] = False
+    files: Optional[List[Dict]] = None
+    parentMessageId: Optional[str] = None
+    overrideParentMessageId: Optional[str] = None
+    responseMessageId: Optional[str] = None
+
+
+class delta(BaseModel):
+    id: Optional[str]
+    delta: Dict
+
+
+class SSEResponse(BaseModel):
+    event: str
+    data: delta
+
+    def toString(self) -> str:
+        return f'event: message\ndata: {json.dumps(self.dict())}\n\n'

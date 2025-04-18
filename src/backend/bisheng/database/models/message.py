@@ -2,12 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
-from loguru import logger
-from pydantic import BaseModel
-from sqlmodel import Field, delete, select, not_, JSON, Column, DateTime, String, Text, case, func, or_, text, update
-
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
+from loguru import logger
+from pydantic import BaseModel
+from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
+                      select, text, update)
 
 
 class LikedType(Enum):
@@ -84,34 +84,39 @@ class MessageDao(MessageBase):
 
     @classmethod
     def app_list_group_by_chat_id(
-            cls,
-            page_size: int,
-            page_num: int,
-            flow_ids: Optional[list[str]],
-            user_ids: Optional[list[int]],
+        cls,
+        page_size: int,
+        page_num: int,
+        flow_ids: Optional[list[str]],
+        user_ids: Optional[list[int]],
     ) -> Tuple[List[Dict], int]:
         with session_getter() as session:
             count_stat = select(func.count(func.distinct(ChatMessage.chat_id)))
-            sql = select(ChatMessage.chat_id, ChatMessage.user_id, ChatMessage.flow_id,
-                         func.max(ChatMessage.create_time).label('create_time'),
-                         func.sum(case((ChatMessage.liked == 1, 1), else_=0)),
-                         func.sum(case((ChatMessage.liked == 2, 1), else_=0)),
-                         func.sum(case((ChatMessage.copied == 1, 1), else_=0)), )
+            sql = select(
+                ChatMessage.chat_id,
+                ChatMessage.user_id,
+                ChatMessage.flow_id,
+                func.max(ChatMessage.create_time).label('create_time'),
+                func.sum(case((ChatMessage.liked == 1, 1), else_=0)),
+                func.sum(case((ChatMessage.liked == 2, 1), else_=0)),
+                func.sum(case((ChatMessage.copied == 1, 1), else_=0)),
+            )
 
             if flow_ids:
                 count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
                 sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
             if user_ids:
-                count_stat = count_stat.where(or_(
-                    ChatMessage.mark_user.in_(user_ids),
-                    ChatMessage.mark_status == 1,
-                ))
-                sql = sql.where(or_(ChatMessage.mark_user.in_(user_ids),
-                                    ChatMessage.mark_status == 1))
+                count_stat = count_stat.where(
+                    or_(
+                        ChatMessage.mark_user.in_(user_ids),
+                        ChatMessage.mark_status == 1,
+                    ))
+                sql = sql.where(
+                    or_(ChatMessage.mark_user.in_(user_ids), ChatMessage.mark_status == 1))
             sql = sql.group_by(ChatMessage.chat_id, ChatMessage.user_id,
                                ChatMessage.flow_id).order_by(
-                func.max(ChatMessage.create_time).desc()).offset(
-                page_size * (page_num - 1)).limit(page_size)
+                                   func.max(ChatMessage.create_time).desc()).offset(
+                                       page_size * (page_num - 1)).limit(page_size)
 
             res_list = session.exec(sql).all()
             total_count = session.scalar(count_stat)
@@ -124,7 +129,8 @@ class MessageDao(MessageBase):
                 'dislike_count': dislike_num,
                 'copied_count': copied_num,
                 'create_time': create_time
-            } for chat_id, user_id, flow_id, create_time, like_num, dislike_num, copied_num in res_list]
+            } for chat_id, user_id, flow_id, create_time, like_num, dislike_num, copied_num in
+                        res_list]
             logger.info(res_list)
             return dict_res, total_count
 
@@ -133,7 +139,8 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def get_latest_message_by_chatid(cls, chat_id: str):
-        statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(ChatMessage.id.desc()).limit(1)
+        statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id).order_by(
+            ChatMessage.id.desc()).limit(1)
         with session_getter() as session:
             res = session.exec(statement).all()
             if res:
@@ -142,7 +149,10 @@ class ChatMessageDao(MessageBase):
                 return None
 
     @classmethod
-    def get_latest_message_by_chat_ids(cls, chat_ids: list[str], category: str = None, exclude_category: str = None):
+    def get_latest_message_by_chat_ids(cls,
+                                       chat_ids: list[str],
+                                       category: str = None,
+                                       exclude_category: str = None):
         """
         获取每个会话最近的一次消息内容
         """
@@ -162,7 +172,10 @@ class ChatMessageDao(MessageBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_messages_by_chat_id(cls, chat_id: str, category_list: list = None, limit: int = 10):
+    def get_messages_by_chat_id(cls,
+                                chat_id: str,
+                                category_list: list = None,
+                                limit: int = 10) -> List[ChatMessage]:
         with session_getter() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
@@ -173,8 +186,10 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_last_msg_by_flow_id(cls, flow_id: List[str], chat_id: List[str]):
         with session_getter() as session:
-            statement = select(ChatMessage.chat_id, ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(
-                not_(ChatMessage.chat_id.in_(chat_id))).group_by(ChatMessage.chat_id, ChatMessage.flow_id)
+            statement = select(ChatMessage.chat_id,
+                               ChatMessage.flow_id).where(ChatMessage.flow_id.in_(flow_id)).where(
+                                   not_(ChatMessage.chat_id.in_(chat_id))).group_by(
+                                       ChatMessage.chat_id, ChatMessage.flow_id)
             return session.exec(statement).all()
 
     @classmethod
@@ -186,14 +201,16 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def get_msg_by_flow(cls, flow_id: str):
         with session_getter() as session:
-            # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id")
-            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id == flow_id).group_by(ChatMessage.chat_id)
+            # sql = text("select chat_id,count(*) as chat_count from chatmessage where flow_id=:flow_id group by chat_id") # noqa
+            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id == flow_id).group_by(
+                ChatMessage.chat_id)
             return session.exec(st).all()
 
     @classmethod
     def get_msg_by_flows(cls, flow_id: List[str]):
         with session_getter() as session:
-            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id.in_(flow_id)).group_by(ChatMessage.chat_id)
+            st = select(ChatMessage.chat_id).where(ChatMessage.flow_id.in_(flow_id)).group_by(
+                ChatMessage.chat_id)
             return session.exec(st).all()
 
     @classmethod
@@ -262,19 +279,22 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
         with session_getter() as session:
-            statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)
+            statement = update(ChatMessage).where(ChatMessage.id == message_id).values(
+                copied=copied)
             session.exec(statement)
             session.commit()
 
     @classmethod
     def update_message_mark(cls, chat_id: str, status: int):
         with session_getter() as session:
-            statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
+            statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(
+                mark_status=status)
             session.exec(statement)
             session.commit()
 
     @classmethod
     def get_all_message_by_chat_ids(cls, chat_ids: List[str]) -> List[ChatMessage]:
-        statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(ChatMessage.create_time.asc())
+        statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(
+            ChatMessage.create_time.asc())
         with session_getter() as session:
             return session.exec(statement).all()

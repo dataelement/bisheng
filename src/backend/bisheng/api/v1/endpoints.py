@@ -4,8 +4,6 @@ from typing import Annotated, List, Optional, Union
 from uuid import UUID
 
 import yaml
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
-
 from bisheng import __version__, settings
 from bisheng.api.services.knowledge_imp import filetype_load_map
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
@@ -18,7 +16,7 @@ from bisheng.chat.utils import judge_source, process_source_document
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
@@ -26,6 +24,7 @@ from bisheng.services.task.service import TaskService
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -34,8 +33,11 @@ except ImportError:
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
 
+
 # build router
 router = APIRouter(tags=['Base'])
+
+minio_client = MinioClient()
 
 
 @router.get('/all')
@@ -124,14 +126,14 @@ async def update_web_config(request: Request,
 
 @router.post('/process/{flow_id}')
 async def process_flow_old(
-        flow_id: UUID,
-        inputs: Optional[dict] = None,
-        tweaks: Optional[dict] = None,
-        history_count: Annotated[int, Body(embed=True)] = 10,
-        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-        task_service: 'TaskService' = Depends(get_task_service),
-        sync: Annotated[bool, Body(embed=True)] = True,
+    flow_id: UUID,
+    inputs: Optional[dict] = None,
+    tweaks: Optional[dict] = None,
+    history_count: Annotated[int, Body(embed=True)] = 10,
+    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+    task_service: 'TaskService' = Depends(get_task_service),
+    sync: Annotated[bool, Body(embed=True)] = True,
 ):
     return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
                               task_service, sync)
@@ -141,15 +143,15 @@ async def process_flow_old(
 # @router.post('/predict/{flow_id}')
 @router.post('/process')
 async def process_flow(
-        flow_id: Annotated[UUID, Body(embed=True)],
-        inputs: Optional[dict] = None,
-        tweaks: Optional[dict] = None,
-        history_count: Annotated[int, Body(embed=True)] = 10,
-        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-        task_service: 'TaskService' = Depends(get_task_service),
-        sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
-        sse: Annotated[bool, Body(embed=True)] = False,
+    flow_id: Annotated[UUID, Body(embed=True)],
+    inputs: Optional[dict] = None,
+    tweaks: Optional[dict] = None,
+    history_count: Annotated[int, Body(embed=True)] = 10,
+    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+    task_service: 'TaskService' = Depends(get_task_service),
+    sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
+    sse: Annotated[bool, Body(embed=True)] = False,
 ):
     """
     Endpoint to process an input with a given flow_id.
@@ -237,13 +239,14 @@ async def process_flow(
             ChatMessageDao.insert_one(question)
             message = ChatMessageDao.insert_one(message)
             try:
-                MessageSessionDao.insert_one(MessageSession(
-                    chat_id=session_id,
-                    flow_id=flow_id,
-                    flow_name=flow.name,
-                    flow_type=FlowType.FLOW.value,
-                    user_id=1,
-                ))
+                MessageSessionDao.insert_one(
+                    MessageSession(
+                        chat_id=session_id,
+                        flow_id=flow_id,
+                        flow_name=flow.name,
+                        flow_type=FlowType.FLOW.value,
+                        user_id=1,
+                    ))
             except Exception as e:
                 logger.warning(f'insert repeat session error: {e}')
 
@@ -253,7 +256,7 @@ async def process_flow(
                 await process_source_document(source_documents, session_id, message.id, answer)
                 extra.update({
                     'source_url':
-                        'resouce/{chat_id}/{msg_id}'.format(chat_id=session_id, msg_id=message.id)
+                    'resouce/{chat_id}/{msg_id}'.format(chat_id=session_id, msg_id=message.id)
                 })
             elif source == 4:
                 # QA
@@ -324,6 +327,8 @@ async def upload_icon_workflow(request: Request,
 async def create_upload_file(file: UploadFile, flow_id: str):
     # Cache file
     try:
+        if len(file.filename) > 80:
+            file.filename = file.filename[-80:]
         file_path = save_uploaded_file(file.file, folder_name=flow_id, file_name=file.filename)
         if not isinstance(file_path, str):
             file_path = str(file_path)
@@ -331,6 +336,17 @@ async def create_upload_file(file: UploadFile, flow_id: str):
             flowId=flow_id,
             file_path=file_path,
         ))
+    except Exception as exc:
+        logger.error(f'Error saving file: {exc}')
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get('/download')
+async def get_download_url(object_name: str):
+    # Cache file
+    try:
+        url = minio_client.get_share_link(object_name)
+        return resp_200(url)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc

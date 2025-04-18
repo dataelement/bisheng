@@ -179,7 +179,7 @@ trigger:
   - release
   event:
   - push
-   
+
 volumes:
 - name: bisheng-cache
   host:
@@ -203,13 +203,13 @@ name: feat_cicd # 定义流水线名称
 
 clone:
   disable: true
-  
+
 steps: # 定义流水线执行步骤，这些步骤将顺序执行
   - name: clone
     image: alpine/git
     pull: if-not-exists
     environment:
-      http_proxy: 
+      http_proxy:
         from_secret: PROXY
       https_proxy:
         from_secret: PROXY
@@ -240,7 +240,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - cd ./src/bisheng-langchain
       - python setup.py bdist_wheel
       - twine upload --verbose -u $NEXUS_USER  -p $NEXUS_PASSWORD --repository-url $REPO  dist/*.whl
-  
+
   - name: set poetry
     pull: if-not-exists
     image: golang
@@ -338,7 +338,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     image: plugins/webhook
     settings:
       debug: true
-      urls: 
+      urls:
         from_secret: FEISHU_URL
       content_type: application/json
       template: |

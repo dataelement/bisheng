@@ -425,6 +425,43 @@ class EvaluationLLMConfig(BaseModel):
     model_id: Optional[int] = Field(None, description='评测功能默认模型的ID')
 
 
+class Icon(BaseModel):
+    enabled: bool
+    image: Optional[str]
+
+
+class WSModel(BaseModel):
+    key: Optional[str]
+    id: str
+    name: Optional[str]
+    displayName: Optional[str]
+
+
+class WSPrompt(BaseModel):
+    enabled: bool
+    prompt: Optional[str]
+    model: Optional[str]
+    tool: Optional[str]
+    bingKey: Optional[str]
+    bingUrl: Optional[str]
+
+
+class WorkstationConfig(BaseModel):
+    menuShow: bool = Field(default=True, description='是否显示左侧菜单栏')
+    maxTokens: Optional[int] = Field(default=15000, description='最大token数')
+    sidebarIcon: Icon
+    assistantIcon: Icon
+    sidebarSlogan: Optional[str] = Field(description='侧边栏slogan')
+    welcomeMessage: Optional[str] = Field()
+    functionDescription: Optional[str] = Field()
+    inputPlaceholder: Optional[str]
+    models: Optional[Union[List[WSModel], str]]
+    voiceInput: Optional[WSPrompt]
+    webSearch: Optional[WSPrompt]
+    knowledgeBase: Optional[WSPrompt]
+    fileUpload: Optional[WSPrompt]
+
+
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='知识库ID')
