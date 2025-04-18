@@ -338,6 +338,7 @@ async def chat_completions(
         web_list = []
         error = False
         final_res = ''
+        final_result = None
         resoning_res = ''
         # prompt 长度token截断
         max_token = wsConfig.maxTokens
@@ -438,18 +439,18 @@ async def chat_completions(
                 # 循环获取task 结果，不等待
                 try:
                     if task.done():
-                        final_res = task.result()  # Raise any exception if the task failed
+                        final_result = task.result()  # Raise any exception if the task failed
                         needBreak = True
                 except Exception as e:
                     logger.error(f'Error in task: {e}')
                     break
         # 结束流式输出
         if resoning_res:
-            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_res.content
+            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
         elif web_list:
-            final_res = ''':::web\n''' + json.dumps(web_list) + '''\n:::''' + final_res.content
+            final_res = ''':::web\n''' + json.dumps(web_list) + '''\n:::''' + final_result.content
         else:
-            final_res = final_res.content if not isinstance(final_res, str) else final_res
+            final_res = final_result.content if final_result else final_res
 
         yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
                             modelName)
