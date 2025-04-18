@@ -732,7 +732,7 @@ export const listConversations = (
       })),
       pageNumber: pageNumber,
       pageSize: 40,
-      pages: Infinity // Math.round(total / 40)
+      pages: list.length === 40 ? Number(pageNumber) + 1 : pageNumber // Math.round(total / 40)
     }
   });
 };

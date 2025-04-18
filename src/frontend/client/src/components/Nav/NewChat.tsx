@@ -113,7 +113,7 @@ export default function NewChat({
           onClick={clickHandler}
           aria-label={localize('com_ui_new_chat')}
         >
-          <MessagesSquareIcon />
+          <img className='size-6' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />
           <span className="text-sm">{localize('com_ui_new_chat')}</span>
         </button>
       </div>
