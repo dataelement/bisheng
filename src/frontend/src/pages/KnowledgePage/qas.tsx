@@ -247,7 +247,7 @@ const ImportQa = forwardRef( function ({ knowlageId, onChange } : any, ref) {
                     <div className="flex flex-col gap-4 py-2">
                         <SimpleUpload
                             filekey="file"
-                            uploadUrl={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
+                            uploadUrl={'/api/v1/knowledge/upload'}
                             accept={['xlsx']}
                             className={`${error.fileUrl ? 'border-red-400' : ''}`}
                             onSuccess={handleFileUploadSuccess}
