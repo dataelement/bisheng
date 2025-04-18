@@ -1,13 +1,11 @@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getUserGroupsApi } from "@/controllers/API/user";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Filter } from "lucide-react";
 
 export default function FilterByUsergroup({ value, onChange }) {
     const { t } = useTranslation()
-    const { groups, loadData } = useGroups()
     const [filter, setFilter] = useState(999)
     return <div className="w-[200px] relative">
         <Select value={value} onValueChange={onChange}>
@@ -29,16 +27,3 @@ export default function FilterByUsergroup({ value, onChange }) {
         </Select>
     </div>
 };
-
-
-const useGroups = () => {
-    const [groups, setGroups] = useState([])
-    const loadData = () => {
-        getUserGroupsApi().then((res: any) => setGroups(res.records))
-    }
-
-    useEffect(() => {
-        loadData()
-    }, [])
-    return { groups, loadData }
-}

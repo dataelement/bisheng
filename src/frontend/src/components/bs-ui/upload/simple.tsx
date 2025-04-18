@@ -5,7 +5,8 @@ import { useToast } from "../toast/use-toast";
 import { cname } from "../utils";
 import axios from "@/controllers/request";
 
-export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', onUpload, onProgress, onError, onSuccess }) {
+// 目前只支持上传单个文件
+export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', onUpload, onProgress, onError, onSuccess, preCheck = null }) {
     const { t } = useTranslation();
     const { toast } = useToast()
 
@@ -24,6 +25,26 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
         });
         if (!files.length) return
 
+         // 执行预校验（如果提供了preCheck函数）
+         if (preCheck) {
+            try {
+                const checkResult = await preCheck(files[0]);
+                if (checkResult?.valid === false) {
+                    toast({
+                        title: t('prompt'),
+                        description: checkResult.message || t('code.preCheckFailed'),
+                    });
+                    return;
+                }
+            } catch (error) {
+                toast({
+                    title: t('prompt'),
+                    description: error.message || t('code.preCheckError'),
+                });
+                return;
+            }
+        }
+
         const formData = new FormData();
         formData.append(filekey, files[0]);
 
@@ -31,10 +52,52 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
         onSuccess(files[0].name, res.file_path)
     }
 
+    // 将文件扩展名转换为对应的MIME类型
+    const getMimeType = (ext) => {
+        const mimeTypes = {
+            // 文档
+            pdf: 'application/pdf',
+            json: 'application/json',
+            xml: 'application/xml',
+            doc: 'application/msword',
+            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            // 图片
+            jpg: 'image/jpeg',
+            jpeg: 'image/jpeg',
+            png: 'image/png',
+            gif: 'image/gif',
+            webp: 'image/webp',
+            svg: 'image/svg+xml',
+            // 表格
+            xls: 'application/vnd.ms-excel',
+            xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            csv: 'text/csv',
+            // 压缩文件
+            zip: 'application/zip',
+            rar: 'application/x-rar-compressed',
+            '7z': 'application/x-7z-compressed',
+            // 文本
+            txt: 'text/plain',
+            md: 'text/markdown',
+            html: 'text/html',
+            // 其他
+            mp3: 'audio/mpeg',
+            mp4: 'video/mp4',
+            mov: 'video/quicktime'
+        };
+        
+        return mimeTypes[ext.toLowerCase()] || 'application/*';
+    };
+
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        accept: {
-            'application/*': accept.map(str => `.${str}`)
-        },
+        accept: accept.reduce((acc, ext) => {
+            const mimeType = getMimeType(ext);
+            if (!acc[mimeType]) {
+                acc[mimeType] = [];
+            }
+            acc[mimeType].push(`.${ext}`);
+            return acc;
+        }, {}),
         multiple: false,
         useFsAccessApi: false,
         onDrop

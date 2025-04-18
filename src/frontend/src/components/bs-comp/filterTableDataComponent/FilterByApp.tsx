@@ -1,8 +1,8 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getGroupsApi } from "@/controllers/API/log";
+import { getGroupsApi, getAuditGroupsApi, getOperationGroupsApi } from "@/controllers/API/log";
 import { useRef, useState } from "react";
-export default function FilterByApp({ value, onChange }) {
-    const { apps, loadApps, searchApp, loadMoreApps } = useApps();
+export default function FilterByApp({ value, onChange, isAudit }) {
+    const { apps, loadApps, searchApp, loadMoreApps } = useApps(isAudit);
 
     return (
         <div className="w-[200px] relative">
@@ -21,7 +21,7 @@ export default function FilterByApp({ value, onChange }) {
     );
 }
 
-const useApps = () => {
+const useApps = (isAudit: boolean) => {
     const [apps, setApps] = useState<any[]>([]);
     const [page, setPage] = useState(1);
     const hasMoreRef = useRef(true);
@@ -32,7 +32,7 @@ const useApps = () => {
     const loadApps = async (name: string) => {
         try {
             loadLock.current = true;
-            const res = await getGroupsApi({ keyword: name, page: 1, page_size: 50 });
+            const res = await (isAudit ? getAuditGroupsApi : getOperationGroupsApi)({ keyword: name, page: 1, page_size: 50 });
             const options = res.data.map((a: any) => ({
                 label: a.name,
                 value: a.id,
@@ -57,7 +57,7 @@ const useApps = () => {
         if (loadLock.current) return;
         try {
             const nextPage = page + 1;
-            const res = await getGroupsApi({ keyword: keyWordRef.current, page: nextPage, page_size: 10 });
+            const res = await (isAudit ? getAuditGroupsApi : getOperationGroupsApi)({ keyword: keyWordRef.current, page: nextPage, page_size: 10 });
             const options = res.data.map((a: any) => ({
                 label: a.name,
                 value: a.id,

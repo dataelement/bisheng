@@ -181,11 +181,20 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
      * 用户
      */
     const [selected, setSelected] = useState([])
+    
+    
+    // 用户权限管理员
+    const [adminsSelected, setAdminsSelected] = useState([])
+
+    // 审计员
+    const [auditorsSelected, setAuditorsSelected] = useState([])
+    
+    // 运营员
+    const [operatorsSelected, setOperatorsSelected] = useState([])
+    
     const [lockOptions, setLockOptions] = useState([])
 
     const handleSave = async () => {
-        console.log('form', form);
-
         if (!form.groupName) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNameRequired'), variant: 'error' });
@@ -194,7 +203,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNamePrompt'), variant: 'error' });
         }
-        if (!form.department) {
+        if (!form.department && !data.group_name) {
             return toast({ title: t('prompt'), description: '上级用户组不可为空', variant: 'error' });
         }
         const flag = onBeforeChange(form.groupName)
@@ -205,9 +214,12 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
 
         // 过滤系统管理员
         const users = selected.filter(item => !lockOptions.some(id => id === item.value))
+        const admins = adminsSelected.filter(item => !lockOptions.some(id => id === item.value))
+        const auditors = auditorsSelected.filter(item => !lockOptions.some(id => id === item.value))
+        const operators = operatorsSelected.filter(item => !lockOptions.some(id => id === item.value))
 
-        const res: any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
-            saveUserGroup(form, users)) // 保存
+        const res: any = await (data.id ? updateUserGroup(data.id, form, admins, auditors, operators) : // 修改
+            saveUserGroup(form, admins, auditors, operators)) // 保存
 
         if (appConfig.isPro) {
             await captureAndAlertRequestErrorHoc(saveGroupApi({
@@ -234,8 +246,18 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         async function init() {
             const res = await getAdminsApi()
             const users = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
+
+            const admins = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
+            const auditors = data.group_audits?.map(d => ({ label: d.user_name, value: d.user_id })) || [];
+            const operators = data.group_operations?.map(d => ({ label: d.user_name, value: d.user_id })) || [];
+            
             const defaultUsers = res.map(d => ({ label: d.user_name, value: d.user_id }))
             setLockOptions(defaultUsers.map(el => el.value))
+
+            setAdminsSelected([...defaultUsers, ...admins]);
+            setAuditorsSelected([...defaultUsers, ...auditors]);
+            setOperatorsSelected([...defaultUsers, ...operators]);
+
             setSelected([...defaultUsers, ...users])
         }
         init()
@@ -263,13 +285,35 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
             />
         </div>
         <div className="font-bold mt-12">
-            <p className="text-xl mb-4">{t('system.admins')}</p>
+            <p className="text-xl mb-4">{t('system.permissionsAdmins')}</p>
             <div className="">
                 <UsersSelect
                     multiple
                     lockedValues={lockOptions}
-                    value={selected}
-                    onChange={setSelected}
+                    value={adminsSelected}
+                    onChange={setAdminsSelected}
+                />
+            </div>
+        </div>
+        <div className="font-bold mt-12">
+            <p className="text-xl mb-4">{t('system.auditor')}</p>
+            <div className="">
+                <UsersSelect
+                    multiple
+                    lockedValues={lockOptions}
+                    value={auditorsSelected}
+                    onChange={setAuditorsSelected}
+                />
+            </div>
+        </div>
+        <div className="font-bold mt-12">
+            <p className="text-xl mb-4">{t('system.operator')}</p>
+            <div className="">
+                <UsersSelect
+                    multiple
+                    lockedValues={lockOptions}
+                    value={operatorsSelected}
+                    onChange={setOperatorsSelected}
                 />
             </div>
         </div>

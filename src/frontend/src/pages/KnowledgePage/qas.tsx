@@ -1,17 +1,20 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { ArrowLeft } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { message, useToast } from "@/components/bs-ui/toast/use-toast";
+import { ArrowLeft, Computer, SquarePen } from "lucide-react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useDropzone } from 'react-dropzone';
 import { Link, useParams } from "react-router-dom";
+import { Label } from "@/components/bs-ui/label";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Button, LoadButton } from "../../components/bs-ui/button";
 import { Input, InputList, SearchInput, Textarea } from "../../components/bs-ui/input";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import * as XLSX from 'xlsx';
 import {
     Table,
     TableBody,
@@ -20,16 +23,262 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { deleteQa, generateSimilarQa, getQaDetail, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaFilePreview, getQaList, postImportQaFile, updateKnowledgeApi, updateQa, updateQaStatus } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import KnowledgeBaseSettingsDialog from "./components/EditKnowledgeDialog";
+import { downloadFile } from "@/util/utils";
+import SimpleUpload from "@/components/bs-ui/upload/simple";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
+import { generateUUID } from "@/components/bs-ui/utils";
 
 const defaultQa = {
     question: '',
     similarQuestions: [''],
     answer: ''
 }
+
+function QaTable({ dataList }) {
+    const { t } = useTranslation('knowledge');
+    const similarityQuestions = useRef(null);
+    const [questions, setQuestions] = useState<string[]>([]);
+    return (
+      <div>
+        <Table>
+            <TableRow>
+                <TableHead>{t('question')}</TableHead>
+                <TableHead>{t('answer')}</TableHead>
+                <TableHead>{t('similarQuestions')}</TableHead>
+            </TableRow>
+            <TableBody>
+                {dataList.map(el => {
+                    const questions = el.questions.filter(item => !!item);
+                    const mainQuestion = questions.shift() || '';
+                    const answers = JSON.parse(el.answers);
+                    const answer = answers[0] || '';
+                    return (
+                        <TableRow key={generateUUID(4)}>
+                            <TableCell className="font-medium">
+                                {mainQuestion}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                                {answer}
+                            </TableCell>
+                            <TableCell className="font-medium cursor-pointer text-primary">
+                                <Button variant="link" className="px-1" onClick={() => {
+                                    if (!questions.length) {
+                                        return message({
+                                            variant: 'warning',
+                                            description: t('similarityQuestionEmpty')
+                                        });
+                                    }
+                                    setQuestions(questions);
+                                    //打开相似问题预览窗口
+                                    similarityQuestions.current.open();
+                                }}>
+                                    {t('view')}
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    )})
+                }
+                <SimilarityProblemModal ref={similarityQuestions} questions={questions}/>
+            </TableBody>
+        </Table>
+      </div>
+    );
+}
+
+// 添加&编辑qa
+const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
+    const { t } = useTranslation('knowledge');
+    const [open, setOpen] = useState(false);
+    const [form, setForm] = useState({ ...defaultQa });
+
+    const idRef = useRef('');
+    const sourceRef = useRef('');
+    useImperativeHandle(ref, () => ({
+        open() {
+            setOpen(true);
+        },
+    }));
+
+    const close = () => {
+        setOpen(false);
+    };
+    return (
+        <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
+            <DialogContent className="sm:max-w-[625px]">
+                <DialogHeader>
+                    <DialogTitle>{t('similarityProblem')}</DialogTitle>
+                </DialogHeader>
+                <Table>
+                    <TableRow>
+                        <TableHead>{t('similarityQuestion')}</TableHead>
+                    </TableRow>
+                    <TableBody>
+                        {(questions || []).slice(0, 10).map((el, index) => {
+                            return (
+                                <TableRow key={index}>
+                                    <TableCell className="font-medium">
+                                        {el}
+                                    </TableCell>
+                                </TableRow>
+                            )})
+                        }
+                    </TableBody>
+                </Table>
+                <DialogFooter>
+                    <DialogClose>
+                        <LoadButton type="submit" className="px-11">
+                            {t('confirm')}
+                        </LoadButton>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+});
+
+// 导入Qa
+const ImportQa = forwardRef( function ({ knowlageId, onChange } : any, ref) {
+    const { t } = useTranslation('knowledge');
+    const [open, setOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [saveLoad, setSaveLoad] = useState(false);
+    const [dataList, setDataList] = useState([]);
+    const [form, setForm] = useState({
+        fileUrl: '',
+        fileName: '',
+    });
+    const [error, setError] = useState({
+        fileUrl: false,
+    });
+
+    useImperativeHandle(ref, () => ({
+        open() {
+            setOpen(true);
+            setForm({
+                fileUrl: '',
+                fileName: '',
+            });
+            setError({
+                fileUrl: false,
+            });
+            setDataList([]);
+        }
+    }));
+
+    const close = () => {
+        setOpen(false);
+        setError({
+            fileUrl: false,
+        });
+    };
+
+    const handleSubmit = async () => {
+        const isDataListEmpty = !dataList.length;
+        const errors = [];
+        setError({
+            fileUrl: isDataListEmpty,
+        });
+        
+        if (isDataListEmpty) errors.push(t('dataListEmpty'));
+        if (errors.length > 0) {
+            return message({
+                variant: 'warning',
+                description: errors
+            });
+        }
+        //提交
+        const res = await captureAndAlertRequestErrorHoc(postImportQaFile(id, {
+            url: form.fileUrl
+        }));
+        const errorLines = res.errors[0];
+        console.log('errors', errorLines);
+        if (errorLines.length) {
+            message({ variant: 'warning', description: t('errorMsg', { value: errorLines.length })});
+        } else {
+            message({ variant: 'success', description: t('successMsg') });
+        }
+        close();
+        onChange();
+    };
+    const { id } = useParams();
+    const handleFileUploadSuccess = async (name, url) => {
+        // 发送请求进行预览
+        const res = await captureAndAlertRequestErrorHoc(getQaFilePreview(id, {
+            // 最多预览10条
+            size: 10,
+            url,
+        }));
+        const { result } = res;
+        setDataList(result);
+        setForm({
+            fileUrl: url,
+            fileName: name
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={(bln) => bln ? setOpen(bln) : close()}>
+            <DialogContent className="sm:max-w-[825px]">
+                <DialogHeader>
+                    <DialogTitle>{t('importQa')}</DialogTitle>
+                </DialogHeader>
+                <div>
+                <div className="flex justify-between items-center">
+                    <label htmlFor="dataSetName" className="bisheng-label">
+                        <span className="text-red-500">*</span>{t('pleaseUploadFile')}
+                    </label>
+                    <div className="flex gap-2 items-center">
+                        <Label>{t('sampleFile')}:</Label>
+                         <Button variant="link" className="px-1" onClick={() => {
+                            getQaFile('template').then(res => {
+                                const fileUrl = res.url;
+                                downloadFile(checkSassUrl(fileUrl), t('qaSample'));
+                            })
+                         }}>
+                            {t('qaSample')}
+                        </Button>
+                    </div>
+                    </div>
+                    <div className="flex flex-col gap-4 py-2">
+                        <SimpleUpload
+                            filekey="file"
+                            uploadUrl={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
+                            accept={['xlsx']}
+                            className={`${error.fileUrl ? 'border-red-400' : ''}`}
+                            onSuccess={handleFileUploadSuccess}
+                            preCheck={excelPreCheck}
+                        />
+                        <p className="text-sm text-green-500 mt-2">{form.fileName}</p>
+                    </div>
+                </div>
+                {!!dataList.length && <div>
+                    <label htmlFor="dataSetName" className="bisheng-label">
+                        { t('importPreview') }
+                    </label>
+                    <div className="flex flex-col gap-4 py-2">
+                        <QaTable dataList={dataList} />
+                    </div>
+                </div>}
+                <DialogFooter>
+                    <DialogClose>
+                        <Button variant="outline" className="px-11" type="button" onClick={close}>
+                            {t('cancel2')}
+                        </Button>
+                    </DialogClose>
+                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit}>
+                        {t('submit')}
+                    </LoadButton>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+})
+
 // 添加&编辑qa
 const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
     const { t } = useTranslation('knowledge');
@@ -214,16 +463,67 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
     );
 });
 
-
+// Excel校验函数
+const excelPreCheck = async (file) => {
+    return new Promise((resolve) => {
+        // 检查是否是Excel文件
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!['xlsx', 'xls'].includes(ext)) {
+            return { valid: false, message: '请上传xlsx、xls类型的文件' }; // 非Excel文件跳过校验
+        }
+        
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                
+                if (jsonData.length === 0) {
+                    resolve({ valid: false, message: 'Excel文件为空' });
+                    return;
+                }
+                
+                const headers = jsonData[0].map(header => header?.toString().toLowerCase().trim());
+                const requiredColumns = ['问题', '答案'];
+                const missingColumns = requiredColumns.filter(
+                    col => !headers.includes(col.toLowerCase())
+                );
+                
+                if (missingColumns.length > 0) {
+                    resolve({ 
+                        valid: false, 
+                        message: `缺少必要列: ${missingColumns.join(', ')}` 
+                    });
+                } else {
+                    resolve({ valid: true });
+                }
+            } catch (error) {
+                resolve({ valid: false, message: 'Excel文件解析失败' });
+            }
+        };
+        
+        reader.onerror = () => {
+            resolve({ valid: false, message: '文件读取失败' });
+        };
+        
+        reader.readAsArrayBuffer(file);
+    });
+};
 
 export default function QasPage() {
     const { t } = useTranslation('knowledge')
 
-    const { id } = useParams()
-    const [title, setTitle] = useState('')
+    const { id } = useParams();
     const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
+    const importRef = useRef(null)
+    const [libInfo, setLibInfo] = useState({ name: '', desc: '' })
+    const [open, setOpen] = useState(false)
+    const { message } = useToast()
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
@@ -236,11 +536,12 @@ export default function QasPage() {
 
     useEffect(() => {
         // @ts-ignore
-        const libname = window.libname // 临时记忆
+        const [libname, libdesc] = window.libname || [] // 临时记忆
         if (libname) {
-            localStorage.setItem('libname', window.libname)
+            localStorage.setItem('libname', libname)
+            localStorage.setItem('libdesc', libdesc)
         }
-        setTitle(window.libname || localStorage.getItem('libname'))
+        setLibInfo({ name: libname || localStorage.getItem('libname'), desc: libdesc || localStorage.getItem('libdesc') })
     }, [])
 
     const handleCheckboxChange = (id) => {
@@ -296,6 +597,23 @@ export default function QasPage() {
         await updateQaStatus(id, status)
         refreshData((item) => item.id === id, { status })
     }
+    
+    const handleSave = (form) => {
+        captureAndAlertRequestErrorHoc(updateKnowledgeApi({
+            knowledge_id: Number(id),
+            name: form.name,
+            description: form.desc
+        })).then((res) => {
+        if (!res) return
+            // api
+            setLibInfo(form)
+            setOpen(false)
+            message({ variant: 'success', description: t('saved') })
+            localStorage.setItem('libname', form.name)
+            localStorage.setItem('libdesc', form.desc)
+        })
+    }
+    
 
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -310,7 +628,21 @@ export default function QasPage() {
                                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
                             </button>
                         </ShadTooltip>
-                        <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{title}</span>
+                        <div>
+                            <div className="group flex items-center">
+                                <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{libInfo.name}</span>
+                                {/* edit dialog */}
+                                <Dialog open={open} onOpenChange={setOpen} >
+                                    <DialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="group-hover:visible invisible"><SquarePen className="w-4 h-4" /></Button>
+                                    </DialogTrigger>
+                                    {
+                                        open && <KnowledgeBaseSettingsDialog initialName={libInfo.name} initialDesc={libInfo.desc} onSave={handleSave}></KnowledgeBaseSettingsDialog>
+                                    }
+                                </Dialog>
+                            </div>
+                            <p className="max-w-96 pl-4 text-muted-foreground text-sm truncate">{libInfo.desc}</p>
+                        </div>
                     </div>
                 </div>
                 <div className="flex justify-between items-center mb-4">
@@ -320,6 +652,13 @@ export default function QasPage() {
                     </div>
                     <div className="flex gap-4 items-center">
                         <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
+                        <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>{t('importQa')}</Button>
+                        <Button variant="outline" className="px-8" onClick={() => {
+                            getQaFile(id).then(res => {
+                                const fileUrl = res.file_list[0];
+                                downloadFile(checkSassUrl(fileUrl), `${libInfo.name}.xlsx`);
+                            })
+                        }}>{t('exportQa')}</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
                     </div>
                 </div>
@@ -357,7 +696,7 @@ export default function QasPage() {
                                         {el.answers}
                                     </div>
                                 </TableCell>
-                                <TableCell>{[t('unknown'), t('manualCreation'), t('auditTag')][el.source]}</TableCell>
+                                <TableCell>{[t('unknown'), t('manualCreation'), t('APIImport'), t('bulkImport') , t('bulkImport')][el.source]}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.user_name}</TableCell>
@@ -385,5 +724,6 @@ export default function QasPage() {
             </div>
         </div>
         <EditQa ref={editRef} knowlageId={id} onChange={reload} />
+        <ImportQa ref={importRef} knowlageId={id} onChange={reload}/>
     </div >
 };

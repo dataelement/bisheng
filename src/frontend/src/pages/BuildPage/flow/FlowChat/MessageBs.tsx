@@ -17,7 +17,8 @@ import { ChevronDown, ShieldAlert } from "lucide-react";
 import { cname } from "@/components/bs-ui/utils";
 import { ToastIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
-import { ShieldAlert } from "lucide-react";
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
+import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 
 // 颜色列表
 const colorList = [
@@ -41,7 +42,7 @@ const ReasoningLog = ({ loading, msg = '' }) => {
     if (!msg) return null
 
     return <div className="py-1">
-        <div className="rounded-sm border">
+        <div className="rounded-sm border">s
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ? <div className="flex items-center font-bold gap-2 text-sm">
                     <LoadIcon className="text-primary duration-300" />
@@ -62,14 +63,12 @@ const ReasoningLog = ({ loading, msg = '' }) => {
         </div>
     </div>
 }
-
-export default function MessageBs({ audit, mark = false, msgVNode = null, logo, data, onUnlike = () => { }, disableBtn = false, onSource, onMarkClick }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({operation, audit, mark = false, logo, data, onUnlike = () => { }, onSource, disableBtn = false, onMarkClick, flow }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
     const message = useMemo(() => {
-        const msg = typeof data.message === 'string' ? data.message : data.message.msg
-
+        const msg = typeof data.message === 'string' ? data.message : data.message.msg;
         return msg
             .replaceAll('$$', '$') // latex
             .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
@@ -128,18 +127,20 @@ export default function MessageBs({ audit, mark = false, msgVNode = null, logo, 
                 <div className="flex justify-between items-center mb-1">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
                     <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                        <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                        <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
                     </div>
                 </div>
-                {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
+                {(audit || operation) && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
-                        {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                        {/* TODO */}
+                        {<TitleLogo url={flow?.logo} className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden" id={flow?.id}></TitleLogo>}
+                        {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                             <img className="w-6 h-6" src={logo} />
                         </div>
                             : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                                 <AvatarIcon />
-                            </div>}
+                            </div>} */}
                         {message || data.files.length ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
                                 {message && mkdown}
@@ -171,10 +172,12 @@ export default function MessageBs({ audit, mark = false, msgVNode = null, logo, 
                         })}
                     />
                     {!disableBtn && <MessageButtons
+                        onlyRead={(audit || operation)}
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}
-                        msgVNode={msgVNode}
+                        // 审计 & 运营页面展示差评
+                        msgVNode={(audit || operation) && data.remark && <MsgVNodeCom message={data.remark} />}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
