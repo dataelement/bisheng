@@ -209,25 +209,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         document.dispatchEvent(myEvent);
     }
 
-    if (!(flow || assistant || workflow)) return <div className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
-        {chatId && <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
-        </div>}
-        {/* <img className="w-[200px] h-[182px] mt-[86px] mx-auto" src={__APP_ENV__.BASE_URL + '/application-start-logo.png'} alt="" />
-        <p className="text-center text-3xl w-auto whitespace-normal leading-[64px] dark:text-[#D4D4D4] mx-auto mt-[20px] font-light">
-            {t('chat.chooseOne')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.dialogue')}</b><br />{t('chat.start')}<b className=" dark:text-[#D4D4D4] font-semibold">{t('chat.wenqingruijian')}</b>
-        </p> */}
-        {
-            !customWsHost && <div
-                className="relative z-40 w-[162px] h-[38px] bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg leading-[38px] flex cursor-pointer  justify-around mx-auto mt-[120px] text-[13px]"
-                onClick={() => {
-                    document.getElementById('newchat')?.click()
-                }}>
-                <span className="block my-auto ml-[4px]"><NewApplicationIcon /></span>
-                <span className="mr-[28px]">{t('chat.newChat')}</span>
-            </div>
-        }
-    </div>
+    if (!(flow || assistant || workflow)) {
+        return <div
+            className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative"
+            style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}
+        > </div>
+    }
 
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >
         {/* 技能会话 */}

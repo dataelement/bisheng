@@ -68,8 +68,10 @@ export const LoginPage = () => {
             ).then((res: any) => {
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
-                location.href = location.href
+                const path = location.href.indexOf('from=workspace') === -1 ? '' : '/workspace/'
+                location.href = path ? location.origin + path : location.href
                 // location.href = __APP_ENV__.BASE_URL + '/'
+
             }), (error) => {
                 if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
                     localStorage.setItem('account', mail)

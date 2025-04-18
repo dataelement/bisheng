@@ -67,7 +67,7 @@ export default function MessageContent(props: TMessageProps) {
           </div>
         ) : (
           <div className="m-auto justify-center p-4 py-2 md:gap-6 ">
-            <ContentRender iconURL={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} {...props} />
+            <ContentRender iconURL={bsConfig?.assistantIcon.image ? __APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image : ''} {...props} />
           </div>
         )}
       </MessageContainer>

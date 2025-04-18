@@ -41,8 +41,9 @@ class APIChatCompletion(BaseModel):
     text: Optional[str] = ''
     search_enabled: Optional[bool] = False
     knowledge_enabled: Optional[bool] = False
-    files: Optional[Dict] = None
+    files: Optional[List[Dict]] = None
     parentMessageId: Optional[str] = None
+    overrideParentMessageId: Optional[str] = None
     responseMessageId: Optional[str] = None
 
 

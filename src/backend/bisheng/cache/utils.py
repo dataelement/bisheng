@@ -265,6 +265,8 @@ def save_download_file(file_byte, folder_name, filename):
     hex_dig = sha256_hash.hexdigest()
     md5_name = hex_dig
     file_path = folder_path / f'{md5_name}_{filename}'
+    if len(filename) > 60:
+        file_path = folder_path / f'{md5_name}_{filename[-60:]}'
     with open(file_path, 'wb') as new_file:
         new_file.write(file_byte)
     return str(file_path)

@@ -64,6 +64,7 @@ async def invoke_workflow(request: Request,
             workflow.set_user_input(user_input, message_id)
             workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
 
+    logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
     async def handle_workflow_event(event_list: List):
         async for event in workflow.get_response_until_break():
             if event.category == WorkflowEventType.NodeRun.value:

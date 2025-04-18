@@ -44,12 +44,12 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         self.stream_queue: Queue = kwargs.get('stream_queue')
 
     async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        logger.debug(f'on_llm_new_token token={token} kwargs={kwargs}')
         chunk = kwargs.get('chunk')
         # azure偶尔会返回一个None
         if token is None and chunk is None:
             return
-        reasoning_content = getattr(chunk.message, 'additional_kwargs', {}).get('reasoning_content')
+        reasoning_content = getattr(chunk.message, 'additional_kwargs',
+                                    {}).get('reasoning_content')
         if token is None:
             token = ''
         resp = ChatResponse(message={

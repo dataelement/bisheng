@@ -15,6 +15,7 @@ import { useDebounce } from "../../util/hook";
 import { generateUUID } from "../../utils";
 import HomePage from "./components/ChatHome";
 import ChatPanne from "./components/ChatPanne";
+import { useMessageStore as useFlowMessageStore } from "../BuildPage/flow/FlowChat/messageStore";
 
 const ChatItem = ({ chat, chatId, location, handleSelectChat, handleDeleteChat }) => {
 
@@ -164,6 +165,7 @@ const useChatList = () => {
     const [chatList, setChatList] = useState([])
     const chatsRef = useRef(null)
     const { chatId, messages } = useMessageStore()
+    const { chatId: flowChatId, messages: flowMessages } = useFlowMessageStore()
 
     useEffect(() => {
         if (messages.length > 0 && chatId === messages[0].chat_id) {
@@ -183,6 +185,25 @@ const useChatList = () => {
             )
         }
     }, [messages, chatId])
+
+    useEffect(() => {
+        // 根据工作流消息更新会话列表描述
+        if (flowMessages.length > 0 && flowChatId === flowMessages[0].chat_id) {
+            let latest: any = flowMessages[flowMessages.length - 1]
+            if (!['stream_msg', 'close', 'over'].includes(latest.category)) return
+            setChatList(chats => chats.map(chat => (chat.chat_id === flowChatId)
+                ? {
+                    ...chat,
+                    update_time: latest.create_time || formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
+                    latest_message: {
+                        ...chat.latest_message,
+                        message: (latest.message.msg || latest.message).substring(0, 40)
+                    }
+                }
+                : chat)
+            )
+        }
+    }, [flowMessages, flowChatId])
 
     const pageRef = useRef(0)
     const onScrollLoad = async () => {

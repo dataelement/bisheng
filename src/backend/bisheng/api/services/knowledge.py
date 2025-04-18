@@ -138,9 +138,9 @@ class KnowledgeService(KnowledgeUtils):
 
         # 创建milvus的collection_name和es的index_name
         embeddings = decide_embeddings(db_knowledge.model)
-        vector_client = decide_vectorstores(knowledge.collection_name, 'Milvus', embeddings)
+        vector_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
         embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+        es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
 
         # 处理创建知识库的后续操作
         cls.create_knowledge_hook(request, login_user, db_knowledge)
@@ -183,9 +183,7 @@ class KnowledgeService(KnowledgeUtils):
             if repeat_knowledge and repeat_knowledge.id != db_knowledge.id:
                 raise KnowledgeExistError.http_exception()
             db_knowledge.name = knowledge.name
-        if knowledge.description:
-            db_knowledge.description = knowledge.description
-
+        db_knowledge.description = knowledge.description
         db_knowledge = KnowledgeDao.update_one(db_knowledge)
         user = UserDao.get_user(db_knowledge.user_id)
         res = KnowledgeRead(**db_knowledge.model_dump(),
