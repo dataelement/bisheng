@@ -6,7 +6,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
-const app_env = { BASE_URL: '/workbench' }
+const app_env = { BASE_URL: '/workspace' }
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -24,20 +24,20 @@ export default defineConfig({
         target: 'http://192.168.106.116:7861',
         changeOrigin: true,
       },
-      '/workbench/bisheng': {
+      '/workspace/bisheng': {
         target: "http://192.168.106.116:9000",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
-          return path.replace(/^\/workbench/, '');
+          return path.replace(/^\/workspace/, '');
         },
       },
-      '/workbench/api': {
-        target: 'http://192.168.106.116:7861',
+      '/workspace/api': {
+        target: 'http://192.168.106.120:3002',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
-          return path.replace(/^\/workbench\/api/, '/api');
+          return path.replace(/^\/workspace\/api/, '/api');
         },
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {

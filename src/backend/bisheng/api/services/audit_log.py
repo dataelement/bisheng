@@ -55,6 +55,8 @@ class AuditLogService:
         data = AuditLogDao.get_all_operators(groups)
         res = {}
         for one in data:
+            if not one[1]:
+                continue
             res[one[0]] = {'user_id': one[0], 'user_name': one[1]}
         return resp_200(data=list(res.values()))
 

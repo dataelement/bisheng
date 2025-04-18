@@ -5,11 +5,11 @@ import MainLayout from "./layout/MainLayout";
 import Templates from "./pages/BuildPage/appTemps";
 import Apps from "./pages/BuildPage/apps";
 import EditAssistantPage from "./pages/BuildPage/assistant/editAssistant";
+import WorkBenchPage from "./pages/BuildPage/bench";
 import FlowPage from "./pages/BuildPage/flow";
 import SkillPage from "./pages/BuildPage/skills/editSkill";
 import L2Edit from "./pages/BuildPage/skills/l2Edit";
 import SkillToolsPage from "./pages/BuildPage/tools";
-import WorkBenchPage from "./pages/BuildPage/bench";
 import SkillChatPage from "./pages/ChatAppPage";
 import ChatAssitantShare from "./pages/ChatAppPage/chatAssitantShare";
 import ChatShare from "./pages/ChatAppPage/chatShare";
@@ -76,7 +76,7 @@ const privateRouter = [
       // { path: "build/skills", element: <SkillsPage />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
-      { path: "build/bench", element: <WorkBenchPage />, permission: 'build', onlyAdmin: true },
+      { path: "build/client", element: <WorkBenchPage />, permission: 'build' },
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
@@ -141,11 +141,10 @@ export const getPrivateRouter = (permissions) => {
         cur.children = filterMenuItem(cur.children)
       }
 
-      const { permission, onlyAdmin, ...other } = cur
+      const { permission, ...other } = cur
       if (permission && !permissions.includes(permission)) {
         return res
       }
-      if (onlyAdmin) return res
 
       res.push(other)
       return res

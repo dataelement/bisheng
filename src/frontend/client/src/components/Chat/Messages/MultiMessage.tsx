@@ -61,7 +61,7 @@ export default function MultiMessage({
         setSiblingIdx={setSiblingIdxRev}
       />
     );
-  } else if (message.content) {
+  } else if (message.content && message.content.length) {
     return (
       <MessageContent
         key={message.messageId}

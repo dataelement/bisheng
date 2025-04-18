@@ -54,14 +54,14 @@ def user_message(msgId, conversationId, sender, text):
     return f'event: message\ndata: {msg}\n\n'
 
 
-def step_message(stepId, runId, msgId):
+def step_message(stepId, runId, index, msgId):
     msg = json.dumps({
         'event': 'on_run_step',
         'data': {
             'id': stepId,
             'runId': runId,
             'type': 'message_creation',
-            'index': 0,
+            'index': index,
             'stepDetails': {
                 'type': 'message_creation',
                 'message_creation': {
@@ -168,7 +168,7 @@ async def upload_file(
     """
     # 读取文件内容
     # 保存文件
-    file_path = save_uploaded_file(file.file, 'bisheng', file.filename)
+    file_path = save_uploaded_file(file.file, 'bisheng', unquote(file.filename))
 
     # 返回文件路径
     return resp_200(
@@ -207,7 +207,7 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
     else:
         # 如果标题不存在，则返回空值
         return resp_500(
-            "Title not found or method not implemented for the conversation\'s endpoint")
+            data="Title not found or method not implemented for the conversation\'s endpoint")
 
 
 @router.get('/messages/{conversationId}')
@@ -338,12 +338,19 @@ async def chat_completions(
         web_list = []
         error = False
         final_res = ''
+        final_result = None
         resoning_res = ''
+        # prompt 长度token截断
+        max_token = wsConfig.maxTokens
+        runId = uuid4().hex
+        index = 0
+
         try:
             if data.search_enabled:
                 # 如果开启搜索，先检查prompt 是否需要搜索
                 stepId = f'step_${uuid4().hex}'
-                yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                index += 1
                 searchTExt = promptSearch % data.text
                 inputs = [HumanMessage(content=searchTExt)]
                 searchRes = await bishengllm.ainvoke(searchTExt)
@@ -356,28 +363,34 @@ async def chat_completions(
                     yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()
                     prompt = wsConfig.webSearch.prompt.format(
-                        search_results=search_res,
+                        search_results=search_res[:max_token],
                         cur_date=datetime.now().strftime('%Y-%m-%d'),
                         question=data.text)
             elif data.knowledge_enabled:
                 logger.info(f'knowledge, prompt={data.text}')
                 chunks = WorkStationService.queryChunksFromDB(data.text, login_user)
                 prompt = wsConfig.knowledgeBase.prompt.format(
-                    retrieved_file_content='\n'.join(chunks), question=data.text)
-
-            if data.files:
+                    retrieved_file_content='\n'.join(chunks)[:max_token], question=data.text)
+            elif data.files:
                 #  获取文件全文
                 filecontent = '\n'.join(
                     [getFileContent(file.get('filepath')) for file in data.files])
-                prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent,
+                prompt = wsConfig.fileUpload.prompt.format(file_content=filecontent[:max_token],
                                                            question=data.text)
+            if prompt != data.text:
+                # 需要将原始消息存储
+                extra = json.loads(message.extra)
+                extra['prompt'] = prompt
+                message.extra = json.dumps(extra, ensure_ascii=False)
+                ChatMessageDao.insert_one(message)
         except Exception as e:
             logger.error(f'Error in processing the prompt: {e}')
             error = True
             final_res = 'Error in processing the prompt'
 
         if not error:
-            inputs = [HumanMessage(content=prompt)]
+            messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
+            inputs = [*messages, HumanMessage(content=prompt)]
             task = asyncio.create_task(
                 bishengllm.ainvoke(
                     inputs,
@@ -397,7 +410,8 @@ async def chat_completions(
                         if not final_res:
                             # 第一次返回的消息
                             stepId = 'step_' + uuid4().hex
-                            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                            index += 1
                         final_res += content
                         content = {'content': [{'type': 'text', 'text': content}]}
                         yield SSEResponse(event='on_message_delta',
@@ -407,9 +421,10 @@ async def chat_completions(
                         if not resoning_res:
                             # 第一次返回的消息
                             stepId = 'step_' + uuid4().hex
-                            yield step_message(stepId, uuid4().hex, f'msg_{uuid4().hex}')
+                            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
+                            index += 1
                         resoning_res += reasoning_content
-                        content = {'type': 'think', 'think': reasoning_content}
+                        content = {'content': [{'type': 'think', 'think': reasoning_content}]}
                         yield SSEResponse(event='on_reasoning_delta',
                                           data=delta(id=stepId, delta=content)).toString()
                 except asyncio.QueueEmpty:
@@ -424,18 +439,19 @@ async def chat_completions(
                 # 循环获取task 结果，不等待
                 try:
                     if task.done():
-                        final_res = task.result()  # Raise any exception if the task failed
+                        final_result = task.result()  # Raise any exception if the task failed
                         needBreak = True
                 except Exception as e:
                     logger.error(f'Error in task: {e}')
                     break
         # 结束流式输出
         if resoning_res:
-            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_res.content
+            final_res = ''':::thinking\n''' + resoning_res + '''\n:::''' + final_result.content
         elif web_list:
-            final_res = ''':::web\n''' + json.dumps(web_list) + '''\n:::''' + final_res.content
+            final_res = ''':::web\n''' + json.dumps(
+                web_list, ensure_ascii=False) + '''\n:::''' + final_result.content
         else:
-            final_res = final_res.content if not isinstance(final_res, str) else final_res
+            final_res = final_result.content if final_result else final_res
 
         yield final_message(conversaiton, conversaiton.flow_name, message, final_res, error,
                             modelName)

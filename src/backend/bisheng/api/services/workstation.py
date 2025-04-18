@@ -9,10 +9,13 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
-from bisheng.database.models.message import ChatMessage
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
+from bisheng.restructure.assistants.services import MsgCategory
 from bisheng.utils.minio_client import MinioClient
 from fastapi import BackgroundTasks, Request
+from langchain_core.messages import AIMessage, HumanMessage
+from loguru import logger
 from openai import BaseModel
 
 minio_client = MinioClient()
@@ -113,6 +116,22 @@ class WorkStationService:
         else:
             content = []
         return content
+
+    @classmethod
+    def get_chat_history(cls, chat_id: str, size: int = 4):
+        chat_history = []
+        messages = ChatMessageDao.get_messages_by_chat_id(chat_id, ['question', 'answer'], size)
+        for one in messages:
+            # bug fix When constructing multi-turn dialogues, the input and response of
+            # the user and the assistant were reversed, leading to incorrect question-and-answer sequences.
+            extra = json.loads(one.extra) or {}
+            content = extra['prompt'] if 'prompt' in extra else one.message
+            if one.category == MsgCategory.Question:
+                chat_history.append(HumanMessage(content=content))
+            elif one.category == MsgCategory.Answer:
+                chat_history.append(AIMessage(content=content))
+        logger.info(f'loaded {len(chat_history)} chat history for chat_id {chat_id}')
+        return chat_history
 
 
 class WorkstationMessage(BaseModel):

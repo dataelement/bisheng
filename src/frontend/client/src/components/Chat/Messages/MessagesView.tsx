@@ -92,7 +92,7 @@ export default function MessagesView({
             }}
             aria-label={localize('com_ui_new_chat')}
           >
-            <MessagesSquareIcon size={18} />
+            <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />
             <span className="text-sm">{localize('com_ui_new_chat')}</span>
           </button>
         </div>

@@ -17,6 +17,7 @@ import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 // import PaginationComponent from "../../components/PaginationComponent";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import Cascader from "@/components/bs-ui/select/cascader";
@@ -24,7 +25,6 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
 function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { t } = useTranslation()
@@ -34,6 +34,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const descRef = useRef(null)
     const [modal, setModal] = useState(null)
     const [options, setOptions] = useState([])
+    const [isSubmitting, setIsSubmitting] = useState(false) // 新增loading状态
 
     // Fetch model data
     useEffect(() => {
@@ -58,16 +59,19 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             });
             setOptions(embeddings)
             setModal(_model)
-
             onLoadEnd(models)
+        }).catch(error => {  // 添加错误处理
+            toast({
+                variant: "error",
+                description: '加载模型出错'
+            })
         })
     }, [])
 
     const { toast } = useToast()
-
     const [error, setError] = useState({ name: false, desc: false })
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         const name = nameRef.current.value
         const desc = descRef.current.value
         const errorlist = []
@@ -75,15 +79,16 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
         if (!name) errorlist.push(t('lib.enterLibraryName'))
         if (name.length > 30) errorlist.push(t('lib.libraryNameLimit'))
         if (!modal) errorlist.push(t('lib.selectModel'))
-
         if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'))
-        const nameErrors = errorlist.length
 
+        const nameErrors = errorlist.length
         if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'))
+
         setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
         if (errorlist.length) return handleError(errorlist)
 
-        captureAndAlertRequestErrorHoc(createFileLib({
+        setIsSubmitting(true)  // 开始提交
+        await captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc,
             model: modal[1].value,
@@ -93,7 +98,9 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             window.libname = [name, desc]
             navigate("/filelib/" + res.id);
             setOpen(false)
+            setIsSubmitting(false)
         }))
+        setIsSubmitting(false)
     }
 
     const handleError = (list) => {
@@ -130,9 +137,17 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+                    <Button variant="outline" className="px-11">{t('cancel')}</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" onClick={handleCreate}>{t('create')}</Button>
+                <Button
+                    type="submit"
+                    className="px-11 flex"
+                    onClick={handleCreate}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting && <LoadIcon className="mr-1" />}
+                    {t('create')}
+                </Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

@@ -227,6 +227,7 @@ const MultiSelect = ({
                         }
                     </div> : <div className="flex flex-wrap w-full">
                         {
+                            // 使用key反推label
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all">
                                     {option.label}
