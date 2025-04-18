@@ -169,7 +169,7 @@ const CreateDataSet = forwardRef(({ onChange }, ref) => {
                             </div>
                             <SimpleUpload
                                 filekey="file"
-                                uploadUrl={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
+                                uploadUrl={'/api/v1/knowledge/upload'}
                                 accept={['json']}
                                 className={`${error.fileUrl ? 'border-red-400' : ''}`}
                                 onSuccess={handleFileUploadSuccess}
