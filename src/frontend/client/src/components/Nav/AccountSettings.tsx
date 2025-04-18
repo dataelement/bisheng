@@ -86,11 +86,11 @@ function AccountSettings() {
           translate: '0px',
         }}
       >
-        <div className="text-token-text-secondary ml-3 mr-2 py-2 text-sm" role="note">
+        {/* <div className="text-token-text-secondary ml-3 mr-2 py-2 text-sm" role="note">
           {user?.email ?? localize('com_nav_user')}
-        </div>
-        <DropdownMenuSeparator />
-        {startupConfig?.checkBalance === true &&
+        </div> */}
+        {/* <DropdownMenuSeparator /> */}
+        {/* {startupConfig?.checkBalance === true &&
           balanceQuery.data != null &&
           !isNaN(parseFloat(balanceQuery.data)) && (
             <>
@@ -99,7 +99,7 @@ function AccountSettings() {
               </div>
               <DropdownMenuSeparator />
             </>
-          )}
+          )} */}
         {/* <Select.SelectItem
           value=""
           onClick={() => setShowFiles(true)}
@@ -118,15 +118,15 @@ function AccountSettings() {
             {localize('com_nav_help_faq')}
           </Select.SelectItem>
         )} */}
-        <Select.SelectItem
+        {/* <Select.SelectItem
           value=""
           onClick={() => setShowSettings(true)}
           className="select-item text-sm"
         >
           <GearIcon className="icon-md" aria-hidden="true" />
           {localize('com_nav_settings')}
-        </Select.SelectItem>
-        <DropdownMenuSeparator />
+        </Select.SelectItem> */}
+        {/* <DropdownMenuSeparator /> */}
         <Select.SelectItem
           aria-selected={true}
           onClick={() => logout()}
