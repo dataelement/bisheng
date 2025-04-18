@@ -12,13 +12,10 @@ from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Kno
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
 from bisheng.restructure.assistants.services import MsgCategory
-from bisheng.utils.minio_client import MinioClient
 from fastapi import BackgroundTasks, Request
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from openai import BaseModel
-
-minio_client = MinioClient()
 
 
 class WorkStationService:
