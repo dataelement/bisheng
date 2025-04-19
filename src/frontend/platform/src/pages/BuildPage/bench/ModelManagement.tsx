@@ -58,7 +58,7 @@ export const ModelManagement = ({
                         options={llmOptions}
                         onChange={(val) => onModelChange(index, val)}
                     /> : <ModelSelect
-                        key={model.id}
+                        key={'model.id'}
                         label={''}
                         value={''}
                         options={[]}

@@ -181,7 +181,7 @@ export function useAssistantLLmModel() {
 
     const { data, refetch } = useQuery({
         queryKey: "QueryModelsKey",
-        queryFn: () => getAssistantModelList(),
+        queryFn: () => getModelListApi(),
         select: (data) => {
             const llmOptions = []
             const embeddings = []
