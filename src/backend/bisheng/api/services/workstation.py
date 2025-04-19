@@ -33,13 +33,14 @@ class WorkStationService:
         return data
 
     @classmethod
-    def get_config(cls) -> WorkstationConfig:
+    def get_config(cls) -> WorkstationConfig | None:
         """ 获取评测功能的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         if config:
             ret = json.loads(config.value)
-        return WorkstationConfig(**ret)
+            return WorkstationConfig(**ret)
+        return None
 
     @classmethod
     async def uploadPersonalKnowledge(
