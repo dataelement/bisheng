@@ -193,6 +193,7 @@ class GptsToolsDao(GptsToolsBase):
         with session_getter() as session:
             statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
                                                     GptsToolsType.is_delete == 0)
+            statement = statement.order_by(GptsToolsType.update_time.desc())
             return session.exec(statement).all()
 
     @classmethod
@@ -215,6 +216,7 @@ class GptsToolsDao(GptsToolsBase):
         if is_preset is not None:
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
+        statement = statement.order_by(GptsToolsType.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
