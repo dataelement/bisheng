@@ -45,6 +45,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         keyword: '',
     });
     useEffect(() => {
+        const _filter = window.LogFilters;
         if (initFilter) {
             const param = {
                 ...filters,
@@ -54,6 +55,12 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             }
             setFilters(param)
             filterData(param)
+            return;
+        }
+        if (_filter) {
+            setFilters(_filter)
+            filterData(_filter)
+            delete window.LogFilters;
         }
     }, [initFilter])
 
@@ -93,7 +100,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         localStorage.setItem('reviewStatus', el.review_status.toString());
         // 搜索的历史记录
         localStorage.setItem('auditKeyword', filters.keyword);
-        window.OperationPage = page;
+        window.LogFilters = filters;
+        window.LogPage = page;
     };
     useEffect(() => {
         const _page = window.LogPage;

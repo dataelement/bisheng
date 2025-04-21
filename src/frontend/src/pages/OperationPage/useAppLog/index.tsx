@@ -44,6 +44,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         keyword: '',
     });
     useEffect(() => {
+        const _filter = window.OperationFilters;
         if (initFilter) {
             const param = {
                 ...filters,
@@ -53,6 +54,12 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             }
             setFilters(param)
             filterData(param)
+            return;
+        }
+        if (_filter) {
+            setFilters(_filter)
+            filterData(_filter)
+            delete window.OperationFilters;
         }
     }, [initFilter])
 
@@ -84,6 +91,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         localStorage.setItem('reviewStatus', el.review_status.toString());
         // 搜索的历史记录
         localStorage.setItem('operationKeyword', filters.keyword);
+        window.OperationFilters = filters;
         window.OperationPage = page;
     };
 
