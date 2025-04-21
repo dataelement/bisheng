@@ -78,14 +78,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         setFilters(updatedFilters);
     };
 
-    const [showReviewResult, setShowReviewResult] = useState(true); // State to control the visibility of the review result column
-    useEffect(() => {
-        // On initial load, fetch the latest configuration and set it to formData
-        getChatAnalysisConfigApi().then(config => {
-            setShowReviewResult(config.reviewEnabled);
-        });
-    }, []);
-    
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = (el) => {
         // 是否违规
@@ -93,17 +85,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         // 搜索的历史记录
         localStorage.setItem('operationKeyword', filters.keyword);
         window.OperationPage = page;
-    };
-
-    // Function to determine the class based on review result
-    const getResultClass = (result) => {
-        switch (result) {
-            case 1: return 'text-gray-500';  // 未审查
-            case 2: return 'text-green-500'; // 通过
-            case 3: return 'text-red-500';   // 违规
-            case 4: return 'text-orange-500';// 审查失败
-            default: return '';
-        }
     };
 
     useEffect(() => {
@@ -153,7 +134,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead>{t('system.userGroup')}</TableHead>
                             <TableHead>{t('createTime')}</TableHead>
                             <TableHead>{t('log.userFeedback')}</TableHead>
-                            {showReviewResult && <TableHead>审查结果</TableHead>} {/* Conditionally render the review result column */}
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -190,14 +170,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
                                 </TableCell>
-                                {showReviewResult && (
-                                    <TableCell className={getResultClass(el.review_status)}>
-                                        {el.review_status === 1 && '未审查'}
-                                        {el.review_status === 2 && '通过'}
-                                        {el.review_status === 3 && '违规'}
-                                        {el.review_status === 4 && '审查失败'}
-                                    </TableCell>
-                                )}
 
                                 <TableCell className="text-right">
                                     {
