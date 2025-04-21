@@ -12,13 +12,10 @@ from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, Kno
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
 from bisheng.restructure.assistants.services import MsgCategory
-from bisheng.utils.minio_client import MinioClient
 from fastapi import BackgroundTasks, Request
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from openai import BaseModel
-
-minio_client = MinioClient()
 
 
 class WorkStationService:
@@ -36,13 +33,14 @@ class WorkStationService:
         return data
 
     @classmethod
-    def get_config(cls) -> WorkstationConfig:
+    def get_config(cls) -> WorkstationConfig | None:
         """ 获取评测功能的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         if config:
             ret = json.loads(config.value)
-        return WorkstationConfig(**ret)
+            return WorkstationConfig(**ret)
+        return None
 
     @classmethod
     async def uploadPersonalKnowledge(

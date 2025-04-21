@@ -51,12 +51,18 @@ export const ModelManagement = ({
             <div key={model.key} className="grid mb-4 items-start"
                 style={{ gridTemplateColumns: "repeat(2, 1fr) 40px" }}>
                 <div className="pr-2" id={model.id}>
-                    {llmOptions.length > 1 && <ModelSelect
+                    {llmOptions.length > 0 ? <ModelSelect
                         key={model.id}
                         label={''}
                         value={model.id}
                         options={llmOptions}
                         onChange={(val) => onModelChange(index, val)}
+                    /> : <ModelSelect
+                        key={'model.id'}
+                        label={''}
+                        value={''}
+                        options={[]}
+                        onChange={(val) => {}}
                     />}
                     {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}
                 </div>

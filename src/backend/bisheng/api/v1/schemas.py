@@ -448,9 +448,9 @@ class WSPrompt(BaseModel):
 
 class WorkstationConfig(BaseModel):
     menuShow: bool = Field(default=True, description='是否显示左侧菜单栏')
-    maxTokens: Optional[int] = Field(default=15000, description='最大token数')
-    sidebarIcon: Icon
-    assistantIcon: Icon
+    maxTokens: Optional[int] = Field(default=1500, description='最大token数')
+    sidebarIcon: Optional[Icon]
+    assistantIcon: Optional[Icon]
     sidebarSlogan: Optional[str] = Field(description='侧边栏slogan')
     welcomeMessage: Optional[str] = Field()
     functionDescription: Optional[str] = Field()

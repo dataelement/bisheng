@@ -23,7 +23,7 @@ class MessageBase(SQLModelSerializable):
     mark_user: Optional[int] = Field(default=None, index=False, description='标记用户')
     mark_user_name: Optional[str] = Field(default=None, index=False, description='标记用户')
     message: Optional[str] = Field(default=None, sa_column=Column(Text), description='聊天消息')
-    extra: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)), description='连接信息等')
+    extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')
     flow_id: str = Field(index=True, description='对应的技能id')
