@@ -278,23 +278,21 @@ async def get_mcp_tool_schema(login_user: UserPayload = Depends(get_login_user),
     """ 解析mcp的工具配置文件 """
     try:
         result = json.loads(file_content)
-        mcp_servers = result.get('mcpServers')
+        mcp_servers = result['mcpServers']
     except Exception as e:
         logger.exception(f'mcp tool schema parse error {e}')
-        return resp_500(message=f'mcp工具配置解析失败，请检查内容是否符合json格式: {str(e)}')
+        return resp_500(message=f'mcp工具配置解析失败，请检查内容是否符合mcp配置格式: {str(e)}')
     tool_type = None
     for key, value in mcp_servers.items():
-        if not value.get('url', None) or not value.get('url').startswith(('http', 'https')):
-            return resp_500(message=f'mcp服务配置中的url必须以http或者https开头: {value.get("url")}')
         # 解析mcp服务配置
-        tool_type = GptsToolsTypeRead(name=value.get('name'),
+        tool_type = GptsToolsTypeRead(name=value.get('name', ''),
                                       server_host=value.get('url'),
-                                      description=value.get('description'),
+                                      description=value.get('description', ''),
                                       is_preset=ToolPresetType.MCP.value,
                                       openapi_schema=file_content,
                                       children=[])
         # 实例化mcp服务对象，获取工具列表
-        client = await ClientManager.connect_mcp(McpClientType.SSE.value, url=value.get('url'))
+        client = await ClientManager.connect_mcp_from_json(result)
 
         tools = await client.list_tools()
 
@@ -309,7 +307,7 @@ async def get_mcp_tool_schema(login_user: UserPayload = Depends(get_login_user),
             ))
         break
     if tool_type is None:
-        return resp_500(message='mcp服务配置解析失败，请检查配置里是否包含了server的url')
+        return resp_500(message='mcp服务配置解析失败，请检查配置里是否配置了mcpServers')
     return resp_200(data=tool_type)
 
 
@@ -319,7 +317,7 @@ async def mcp_tool_run(login_user: UserPayload = Depends(get_login_user),
     """ 测试mcp服务的工具 """
     try:
         # 实例化mcp服务对象，获取工具列表
-        client = await ClientManager.connect_mcp(McpClientType.SSE.value, url=req.server_host)
+        client = await ClientManager.connect_mcp_from_json(req.openapi_schema)
         extra = json.loads(req.extra)
         tool_name = extra.get('name')
         resp = await client.call_tool(tool_name, req.request_params)

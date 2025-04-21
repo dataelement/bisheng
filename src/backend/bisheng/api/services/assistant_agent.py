@@ -202,7 +202,7 @@ class AssistantAgent(AssistantUtils):
         for one in tool_list:
             tool_type = all_tool_type.get(one.type)
             input_schema = json.loads(one.extra)
-            mcp_client = ClientManager.sync_connect_mcp(McpClientType.SSE.value, url=tool_type.server_host)
+            mcp_client = ClientManager.sync_connect_mcp_from_json(tool_type.openapi_schema)
             mcp_tool = McpTool.get_mcp_tool(name=one.tool_key, description=one.desc, mcp_client=mcp_client,
                                             mcp_tool_name=one.name, arg_schema=input_schema['inputSchema'],
                                             callbacks=callbacks)
@@ -221,7 +221,7 @@ class AssistantAgent(AssistantUtils):
         for one in tool_list:
             tool_type = all_tool_type.get(one.type)
             input_schema = json.loads(one.extra)
-            mcp_client = await ClientManager.connect_mcp(McpClientType.SSE.value, url=tool_type.server_host)
+            mcp_client = await ClientManager.connect_mcp_from_json(tool_type.openapi_schema)
             mcp_tool = McpTool.get_mcp_tool(name=one.tool_key, description=one.desc, mcp_client=mcp_client,
                                             mcp_tool_name=one.name, arg_schema=input_schema['inputSchema'],
                                             callbacks=callbacks)

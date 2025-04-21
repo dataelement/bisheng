@@ -43,7 +43,7 @@ class ToolServices(BaseModel):
         """ refresh mcp tools """
         # 1. get all new tools
         # 实例化mcp服务对象，获取工具列表
-        client = await ClientManager.connect_mcp(McpClientType.SSE.value, url=tool_type.server_host)
+        client = await ClientManager.connect_mcp_from_json(tool_type.openapi_schema)
         tools = await client.list_tools()
         new_tools = {}
         for one in tools:

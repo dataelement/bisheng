@@ -322,6 +322,7 @@ class DeleteToolTypeReq(BaseModel):
 
 class TestToolReq(BaseModel):
     server_host: str = Field(default='', description='服务的根地址')
+    openapi_schema: Optional[str] = Field(default='', description='openapi schema')
     extra: str = Field(default='', description='Api 对象解析后的extra字段')
     auth_method: int = Field(default=AuthMethod.NO.value, description='认证类型')
     auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description='Auth Type')
