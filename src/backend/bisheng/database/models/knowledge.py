@@ -8,9 +8,10 @@ from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileD
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-from pydantic import BaseModel
-from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
+from pydantic import BaseModel, field_validator
+from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update, CHAR
 from sqlmodel.sql.expression import Select, SelectOfScalar
+
 
 class KnowledgeTypeEnum(Enum):
     QA = 1
@@ -31,6 +32,13 @@ class KnowledgeBase(SQLModelSerializable):
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+
+    @field_validator('model', mode='before')
+    @classmethod
+    def convert_model(cls, v: Any) -> str:
+        if isinstance(v, int):
+            v = str(v)
+        return v
 
 
 class Knowledge(KnowledgeBase, table=True):
