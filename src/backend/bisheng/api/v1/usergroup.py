@@ -46,7 +46,8 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
     return resp_200({'records': groups_res})
 
 @router.get('/list_operation', response_model=UnifiedResponseModel[List[GroupRead]])
-async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
+async def get_all_group(*,login_user: UserPayload = Depends(get_login_user),
+                        keyword: Optional[str] = Query(default=None,description='匹配关键字')):
     """
     获取所有分组
     """
@@ -63,10 +64,13 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
             raise HTTPException(status_code=500, detail='无查看权限')
 
     groups_res = RoleGroupService().get_group_list(groups)
+    if keyword:
+        groups_res = [one for one in groups_res if keyword in one['group_name']]
     return resp_200({'records': groups_res})
 
 @router.get('/list_audit', response_model=UnifiedResponseModel[List[GroupRead]])
-async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
+async def get_all_group(*,login_user: UserPayload = Depends(get_login_user),
+                        keyword: Optional[str] = Query(default=None,description='匹配关键字')):
     """
     获取所有分组
     """
@@ -81,8 +85,9 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
         # 不是任何用户组的管理员无查看权限
         if not groups:
             raise HTTPException(status_code=500, detail='无查看权限')
-
     groups_res = RoleGroupService().get_group_list(groups)
+    if keyword:
+        groups_res = [one for one in groups_res if keyword in one['group_name']]
     return resp_200({'records': groups_res})
 
 
