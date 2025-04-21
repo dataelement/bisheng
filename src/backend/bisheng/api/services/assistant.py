@@ -475,10 +475,8 @@ class AssistantService(BaseService, AssistantUtils):
         exist_tool_type = GptsToolsDao.get_one_tool_type(req.id)
         if not exist_tool_type:
             return ToolTypeNotExistsError.return_resp()
-        if len(req.children) == 0:
-            return ToolTypeEmptyError.return_resp()
-        if req.name.__len__() > 30 or req.name.__len__() == 0:
-            return resp_500(message="名字不符合规范：最少一个字符，不能超过30个字符")
+        if req.name.__len__() > 1000 or req.name.__len__() == 0:
+            return resp_500(message="名字不符合规范：至少1个字符，不能超过1000个字符")
 
         #  判断工具类别名称是否重复
         tool_type = GptsToolsDao.get_one_tool_type_by_name(user.user_id, req.name)
