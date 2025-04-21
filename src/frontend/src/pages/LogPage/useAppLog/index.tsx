@@ -185,7 +185,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </Select>
                         </div>
                     }
-                    <SearchInput className="w-64" value={filters.keyword} placeholder={'历史记录'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
+                    <SearchInput className="w-64" value={filters.keyword} placeholder={'历史聊天记录查询'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                     {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
