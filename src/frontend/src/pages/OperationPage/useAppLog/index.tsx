@@ -136,7 +136,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 <SelectGroup>
                                     <SelectItem value={'like'}>赞</SelectItem>
                                     <SelectItem value={'dislike'}>踩</SelectItem>
-                                    <SelectItem value={'copied'}>反馈</SelectItem>
+                                    <SelectItem value={'copied'}>复制</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
