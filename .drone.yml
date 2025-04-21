@@ -366,7 +366,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         - success
 trigger:
   branch:
-  - feat/1.2.0
+  - add_some_branch_you_need
   event:
   - push
    
