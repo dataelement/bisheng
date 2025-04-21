@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function ToolItem({
@@ -20,6 +21,12 @@ export default function ToolItem({
     onSetClick = null
 }) {
     const { t } = useTranslation();
+    const sortData = useMemo(() => {
+        if (data.children) {
+            return data.children.sort((a, b) => a.id - b.id);
+        }
+        return [];
+    }, [data.children]);
 
     return <AccordionItem key={data.id} value={data.id} className="data-[state=open]:border-2 data-[state=open]:border-primary/20 data-[state=open]:rounded-md">
         <AccordionTrigger>
@@ -46,7 +53,7 @@ export default function ToolItem({
         </AccordionTrigger>
         <AccordionContent className="">
             <div className="px-6 mb-4">
-                {data.children.map(api => (
+                {sortData.map(api => (
                     <div key={api.name} className="relative p-4 rounded-sm  border-t">
                         <h1 className="text-sm font-medium leading-none">{api.name}</h1>
                         <p className="text-sm text-muted-foreground mt-2">{api.desc}</p>

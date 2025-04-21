@@ -7,11 +7,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { userContext } from "@/contexts/userContext";
 import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
 // import { createMcpServer, deleteMcpServer, getMcpTools, testMcpTool, updateMcpServer } from "@/controllers/API/mcp";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
 
 // 测试对话框组件
 const TestDialog = forwardRef((props, ref) => {
@@ -22,10 +23,13 @@ const TestDialog = forwardRef((props, ref) => {
     const [loading, setLoading] = useState(false);
     const { message } = useToast();
     const serverRef = useRef({});
+    const openapiSchemaRef = useRef('')
 
     useImperativeHandle(ref, () => ({
         open: (tool, config, _serverRef) => {
-            setToolData({ ...tool, config });
+            openapiSchemaRef.current = config
+            const openapiSchema = JSON.parse(config)
+            setToolData({ ...tool, openapiSchema });
             setParams({});
             setResult("");
             setTestShow(true);
@@ -86,7 +90,7 @@ const TestDialog = forwardRef((props, ref) => {
                                     <TableRow key={name}>
                                         <TableCell>
                                             {name}
-                                            {schema.required && <span className="text-red-500">*</span>}
+                                            {toolData?.inputSchema.required.includes(name) && <span className="text-red-500">*</span>}
                                         </TableCell>
                                         <TableCell>
                                             <Input
@@ -130,6 +134,8 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const originalName = useRef("");
     const { message } = useToast();
     const testToolDialogRef = useRef(null);
+    const { user } = useContext(userContext);
+    const [isSelf, setIsSelf] = useState(false);
 
     // 示例配置
     const exampleConfigs = {
@@ -153,6 +159,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                     openapiSchema: serverData.openapi_schema
                 });
                 serverRef.current = serverData;
+                setIsSelf(serverData.user_id === user.user_id);
                 originalName.current = serverData.name;
                 setIsEditMode(true);
                 loadToolsFromSchema(serverData.openapi_schema);
@@ -184,11 +191,17 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         }
 
         const tools = await captureAndAlertRequestErrorHoc(
-            getMcpServeByConfig({ file_content: schemaContent })
+            getMcpServeByConfig({ file_content: schemaContent }),
+            (res) => {
+                serverRef.current.children = []
+                setAvailableTools([])
+            }
         );
-        serverRef.current = tools;
-        const parsedApis = tools.children.map(item => JSON.parse(item.extra));
-        setAvailableTools(parsedApis);
+        if (tools) {
+            serverRef.current = tools;
+            const parsedApis = tools.children.map(item => JSON.parse(item.extra));
+            setAvailableTools(parsedApis);
+        }
     };
 
     const validateForm = () => {
@@ -231,9 +244,12 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
         // 提交数据
         const apiMethod = isEditMode ? updateTool : createTool;
+        const { openapiSchema, ...other } = formData;
         captureAndAlertRequestErrorHoc(apiMethod({
             ...serverRef.current,
-            ...formData,
+            ...other,
+            description: serverRef.current.description,
+            openapi_schema: openapiSchema,
             is_preset: 2
         })).then((res) => {
             if (!res) return;
@@ -345,7 +361,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                                     variant="outline"
                                                     onClick={() => testToolDialogRef.current.open(
                                                         tool,
-                                                        JSON.parse(formData.openapiSchema),
+                                                        formData.openapiSchema,
                                                         serverRef.current
                                                     )}
                                                 >
@@ -361,7 +377,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
                     {/* 底部操作按钮 */}
                     <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                        {isEditMode && (
+                        {isEditMode && (user.role === 'admin' || isSelf) && (
                             <Button
                                 variant="destructive"
                                 className="mr-auto"

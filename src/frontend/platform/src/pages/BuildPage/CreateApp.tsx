@@ -37,9 +37,10 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
     const [loading, setLoading] = useState(false);
     const { t } = useTranslation('flow');
     const { appConfig } = useContext(locationContext)
+    const securityRef = useRef<any>(null);
 
     // 应用id (edit)
-    const appidRef = useRef<string>('');
+    const [appId, setAppId] = useState<string>('');
     // State for errors
     const [errors, setErrors] = useState<any>({});
 
@@ -64,7 +65,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setErrors({})
             setOpen(true);
             tempDataRef.current = null;
-            appidRef.current = '';
+            setAppId('');
         },
         // edit
         edit(type: AppType, flow: any) {
@@ -74,7 +75,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setErrors({})
             setOpen(true);
             tempDataRef.current = null;
-            appidRef.current = flow.flow_id;
+            setAppId(flow.id);
         },
     }));
 
@@ -244,7 +245,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 </div>
                 {/* 工作流安全审查 */}
                 {appConfig.isPro && <Accordion type="multiple" className="w-full">
-                    <AssistantSetting id={'xxx'} type={3} />
+                    <AssistantSetting ref={securityRef} id={appId} type={5} />
                 </Accordion>}
                 <DialogFooter>
                     <DialogClose>

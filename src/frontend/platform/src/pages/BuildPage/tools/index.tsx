@@ -1,17 +1,19 @@
+import { LoadIcon } from "@/components/bs-icons";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { getAssistantMcpApi, getAssistantToolsApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import McpServerDialog from "./EditMcp";
 import EditTool from "./EditTool";
 import ToolItem from "./ToolItem";
 import ToolSet from "./ToolSet";
-import { LoadIcon } from "@/components/bs-icons";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
@@ -31,9 +33,11 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     const { user } = useContext(userContext)
 
-    const [type, setType] = useState(""); // '' add edit
+    const [type, setType] = useState("");
     const editRef = useRef(null);
     const mcpDialogRef = useRef(null);
+
+    useToolType(setType)
 
     const loadData = (_type = "custom") => {
         getAssistantToolsApi(_type).then((res) => {
@@ -55,10 +59,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const options = useMemo(() => {
         return allData.filter((el) => {
             // 搜索范围：工具名称、工具描述、工具api名称、工具api描述
-            const targetStr = `${el.name}-${el.description}-${el.children?.map((el) => el.name + el.desc).join("-") || ''}`
-            return targetStr.toLowerCase().includes(keyword.toLowerCase());
+            const targetStr = `${el.name}-${el.description}-${el.children?.map((el) => {
+                // mcp 搜索包含参数名 参数描述
+                const param = type === 'mcp' ? (el.api_params.map((param) => param.name + param.description).join("-") || '') : ''
+                return el.name + el.desc + param
+            }).join("-") || ''}`
+            return targetStr.toLowerCase().includes(keyword.trim().toLowerCase());
         });
-    }, [keyword, allData]);
+    }, [keyword, type, allData]);
 
     const hasSet = (name) => {
         if (user.role !== 'admin') return false
@@ -113,12 +121,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
                     <div className="mb-4">
                         {type === 'edit' && <Button
+                            id="create-apitool"
                             className="mt-4  text-[white]"
                             onClick={() => editRef.current.open()}
                         >
                             {t('create')}{t("tools.createCustomTool")}
                         </Button>}
                         {type === 'mcp' && <Button
+                            id="create-mcptool"
                             className="mt-4  text-[white]"
                             onClick={() => mcpDialogRef.current.open()}
                         >
@@ -127,7 +137,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         {type === 'mcp' && <Button
                             disabled={loading}
                             className="mt-4 ml-4 text-[white]"
-                            onClick={refresh}
+                            onClick={async () => {
+                                await refresh()
+                                loadMcpData()
+                            }}
                         >
                             {loading && <LoadIcon />}
                             刷新
@@ -181,7 +194,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 }
 
 // 刷新mcp服务
-const useMcpRefrensh = () => {
+export const useMcpRefrensh = () => {
     const [loading, setLoading] = useState(false);
     const { message } = useToast()
 
@@ -190,22 +203,32 @@ const useMcpRefrensh = () => {
         async refresh() {
             setLoading(true);
             // api
-            const res = await refreshAssistantMcpApi()
-            console.log('刷新 :>> ', res);
-            if (!res) {
+            const res = await captureAndAlertRequestErrorHoc(refreshAssistantMcpApi())
+            // console.log('刷新 :>> ', res);
+            if (res) {
                 message({
                     variant: "success",
                     description: "刷新成功"
-                })
-            } else {
-                message({
-                    variant: "error",
-                    description: "{xxx MCP服务器名称}工具获取失败，请重试"
                 })
             }
             setLoading(false);
         }
     }
+}
+
+// 处理跳转参数,默认弹出创建工具
+const useToolType = (setType) => {
+    const [searchParams, setSearchParams] = useSearchParams();
+    useEffect(() => {
+        const type = searchParams.get('c');
+        setSearchParams({})
+        if (!type) return
+
+        setType(type === 'mcp' ? type : 'edit')
+        setTimeout(() => {
+            document.getElementById(type === 'mcp' ? 'create-mcptool' : 'create-apitool')?.click()
+        }, 100)
+    }, [searchParams])
 }
 
 export default TabTools;

@@ -1,8 +1,10 @@
+import { LoadIcon } from "@/components/bs-icons/loading";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { useMcpRefrensh } from "@/pages/BuildPage/tools";
 import ToolItem from "@/pages/BuildPage/tools/ToolItem";
 import { CpuIcon, Star, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -15,11 +17,15 @@ export default function ToolsSheet({ select, onSelect, children }) {
     const [keyword, setKeyword] = useState('')
     const [allData, setAllData] = useState([])
 
-    useEffect(() => {
+
+    const loadMData = () => {
         getAssistantToolsApi(type).then(res => {
             setAllData(res)
             setKeyword('')
         })
+    }
+    useEffect(() => {
+        loadMData()
     }, [type])
 
     const options = useMemo(() => {
@@ -30,6 +36,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
         });
     }, [keyword, allData])
 
+    const { loading, refresh } = useMcpRefrensh()
     return (
         <Sheet onOpenChange={open => !open && setKeyword('')}>
             <SheetTrigger asChild>
@@ -69,15 +76,26 @@ export default function ToolsSheet({ select, onSelect, children }) {
                         <div className="mb-4">
                             {type === 'custom' && <Button
                                 className="mt-4  text-[white]"
-                                onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools")}
+                                onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=api")}
                             >
                                 {t('create')}{t("tools.createCustomTool")}
                             </Button>}
                             {type === 'mcp' && <Button
                                 className="mt-4  text-[white]"
-                                onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools")}
+                                onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}
                             >
                                 添加 MCP 服务器
+                            </Button>}
+                            {type === 'mcp' && <Button
+                                disabled={loading}
+                                className="mt-4 ml-4 text-[white]"
+                                onClick={async () => {
+                                    await refresh()
+                                    loadMData()
+                                }}
+                            >
+                                {loading && <LoadIcon />}
+                                刷新
                             </Button>}
                         </div>
                         <Accordion type="single" collapsible className="w-full">
