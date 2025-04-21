@@ -43,7 +43,7 @@ class GptsToolsBase(SQLModelSerializable):
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
-    name: str = Field(default='', index=True, description="工具类别名字")
+    name: str = Field(default='', sa_column=Column(String(length=1024), index=True), description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
     extra: Optional[str] = Field(default='', sa_column=Column(String(length=2048)),
                                  description="工具类别的配置信息，用来存储工具类别所需的配置信息")
@@ -289,13 +289,14 @@ class GptsToolsDao(GptsToolsBase):
             session.add(gpts_tool_type)
             session.commit()
             session.refresh(gpts_tool_type)
-        with session_getter() as session:
-            # 插入工具列表
-            for one in children:
-                one.type = gpts_tool_type.id
-                one.tool_key = cls.get_tool_key(gpts_tool_type.id, one.tool_key)
-            session.add_all(children)
-            session.commit()
+        if children:
+            with session_getter() as session:
+                # 插入工具列表
+                for one in children:
+                    one.type = gpts_tool_type.id
+                    one.tool_key = cls.get_tool_key(gpts_tool_type.id, one.tool_key)
+                session.add_all(children)
+                session.commit()
         res = GptsToolsTypeRead(**gpts_tool_type.model_dump(), children=children)
         return res
 
