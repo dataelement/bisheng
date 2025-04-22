@@ -87,7 +87,7 @@ class ToolServices(BaseModel):
         for key, value in mcp_servers.items():
             # 解析mcp服务配置
             tool_type = GptsToolsTypeRead(name=value.get('name', ''),
-                                          server_host=value.get('url'),
+                                          server_host=value.get('url', ''),
                                           description=value.get('description', ''),
                                           is_preset=ToolPresetType.MCP.value,
                                           openapi_schema=file_content,
