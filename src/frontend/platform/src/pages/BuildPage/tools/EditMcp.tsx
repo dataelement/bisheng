@@ -299,7 +299,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                     <div className="mt-4 space-y-6 px-6 overflow-y-auto h-[calc(100vh-200px)]">
                         {/* 名称输入 */}
                         <div>
-                            <Label className="bisheng-label">名称</Label>
+                            <label className="">名称</label>
                             <Input
                                 value={formData.name}
                                 className="mt-2"
@@ -314,7 +314,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         {/* 配置输入 */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <Label className="bisheng-label">MCP服务器配置</Label>
+                                <label className="">MCP服务器配置</label>
                                 <Select value={'1'} onValueChange={handleExampleSelect}>
                                     <SelectTrigger className="w-[180px]">
                                         <span>示例</span>
@@ -341,7 +341,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         {/* 工具列表 */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <Label>可用工具</Label>
+                                <label>可用工具</label>
                                 <Button variant="outline" onClick={() => loadToolsFromSchema(formData.openapiSchema)}>
                                     刷新
                                 </Button>

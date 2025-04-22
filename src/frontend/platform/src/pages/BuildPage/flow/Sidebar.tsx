@@ -1,16 +1,73 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { getAssistantToolsApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
 import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { getToolTree } from "@/util/flowUtils";
 import { cloneDeep } from "lodash-es";
 import { ListVideo } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
-import { useTranslation } from "react-i18next";
+
+const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
+    const sortData = useMemo(() => {
+        const { children, is_preset } = temp;
+        if (children) {
+            return is_preset === 2 ? children.sort((a, b) => a.id - b.id) : children;
+        }
+        return [];
+    }, [temp.children]);
+
+    return <AccordionItem key={temp.name} value={temp.name + index} className="border-none">
+        <AccordionTrigger className="py-2 bisheng-label">{temp.name}</AccordionTrigger>
+        <AccordionContent className="pb-2">
+            {
+                sortData.map(el =>
+                    <Tooltip key={el.name}>
+                        <TooltipTrigger className="block w-full">
+                            <div key={el.name}
+                                className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200`}
+                                onMouseEnter={(event) => {
+                                    if (!event.currentTarget.classList.contains('border-gray-200')) {
+                                        event.currentTarget.classList.add('bg-muted');
+                                    }
+                                }}
+                                onMouseLeave={(event) => {
+                                    event.currentTarget.classList.remove('bg-muted');
+                                }}
+                                draggable={!dropdown}
+                                onDragStart={(event) => {
+                                    onDragStart(event, { type: el.type, node: el })
+                                }}
+                                onDragEnd={(event) => {
+                                    document.body.removeChild(
+                                        document.getElementsByClassName(
+                                            "cursor-dragging"
+                                        )[0]
+                                    );
+                                }}
+                                onClick={() => {
+                                    if (!dropdown) return
+                                    onClick(el.type, el.tool_key)
+                                }}
+                            >
+                                <NodeLogo type="tool" colorStr={el.name} />
+                                <span className="text-sm truncate">{el.name}</span>
+                            </div>
+                        </TooltipTrigger>
+                        {el.description && <TooltipContent side="right">
+                            <div className="max-w-96 text-left break-all whitespace-normal">{el.description}</div>
+                        </TooltipContent>}
+                    </Tooltip>
+                )
+            }
+        </AccordionContent>
+    </AccordionItem>
+}
 
 export default function Sidebar({ dropdown = false, disabledNodes = [], onInitStartNode = (node: any) => { }, onClick = (k) => { } }) {
     const { t } = useTranslation('flow')
@@ -27,6 +84,22 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
             icon: <NodeLogo type={temp.type} />,
             desc: temp.description
         }
+    }
+
+    // 先刷新mcp服务接口
+    const [loading, setLoading] = useState(true)
+    const onecRef = useRef(false)
+    const handleLoadTools = async (val) => {
+        if (val !== 'tool' || onecRef.current) return
+        setLoading(true)
+        onecRef.current = true
+        try {
+            await refreshAssistantMcpApi()
+        } catch (error) {
+            console.error(error)
+        }
+        refetch()
+        setLoading(false)
     }
 
     const nodeTemps = useMemo(() => {
@@ -79,7 +152,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     return <div className={`${dropdown ? 'relative' : 'absolute'} max-w-56 z-40 h-full transition-transform ${expand ? 'p-2' : 'py-2 translate-x-[-200px]'}`}>
         <div className="bg-background rounded-2xl shadow-md h-full p-2">
             {/* tab */}
-            <Tabs defaultValue="base" className="h-full">
+            <Tabs defaultValue="base" className="h-full" onValueChange={handleLoadTools}>
                 <div className="flex gap-1">
                     <TabsList className="grid flex-1 grid-cols-2">
                         <TabsTrigger value="base">{t('basicNodes')}</TabsTrigger>
@@ -133,63 +206,31 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                     </TooltipProvider>
                 </TabsContent>
                 {/* tool */}
-                <TabsContent value="tool" className="nowheel overflow-y-auto h-[calc(100vh-10rem)] max-w-44">
+                <TabsContent value="tool" className="nowheel overflow-y-auto h-[calc(100vh-10rem)] max-w-44 relative">
                     <Accordion type="multiple" className="w-full">
                         <TooltipProvider delayDuration={100}>
                             {toolTemps.map((temp, index) =>
-                                <AccordionItem key={temp.name} value={temp.name + index} className="border-none">
-                                    <AccordionTrigger className="py-2 bisheng-label">{temp.name}</AccordionTrigger>
-                                    <AccordionContent className="pb-2">
-                                        {
-                                            temp.children.map(el =>
-                                                <Tooltip key={el.name}>
-                                                    <TooltipTrigger className="block w-full">
-                                                        <div key={el.name}
-                                                            className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200`}
-                                                            onMouseEnter={(event) => {
-                                                                if (!event.currentTarget.classList.contains('border-gray-200')) {
-                                                                    event.currentTarget.classList.add('bg-muted');
-                                                                }
-                                                            }}
-                                                            onMouseLeave={(event) => {
-                                                                event.currentTarget.classList.remove('bg-muted');
-                                                            }}
-                                                            draggable={!dropdown}
-                                                            onDragStart={(event) => {
-                                                                onDragStart(event, { type: el.type, node: el })
-                                                            }}
-                                                            onDragEnd={(event) => {
-                                                                document.body.removeChild(
-                                                                    document.getElementsByClassName(
-                                                                        "cursor-dragging"
-                                                                    )[0]
-                                                                );
-                                                            }}
-                                                            onClick={() => {
-                                                                if (!dropdown) return
-                                                                let node = null
-                                                                toolTemps.some((temp) => {
-                                                                    node = temp.children.find(node => node.tool_key === el.tool_key)
-                                                                    return node
-                                                                })
-                                                                onClick({ type: el.type, node })
-                                                            }}
-                                                        >
-                                                            <NodeLogo type="tool" colorStr={el.name} />
-                                                            <span className="text-sm truncate">{el.name}</span>
-                                                        </div>
-                                                    </TooltipTrigger>
-                                                    {el.description && <TooltipContent side="right">
-                                                        <div className="max-w-96 text-left break-all whitespace-normal">{el.description}</div>
-                                                    </TooltipContent>}
-                                                </Tooltip>
-                                            )
-                                        }
-                                    </AccordionContent>
-                                </AccordionItem>
+                                <ToolItem
+                                    key={temp.id}
+                                    temp={temp}
+                                    index={index}
+                                    dropdown={dropdown}
+                                    onDragStart={onDragStart}
+                                    onClick={(type, tool_key) => {
+                                        let node = null
+                                        toolTemps.some((temp) => {
+                                            node = temp.children.find(node => node.tool_key === tool_key)
+                                            return node
+                                        })
+                                        onClick({ type, node })
+                                    }}
+                                />
                             )}
                         </TooltipProvider>
                     </Accordion>
+                    {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                        <LoadingIcon />
+                    </div>}
                 </TabsContent>
             </Tabs>
             {/* 搜索 */}

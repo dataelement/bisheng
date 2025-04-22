@@ -23,8 +23,9 @@ export default function ToolItem({
 }) {
     const { t } = useTranslation();
     const sortData = useMemo(() => {
-        if (data.children) {
-            return data.children.sort((a, b) => a.id - b.id);
+        const { children, is_preset } = data;
+        if (children) {
+            return is_preset === 2 ? children.sort((a, b) => a.id - b.id) : children;
         }
         return [];
     }, [data.children]);
