@@ -33,7 +33,7 @@ class LLMService:
         for one in llm_models:
             if one.server_id not in server_dicts:
                 server_dicts[one.server_id] = []
-            server_dicts[one.server_id].append(one.model_dump(exclude={'config'}))
+            server_dicts[one.server_id].append(LLMModelInfo(**one.model_dump(exclude={'config'})))
 
         for one in ret:
             one.models = server_dicts.get(one.id, [])

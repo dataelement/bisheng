@@ -392,7 +392,7 @@ class LLMServerCreateReq(BaseModel):
 
 
 class LLMModelInfo(LLMModelBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class LLMServerInfo(LLMServerBase):
