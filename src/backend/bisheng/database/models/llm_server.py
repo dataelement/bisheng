@@ -62,6 +62,7 @@ class LLMModelBase(SQLModelSerializable):
     status: int = Field(default=2, description='模型状态。0：正常，1：异常, 2: 未知')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='异常原因')
     online: bool = Field(default=True, description='是否在线')
+    check: bool = Field(default=True, description='用于检测是否进行定时校验，1 表示开启，0 表示关闭')
     user_id: int = Field(default=0, description='创建人ID')
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))

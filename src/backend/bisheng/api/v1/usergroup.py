@@ -52,6 +52,34 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user),
         groups_res = [one for one in groups_res if keyword in one.group_name]
     return resp_200({'records': groups_res})
 
+@router.get('/list_v2', response_model=UnifiedResponseModel[List[GroupRead]])
+async def get_all_group2(login_user: UserPayload = Depends(get_login_user),
+                        page: Optional[int] = Query(default=1, description='页码'),
+                        page_size: Optional[int] = Query(default=10, description='每页条数'),
+                        keyword: Optional[str] = Query(default=None,description='匹配关键字')):
+    """
+    获取所有分组
+    """
+    if login_user.is_admin():
+        groups = []
+    else:
+        # 查询下是否是其他用户组的管理员
+        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+        groups = []
+        for one in user_groups:
+            if one.is_group_admin:
+                groups.append(one.group_id)
+        # 不是任何用户组的管理员无查看权限
+        if not groups:
+            raise HTTPException(status_code=500, detail='无查看权限')
+
+    groups_res = RoleGroupService().get_group_list(groups)
+    if page and page_size:
+        groups_res = groups_res[(page-1) * page_size:page * page_size]
+    if keyword:
+        groups_res = [one for one in groups_res if keyword in one.group_name]
+    return resp_200({'data': groups_res,'total': len(groups_res)})
+
 @router.get('/list_operation', response_model=UnifiedResponseModel[List[GroupRead]])
 async def get_all_group(*,login_user: UserPayload = Depends(get_login_user),
                         keyword: Optional[str] = Query(default=None,description='匹配关键字')):
