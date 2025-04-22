@@ -211,103 +211,23 @@ async def update_tool_config(*,
 
 
 @router.post('/tool_schema')
-async def get_tool_schema(*,
+async def get_tool_schema(request: Request, login_user: UserPayload = Depends(get_login_user),
                           download_url: Optional[str] = Body(default=None,
                                                              description='下载url不为空的话优先用下载url'),
-                          file_content: Optional[str] = Body(default=None, description='上传的文件'),
-                          login_user: UserPayload = Depends(get_login_user)):
+                          file_content: Optional[str] = Body(default=None, description='上传的文件')):
     """ 下载或者解析openapi schema的内容 转为助手自定义工具的格式 """
-    if download_url:
-        try:
-            file_content = await get_url_content(download_url)
-        except Exception as e:
-            logger.exception(f'file {download_url} download error')
-            return resp_500(message='url文件下载失败：' + str(e))
-
-    if not file_content:
-        return resp_500(message='schema内容不能为空')
-    # 根据文件内容是否以`{`开头判断用什么解析方式
-    try:
-        if file_content.startswith('{'):
-            res = json.loads(file_content)
-        else:
-            res = yaml.safe_load(file_content)
-    except Exception as e:
-        logger.exception(f'openapi schema parse error {e}')
-        return resp_500(message=f'openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}')
-
-    #  解析openapi schema转为助手工具的格式
-    try:
-        schema = OpenApiSchema(res)
-        schema.parse_server()
-        if not schema.default_server.startswith(('http', 'https')):
-            return resp_500(message=f'server中的url必须以http或者https开头: {schema.default_server}')
-        tool_type = GptsToolsTypeRead(name=schema.title,
-                                      description=schema.description,
-                                      is_preset=ToolPresetType.API.value,
-                                      server_host=schema.default_server,
-                                      openapi_schema=file_content,
-                                      api_location=schema.api_location,
-                                      parameter_name=schema.parameter_name,
-                                      auth_type=schema.auth_type,
-                                      auth_method=schema.auth_method,
-                                      children=[])
-        # 解析获取所有的api
-        schema.parse_paths()
-        for one in schema.apis:
-            tool_type.children.append(
-                GptsTools(
-                    name=one['operationId'],
-                    desc=one['description'],
-                    tool_key=hashlib.md5(one['operationId'].encode('utf-8')).hexdigest(),
-                    is_preset=0,
-                    is_delete=0,
-                    api_params=one['parameters'],
-                    extra=json.dumps(one, ensure_ascii=False),
-                ))
-        return resp_200(data=tool_type)
-    except Exception as e:
-        logger.exception(f'openapi schema parse error {e}')
-        return resp_500(message='openapi schema解析失败：' + str(e))
+    services = ToolServices(request=request, login_user=login_user)
+    tool_type = services.parse_openapi_schema(download_url, file_content)
+    return resp_200(data=tool_type)
 
 
 @router.post('/mcp/tool_schema')
-async def get_mcp_tool_schema(login_user: UserPayload = Depends(get_login_user),
+async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depends(get_login_user),
                               file_content: Optional[str] = Body(default=None, embed=True,
                                                                  description='mcp服务配置内容')):
     """ 解析mcp的工具配置文件 """
-    try:
-        result = json.loads(file_content)
-        mcp_servers = result['mcpServers']
-    except Exception as e:
-        logger.exception(f'mcp tool schema parse error {e}')
-        return resp_500(message=f'mcp工具配置解析失败，请检查内容是否符合mcp配置格式: {str(e)}')
-    tool_type = None
-    for key, value in mcp_servers.items():
-        # 解析mcp服务配置
-        tool_type = GptsToolsTypeRead(name=value.get('name', ''),
-                                      server_host=value.get('url'),
-                                      description=value.get('description', ''),
-                                      is_preset=ToolPresetType.MCP.value,
-                                      openapi_schema=file_content,
-                                      children=[])
-        # 实例化mcp服务对象，获取工具列表
-        client = await ClientManager.connect_mcp_from_json(result)
-
-        tools = await client.list_tools()
-
-        for one in tools:
-            tool_type.children.append(GptsTools(
-                name=one.name,
-                desc=one.description,
-                tool_key=md5_hash(one.name),
-                is_preset=ToolPresetType.MCP.value,
-                api_params=ToolServices.convert_input_schema(one.inputSchema),
-                extra=one.model_dump_json(),
-            ))
-        break
-    if tool_type is None:
-        return resp_500(message='mcp服务配置解析失败，请检查配置里是否配置了mcpServers')
+    services = ToolServices(request=request, login_user=login_user)
+    tool_type = services.parse_mcp_schema(file_content)
     return resp_200(data=tool_type)
 
 

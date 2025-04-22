@@ -1,4 +1,4 @@
-FROM dataelement/bisheng-backend:base.v1
+FROM dataelement/bisheng-backend:base.v2
 
 WORKDIR /app
 

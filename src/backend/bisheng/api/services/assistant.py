@@ -7,13 +7,14 @@ from loguru import logger
 
 from bisheng.api.errcode.assistant import (AssistantInitError, AssistantNameRepeatError,
                                            AssistantNotEditError, AssistantNotExistsError, ToolTypeRepeatError,
-                                           ToolTypeEmptyError, ToolTypeNotExistsError, ToolTypeIsPresetError)
+                                           ToolTypeNotExistsError, ToolTypeIsPresetError)
 from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
@@ -430,6 +431,13 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def add_gpts_tools(cls, user: UserPayload, req: GptsToolsTypeRead) -> UnifiedResponseModel:
         """ 添加自定义工具 """
+        # 尝试解析下openapi schema看下是否可以正常解析, 不能的话保存不允许保存
+        tool_service = ToolServices()
+        if req.is_preset == ToolPresetType.API.value:
+            tool_service.parse_openapi_schema('', req.openapi_schema)
+        elif req.is_preset == ToolPresetType.MCP.value:
+            tool_service.parse_mcp_schema(req.openapi_schema)
+
         req.id = None
         if req.name.__len__() > 1000 or req.name.__len__() == 0:
             return resp_500(message="名字不符合规范：至少1个字符，不能超过1000个字符")
@@ -472,6 +480,13 @@ class AssistantService(BaseService, AssistantUtils):
         """
         更新工具类别，包括更新工具类别的名称和删除、新增工具类别的API
         """
+        # 尝试解析下openapi schema看下是否可以正常解析, 不能的话保存不允许保存
+        tool_service = ToolServices()
+        if req.is_preset == ToolPresetType.API.value:
+            tool_service.parse_openapi_schema('', req.openapi_schema)
+        elif req.is_preset == ToolPresetType.MCP.value:
+            tool_service.parse_mcp_schema(req.openapi_schema)
+
         exist_tool_type = GptsToolsDao.get_one_tool_type(req.id)
         if not exist_tool_type:
             return ToolTypeNotExistsError.return_resp()
