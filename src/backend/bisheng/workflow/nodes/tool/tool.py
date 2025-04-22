@@ -50,7 +50,11 @@ class ToolNode(BaseNode):
         for key, val in self.node_params.items():
             if key == "output":
                 continue
-            ret[key] = self.parse_template_msg(val)
+            new_val = self.parse_template_msg(val)
+            if new_val == '' or new_val is None:
+                continue
+            ret[key] = new_val
+
         return ret
 
     def parse_template_msg(self, msg: str):
