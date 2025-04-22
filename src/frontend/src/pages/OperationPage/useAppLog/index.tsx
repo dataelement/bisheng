@@ -25,7 +25,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
             user_ids: param.userName?.[0]?.value || undefined,
-            group_ids: param.userGroup || undefined,
+            group_ids: param.userGroup?.[0]?.value || undefined,
             start_date,
             end_date,
             feedback: param.feedback || undefined,
@@ -37,22 +37,28 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     const [filters, setFilters] = useState({
         appName: [],
         userName: [],
-        userGroup: '',
+        userGroup: [],
         dateRange: [],
         feedback: '',
         result: '',
         keyword: '',
     });
     useEffect(() => {
+        const _filter = window.OperationFilters;
         if (initFilter) {
             const param = {
                 ...filters,
                 appName: [{ label: initFilter.name, value: initFilter.flow_id }],
-                userGroup: initFilter.group_info[0].id,
-                // result: '3'
+                userGroup: [{ label: initFilter.group_info[0].group_name, value: initFilter.group_info[0].id}],
             }
             setFilters(param)
             filterData(param)
+            return;
+        }
+        if (_filter) {
+            setFilters(_filter)
+            filterData(_filter)
+            delete window.OperationFilters;
         }
     }, [initFilter])
 
@@ -64,7 +70,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         const param = {
             appName: [],
             userName: [],
-            userGroup: '',
+            userGroup: [],
             dateRange: [],
             feedback: '',
             result: '',
@@ -78,32 +84,14 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         setFilters(updatedFilters);
     };
 
-    const [showReviewResult, setShowReviewResult] = useState(true); // State to control the visibility of the review result column
-    useEffect(() => {
-        // On initial load, fetch the latest configuration and set it to formData
-        getChatAnalysisConfigApi().then(config => {
-            setShowReviewResult(config.reviewEnabled);
-        });
-    }, []);
-    
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = (el) => {
         // 是否违规
         localStorage.setItem('reviewStatus', el.review_status.toString());
         // 搜索的历史记录
         localStorage.setItem('operationKeyword', filters.keyword);
+        window.OperationFilters = filters;
         window.OperationPage = page;
-    };
-
-    // Function to determine the class based on review result
-    const getResultClass = (result) => {
-        switch (result) {
-            case 1: return 'text-gray-500';  // 未审查
-            case 2: return 'text-green-500'; // 通过
-            case 3: return 'text-red-500';   // 违规
-            case 4: return 'text-orange-500';// 审查失败
-            default: return '';
-        }
     };
 
     useEffect(() => {
@@ -136,12 +124,12 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 <SelectGroup>
                                     <SelectItem value={'like'}>赞</SelectItem>
                                     <SelectItem value={'dislike'}>踩</SelectItem>
-                                    <SelectItem value={'copied'}>反馈</SelectItem>
+                                    <SelectItem value={'copied'}>复制</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
                     </div>
-                    <SearchInput className="w-64" value={filters.keyword} placeholder={'历史记录'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
+                    <SearchInput className="w-64" value={filters.keyword} placeholder={'历史聊天记录查询'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                 </div>
@@ -153,7 +141,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead>{t('system.userGroup')}</TableHead>
                             <TableHead>{t('createTime')}</TableHead>
                             <TableHead>{t('log.userFeedback')}</TableHead>
-                            {showReviewResult && <TableHead>审查结果</TableHead>} {/* Conditionally render the review result column */}
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -190,14 +177,6 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
                                 </TableCell>
-                                {showReviewResult && (
-                                    <TableCell className={getResultClass(el.review_status)}>
-                                        {el.review_status === 1 && '未审查'}
-                                        {el.review_status === 2 && '通过'}
-                                        {el.review_status === 3 && '违规'}
-                                        {el.review_status === 4 && '审查失败'}
-                                    </TableCell>
-                                )}
 
                                 <TableCell className="text-right">
                                     {

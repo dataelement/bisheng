@@ -26,7 +26,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
             user_ids: param.userName?.[0]?.value || undefined,
-            group_ids: param.userGroup || undefined,
+            group_ids: param.userGroup?.[0]?.value || undefined,
             start_date,
             end_date,
             feedback: param.feedback || undefined,
@@ -38,22 +38,29 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     const [filters, setFilters] = useState({
         appName: [],
         userName: [],
-        userGroup: '',
+        userGroup: [],
         dateRange: [],
         feedback: '',
         result: '',
         keyword: '',
     });
     useEffect(() => {
+        const _filter = window.LogFilters;
         if (initFilter) {
             const param = {
                 ...filters,
                 appName: [{ label: initFilter.name, value: initFilter.flow_id }],
-                userGroup: initFilter.group_info[0].id,
+                userGroup: [{ label: initFilter.group_info[0].group_name, value: initFilter.group_info[0].id}],
                 result: '3'
             }
             setFilters(param)
             filterData(param)
+            return;
+        }
+        if (_filter) {
+            setFilters(_filter)
+            filterData(_filter)
+            delete window.LogFilters;
         }
     }, [initFilter])
 
@@ -65,7 +72,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         const param = {
             appName: [],
             userName: [],
-            userGroup: '',
+            userGroup: [],
             dateRange: [],
             feedback: '',
             result: '',
@@ -93,7 +100,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         localStorage.setItem('reviewStatus', el.review_status.toString());
         // 搜索的历史记录
         localStorage.setItem('auditKeyword', filters.keyword);
-        window.OperationPage = page;
+        window.LogFilters = filters;
+        window.LogPage = page;
     };
     useEffect(() => {
         const _page = window.LogPage;
@@ -128,7 +136,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                 auditApi({
                     flow_ids: filters.appName?.map(el => el.value) || undefined,
                     user_ids: filters.userName?.[0]?.value || undefined,
-                    group_ids: filters.userGroup || undefined,
+                    group_ids: filters.userGroup?.[0]?.value || undefined,
                     start_date,
                     end_date,
                     feedback: filters.feedback || undefined,
@@ -185,7 +193,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </Select>
                         </div>
                     }
-                    <SearchInput className="w-64" value={filters.keyword} placeholder={'历史记录'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
+                    <SearchInput className="w-64" value={filters.keyword} placeholder={'历史聊天记录查询'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
                     {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>

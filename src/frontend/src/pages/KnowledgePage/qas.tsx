@@ -113,7 +113,7 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
                 <DialogHeader>
                     <DialogTitle>{t('similarityProblem')}</DialogTitle>
                 </DialogHeader>
-                <div className="flex flex-col gap-4 py-2 max-h-[600px] overflow-y-auto">
+                <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
                     <Table>
                         <TableRow>
                             <TableHead>{t('similarityQuestion')}</TableHead>
@@ -262,7 +262,7 @@ const ImportQa = forwardRef( function ({ knowlageId, onChange } : any, ref) {
                     <label htmlFor="dataSetName" className="bisheng-label">
                         { t('importPreview') }
                     </label>
-                    <div className="flex flex-col gap-4 py-2 max-h-[600px] overflow-y-auto">
+                    <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
                         <QaTable dataList={dataList} />
                     </div>
                 </div>}
