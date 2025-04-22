@@ -116,22 +116,24 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
                 <DialogHeader>
                     <DialogTitle>{t('similarityProblem')}</DialogTitle>
                 </DialogHeader>
-                <Table>
-                    <TableRow>
-                        <TableHead>{t('similarityQuestion')}</TableHead>
-                    </TableRow>
-                    <TableBody>
-                        {(questions || []).slice(0, 10).map((el, index) => {
-                            return (
-                                <TableRow key={index}>
-                                    <TableCell className="font-medium">
-                                        {el}
-                                    </TableCell>
-                                </TableRow>
-                            )})
-                        }
-                    </TableBody>
-                </Table>
+                <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
+                    <Table>
+                        <TableRow>
+                            <TableHead>{t('similarityQuestion')}</TableHead>
+                        </TableRow>
+                        <TableBody>
+                            {(questions || []).slice(0, 10).map((el, index) => {
+                                return (
+                                    <TableRow key={index}>
+                                        <TableCell className="font-medium">
+                                            {el}
+                                        </TableCell>
+                                    </TableRow>
+                                )})
+                            }
+                        </TableBody>
+                    </Table>
+                </div>
                 <DialogFooter>
                     <DialogClose>
                         <LoadButton type="submit" className="px-11">
@@ -263,7 +265,7 @@ const ImportQa = forwardRef( function ({ knowlageId, onChange } : any, ref) {
                     <label htmlFor="dataSetName" className="bisheng-label">
                         { t('importPreview') }
                     </label>
-                    <div className="flex flex-col gap-4 py-2">
+                    <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
                         <QaTable dataList={dataList} />
                     </div>
                 </div>}

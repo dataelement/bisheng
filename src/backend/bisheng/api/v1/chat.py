@@ -133,6 +133,7 @@ def get_app_chat_list(*,
             flow_ids = group_flow_ids
 
     # 获取会话列表
+    flow_ids = [one.replace("-",'') for one in flow_ids]
     res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
     total = len(res)
 
@@ -185,6 +186,7 @@ def get_chatmessage(*,
                     login_user: UserPayload = Depends(get_login_user)):
     if not chat_id or not flow_id:
         return {'code': 500, 'message': 'chat_id 和 flow_id 必传参数'}
+    flow_id = flow_id.replace("-",'')
     where = select(ChatMessage).where(ChatMessage.flow_id == flow_id,
                                       ChatMessage.chat_id == chat_id)
     if id:

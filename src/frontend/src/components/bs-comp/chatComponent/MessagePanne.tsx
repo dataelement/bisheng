@@ -74,7 +74,8 @@ export default function MessagePanne({operation = false, mark = false, audit = f
             }
             return;
         }
-        if (isViolation) {
+        // 只有审核页面进行违规消息滚动
+        if (isViolation && audit) {
             const lastViolation = findLastViolation();
             if (lastViolation) {
                 scrollToMessage(lastViolation);
