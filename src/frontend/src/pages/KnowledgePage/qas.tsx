@@ -6,6 +6,8 @@ import { Switch } from "@/components/bs-ui/switch";
 import { message, useToast } from "@/components/bs-ui/toast/use-toast";
 import { ArrowLeft, Computer, SquarePen } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallback } from "react";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { useTranslation } from "react-i18next";
 import { useDropzone } from 'react-dropzone';
 import { Link, useParams } from "react-router-dom";
@@ -32,6 +34,7 @@ import { downloadFile } from "@/util/utils";
 import SimpleUpload from "@/components/bs-ui/upload/simple";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { generateUUID } from "@/components/bs-ui/utils";
+import RichInput from "./components/RichInput";
 
 const defaultQa = {
     question: '',
@@ -440,9 +443,15 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
                         <label htmlFor="answer" className="bisheng-label">
                             <span className="text-red-500">*</span>{t('answer')}
                         </label>
-                        <Textarea
+                        {/* <Textarea
                             name="answer"
                             className={`col-span-3 h-36 ${error.answer && 'border-red-400'}`}
+                            value={form.answer}
+                            onChange={handleInputChange}
+                        /> */}
+                        <RichInput
+                            className={`col-span-3 h-36 ${error.answer && 'border-red-400'}`}
+                            url={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
                             value={form.answer}
                             onChange={handleInputChange}
                         />
