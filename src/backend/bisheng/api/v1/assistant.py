@@ -272,7 +272,7 @@ async def update_tool_type(*,
                      req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
     """ 更新自定义tool """
     req = GptsToolsTypeRead(**req)
-    return AssistantService.update_gpts_tools(login_user, req)
+    return await AssistantService.update_gpts_tools(login_user, req)
 
 
 @router.delete('/tool_list')
