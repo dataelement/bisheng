@@ -119,7 +119,7 @@ const TestDialog = forwardRef((props, ref) => {
     );
 });
 
-// 主组件
+// 主组件  TODO(重构,状态混乱)
 const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref) => {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -201,6 +201,10 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             serverRef.current = tools;
             const parsedApis = tools.children.map(item => JSON.parse(item.extra));
             setAvailableTools(parsedApis);
+            setFormData(prev => ({
+                ...prev,
+                children: tools.children
+            }))
         }
     };
 
@@ -276,7 +280,6 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         });
     };
 
-    const [selectValue] = useState("");
     const handleExampleSelect = (exampleKey) => {
         const exampleSchema = exampleConfigs[exampleKey];
         setFormData(prev => ({
@@ -312,7 +315,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <Label className="bisheng-label">MCP服务器配置</Label>
-                                <Select value={selectValue} onValueChange={handleExampleSelect}>
+                                <Select value={'1'} onValueChange={handleExampleSelect}>
                                     <SelectTrigger className="w-[180px]">
                                         <span>示例</span>
                                     </SelectTrigger>

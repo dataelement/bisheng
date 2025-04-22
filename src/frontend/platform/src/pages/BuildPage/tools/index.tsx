@@ -135,14 +135,15 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             添加 MCP 服务器
                         </Button>}
                         {type === 'mcp' && <Button
+                            variant="outline"
                             disabled={loading}
-                            className="mt-4 ml-4 text-[white]"
+                            className="mt-4 ml-4"
                             onClick={async () => {
                                 await refresh()
                                 loadMcpData()
                             }}
                         >
-                            {loading && <LoadIcon />}
+                            {loading && <LoadIcon className="text-gray-800" />}
                             刷新
                         </Button>}
                     </div>

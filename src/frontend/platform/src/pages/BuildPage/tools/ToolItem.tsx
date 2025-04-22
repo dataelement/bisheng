@@ -9,6 +9,7 @@ import {
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { CircleHelp } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -62,7 +63,7 @@ export default function ToolItem({
                                 <TooltipProvider>
                                     <Tooltip delayDuration={100}>
                                         <TooltipTrigger asChild>
-                                            <span className="text-primary cursor-pointer">{t("build.params")}</span>
+                                            <span className="text-primary cursor-pointer flex items-center">{t("build.params")}<CircleHelp className="size-3" /></span>
                                         </TooltipTrigger>
                                         <TooltipContent side="right" className="bg-gray-50 border shadow-md p-4 text-gray-950 max-w-[520px]">
                                             <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method || 'http'}</Badge><span className="text-xl">{api.name}</span></p>
