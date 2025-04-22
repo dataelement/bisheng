@@ -96,7 +96,6 @@ typings/
 
 # Nuxt.js build / generate output
 .nuxt
-dist
 
 # Gatsby files
 .cache/
@@ -134,7 +133,6 @@ build/
 output/
 develop-eggs/
 config.dev.yaml
-dist/
 downloads/
 eggs/
 .eggs/
