@@ -55,11 +55,11 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
 
     # Define the function to execute tools
     async def acall_tool(messages):
-        tool_messages = await tool_nodes._afunc(messages, None, store=None)
+        tool_messages = await tool_nodes.ainvoke(messages, None, store=None)
         return tool_messages
 
     def call_tool(messages):
-        tool_messages = tool_nodes._func(messages, config=None, store=None)
+        tool_messages = tool_nodes.invoke(messages, config=None, store=None)
         return tool_messages
 
     workflow = MessageGraph()
@@ -147,7 +147,7 @@ def get_qwen_local_functions_agent_executor(
 
     # Define the function to execute tools
     async def call_tool(messages):
-        tool_messages = await tool_nodes._afunc(messages, config=None, store=None)
+        tool_messages = await tool_nodes.ainvoke(messages, config=None, store=None)
         return tool_messages
 
     workflow = MessageGraph()
