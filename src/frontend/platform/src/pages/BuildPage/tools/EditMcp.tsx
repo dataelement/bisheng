@@ -128,7 +128,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
     const initialFormState = {
         name: "",
-        openapiSchema: "{}"
+        openapiSchema: ""
     };
     const [formData, setFormData] = useState(initialFormState);
     const serverRef = useRef(initialFormState);
