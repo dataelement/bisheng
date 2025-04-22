@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class ResourceTypeEnum(Enum):
@@ -13,20 +14,17 @@ class ResourceTypeEnum(Enum):
     FLOW = 2
     ASSISTANT = 3
     GPTS_TOOL = 4
-    WORK_FLOW= 5
+    WORK_FLOW = 5
 
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False, description='资源类别 1:知识库 2:技能 3:助手 4:工具 5:工作流')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class GroupResource(GroupResourceBase, table=True):
@@ -34,13 +32,13 @@ class GroupResource(GroupResourceBase, table=True):
 
 
 class GroupResourceRead(GroupResourceBase):
-    id: Optional[int]
-    group_admins: Optional[List[Dict]]
+    id: Optional[int] = None
+    group_admins: Optional[List[Dict]] = None
 
 
 class GroupResourceUpdate(GroupResourceBase):
-    role_name: Optional[str]
-    remark: Optional[str]
+    role_name: Optional[str] = None
+    remark: Optional[str] = None
 
 
 class GroupResourceCreate(GroupResourceBase):

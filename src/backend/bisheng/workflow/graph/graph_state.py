@@ -9,10 +9,10 @@ class GraphState(BaseModel):
     """ 所有节点的 全局状态管理 """
 
     # 存储聊天历史
-    history_memory: Optional[ConversationBufferWindowMemory]
+    history_memory: Optional[ConversationBufferWindowMemory] = None
 
     # 全局变量池
-    variables_pool: Dict[str, Dict[str, Any]] = Field(default={}, description='全局变量池: {node_id: {key: value}}')
+    variables_pool: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description='全局变量池: {node_id: {key: value}}')
 
     def get_history_memory(self, count: int) -> str:
         """ 获取聊天历史记录

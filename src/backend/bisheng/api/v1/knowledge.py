@@ -27,7 +27,7 @@ from fastapi.encoders import jsonable_encoder
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 
 
-@router.post('/upload', response_model=UnifiedResponseModel[UploadFileResponse], status_code=201)
+@router.post('/upload')
 async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
@@ -95,7 +95,7 @@ async def process_knowledge_file(*,
     return resp_200(res)
 
 
-@router.post('/create', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
+@router.post('/create')
 def create_knowledge(*,
                      request: Request,
                      login_user: UserPayload = Depends(get_login_user),
@@ -105,7 +105,7 @@ def create_knowledge(*,
     return resp_200(db_knowledge)
 
 
-@router.post('/copy', response_model=UnifiedResponseModel[KnowledgeRead], status_code=201)
+@router.post('/copy')
 async def copy_knowledge(*,
                          request: Request,
                          background_tasks: BackgroundTasks,

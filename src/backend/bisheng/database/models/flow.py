@@ -4,17 +4,20 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
+from pydantic import field_validator
+from sqlalchemy import Column, DateTime, String, and_, func, or_, text
+from sqlmodel import JSON, Field, select, update
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
-from pydantic import validator
-from sqlalchemy import Column, DateTime, String, and_, func, or_, text
-from sqlmodel import JSON, Field, select, update
+
 
 # if TYPE_CHECKING:
+
 
 
 class FlowStatus(Enum):
@@ -31,23 +34,21 @@ class FlowType(Enum):
 
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
-    user_id: Optional[int] = Field(index=True)
-    description: Optional[str] = Field(index=False)
+    user_id: Optional[int] = Field(default=None, index=True)
+    description: Optional[str] = Field(default=None, index=False)
     data: Optional[Dict] = Field(default=None)
-    logo: Optional[str] = Field(index=False)
+    logo: Optional[str] = Field(default=None, index=False)
     status: Optional[int] = Field(index=False, default=1)
     flow_type: Optional[int] = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    guide_word: Optional[str] = Field(sa_column=Column(String(length=1000)))
 
-    @validator('data')
-    def validate_json(v):
+    @field_validator('data', mode='before')
+    @classmethod
+    def validate_json(cls, v):
         if not v:
             return v
         if not isinstance(v, dict):
@@ -68,13 +69,13 @@ class Flow(FlowBase, table=True):
 
 
 class FlowCreate(FlowBase):
-    flow_id: Optional[str]
+    flow_id: Optional[str] = None
 
 
 class FlowRead(FlowBase):
     id: str
-    user_name: Optional[str]
-    version_id: Optional[int]
+    user_name: Optional[str] = None
+    version_id: Optional[int] = None
 
 
 class FlowReadWithStyle(FlowRead):
@@ -210,7 +211,7 @@ class FlowDao(FlowBase):
             if status is not None:
                 statement = statement.where(Flow.status == status)
             if flow_type is not None:
-                statement = statement.where(Flow.flow_type == flow_type)
+                statement = statement.where(Flow.flow_type== flow_type)
             if flow_ids:
                 statement = statement.where(Flow.id.in_(flow_ids))
             statement = statement.order_by(Flow.update_time.desc())

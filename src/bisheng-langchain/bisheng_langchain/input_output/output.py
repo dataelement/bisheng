@@ -5,7 +5,7 @@ from venv import logger
 from bisheng_langchain.chains import LoaderOutputChain
 from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
 from langchain.chains.base import Chain
-from pydantic import BaseModel, Extra
+from pydantic import ConfigDict, BaseModel
 
 _TEXT_COLOR_MAPPING = {
     'blue': '36;1',
@@ -52,11 +52,7 @@ class Report(Chain):
 
     input_key: str = 'report_name'  #: :meta private:
     output_key: str = 'text'  #: :meta private:
-
-    class Config:
-        """Configuration for this pydantic object."""
-        extra = Extra.forbid
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     @property
     def input_keys(self) -> List[str]:

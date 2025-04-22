@@ -5,16 +5,15 @@ from typing import Dict, List, Optional, Union
 
 import yaml
 from cryptography.fernet import Fernet
-from langchain.pydantic_v1 import BaseSettings, root_validator, validator
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 from sqlmodel import select
 
 
 class LoggerConf(BaseModel):
     level: str = 'DEBUG'
     format: str = '<level>[{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'  # noqa
-    handlers: List[Dict] = []
+    handlers: List[Dict] = Field(default_factory=list, description='日志处理器')
 
     @classmethod
     def parse_logger_sink(cls, sink: str) -> str:
@@ -26,7 +25,7 @@ class LoggerConf(BaseModel):
             env_keys[one] = os.getenv(one, '')
         return sink.format(**env_keys)
 
-    @validator('handlers', pre=True)
+    @field_validator('handlers')
     @classmethod
     def set_handlers(cls, value):
         if value is None:
@@ -88,10 +87,7 @@ class WorkflowConf(BaseModel):
 
 
 class Settings(BaseModel):
-    class Config:
-        validate_assignment = True
-        arbitrary_types_allowed = True
-        extra = 'ignore'
+    model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 
     chains: dict = {}
     agents: dict = {}
@@ -133,7 +129,8 @@ class Settings(BaseModel):
     object_storage: ObjectStore = {}
     workflow_conf: WorkflowConf = WorkflowConf()
 
-    @validator('database_url', pre=True)
+    @field_validator('database_url')
+    @classmethod
     def set_database_url(cls, value):
         if not value:
             logger.debug('No database_url provided, trying bisheng_DATABASE_URL env variable')
@@ -155,7 +152,8 @@ class Settings(BaseModel):
 
         return value
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def set_redis_url(cls, values):
         if 'redis_url' in values:
             if isinstance(values['redis_url'], dict):
@@ -174,7 +172,8 @@ class Settings(BaseModel):
                     values['redis_url'] = new_redis_url
         return values
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def set_celery_redis_url(cls, values):
         if 'celery_redis_url' in values:
             if isinstance(values['celery_redis_url'], dict):
@@ -193,7 +192,8 @@ class Settings(BaseModel):
                     values['celery_redis_url'] = new_redis_url
         return values
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
             if key != 'dev' and not value:

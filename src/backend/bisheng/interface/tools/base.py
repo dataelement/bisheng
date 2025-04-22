@@ -121,8 +121,8 @@ class ToolCreator(LangChainTypeCreator):
 
             # Pop unnecessary fields and add name
             fields.pop('_type')  # type: ignore
-            fields.pop('return_direct')  # type: ignore
-            fields.pop('verbose')  # type: ignore
+            fields.pop('return_direct', None)  # type: ignore
+            fields.pop('verbose', None)  # type: ignore
 
             tool_params = {
                 'name': fields.pop('name')['value'],  # type: ignore

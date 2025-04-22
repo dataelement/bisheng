@@ -258,7 +258,7 @@ def decide_knowledge_llm() -> Any:
         return None
 
     # 获取llm对象
-    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id)
+    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id, cache=False)
 
 
 def addEmbedding(collection_name: str,

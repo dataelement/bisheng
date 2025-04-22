@@ -1,24 +1,22 @@
 from datetime import datetime
 from typing import Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class ServerBase(SQLModelSerializable):
     endpoint: str = Field(index=False, unique=True)
     sft_endpoint: str = Field(default='', index=False, description='Finetune服务地址')
     server: str = Field(index=True)
-    remark: Optional[str] = Field(index=False)
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    remark: Optional[str] = Field(default=None, index=False)
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class Server(ServerBase, table=True):
@@ -41,12 +39,12 @@ class ServerDao(ServerBase):
 
 
 class ServerRead(ServerBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class ServerQuery(ServerBase):
-    id: Optional[int]
-    server: Optional[str]
+    id: Optional[int] = None
+    server: Optional[str] = None
 
 
 class ServerCreate(ServerBase):

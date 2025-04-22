@@ -47,7 +47,7 @@ export function initNode(node) {
 export function getToolTree(temp) {
     const children = temp.children.map(item => {
         return {
-            id: '',
+            id: item.id,
             tool_key: item.tool_key,
             type: 'tool',
             name: item.name,
@@ -81,6 +81,7 @@ export function getToolTree(temp) {
 
     return {
         name: temp.name,
+        is_preset: temp.is_preset,
         children: children
     }
 }

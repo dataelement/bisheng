@@ -1,6 +1,6 @@
 from bisheng.template.field.base import TemplateField
 from bisheng.template.template.base import Template
-from langchain.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.language_models import BaseLanguageModel
 
 

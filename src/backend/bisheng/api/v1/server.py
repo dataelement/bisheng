@@ -26,7 +26,7 @@ thread_pool = ThreadPoolExecutor(3)
 required_param = ['type', 'pymodel_type', 'gpu_memory', 'instance_groups']
 
 
-@router.post('/add', response_model=UnifiedResponseModel[ServerRead], status_code=201)
+@router.post('/add')
 async def add_server(*, server: ServerCreate):
     try:
         db_server = Server.from_orm(server)
@@ -42,7 +42,7 @@ async def add_server(*, server: ServerCreate):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get('/list_server', response_model=UnifiedResponseModel[List[ServerRead]], status_code=200)
+@router.get('/list_server')
 async def list_server():
     try:
         with session_getter() as session:
@@ -73,7 +73,7 @@ async def delete_server(*, server_id: int):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get('/list', response_model=UnifiedResponseModel[List[ModelDeployRead]], status_code=201)
+@router.get('/list')
 async def list(*, query: ModelDeployQuery = None):
     try:
         # 更新模型
@@ -105,7 +105,7 @@ async def list(*, query: ModelDeployQuery = None):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get('/model/{deploy_id}', response_model=UnifiedResponseModel[ModelDeployRead], status_code=201)
+@router.get('/model/{deploy_id}')
 async def get_model_deploy(*, deploy_id: int):
     try:
         model_deploy = ModelDeployDao.find_model(deploy_id)
@@ -117,7 +117,7 @@ async def get_model_deploy(*, deploy_id: int):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post('/update', response_model=UnifiedResponseModel[ModelDeployRead], status_code=201)
+@router.post('/update')
 async def update_deploy(*, deploy: ModelDeployUpdate):
     try:
         with session_getter() as session:

@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from langchain.chains.base import Chain
 from langchain_core.callbacks import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
-from langchain_core.pydantic_v1 import Field
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 

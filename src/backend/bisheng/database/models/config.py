@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, Text, text
+from sqlalchemy import Column, DateTime, text, Text
 from sqlmodel import Field, select
+
+from bisheng.database.models.base import SQLModelSerializable
+from bisheng.database.base import session_getter
 
 
 class ConfigKeyEnum(Enum):
@@ -22,14 +23,11 @@ class ConfigKeyEnum(Enum):
 class ConfigBase(SQLModelSerializable):
     key: str = Field(index=True, unique=True)
     value: str = Field(sa_column=Column(Text))
-    comment: Optional[str] = Field(index=False)
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    comment: Optional[str] = Field(default=None, index=False)
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class Config(ConfigBase, table=True):
@@ -46,8 +44,8 @@ class ConfigCreate(ConfigBase):
 
 class ConfigUpdate(SQLModelSerializable):
     key: str
-    value: Optional[str]
-    comment: Optional[str]
+    value: Optional[str] = None
+    comment: Optional[str] = None
 
 
 class ConfigDao(ConfigBase):

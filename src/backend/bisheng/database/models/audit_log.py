@@ -67,7 +67,7 @@ class AuditLogBase(SQLModelSerializable):
     system_id: Optional[str] = Field(index=True, description="系统模块")
     event_type: Optional[str] = Field(index=True, description="操作行为")
     object_type: Optional[str] = Field(index=True, description="操作对象类型")
-    object_id: Optional[int] = Field(index=True, description="操作对象ID")
+    object_id: Optional[str] = Field(index=True, description="操作对象ID")
     object_name: Optional[str] = Field(sa_column=Column(Text), description="操作对象名称")
     note: Optional[str] = Field(sa_column=Column(Text), description="操作备注")
     ip_address: Optional[str] = Field(index=True, description="操作时客户端的IP地址")

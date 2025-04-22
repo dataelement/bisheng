@@ -12,8 +12,7 @@ from langchain.prompts import PromptTemplate
 from langchain.schema import BaseMemory
 from langchain.schema.prompt_template import BasePromptTemplate
 from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
-from langchain_core.pydantic_v1 import Field, root_validator
-from pydantic import BaseModel
+from pydantic import Field, model_validator
 
 DEFAULT_SUFFIX = """"
 Current conversation:
@@ -30,7 +29,8 @@ class BaseCustomConversationChain(ConversationChain):
     ai_prefix_value: Optional[str]
     """Field to use as the ai_prefix. It needs to be set and has to be in the template"""
 
-    @root_validator(pre=False)
+    @model_validator(mode='before')
+    @classmethod
     def build_template(cls, values):
         format_dict = {}
         input_variables = extract_input_variables_from_prompt(values['template'])
@@ -168,7 +168,7 @@ prompt_default = PromptTemplate(
     {image_desc}""")
 
 
-class DalleGeneratorChain(CustomChain, BaseModel):
+class DalleGeneratorChain(CustomChain):
     """Implementation of dall-e generate images"""
     dalle: DallEAPIWrapper
     llm: Optional[BaseLanguageModel]

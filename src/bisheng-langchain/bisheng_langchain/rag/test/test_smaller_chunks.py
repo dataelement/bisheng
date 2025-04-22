@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import httpx
 from bisheng_langchain.vectorstores.milvus import Milvus
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import Field
+from pydantic import Field
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
 from loguru import logger

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import field_validator, BaseModel, model_validator
 
 
 class RangeSpec(BaseModel):
@@ -6,14 +6,14 @@ class RangeSpec(BaseModel):
     max: float = 1.0
     step: float = 0.1
 
-    @validator('max')
+    @model_validator(mode='before')
     @classmethod
-    def max_must_be_greater_than_min(cls, v, values, **kwargs):
-        if 'min' in values.data and v <= values.data['min']:
+    def max_must_be_greater_than_min(cls, values):
+        if 'min' in values and values['max'] <= values['min']:
             raise ValueError('max must be greater than min')
-        return v
+        return values
 
-    @validator('step')
+    @field_validator('step')
     @classmethod
     def step_must_be_positive(cls, v):
         if v <= 0:

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import validator
+from pydantic import validator, field_validator
 from sqlmodel import Field, SQLModel
 
 
@@ -42,7 +42,8 @@ class ApiKeyRead(ApiKeyBase):
     api_key: str = Field()
     user_id: UUID = Field()
 
-    @validator('api_key', always=True)
+    @field_validator('api_key', mode='before')
+    @classmethod
     def mask_api_key(cls, v):
         # This validator will always run, and will mask the API key
         return f"{v[:8]}{'*' * (len(v) - 8)}"

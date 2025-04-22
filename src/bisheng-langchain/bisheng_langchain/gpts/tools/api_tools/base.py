@@ -1,7 +1,8 @@
 from typing import Any, Dict, Tuple, Type, Union
 
+from pydantic import ConfigDict, model_validator, BaseModel, Field
+
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.tools import BaseTool, Tool
 from loguru import logger
 
@@ -32,13 +33,10 @@ class APIToolBase(BaseModel):
     params: Dict[str, Any] = {}
     input_key: str = 'keyword'
     args_schema: Type[BaseModel] = ApiArg
+    model_config = ConfigDict(extra="forbid")
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
-
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         timeout = values.get('request_timeout', 30)

@@ -168,3 +168,23 @@ export function exportCsv(data: any[], fileName: string = 'test_result.csv') {
         window.URL.revokeObjectURL(url);
     }, 0);
 }
+
+// 校验合法json
+export function isValidJSON(str) {
+    if (typeof str !== 'string') return false;
+    
+    // 简单的前置检查
+    str = str.trim();
+    if (!(str.startsWith('{') && str.endsWith('}')) && 
+        !(str.startsWith('[') && str.endsWith(']'))) {
+        return false;
+    }
+    
+    // 完整解析验证
+    try {
+        JSON.parse(str);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}

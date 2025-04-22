@@ -1,0 +1,22 @@
+12c12
+<     authjwt_token_location: Optional[Sequence[StrictStr]] = {'headers'}
+---
+>     authjwt_token_location: Optional[List[StrictStr]] = {'headers'}
+21c21
+<     authjwt_decode_audience: Optional[Union[StrictStr,Sequence[StrictStr]]] = None
+---
+>     authjwt_decode_audience: Optional[Union[StrictStr,List[StrictStr]]] = None
+23c23
+<     authjwt_denylist_token_checks: Optional[Sequence[StrictStr]] = {'access','refresh'}
+---
+>     authjwt_denylist_token_checks: Optional[List[StrictStr]] = {'access','refresh'}
+45c45
+<     authjwt_csrf_methods: Optional[Sequence[StrictStr]] = {'POST','PUT','PATCH','DELETE'}
+---
+>     authjwt_csrf_methods: Optional[List[StrictStr]] = {'POST','PUT','PATCH','DELETE'}
+84,85c84,85
+<         min_anystr_length = 1
+<         anystr_strip_whitespace = True
+---
+>         str_min_length = 1
+>         str_strip_whitespace = True

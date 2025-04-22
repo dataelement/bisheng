@@ -11,7 +11,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.constants import END, START
 from langgraph.graph import add_messages, StateGraph
 from langgraph.prebuilt import ToolNode
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 
 class State(TypedDict):
@@ -47,8 +47,8 @@ class SubmitFinalAnswer(BaseModel):
     final_answer: str = Field(..., description="The final answer to the user")
 
 class QueryDBTool(BaseTool):
-    name = "db_query_tool"
-    description = """Execute a SQL query against the database and get back the result.
+    name: str = "db_query_tool"
+    description: str = """Execute a SQL query against the database and get back the result.
         If the query is not correct, an error message will be returned.
         If an error is returned, rewrite the query, check the query, and try again."""
 
@@ -64,20 +64,18 @@ class SqlAgentAPIWrapper(BaseModel):
     llm: BaseLanguageModel = Field(description="llm to use for sql agent")
     sql_address: str = Field(description="sql database address for SQLDatabase uri")
 
-    db: Optional[SQLDatabase]
-    list_tables_tool: Optional[BaseTool]
-    get_schema_tool: Optional[BaseTool]
-    db_query_tool: Optional[BaseTool]
-    query_check: Optional[Any]
-    query_gen: Optional[Any]
-    workflow: Optional[StateGraph]
-    app: Optional[Any]
-    schema_llm: Optional[Any]
-    query_check_llm: Optional[Any]
-    query_gen_llm: Optional[Any]
-
-    class Config:
-        arbitrary_types_allowed = True
+    db: Optional[SQLDatabase] = None
+    list_tables_tool: Optional[BaseTool] = None
+    get_schema_tool: Optional[BaseTool] = None
+    db_query_tool: Optional[BaseTool] = None
+    query_check: Optional[Any] = None
+    query_gen: Optional[Any] = None
+    workflow: Optional[StateGraph] = None
+    app: Optional[Any] = None
+    schema_llm: Optional[Any] = None
+    query_check_llm: Optional[Any] = None
+    query_gen_llm: Optional[Any] = None
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -241,8 +239,8 @@ class SqlAgentInput(BaseModel):
 
 
 class SqlAgentTool(BaseTool):
-    name = "sql_agent"
-    description = "回答与 SQL 数据库有关的问题。给定用户问题，将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
+    name: str = "sql_agent"
+    description: str = "回答与 SQL 数据库有关的问题。给定用户问题，将从数据库中获取可用的表以及对应 DDL，生成 SQL 查询语句并进行执行，最终得到执行结果。"
     args_schema: Type[BaseModel] = SqlAgentInput
     api_wrapper: SqlAgentAPIWrapper
 

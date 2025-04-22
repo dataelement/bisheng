@@ -76,9 +76,7 @@ def clear_knowledge_files(*, request: Request, knowledge_id: int):
     return resp_200(message='knowledge clear successfully')
 
 
-@router.post('/file/{knowledge_id}',
-             response_model=UnifiedResponseModel[KnowledgeFileRead],
-             status_code=200)
+@router.post('/file/{knowledge_id}')
 async def upload_file(request: Request,
                       knowledge_id: int,
                       separator: Optional[List[str]] = Form(default=None,
@@ -147,7 +145,7 @@ def get_filelist(request: Request,
     return resp_200(data={'data': data, 'total': total, 'writeable': flag})
 
 
-@router.post('/chunks', response_model=UnifiedResponseModel[KnowledgeFileRead], status_code=200)
+@router.post('/chunks')
 async def post_chunks(request: Request,
                       knowledge_id: int = Form(...),
                       metadata: str = Form(...),
@@ -177,9 +175,7 @@ async def post_chunks(request: Request,
     return resp_200(data=res[0])
 
 
-@router.post('/chunks_string',
-             response_model=UnifiedResponseModel[KnowledgeFileRead],
-             status_code=200)
+@router.post('/chunks_string')
 async def post_string_chunks(request: Request, document: ChunkInput):
     """ 获取知识库文件信息. """
 
@@ -276,7 +272,7 @@ def add_qa(*,
     return resp_200(res)
 
 
-@router.post('/add_relative_qa', response_model=QAKnowledge)
+@router.post('/add_relative_qa')
 def append_qa(*,
               knowledge_id: int = Body(embed=True),
               data: APIAppendQAParam = Body(embed=True),

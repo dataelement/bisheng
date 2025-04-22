@@ -18,7 +18,7 @@ from bisheng.interface.custom.utils import build_custom_component_template
 router = APIRouter(prefix='/component', tags=['Component'], dependencies=[Depends(get_login_user)])
 
 
-@router.get('', response_model=UnifiedResponseModel[List[Component]])
+@router.get('')
 def get_all_components(*, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -26,7 +26,7 @@ def get_all_components(*, Authorize: AuthJWT = Depends()):
     return ComponentService.get_all_component(current_user)
 
 
-@router.post('', response_model=UnifiedResponseModel[Component])
+@router.post('')
 def save_components(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -38,7 +38,7 @@ def save_components(*, data: CreateComponentReq, Authorize: AuthJWT = Depends())
     return ComponentService.save_component(component)
 
 
-@router.patch('', response_model=UnifiedResponseModel[Component])
+@router.patch('')
 def update_component(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -50,7 +50,7 @@ def update_component(*, data: CreateComponentReq, Authorize: AuthJWT = Depends()
     return ComponentService.update_component(component)
 
 
-@router.delete('', response_model=UnifiedResponseModel[Component])
+@router.delete('')
 def delete_component(*,
                      name: str = Body(..., embed=True, description='组件名'),
                      Authorize: AuthJWT = Depends()):
@@ -60,7 +60,7 @@ def delete_component(*,
     return ComponentService.delete_component(current_user.get('user_id'), name)
 
 
-@router.post('/custom_component', response_model=UnifiedResponseModel[Component])
+@router.post('/custom_component')
 async def custom_component(
         raw_code: CustomComponentCode,
         Authorize: AuthJWT = Depends(),
@@ -78,7 +78,7 @@ async def custom_component(
     return resp_200(data=built_frontend_node)
 
 
-@router.post('/custom_component/reload', response_model=UnifiedResponseModel[Component])
+@router.post('/custom_component/reload')
 async def reload_custom_component(path: str, Authorize: AuthJWT = Depends()):
     from bisheng.interface.custom.utils import build_custom_component_template
 
@@ -98,7 +98,7 @@ async def reload_custom_component(path: str, Authorize: AuthJWT = Depends()):
         return resp_500(message=str(exc))
 
 
-@router.post('/custom_component/update', response_model=UnifiedResponseModel[Component])
+@router.post('/custom_component/update')
 async def custom_component_update(
         raw_code: CustomComponentCode,
         Authorize: AuthJWT = Depends(),

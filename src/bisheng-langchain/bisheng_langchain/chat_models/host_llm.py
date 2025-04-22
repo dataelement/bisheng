@@ -7,6 +7,8 @@ import sys
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
 
 import requests
+from pydantic import ConfigDict, model_validator, Field
+
 from bisheng_langchain.utils.requests import Requests
 from langchain.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain.chat_models.base import BaseChatModel
@@ -15,7 +17,6 @@ from langchain.schema.messages import (AIMessage, BaseMessage, ChatMessage, Func
                                        HumanMessage, SystemMessage)
 from langchain.utils import get_from_dict_or_env
 from langchain_core.language_models.llms import create_base_retry_decorator
-from langchain_core.pydantic_v1 import Field, root_validator
 
 # from requests.exceptions import HTTPError
 
@@ -138,13 +139,10 @@ class BaseHostChatLLM(BaseChatModel):
     verbose: Optional[bool] = False
 
     decoupled: Optional[bool] = False
+    model_config = ConfigDict(validate_by_name=True)
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        allow_population_by_field_name = True
-
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')

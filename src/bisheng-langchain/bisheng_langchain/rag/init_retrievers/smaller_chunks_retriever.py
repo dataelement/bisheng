@@ -3,7 +3,7 @@ from typing import Any, List, Optional
 
 from langchain.text_splitter import TextSplitter
 from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import Field
+from pydantic import Field
 from langchain_core.retrievers import BaseRetriever
 
 
@@ -15,7 +15,7 @@ class SmallerChunksVectorRetriever(BaseRetriever):
     parent_splitter: Optional[TextSplitter] = None
     """The text splitter to use to create parent documents.
     If none, then the parent documents will be the raw documents passed in."""
-    id_key = 'doc_id'
+    id_key: str = 'doc_id'
 
     def add_documents(
         self,

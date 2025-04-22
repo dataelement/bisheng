@@ -24,7 +24,7 @@ class NodeType(Enum):
 class NodeParams(BaseModel):
     key: str = Field(default="", description="变量的key")
     label: Optional[str] = Field("", description="变量描述文本")
-    value: Optional[Any] = Field(description="变量的值")
+    value: Optional[Any] = Field(None, description="变量的值")
 
     # 变量类型 -> 数据格式的详情参考 https://dataelem.feishu.cn/wiki/IfBvwwvfFiHjuQkjFJgcxzoGnxb
     type: Optional[str] = Field("", description="变量类型")
@@ -49,7 +49,7 @@ class BaseNodeData(BaseModel):
     group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
     tab: Optional[dict] = Field({}, description="tab config")
     tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
-    v: str = Field(default="", description="node version")
+    v: Optional[str | int] = Field(default="", description="node version")
 
     def get_variable_info(self, variable_key: str) -> NodeParams | None:
         for group_info in self.group_params:

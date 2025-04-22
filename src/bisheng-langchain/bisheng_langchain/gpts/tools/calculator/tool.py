@@ -2,7 +2,7 @@ import math
 from math import *
 
 import sympy
-from langchain.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain.tools import tool
 from sympy import *
 
@@ -10,7 +10,7 @@ from sympy import *
 class CalculatorInput(BaseModel):
     expression: str = Field(
         description="The input to this tool should be a mathematical expression using only Python's built-in mathematical operators.",
-        example='200*7',
+        examples=['200*7'],
     )
 
 

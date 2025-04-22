@@ -1,12 +1,12 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Optional, List
+
+from sqlmodel import Field, Column, DateTime, text, select, func, update
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.flow import FlowType
-from sqlmodel import Column, DateTime, Field, func, select, text, update
-
 
 class SensitiveStatus(Enum):
     PASS = 1  # 通过
@@ -25,14 +25,11 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
     copied: Optional[int] = Field(default=0, description='已复制的消息数量')
     sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description='审查状态')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         index=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class MessageSession(MessageSessionBase, table=True):
@@ -51,8 +48,7 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     def delete_session(cls, chat_id: str):
-        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(
-            is_delete=True)
+        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
         with session_getter() as session:
             session.exec(statement)
             session.commit()

@@ -2,14 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, validator
+from pydantic import field_validator, BaseModel
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
-
 
 
 class TrainMethod(Enum):
@@ -44,17 +43,17 @@ class FinetuneBase(SQLModelSerializable):
     model_name: str = Field(index=True, max_length=50, description='训练模型的名称')
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='训练方法')
     extra_params: Dict = Field(sa_column=Column(JSON), description='训练任务所需的额外参数')
-    train_data: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='个人训练数据集信息')
-    preset_data: Optional[List[Dict]] = Field(sa_column=Column(JSON), description='预置训练数据集信息')
+    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='个人训练数据集信息')
+    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='预置训练数据集信息')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='训练任务的状态')
     reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='任务失败原因')
     log_path: Optional[str] = Field(default='', max_length=512, description='训练日志在minio上的路径')
-    report: Optional[Dict] = Field(sa_column=Column(JSON), description='训练任务的评估报告数据')
+    report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='训练任务的评估报告数据')
     user_id: int = Field(default=None, index=True, description='创建人ID')
     user_name: str = Field(default=None, description='创建人姓名')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     # 检查训练集数据格式
@@ -69,17 +68,20 @@ class FinetuneBase(SQLModelSerializable):
                 raise ValueError('Finetune.train_data each item must be {name:"",url:"",num:0}')
         return v
 
-    @validator('extra_params')
+    @field_validator('extra_params')
+    @classmethod
     def validate_params(cls, v: Optional[Dict]):
         if v is None or not isinstance(v, dict):
             raise ValueError('Finetune.extra_params must be a valid json')
         return v
 
-    @validator('train_data')
+    @field_validator('train_data')
+    @classmethod
     def validate_train_data(cls, v: Optional[Dict]):
         return cls.validate_train(v)
 
-    @validator('preset_data')
+    @field_validator('preset_data')
+    @classmethod
     def validate_preset_data(cls, v: Optional[Dict]):
         return cls.validate_train(v)
 
@@ -89,10 +91,10 @@ class Finetune(FinetuneBase, table=True):
 
 
 class FinetuneList(BaseModel):
-    server: Optional[int] = Field(description='关联的RT服务ID')
-    server_name: Optional[str] = Field(description='关联的RT服务名称')
-    status: Optional[List[int]] = Field(description='训练任务的状态')
-    model_name: Optional[str] = Field(description='模型名称, 模糊搜索')
+    server: Optional[int] = Field(None, description='关联的RT服务ID')
+    server_name: Optional[str] = Field(None, description='关联的RT服务名称')
+    status: Optional[List[int]] = Field(None, description='训练任务的状态')
+    model_name: Optional[str] = Field(None, description='模型名称, 模糊搜索')
     page: Optional[int] = Field(default=1, description='页码')
     limit: Optional[int] = Field(default=10, description='每页条数')
 
@@ -111,7 +113,8 @@ class FinetuneExtraParams(BaseModel):
     max_seq_len: int = Field(8192, gt=0, description='最大序列长度')
     cpu_load: str = Field('false', description='是否cpu载入')
 
-    @validator('per_device_train_batch_size')
+    @field_validator('per_device_train_batch_size')
+    @classmethod
     def validate_batch_size(cls, v: str):
         try:
             batch_size = int(v)
@@ -122,7 +125,8 @@ class FinetuneExtraParams(BaseModel):
         except Exception as e:
             raise ValueError(f'per_device_train_batch_size must be an integer {e}')
 
-    @validator('gpus')
+    @field_validator('gpus')
+    @classmethod
     def validate_gpus(cls, v: str):
         try:
             gpu_list = v.split(',')

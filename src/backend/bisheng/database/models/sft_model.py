@@ -1,18 +1,19 @@
 from datetime import datetime
 from typing import Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 # 可用于训练的model列表
 class SftModelBase(SQLModelSerializable):
     id: int = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 

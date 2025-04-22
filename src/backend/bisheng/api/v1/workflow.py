@@ -28,7 +28,7 @@ from bisheng.utils import generate_uuid
 router = APIRouter(prefix='/workflow', tags=['Workflow'])
 
 
-@router.get("/report/file", response_model=UnifiedResponseModel, status_code=200)
+@router.get("/report/file")
 async def get_report_file(
         request: Request,
         login_user: UserPayload = Depends(get_login_user),
@@ -216,13 +216,13 @@ def change_version(*,
     return FlowService.change_current_version(request, login_user, flow_id, version_id)
 
 
-@router.get('/get_one_flow/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
+@router.get('/get_one_flow/{flow_id}')
 def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
     return FlowService.get_one_flow(login_user, flow_id)
 
 
-@router.patch('/update/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+@router.patch('/update/{flow_id}')
 async def update_flow(*,
                       request: Request,
                       flow_id: str,
@@ -253,7 +253,7 @@ async def update_flow(*,
     return resp_200(db_flow)
 
 
-@router.patch('/status', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+@router.patch('/status')
 async def update_flow_status(request: Request, login_user: UserPayload = Depends(get_login_user),
                              flow_id: str = Body(..., description='技能ID'),
                              version_id: int = Body(..., description='版本ID'),

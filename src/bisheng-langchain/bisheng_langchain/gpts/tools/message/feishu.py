@@ -1,29 +1,28 @@
 from typing import Any, Optional, Type
 
 import requests
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
-from loguru import logger
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)
 
 
 class InputArgs(BaseModel):
-    message: Optional[str] = Field(description="需要发送的钉钉消息")
-    receive_id: Optional[str] = Field(description="接收的ID")
-    receive_id_type: Optional[str] = Field(description="接收的ID类型")
-    container_id: Optional[str] = Field(description="container_id")
-    start_time: Optional[str] = Field(description="start_time")
-    end_time: Optional[str] = Field(description="end_time")
+    message: Optional[str] = Field(None, description="需要发送的钉钉消息")
+    receive_id: Optional[str] = Field(None, description="接收的ID")
+    receive_id_type: Optional[str] = Field(None, description="接收的ID类型")
+    container_id: Optional[str] = Field(None, description="container_id")
+    start_time: Optional[str] = Field(None, description="start_time")
+    end_time: Optional[str] = Field(None, description="end_time")
     # page_token: Optional[str] = Field(description="page_token")
-    container_id_type: Optional[str] = Field(description="container_id_type")
+    container_id_type: Optional[str] = Field(None, description="container_id_type")
     page_size: Optional[int] = Field(default=20,description="page_size")
-    page_token: Optional[str] = Field(description="page_token")
+    page_token: Optional[str] = Field(None, description="page_token")
     sort_type: Optional[str] = Field(description="sort_type",default="ByCreateTimeAsc")
 
 
 class FeishuMessageTool(BaseModel):
-    API_BASE_URL = "https://open.feishu.cn/open-apis"
+    API_BASE_URL: str = "https://open.feishu.cn/open-apis"
     app_id: str = Field(description="app_id")
     app_secret: str = Field(description="app_secret")
 

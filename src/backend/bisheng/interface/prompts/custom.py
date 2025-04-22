@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Type
 
 from bisheng.interface.utils import extract_input_variables_from_prompt
 from langchain.prompts import PromptTemplate
-from langchain_core.pydantic_v1 import root_validator
+from pydantic import model_validator
 
 # Steps to create a BaseCustomPrompt:
 # 1. Create a prompt template that endes with:
@@ -27,7 +27,8 @@ class BaseCustomPrompt(PromptTemplate):
     description: Optional[str]
     ai_prefix: Optional[str]
 
-    @root_validator(pre=False)
+    @model_validator(mode='before')
+    @classmethod
     def build_template(cls, values):
         format_dict = {}
         ai_prefix_format_dict = {}

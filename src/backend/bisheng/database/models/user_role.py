@@ -1,26 +1,23 @@
 from datetime import datetime
 from typing import List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
+from bisheng.database.base import session_getter
 from bisheng.database.constants import AdminRole
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class UserRoleBase(SQLModelSerializable):
     user_id: int = Field(index=True)
     role_id: int = Field(index=True)
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         index=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class UserRole(UserRoleBase, table=True):
@@ -28,7 +25,7 @@ class UserRole(UserRoleBase, table=True):
 
 
 class UserRoleRead(UserRoleBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class UserRoleCreate(BaseModel):

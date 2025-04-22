@@ -13,7 +13,7 @@ from bisheng.database.models.variable_value import Variable, VariableCreate, Var
 router = APIRouter(prefix='/variable', tags=['variable'])
 
 
-@router.post('/', status_code=200, response_model=UnifiedResponseModel[VariableRead])
+@router.post('/', status_code=200)
 def post_variable(variable: Variable):
     try:
         if not variable.version_id:
@@ -47,7 +47,7 @@ def post_variable(variable: Variable):
         return HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/list', response_model=UnifiedResponseModel[List[VariableRead]], status_code=200)
+@router.get('/list')
 def get_variables(*,
                   flow_id: str,
                   node_id: Optional[str] = None,

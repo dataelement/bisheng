@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     ] = 'https://api.langflow.store/flows/trigger/ec611a61-8460-4438-b187-a4f65e5559d4'
     LIKE_WEBHOOK_URL: Optional[str] = 'https://api.langflow.store/flows/trigger/64275852-ec00-45c1-984e-3bff814732da'
 
-    @validator('CONFIG_DIR', pre=True, allow_reuse=True)
+    @field_validator('CONFIG_DIR', mode="before")
+    @classmethod
     def set_langflow_dir(cls, value):
         if not value:
             from platformdirs import user_cache_dir
@@ -85,7 +86,8 @@ class Settings(BaseSettings):
 
         return str(value)
 
-    @validator('DATABASE_URL', pre=True)
+    @field_validator('DATABASE_URL', mode='before')
+    @classmethod
     def set_database_url(cls, value, values):
         if not value:
             logger.debug('No database_url provided, trying LANGFLOW_DATABASE_URL env variable')
@@ -118,6 +120,7 @@ class Settings(BaseSettings):
         return value
 
     @field_validator('COMPONENTS_PATH', mode='before')
+    @classmethod
     def set_components_path(cls, value):
         if os.getenv('LANGFLOW_COMPONENTS_PATH'):
             logger.debug('Adding LANGFLOW_COMPONENTS_PATH to components_path')

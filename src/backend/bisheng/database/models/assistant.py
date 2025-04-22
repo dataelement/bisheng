@@ -2,12 +2,13 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
 
+from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
+from sqlmodel import Field, select
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
-from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
-from sqlmodel import Field, select
 
 
 class AssistantStatus(Enum):
@@ -23,33 +24,32 @@ class AssistantBase(SQLModelSerializable):
     system_prompt: str = Field(default='', sa_column=Column(Text), description='系统提示词')
     prompt: str = Field(default='', sa_column=Column(Text), description='用户可见描述词')
     guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='开场白')
-    guide_question: Optional[List] = Field(sa_column=Column(JSON), description='引导问题')
+    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON), description='引导问题')
     model_name: str = Field(default='', description='对应模型管理里模型的唯一ID')
     temperature: float = Field(default=0.5, description='模型温度')
     max_token: int = Field(default=32000, description='最大token数')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
     user_id: int = Field(default=0, description='创建用户ID')
     is_delete: int = Field(default=0, description='删除标志')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None,
+                                            sa_column=Column(DateTime,
+                                                             nullable=False,
+                                                             server_default=text(
+                                                                 'CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class AssistantLinkBase(SQLModelSerializable):
-    id: Optional[int] = Field(nullable=False, primary_key=True, description='唯一ID')
-    assistant_id: Optional[str] = Field(index=True, description='助手ID')
+    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    assistant_id: Optional[str] = Field(default=0, index=True, description='助手ID')
     tool_id: Optional[int] = Field(default=0, index=True, description='工具ID')
     flow_id: Optional[str] = Field(default='', index=True, description='技能ID')
     knowledge_id: Optional[int] = Field(default=0, index=True, description='知识库ID')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class Assistant(AssistantBase, table=True):

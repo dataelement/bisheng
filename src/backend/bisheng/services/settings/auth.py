@@ -6,8 +6,8 @@ from bisheng.services.settings.constants import DEFAULT_SUPERUSER, DEFAULT_SUPER
 from bisheng.services.settings.utils import read_secret_from_file, write_secret_to_file
 from loguru import logger
 from passlib.context import CryptContext
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import SettingsConfigDict, BaseSettings
 
 
 class AuthSettings(BaseSettings):
@@ -35,35 +35,14 @@ class AuthSettings(BaseSettings):
     SUPERUSER_PASSWORD: str = DEFAULT_SUPERUSER_PASSWORD
 
     pwd_context: CryptContext = CryptContext(schemes=['bcrypt'], deprecated='auto')
-
-    class Config:
-        validate_assignment = True
-        extra = 'ignore'
-        env_prefix = 'bisheng_'
+    model_config = SettingsConfigDict(validate_assignment=True, extra='ignore', env_prefix='bisheng_')
 
     def reset_credentials(self):
         self.SUPERUSER = DEFAULT_SUPERUSER
         self.SUPERUSER_PASSWORD = DEFAULT_SUPERUSER_PASSWORD
 
-    # If autologin is true, then we need to set the credentials to
-    # the default values
-    # so we need to validate the superuser and superuser_password
-    # fields
-    @validator('SUPERUSER', 'SUPERUSER_PASSWORD', pre=True)
-    def validate_superuser(cls, value, values):
-        if values.get('AUTO_LOGIN'):
-            if value != DEFAULT_SUPERUSER:
-                value = DEFAULT_SUPERUSER
-                logger.debug('Resetting superuser to default value')
-            if values.get('SUPERUSER_PASSWORD') != DEFAULT_SUPERUSER_PASSWORD:
-                values['SUPERUSER_PASSWORD'] = DEFAULT_SUPERUSER_PASSWORD
-                logger.debug('Resetting superuser password to default value')
-
-            return value
-
-        return value
-
-    @validator('SECRET_KEY', pre=True)
+    @field_validator('SECRET_KEY', mode='before')
+    @classmethod
     def get_secret_key(cls, value, values):
         config_dir = values.get('CONFIG_DIR')
 

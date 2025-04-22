@@ -8,7 +8,7 @@ from sqlalchemy import func
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
-from pydantic import validator
+from pydantic import field_validator
 from sqlmodel import JSON, Field, select, update, text, Column, DateTime
 
 from bisheng.database.models.flow import Flow
@@ -19,19 +19,20 @@ class FlowVersionBase(SQLModelSerializable):
     flow_id: str = Field(index=True, max_length=32, description="所属的技能ID")
     name: str = Field(index=True, description="版本的名字")
     data: Optional[Dict] = Field(default=None, description="版本的数据")
-    description: Optional[str] = Field(index=False, description="版本的描述")
-    user_id: Optional[int] = Field(index=True, description="创建者")
+    description: Optional[str] = Field(default=None, index=False, description="版本的描述")
+    user_id: Optional[int] = Field(default=None, index=True, description="创建者")
     flow_type: Optional[int] = Field(default=1, description="版本的类型")
     is_current: Optional[int] = Field(default=0, description="是否为正在使用版本")
     is_delete: Optional[int] = Field(default=0, description="是否删除")
     original_version_id: Optional[int] = Field(default=None, description="来源版本的ID")
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(sa_column=Column(
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
-    @validator('data')
-    def validate_json(v):
+    @field_validator('data')
+    @classmethod
+    def validate_json(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             return v
@@ -54,7 +55,7 @@ class FlowVersionRead(FlowVersionBase):
     pass
 
 
-class FlowVersionDao(FlowVersion):
+class FlowVersionDao(FlowVersionBase):
 
     @classmethod
     def create_version(cls, version: FlowVersion) -> FlowVersion:

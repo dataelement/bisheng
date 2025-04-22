@@ -7,11 +7,11 @@ from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.database.constants import MessageCategory
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
-from bisheng.restructure.assistants.services import MsgCategory
 from fastapi import BackgroundTasks, Request
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
@@ -124,9 +124,9 @@ class WorkStationService:
             # the user and the assistant were reversed, leading to incorrect question-and-answer sequences.
             extra = json.loads(one.extra) or {}
             content = extra['prompt'] if 'prompt' in extra else one.message
-            if one.category == MsgCategory.Question:
+            if one.category == MessageCategory.QUESTION.value:
                 chat_history.append(HumanMessage(content=content))
-            elif one.category == MsgCategory.Answer:
+            elif one.category == MessageCategory.ANSWER.value:
                 chat_history.append(AIMessage(content=content))
         logger.info(f'loaded {len(chat_history)} chat history for chat_id {chat_id}')
         return chat_history

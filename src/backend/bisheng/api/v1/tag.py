@@ -11,7 +11,7 @@ from bisheng.database.models.tag import Tag, TagLink
 router = APIRouter(prefix='/tag', tags=['Tag'])
 
 
-@router.get('', response_model=UnifiedResponseModel[List[Tag]])
+@router.get('')
 def get_all_tag(request: Request,
                 login_user: UserPayload = Depends(get_login_user),
                 keyword: str = Query(default=None, description='搜索关键字'),
@@ -24,7 +24,7 @@ def get_all_tag(request: Request,
     })
 
 
-@router.post('', response_model=UnifiedResponseModel[Tag])
+@router.post('')
 def create_tag(request: Request,
                login_user: UserPayload = Depends(get_admin_user),
                name: str = Body(..., embed=True, description='标签名称')):
@@ -32,7 +32,7 @@ def create_tag(request: Request,
     return resp_200(result)
 
 
-@router.put('', response_model=UnifiedResponseModel[Tag])
+@router.put('')
 def update_tag(request: Request,
                login_user: UserPayload = Depends(get_admin_user),
                tag_id: int = Body(..., embed=True, description='标签ID'),
@@ -41,7 +41,7 @@ def update_tag(request: Request,
     return resp_200(result)
 
 
-@router.delete('', response_model=UnifiedResponseModel)
+@router.delete('')
 def delete_tag(request: Request,
                login_user: UserPayload = Depends(get_admin_user),
                tag_id: int = Body(..., embed=True, description='标签ID')):
@@ -49,7 +49,7 @@ def delete_tag(request: Request,
     return resp_200()
 
 
-@router.post('/link', response_model=UnifiedResponseModel[TagLink])
+@router.post('/link')
 def create_tag_link(request: Request,
                     login_user: UserPayload = Depends(get_login_user),
                     tag_id: int = Body(..., embed=True, description='标签ID'),
@@ -59,7 +59,7 @@ def create_tag_link(request: Request,
     return resp_200(result)
 
 
-@router.delete('/link', response_model=UnifiedResponseModel)
+@router.delete('/link')
 def delete_tag_link(
         request: Request,
         login_user: UserPayload = Depends(get_login_user),
@@ -70,7 +70,7 @@ def delete_tag_link(
     return resp_200()
 
 
-@router.get('/home', response_model=UnifiedResponseModel[List[Tag]])
+@router.get('/home')
 def get_home_tag(request: Request,
                  login_user: UserPayload = Depends(get_login_user)):
     """
@@ -81,7 +81,7 @@ def get_home_tag(request: Request,
     return resp_200(result)
 
 
-@router.post('/home', response_model=UnifiedResponseModel[List[Tag]])
+@router.post('/home')
 def update_home_tag(request: Request,
                     login_user: UserPayload = Depends(get_admin_user),
                     tag_ids: List[int] = Body(..., embed=True, description='标签ID列表')):

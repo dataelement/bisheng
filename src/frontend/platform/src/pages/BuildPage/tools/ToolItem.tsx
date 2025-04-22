@@ -9,6 +9,8 @@ import {
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { CircleHelp } from "lucide-react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function ToolItem({
@@ -20,6 +22,13 @@ export default function ToolItem({
     onSetClick = null
 }) {
     const { t } = useTranslation();
+    const sortData = useMemo(() => {
+        const { children, is_preset } = data;
+        if (children) {
+            return is_preset === 2 ? children.sort((a, b) => a.id - b.id) : children;
+        }
+        return [];
+    }, [data.children]);
 
     return <AccordionItem key={data.id} value={data.id} className="data-[state=open]:border-2 data-[state=open]:border-primary/20 data-[state=open]:rounded-md">
         <AccordionTrigger>
@@ -28,7 +37,7 @@ export default function ToolItem({
                 <div className="flex-1 min-w-0">
                     <div className="w-full text-sm font-medium leading-none flex items-center gap-2">{data.name}
                         {
-                            type === 'edit' && <div
+                            ['edit', 'mcp'].includes(type) && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={(e) => onEdit(data.id)}
                             ><SettingIcon /></div>
@@ -46,7 +55,7 @@ export default function ToolItem({
         </AccordionTrigger>
         <AccordionContent className="">
             <div className="px-6 mb-4">
-                {data.children.map(api => (
+                {sortData.map(api => (
                     <div key={api.name} className="relative p-4 rounded-sm  border-t">
                         <h1 className="text-sm font-medium leading-none">{api.name}</h1>
                         <p className="text-sm text-muted-foreground mt-2">{api.desc}</p>
@@ -55,7 +64,7 @@ export default function ToolItem({
                                 <TooltipProvider>
                                     <Tooltip delayDuration={100}>
                                         <TooltipTrigger asChild>
-                                            <span className="text-primary cursor-pointer">{t("build.params")}</span>
+                                            <span className="text-primary cursor-pointer flex items-center">{t("build.params")}<CircleHelp className="size-3" /></span>
                                         </TooltipTrigger>
                                         <TooltipContent side="right" className="bg-gray-50 border shadow-md p-4 text-gray-950 max-w-[520px]">
                                             <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method || 'http'}</Badge><span className="text-xl">{api.name}</span></p>

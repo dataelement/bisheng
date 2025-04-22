@@ -5,8 +5,7 @@ import redis
 from langchain.memory.chat_memory import BaseChatMemory
 from langchain_core.messages import (AIMessage, BaseMessage, HumanMessage, get_buffer_string,
                                      message_to_dict, messages_from_dict)
-from langchain_core.pydantic_v1 import root_validator
-from pydantic import Field
+from pydantic import Field, model_validator
 
 
 class ConversationRedisMemory(BaseChatMemory):
@@ -20,7 +19,8 @@ class ConversationRedisMemory(BaseChatMemory):
     redis_prefix: str = 'redis_buffer_'
     ttl: Optional[int] = None
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         redis_url = values.get('redis_url')
         if not redis_url:

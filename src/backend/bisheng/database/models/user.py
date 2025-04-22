@@ -1,33 +1,32 @@
 from datetime import datetime
 from typing import List, Optional
 
+from pydantic import field_validator
+from sqlalchemy import Column, DateTime, func, text
+from sqlmodel import Field, select
+
 from bisheng.database.base import session_getter
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.user_group import UserGroup
 from bisheng.database.models.user_role import UserRole
-from pydantic import validator
-from sqlalchemy import Column, DateTime, func, text
-from sqlmodel import Field, select
 
 
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True, unique=True)
-    email: Optional[str] = Field(index=True)
-    phone_number: Optional[str] = Field(index=True)
-    dept_id: Optional[str] = Field(index=True)
-    remark: Optional[str] = Field(index=False)
-    delete: int = Field(index=False, default=0)
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    email: Optional[str] = Field(default=None, index=True)
+    phone_number: Optional[str] = Field(default=None, index=True)
+    dept_id: Optional[str] = Field(default=None, index=True)
+    remark: Optional[str] = Field(default=None, index=False)
+    delete: int = Field(default=0, index=False)
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
-    @validator('user_name')
-    def validate_str(v):
+    @field_validator('user_name')
+    @classmethod
+    def validate_str(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
             raise ValueError('user_name 不能为空')
@@ -37,35 +36,34 @@ class UserBase(SQLModelSerializable):
 class User(UserBase, table=True):
     user_id: Optional[int] = Field(default=None, primary_key=True)
     password: str = Field(index=False)
-    password_update_time: Optional[datetime] = Field(sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')),
-                                                     description='密码最近的修改时间')
+    password_update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')), description='密码最近的修改时间')
 
 
 class UserRead(UserBase):
-    user_id: Optional[int]
-    role: Optional[str]
-    access_token: Optional[str]
-    web_menu: Optional[List[str]]
-    admin_groups: Optional[List[int]]  # 所管理的用户组ID列表
+    user_id: Optional[int] = None
+    role: Optional[str] = None
+    access_token: Optional[str] = None
+    web_menu: Optional[List[str]] = None
+    admin_groups: Optional[List[int]] = None  # 所管理的用户组ID列表
 
 
 class UserQuery(UserBase):
-    user_id: Optional[int]
-    user_name: Optional[str]
+    user_id: Optional[int] = None
+    user_name: Optional[str] = None
 
 
 class UserLogin(UserBase):
     password: str
     user_name: str
-    captcha_key: Optional[str]
-    captcha: Optional[str]
+    captcha_key: Optional[str] = None
+    captcha: Optional[str] = None
 
 
 class UserCreate(UserBase):
     password: Optional[str] = Field(default='')
-    captcha_key: Optional[str]
-    captcha: Optional[str]
+    captcha_key: Optional[str] = None
+    captcha: Optional[str] = None
 
 
 class UserUpdate(SQLModelSerializable):

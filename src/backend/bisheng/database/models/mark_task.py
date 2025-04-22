@@ -2,11 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 # if TYPE_CHECKING:
 from sqlalchemy import Column, DateTime, and_, delete, func, or_, text
 from sqlmodel import Field, select, update
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class MarkTaskStatus(Enum):
@@ -20,14 +21,11 @@ class MarkTaskBase(SQLModelSerializable):
     create_id: int = Field(index=True)
     app_id: str = Field(index=False, max_length=2048)
     process_users: str = Field(index=False)  # 23,2323
-    mark_user: Optional[str] = Field(index=True, nullable=True)
+    mark_user: Optional[str] = Field(default=None, index=True, nullable=True)
     status: Optional[int] = Field(index=False, default=1)
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
 
 
@@ -36,8 +34,8 @@ class MarkTask(MarkTaskBase, table=True):
 
 
 class MarkTaskRead(MarkTaskBase):
-    id: Optional[int]
-    mark_process: Optional[List[str]]
+    id: Optional[int] = None
+    mark_process: Optional[List[str]] = None
 
 
 class MarkTaskDao(MarkTaskBase):
@@ -84,9 +82,9 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def get_all_task(
-        cls,
-        page_size: int = 10,
-        page_num: int = 1,
+            cls,
+            page_size: int = 10,
+            page_num: int = 1,
     ):
         with session_getter() as session:
             statement = select(MarkTask)
@@ -98,12 +96,12 @@ class MarkTaskDao(MarkTaskBase):
 
     @classmethod
     def get_task_list(
-        cls,
-        status: int,
-        create_id: Optional[int],
-        user_id: Optional[int],
-        page_size: int = 10,
-        page_num: int = 1,
+            cls,
+            status: int,
+            create_id: Optional[int],
+            user_id: Optional[int],
+            page_size: int = 10,
+            page_num: int = 1,
     ):
         with session_getter() as session:
             statement = select(MarkTask)

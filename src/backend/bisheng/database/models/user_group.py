@@ -1,11 +1,11 @@
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy import Column, DateTime, delete, text
+from sqlmodel import Field, select
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from sqlalchemy import Column, DateTime, delete, text
-from sqlmodel import Field, select, update
-
 from bisheng.database.models.group import DefaultGroup
 
 
@@ -13,14 +13,11 @@ class UserGroupBase(SQLModelSerializable):
     user_id: int = Field(index=True, description='用户id')
     group_id: int = Field(index=True, description='组id')
     is_group_admin: bool = Field(default=False, index=False, description='是否是组管理员')  # 管理员不属于此用户组
-    remark: Optional[str] = Field(index=False)
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    remark: Optional[str] = Field(default=None, index=False)
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class UserGroup(UserGroupBase, table=True):
@@ -28,14 +25,14 @@ class UserGroup(UserGroupBase, table=True):
 
 
 class UserGroupRead(UserGroupBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class UserGroupUpdate(UserGroupBase):
-    user_id: Optional[int]
-    group_id: Optional[int]
-    is_group_admin: Optional[bool]
-    remark: Optional[str]
+    user_id: Optional[int] = None
+    group_id: Optional[int] = None
+    is_group_admin: Optional[bool] = None
+    remark: Optional[str] = None
 
 
 class UserGroupCreate(UserGroupBase):
