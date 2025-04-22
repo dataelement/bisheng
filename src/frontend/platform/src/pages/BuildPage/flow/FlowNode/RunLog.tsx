@@ -22,14 +22,13 @@ export default function RunLog({ node, children }) {
     const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
     const [data, setData] = useState<any>([])
     const { t } = useTranslation('flow')
-
     // 订阅日志事件
     useEffect(() => {
         const buildData = (data) => {
             if (data) {
                 /**
                  * newData
-                 * key: {type: value}  
+                 * key: {type, value}  
                  * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
                  */
                 const newData = data.reduce((res, item) => {

@@ -60,7 +60,8 @@ const TestDialog = forwardRef((props, ref) => {
                     auth_method,
                     auth_type,
                     api_key,
-                    request_params: params
+                    request_params: params,
+                    openapi_schema: openapiSchemaRef.current
                 }).then(setResult)
             );
             console.log('res :>> ', res);
