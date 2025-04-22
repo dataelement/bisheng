@@ -25,7 +25,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName.map(el => el.value) : undefined,
             user_ids: param.userName?.[0]?.value || undefined,
-            group_ids: param.userGroup || undefined,
+            group_ids: param.userGroup?.[0]?.value || undefined,
             start_date,
             end_date,
             feedback: param.feedback || undefined,
@@ -37,7 +37,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
     const [filters, setFilters] = useState({
         appName: [],
         userName: [],
-        userGroup: '',
+        userGroup: [],
         dateRange: [],
         feedback: '',
         result: '',
@@ -49,8 +49,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             const param = {
                 ...filters,
                 appName: [{ label: initFilter.name, value: initFilter.flow_id }],
-                userGroup: initFilter.group_info[0].id,
-                // result: '3'
+                userGroup: [{ label: initFilter.group_info[0].group_name, value: initFilter.group_info[0].id}],
             }
             setFilters(param)
             filterData(param)
@@ -71,7 +70,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
         const param = {
             appName: [],
             userName: [],
-            userGroup: '',
+            userGroup: [],
             dateRange: [],
             feedback: '',
             result: '',
