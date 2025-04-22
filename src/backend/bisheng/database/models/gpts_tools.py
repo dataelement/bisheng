@@ -217,9 +217,7 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
         statement = statement.order_by(func.field(GptsToolsType.is_preset,
-                                                  ToolPresetType.PRESET.value,
-                                                  ToolPresetType.API.value,
-                                                  ToolPresetType.MCP.value) ,GptsToolsType.update_time.desc())
+                                                  ToolPresetType.PRESET.value).desc() ,GptsToolsType.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 

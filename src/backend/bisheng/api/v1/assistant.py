@@ -217,7 +217,7 @@ async def get_tool_schema(request: Request, login_user: UserPayload = Depends(ge
                           file_content: Optional[str] = Body(default=None, description='上传的文件')):
     """ 下载或者解析openapi schema的内容 转为助手自定义工具的格式 """
     services = ToolServices(request=request, login_user=login_user)
-    tool_type = services.parse_openapi_schema(download_url, file_content)
+    tool_type = await services.parse_openapi_schema(download_url, file_content)
     return resp_200(data=tool_type)
 
 
@@ -227,7 +227,7 @@ async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depend
                                                                  description='mcp服务配置内容')):
     """ 解析mcp的工具配置文件 """
     services = ToolServices(request=request, login_user=login_user)
-    tool_type = services.parse_mcp_schema(file_content)
+    tool_type = await services.parse_mcp_schema(file_content)
     return resp_200(data=tool_type)
 
 
@@ -258,16 +258,16 @@ async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depe
 
 
 @router.post('/tool_list')
-def add_tool_type(*,
+async def add_tool_type(*,
                   req: Dict = Body(default={}, description='openapi解析后的工具对象'),
                   login_user: UserPayload = Depends(get_login_user)):
     """ 新增自定义tool """
     req = GptsToolsTypeRead(**req)
-    return AssistantService.add_gpts_tools(login_user, req)
+    return await AssistantService.add_gpts_tools(login_user, req)
 
 
 @router.put('/tool_list')
-def update_tool_type(*,
+async def update_tool_type(*,
                      login_user: UserPayload = Depends(get_login_user),
                      req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
     """ 更新自定义tool """
