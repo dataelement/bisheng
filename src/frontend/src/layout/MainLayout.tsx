@@ -72,7 +72,7 @@ export default function MainLayout() {
     }, [user])
     
     // 拥有审批权限
-    const hasAduitRole = useMemo(() => {
+    const hasAuditRole = useMemo(() => {
         return user.role?.includes('group_audit')
     }, [user])
 
@@ -190,7 +190,7 @@ export default function MainLayout() {
                         }
                         {
                             //管理员和审核员和用户组权限管理员 可以看到
-                            (isAdmin || hasGroupAdminRole || hasAduitRole) && <>
+                            (isAdmin || hasGroupAdminRole || hasAuditRole) && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
