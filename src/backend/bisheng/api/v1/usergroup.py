@@ -25,7 +25,9 @@ router = APIRouter(prefix='/group', tags=['Group'], dependencies=[Depends(get_lo
 
 
 @router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]])
-async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
+async def get_all_group(login_user: UserPayload = Depends(get_login_user),
+                        page: Optional[int] = Query(default=1, description='页码'),
+                        page_size: Optional[int] = Query(default=10, description='每页条数'),):
     """
     获取所有分组
     """
@@ -43,6 +45,8 @@ async def get_all_group(login_user: UserPayload = Depends(get_login_user)):
             raise HTTPException(status_code=500, detail='无查看权限')
 
     groups_res = RoleGroupService().get_group_list(groups)
+    if page and page_size:
+        groups_res = groups_res[(page-1) * page_size:page * page_size]
     return resp_200({'records': groups_res})
 
 @router.get('/list_operation', response_model=UnifiedResponseModel[List[GroupRead]])
@@ -66,7 +70,7 @@ async def get_all_group(*,login_user: UserPayload = Depends(get_login_user),
     groups_res = RoleGroupService().get_group_list(groups)
     if keyword:
         groups_res = [one for one in groups_res if keyword in one.group_name]
-    return resp_200({'records': groups_res})
+    return resp_200({'data': groups_res,'total': len(groups_res)})
 
 @router.get('/list_audit', response_model=UnifiedResponseModel[List[GroupRead]])
 async def get_all_group(*,login_user: UserPayload = Depends(get_login_user),
@@ -88,7 +92,7 @@ async def get_all_group(*,login_user: UserPayload = Depends(get_login_user),
     groups_res = RoleGroupService().get_group_list(groups)
     if keyword:
         groups_res = [one for one in groups_res if keyword in one.group_name]
-    return resp_200({'records': groups_res})
+    return resp_200({'data': groups_res,'total': len(groups_res)})
 
 
 @router.get('/tree')
