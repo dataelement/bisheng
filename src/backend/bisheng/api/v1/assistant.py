@@ -241,7 +241,7 @@ async def mcp_tool_run(login_user: UserPayload = Depends(get_login_user),
         extra = json.loads(req.extra)
         tool_name = extra.get('name')
         resp = await client.call_tool(tool_name, req.request_params)
-        return resp_200(data=resp.model_dump_json())
+        return resp_200(data=resp)
     except Exception as e:
         logger.exception('mcp_tool_run error')
         return resp_500(message=f'测试请求出错：{str(e)}')

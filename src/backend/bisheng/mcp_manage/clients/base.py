@@ -34,10 +34,13 @@ class BaseMcpClient(object):
             tools = await client_session.list_tools()
         return tools.tools
 
-    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None):
+    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> str:
         """
         Call a tool.
         """
         async with self.initialize() as client_session:
-            resp = await client_session.call_tool(name, arguments)
-        return resp
+            try:
+                resp = await client_session.call_tool(name, arguments)
+            except Exception as e:
+                return f"Tool call failed: {str(e)}"
+        return resp.model_dump_json()
