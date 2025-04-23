@@ -213,7 +213,8 @@ export const LoginPage = () => {
                         {appConfig.isPro && <LoginBridge onHasLdap={setIsLDAP} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
-                        <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
+                        {/* 隐藏版本号 */}
+                        {/* <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span> */}
                         {!appConfig.noFace && <div className='help flex'>
                             <a href={"https://github.com/dataelement/bisheng"} target="_blank">
                                 <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />

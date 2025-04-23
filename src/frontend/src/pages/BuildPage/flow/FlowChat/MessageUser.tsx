@@ -38,8 +38,8 @@ export default function MessageUser({operation, audit, mark = false, useName = '
                 {useName && <p className="text-gray-600 text-sm">{useName}</p>}
             </div>
             <div className="text-right">
-                {/* 违规 */}
-                {(audit || operation) && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
+                {/* 只有审计展示违规 */}
+                {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
             </div>
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
