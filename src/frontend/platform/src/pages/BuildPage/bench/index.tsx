@@ -83,7 +83,7 @@ export default function index() {
             navigate('/build/apps')
         }
     }, [user])
-    
+
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant') => {
         setFormData(prev => ({
             ...prev,
@@ -115,25 +115,25 @@ export default function index() {
             <Card className="">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
-                        <ToggleSection
+                        {/* <ToggleSection
                             title="工作台入口"
                             enabled={formData.menuShow}
                             onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
-                        >{null}</ToggleSection>
+                        >{null}</ToggleSection> */}
                         {/* Icon Uploads */}
                         <p className="text-lg font-bold mb-2">图标上传</p>
                         <div className="flex gap-8 mb-6">
                             <IconUploadSection
                                 label="左侧边栏图标"
                                 enabled={formData.sidebarIcon.enabled}
-                                image={formData.sidebarIcon.image}
+                                image={formData.sidebarIcon.image || '/logo.svg'}
                                 onToggle={(enabled) => toggleFeature('sidebarIcon', enabled)}
                                 onUpload={(fileUrl) => uploadAvator(fileUrl, 'sidebar')}
                             />
                             <IconUploadSection
                                 label="欢迎页面图标&对话头像"
                                 enabled={formData.assistantIcon.enabled}
-                                image={formData.assistantIcon.image}
+                                image={formData.assistantIcon.image || '/logo.svg'}
                                 onToggle={(enabled) => toggleFeature('assistantIcon', enabled)}
                                 onUpload={(fileUrl) => uploadAvator(fileUrl, 'assistant')}
                             />

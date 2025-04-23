@@ -42,7 +42,7 @@ function AccountSettings() {
         <FileText className="icon-md" />
         <div>个人知识库</div>
       </div>
-      <Select.Select
+      {/* <Select.Select
         aria-label={localize('com_nav_account_settings')}
         data-testid="nav-user"
         className="mt-text-sm flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-accent"
@@ -77,20 +77,20 @@ function AccountSettings() {
         >
           {user?.name ?? user?.username ?? localize('com_nav_user')}
         </div>
-      </Select.Select>
-      <Select.SelectPopover
+      </Select.Select> */}
+      {/* <Select.SelectPopover
         className="popover-ui w-[235px]"
         style={{
           transformOrigin: 'bottom',
           marginRight: '0px',
           translate: '0px',
         }}
-      >
-        {/* <div className="text-token-text-secondary ml-3 mr-2 py-2 text-sm" role="note">
+      > */}
+      {/* <div className="text-token-text-secondary ml-3 mr-2 py-2 text-sm" role="note">
           {user?.email ?? localize('com_nav_user')}
         </div> */}
-        {/* <DropdownMenuSeparator /> */}
-        {/* {startupConfig?.checkBalance === true &&
+      {/* <DropdownMenuSeparator /> */}
+      {/* {startupConfig?.checkBalance === true &&
           balanceQuery.data != null &&
           !isNaN(parseFloat(balanceQuery.data)) && (
             <>
@@ -100,7 +100,7 @@ function AccountSettings() {
               <DropdownMenuSeparator />
             </>
           )} */}
-        {/* <Select.SelectItem
+      {/* <Select.SelectItem
           value=""
           onClick={() => setShowFiles(true)}
           className="select-item text-sm"
@@ -108,7 +108,7 @@ function AccountSettings() {
           <FileText className="icon-md" aria-hidden="true" />
           {localize('com_nav_my_files')}
         </Select.SelectItem> */}
-        {/* {startupConfig?.helpAndFaqURL !== '/' && (
+      {/* {startupConfig?.helpAndFaqURL !== '/' && (
           <Select.SelectItem
             value=""
             onClick={() => window.open(startupConfig?.helpAndFaqURL, '_blank')}
@@ -118,7 +118,7 @@ function AccountSettings() {
             {localize('com_nav_help_faq')}
           </Select.SelectItem>
         )} */}
-        {/* <Select.SelectItem
+      {/* <Select.SelectItem
           value=""
           onClick={() => setShowSettings(true)}
           className="select-item text-sm"
@@ -126,8 +126,8 @@ function AccountSettings() {
           <GearIcon className="icon-md" aria-hidden="true" />
           {localize('com_nav_settings')}
         </Select.SelectItem> */}
-        {/* <DropdownMenuSeparator /> */}
-        <Select.SelectItem
+      {/* <DropdownMenuSeparator /> */}
+      {/* <Select.SelectItem
           aria-selected={true}
           onClick={() => logout()}
           value="logout"
@@ -136,7 +136,7 @@ function AccountSettings() {
           <LogOut className="icon-md" />
           {localize('com_nav_log_out')}
         </Select.SelectItem>
-      </Select.SelectPopover>
+      </Select.SelectPopover> */}
       {/* {showFiles && <FilesView open={showFiles} onOpenChange={setShowFiles} />} */}
       {showKnowledge && <MyKnowledgeView open={showKnowledge} onOpenChange={setShowKnowledge} />}
       {showSettings && <Settings open={showSettings} onOpenChange={setShowSettings} />}

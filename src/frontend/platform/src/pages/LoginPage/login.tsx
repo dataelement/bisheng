@@ -14,6 +14,7 @@ import LoginBridge from './loginBridge';
 import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
 import { ldapLoginApi } from '@/controllers/API/pro';
+import { InfiniIcon } from '@/icons/Infini';
 
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -126,18 +127,12 @@ export const LoginPage = () => {
     }
 
     return <div className='w-full h-full bg-background-dark'>
-        <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-background-login'>
-            <div className='w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20'>
-                <img src={__APP_ENV__.BASE_URL + '/login-logo-big.png'} alt="logo_picture" className='w-full h-full dark:hidden' />
-                <img src={__APP_ENV__.BASE_URL + '/login-logo-dark.png'} alt="logo_picture" className='w-full h-full hidden dark:block' />
-                {/* <iframe src={__APP_ENV__.BASE_URL + '/face.html'} className='w-full h-full'></iframe> */}
-            </div>
-            <div className='absolute w-full h-full z-10 flex justify-end top-0'>
-                <div className='w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
+        <div className='fixed z-10 sm:w-[852px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-background-login'>
+            <div className='absolute w-full h-full z-10 flex top-0'>
+                <div className='w-full sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative'>
                     <div>
-                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="block w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden" alt="" />
-                        <img src={__APP_ENV__.BASE_URL + '/logo-small-dark.png'} className="w-[114px] h-[36px] m-auto mt-[140px] dark:w-[124px] dark:pr-[10px] dark:block hidden" alt="" />
-                        <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
+                        <InfiniIcon className="block w-[114px] h-[36px] mt-[140px] dark:w-[124px] dark:pr-[10px] dark:hidden" />
+                        <span className='block w-fit font-normal text-[14px] text-tx-color mt-[24px]'>{t('login.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">
                         <div className="grid">
@@ -210,14 +205,6 @@ export const LoginPage = () => {
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
-                        {!appConfig.noFace && <div className='help flex'>
-                            <a href={"https://github.com/dataelement/bisheng"} target="_blank">
-                                <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
-                            </a>
-                            <a href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                                <BookOpenIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer" />
-                            </a>
-                        </div>}
                     </div>
                 </div>
             </div>

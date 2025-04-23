@@ -35,6 +35,7 @@ import Management from "./pages/ModelPage/manage";
 import Page403 from "./pages/Page403";
 import Report from "./pages/Report";
 import SystemPage from "./pages/SystemPage";
+import WebWorkSpace from './pages/WebWorkSpace';
 import ResoucePage from "./pages/resoucePage";
 import { AppNumType } from "./types/app";
 
@@ -66,7 +67,8 @@ const privateRouter = [
     path: "/",
     element: <MainLayout />,
     children: [
-      { path: "", element: <SkillChatPage />, },
+      { path: "", element: <WebWorkSpace />, },
+      { path: "app", element: <SkillChatPage />, },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
@@ -77,7 +79,7 @@ const privateRouter = [
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build/client", element: <WorkBenchPage />, permission: 'build' },
-      { path: "build", element: <Navigate to="apps" replace /> },
+      { path: "build", element: <Navigate to="client" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
       { path: "build/temps/:type", element: <Templates />, permission: 'build', },

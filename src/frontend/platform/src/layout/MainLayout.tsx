@@ -16,6 +16,7 @@ import { DatasetIcon } from "@/components/bs-icons/menu/dataset";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
+import { InfiniIcon } from "@/icons/Infini";
 import i18next from "i18next";
 import { ChevronDown, Globe, Lock, MoonStar, Sun } from "lucide-react";
 import { useContext, useEffect, useMemo, useState } from "react";
@@ -75,12 +76,11 @@ export default function MainLayout() {
             <div className="flex justify-between h-[64px] bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
                     <Link className="inline-block" to='/'>
-                        {/* @ts-ignore */}
-                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
+                        <InfiniIcon className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
                     </Link>
                 </div>
                 <div>
-                    <HeaderMenu />
+                    {/* <HeaderMenu /> */}
                 </div>
                 <div className="flex w-fit relative z-10">
                     <div className="flex">
@@ -98,7 +98,7 @@ export default function MainLayout() {
                                 <TooltipContent><p>{t('menu.themeSwitch')}</p></TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-                        <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
+                        {/* <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger className="h-8 w-8 bg-header-icon rounded-lg cursor-pointer my-4" onClick={changLanguage}>
@@ -110,7 +110,7 @@ export default function MainLayout() {
                                 </TooltipTrigger>
                                 <TooltipContent><p>{options[language]}</p></TooltipContent>
                             </Tooltip>
-                        </TooltipProvider>
+                        </TooltipProvider> */}
                         <Separator className="mx-[23px] h-6 border-l my-5 border-[#dddddd]" orientation="vertical" />
                     </div>
                     <div className="flex items-center h-7 my-4">
@@ -129,24 +129,24 @@ export default function MainLayout() {
                 </div>
             </div>
             <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
-                <div className="relative z-10 bg-background-main h-full w-[184px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
+                <div className="relative z-10 bg-background-main h-full w-[196px] min-w-[184px] px-3  shadow-x1 flex justify-between text-center ">
                     <nav className="">
-                        {appConfig.benchMenu && <NavLink to='/workspace/' target="_blank" className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                            <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">工作台</span>
-                        </NavLink>}
                         <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                            <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
+                            <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">会&nbsp;&nbsp;&nbsp;&nbsp;话</span>
+                        </NavLink>
+                        <NavLink to='/app' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                            <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[70px] text-[14px] leading-[48px]">应用中心</span>
                         </NavLink>
                         {
                             isMenu('build') &&
                             <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >
-                                <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.skills')}</span>
+                                <TechnologyIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">配&nbsp;&nbsp;&nbsp;&nbsp;置</span>
                             </NavLink>
                         }
                         {
                             isMenu('knowledge') &&
                             <NavLink to='/filelib' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.knowledge')}</span>
+                                <KnowledgeIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[70px] text-[14px] leading-[48px]">本地知识库</span>
                             </NavLink>
                         }
                         {
@@ -176,7 +176,7 @@ export default function MainLayout() {
                         {
                             isAdmin && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                    <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.log')}</span>
+                                    <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[70px] text-[14px] leading-[48px]">审&nbsp;&nbsp;&nbsp;&nbsp;核</span>
                                 </NavLink>
                             </>
                         }
@@ -188,33 +188,6 @@ export default function MainLayout() {
                             </>
                         }
                     </nav>
-                    {!appConfig.noFace && <div className="absolute left-0 bottom-0 w-[180px] p-2">
-                        <div className="help flex items-between my-3">
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg hover:bg-[#1b1f23] hover:text-[white] transition-all dark:hover:bg-background-tip-darkhover">
-                                        <Link to={"https://github.com/dataelement/bisheng"} target="_blank">
-                                            <GithubIcon className="side-bar-button-size mx-auto w-5 h-5 " />
-                                            <span className="block text-[12px] mt-[8px] font-bold">{t("menu.github")}</span>
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>{t("menu.github")}</p></TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                            <Separator className="mx-1" orientation="vertical" />
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger className="h-[72px] w-[78px] cursor-pointer bg-background-tip rounded-lg p-0 align-top hover:bg-[#0055e3] hover:text-[white]  transition-all">
-                                        <Link className="m-0 p-0" to={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"} target="_blank">
-                                            <BookOpenIcon className=" mx-auto w-5 h-5" />
-                                            <span className="block text-[12px] mt-[8px] font-bold">{t("menu.bookopen")}</span>
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent><p>{t('menu.document')}</p></TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        </div>
-                    </div>}
                 </div>
                 <div className="flex-1 bg-background-main-content rounded-lg w-[calc(100vw-184px)]">
                     <ErrorBoundary

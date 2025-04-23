@@ -270,7 +270,16 @@ export const getStartupConfig = (): Promise<config.TStartupConfig> => {
 };
 
 export const getBishengConfig = (): Promise<config.BsConfig> => {
-  return request.get(endpoints.bsConfig()).then(res => res.data);
+  return request.get(endpoints.bsConfig()).then(res => {
+    const { assistantIcon, sidebarIcon } = res.data
+    if (!assistantIcon.image) {
+      assistantIcon.image = '/logo.svg'
+    }
+    if (!sidebarIcon.image) {
+      sidebarIcon.image = '/logo.svg'
+    }
+    return res.data;
+  });
 };
 
 export const getAIEndpoints = (): Promise<t.TEndpointsConfig> => {

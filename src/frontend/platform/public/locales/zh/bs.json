@@ -184,9 +184,9 @@
   "chat": {
     "newChat": "新建会话",
     "chooseOne": "选择一个",
-    "dialogue": "对话",
+    "dialogue": "应用",
     "start": "开始",
-    "wenqingruijian": "文擎睿见",
+    "wenqingruijian": "对话",
     "inputPlaceholder": "请输入问题",
     "uploadFileTooltip": "上传文件",
     "sendTooltip": "发送",
