@@ -6,12 +6,21 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
 import { CircleHelp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import FormSet from "./FormSet";
 import FormView from "./FormView";
 
-export default function AssistantSetting({ id, type }) {
+interface AssistantSettingProps {
+    id: string | number;
+    type: string;
+}
+
+export interface AssistantSettingRef {
+    create: (id: number) => Promise<boolean>;
+}
+
+const AssistantSetting = forwardRef<AssistantSettingRef, AssistantSettingProps>(({ id, type }, ref) => {
     const { t } = useTranslation();
 
     const [open, setOpen] = useState(false);
@@ -25,7 +34,7 @@ export default function AssistantSetting({ id, type }) {
 
     // load
     useEffect(() => {
-        if (id !== 3) {
+        if (id && id !== 3) {
             getSensitiveApi(id, type).then(res => {
                 const { is_check, auto_reply, words, words_type } = res;
                 setForm({
@@ -38,22 +47,47 @@ export default function AssistantSetting({ id, type }) {
         }
     }, [id, type]);
 
-    const handleFormChange = async (_form) => {
+    // 验证表单
+    const validateForm = (formData: typeof form) => {
+        if (!formData.isCheck) return true
         const errors = [];
-        if (_form.wordsType.length === 0) errors.push(t('build.errors.selectAtLeastOneWordType'));
-        if (_form.autoReply === '') errors.push(t('build.errors.autoReplyNotEmpty'));
-        if (errors.length) {
-            return toast({ title: t('prompt'), variant: 'error', description: errors.join(', ') });
+        if (formData.wordsType.length === 0) {
+            errors.push(t('build.errors.selectAtLeastOneWordType'));
         }
+        if (formData.autoReply === '') {
+            errors.push(t('build.errors.autoReplyNotEmpty'));
+        }
+        if (errors.length) {
+            toast({ title: t('prompt'), variant: 'error', description: errors.join(', ') });
+            return false
+        }
+        return true
+    };
+
+    // 暴露 save 方法给 ref
+    useImperativeHandle(ref, () => ({
+        create: async (saveId?: number) => {
+            if (!form.isCheck) return true
+            if (!validateForm(form)) return false
+            const res = await sensitiveSaveApi({ ...form, id: saveId, type });
+            return true;
+        }
+    }));
+
+    const handleFormChange = async (_form) => {
+        if (!validateForm(_form)) return true
 
         setForm(_form);
-        await sensitiveSaveApi({ ..._form, id, type });
-        message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+        if (id) {
+            await sensitiveSaveApi({ ..._form, id, type });
+            message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+            return false
+        }
     };
 
     const onOff = (bln) => {
         setForm({ ...form, isCheck: bln });
-        sensitiveSaveApi({ ...form, isCheck: bln, id, type });
+        id && sensitiveSaveApi({ ...form, isCheck: bln, id, type });
         if (bln) setOpen(true);
     };
 
@@ -99,4 +133,9 @@ export default function AssistantSetting({ id, type }) {
             </AccordionContent>
         </AccordionItem>
     );
-}
+})
+
+
+AssistantSetting.displayName = "AssistantSetting";
+
+export default AssistantSetting;

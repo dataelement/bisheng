@@ -305,6 +305,46 @@ export async function getQaList(id, data: { page, pageSize, keyword }) {
   });
 }
 
+
+/**
+ * 导出QA文件
+ */
+export async function getQaFile(id): Promise<{ file_list: string[] }> {
+  return await axios.get(`/api/v1/knowledge/qa/export/${id}`);
+}
+
+/**
+ * 导入QA文件
+ */
+export async function postImportQaFile(id, params): Promise<{
+  result: {
+    answers: string,
+    questions: string[],
+  }[]
+}> {
+  const { url } = params;
+  return await axios.post(`/api/v1/knowledge/qa/import/${id}`, {
+    file_list: [url],
+  });
+}
+
+/**
+ * 预览QA文件
+ */
+export async function getQaFilePreview(id, params): Promise<{
+  result: {
+    answers: string,
+    questions: string[],
+  }[]
+}> {
+  const { url, size, offset } = params;
+  return await axios.post(`/api/v1/knowledge/qa/preview/${id}`, {
+    file_url: url,
+    size,
+    offset,
+  });
+}
+
 /**
  * 修改qa状态
  */

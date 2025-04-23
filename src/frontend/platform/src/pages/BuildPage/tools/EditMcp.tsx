@@ -60,7 +60,8 @@ const TestDialog = forwardRef((props, ref) => {
                     auth_method,
                     auth_type,
                     api_key,
-                    request_params: params
+                    request_params: params,
+                    openapi_schema: openapiSchemaRef.current
                 }).then(setResult)
             );
             console.log('res :>> ', res);
@@ -127,7 +128,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
     const initialFormState = {
         name: "",
-        openapiSchema: "{}"
+        openapiSchema: ""
     };
     const [formData, setFormData] = useState(initialFormState);
     const serverRef = useRef(initialFormState);

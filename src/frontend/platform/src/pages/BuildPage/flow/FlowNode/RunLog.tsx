@@ -1,6 +1,6 @@
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { downloadFile } from "@/util/utils";
 import { Check, ChevronsRightIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,14 +22,13 @@ export default function RunLog({ node, children }) {
     const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
     const [data, setData] = useState<any>([])
     const { t } = useTranslation('flow')
-
     // 订阅日志事件
     useEffect(() => {
         const buildData = (data) => {
             if (data) {
                 /**
                  * newData
-                 * key: {type: value}  
+                 * key: {type, value}  
                  * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
                  */
                 const newData = data.reduce((res, item) => {
@@ -62,7 +61,6 @@ export default function RunLog({ node, children }) {
                                 if (newData.has(p.tool_key)) {
                                     newData.get(p.tool_key)['label'] = p.label;
                                     hasKeys.push(p.tool_key);
-                                    return true;
                                 }
                             });
                         }

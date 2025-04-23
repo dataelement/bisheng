@@ -10,10 +10,11 @@ import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
+import { userContext } from "@/contexts/userContext"
 import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Plus } from "lucide-react"
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface TestDialogProps {
@@ -180,7 +181,8 @@ const EditTool = forwardRef((props: any, ref) => {
     const schemaUrl = useRef('')
     const [formState, setFormState] = useState({ ...formData });
     const fromDataRef = useRef<any>({}) // 与formState同步，fromDataRef属性更多，透传保存
-
+    const { user } = useContext(userContext);
+    const [isSelf, setIsSelf] = useState(false);
     // 表格数据（api接口列表）
     const [tableData, setTableData] = useApiTableData()
 
@@ -200,6 +202,7 @@ const EditTool = forwardRef((props: any, ref) => {
                 apiLocation: tool.api_location || "query",
                 parameter: tool.parameter_name || ""
             })
+            setIsSelf(tool.user_id === user.user_id);
             setEditShow(true)
             setDelShow(true)
 
@@ -592,12 +595,14 @@ const EditTool = forwardRef((props: any, ref) => {
                     )}
                 </div>
                 <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
-                    {delShow && <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute left-6"
-                        onClick={handleDelete}
-                    >{t('tools.delete')}</Button>}
+                    {delShow && (user.role === 'admin' || isSelf) && (
+                        <Button
+                            size="sm"
+                            variant="destructive"
+                            className="absolute left-6"
+                            onClick={handleDelete}
+                        >{t('tools.delete')}</Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
                     <Button size="sm" className="text-[white]" onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>

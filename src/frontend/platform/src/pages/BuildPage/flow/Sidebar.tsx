@@ -1,14 +1,13 @@
-import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { getAssistantToolsApi, refreshAssistantMcpApi } from "@/controllers/API/assistant";
+import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { getToolTree } from "@/util/flowUtils";
 import { cloneDeep } from "lodash-es";
 import { ListVideo } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
 import NodeLogo from "./FlowNode/NodeLogo";
@@ -87,19 +86,19 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     }
 
     // 先刷新mcp服务接口
-    const [loading, setLoading] = useState(true)
-    const onecRef = useRef(false)
+    // const [loading, setLoading] = useState(true)
+    // const onecRef = useRef(false)
     const handleLoadTools = async (val) => {
-        if (val !== 'tool' || onecRef.current) return
-        setLoading(true)
-        onecRef.current = true
-        try {
-            await refreshAssistantMcpApi()
-        } catch (error) {
-            console.error(error)
-        }
-        refetch()
-        setLoading(false)
+        // if (val !== 'tool' || onecRef.current) return
+        // setLoading(true)
+        // onecRef.current = true
+        // try {
+        //     await refreshAssistantMcpApi()
+        // } catch (error) {
+        //     console.error(error)
+        // }
+        // refetch()
+        // setLoading(false)
     }
 
     const nodeTemps = useMemo(() => {
@@ -228,9 +227,6 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                             )}
                         </TooltipProvider>
                     </Accordion>
-                    {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                        <LoadingIcon />
-                    </div>}
                 </TabsContent>
             </Tabs>
             {/* 搜索 */}

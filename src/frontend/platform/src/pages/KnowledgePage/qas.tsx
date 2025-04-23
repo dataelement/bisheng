@@ -1,9 +1,12 @@
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { downloadFile } from "@/util/utils";
 import { ArrowLeft } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,10 +23,10 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { deleteQa, generateSimilarQa, getQaDetail, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { ImportQa } from "./components/ImportQa";
 
 const defaultQa = {
     question: '',
@@ -224,6 +227,7 @@ export default function QasPage() {
     const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
+    const importRef = useRef(null)
     const [hasPermission, setHasPermission] = useState(false)
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
@@ -321,6 +325,13 @@ export default function QasPage() {
                     </div>
                     <div className="flex gap-4 items-center">
                         <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
+                        <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>导入</Button>
+                        <Button variant="outline" className="px-8" onClick={() => {
+                            getQaFile(id).then(res => {
+                                const fileUrl = res.file_list[0];
+                                downloadFile(checkSassUrl(fileUrl), `${title}.xlsx`);
+                            })
+                        }}>导出</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
                     </div>
                 </div>
@@ -389,5 +400,6 @@ export default function QasPage() {
             </div>
         </div>
         <EditQa ref={editRef} knowlageId={id} onChange={reload} />
+        <ImportQa ref={importRef} knowlageId={id} onChange={reload} />
     </div >
 };

@@ -181,9 +181,18 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     navigate('/assistant/' + res.id)
                 }
             } else {
-                // 工作流
-                const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url))
-                if (res) navigate('/flow/' + res.id)
+                if (appId) return navigate('/flow/' + appId) // 避免重复创建
+                // 创建工作流
+                const workflow = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url))
+                if (workflow) {
+                    const navigateToFlow = (id) => navigate(`/flow/${id}`);
+                    // 非Pro版本直接跳转
+                    if (!appConfig.isPro) return navigateToFlow(workflow.id)
+
+                    setAppId(workflow.id)
+                    const securityCreated = await securityRef.current.create(workflow.id)
+                    if (securityCreated) navigateToFlow(workflow.id)
+                }
             }
         }
         setLoading(false);

@@ -103,22 +103,22 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
     return f'event: message\ndata: {msg}\n\n'
 
 
-@router.get('/config', response_model=UnifiedResponseModel[WorkstationConfig])
+@router.get('/config')
 def get_config(
     request: Request,
     login_user: UserPayload = Depends(get_login_user),
-) -> UnifiedResponseModel[WorkstationConfig]:
+):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
     return resp_200(data=ret)
 
 
-@router.post('/config', response_model=UnifiedResponseModel[WorkstationConfig])
+@router.post('/config')
 def update_config(
     request: Request,
     login_user: UserPayload = Depends(get_admin_user),
     data: WorkstationConfig = Body(..., description='默认模型配置'),
-) -> UnifiedResponseModel[WorkstationConfig]:
+):
     """ 更新评价相关的模型配置 """
     ret = WorkStationService.update_config(request, login_user, data)
     return resp_200(data=ret)

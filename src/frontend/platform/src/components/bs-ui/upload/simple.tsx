@@ -5,7 +5,7 @@ import { useToast } from "../toast/use-toast";
 import { cname } from "../utils";
 import axios from "@/controllers/request";
 
-export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', onUpload, onProgress, onError, onSuccess }) {
+export default function SimpleUpload({ filekey, uploadUrl, accept, className = '', preCheck, onUpload, onProgress, onError, onSuccess }) {
     const { t } = useTranslation();
     const { toast } = useToast()
 
@@ -23,6 +23,26 @@ export default function SimpleUpload({ filekey, uploadUrl, accept, className = '
             description: errorFile.map(str => `${t('code.file')}: ${str} ${t('code.sizeExceedsLimit')}`),
         });
         if (!files.length) return
+
+        // 执行预校验（如果提供了preCheck函数）
+        if (preCheck) {
+            try {
+                const checkResult = await preCheck(files[0]);
+                if (checkResult?.valid === false) {
+                    toast({
+                        title: t('prompt'),
+                        description: checkResult.message || t('code.preCheckFailed'),
+                    });
+                    return;
+                }
+            } catch (error) {
+                toast({
+                    title: t('prompt'),
+                    description: error.message || t('code.preCheckError'),
+                });
+                return;
+            }
+        }
 
         const formData = new FormData();
         formData.append(filekey, files[0]);
