@@ -50,7 +50,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
-    source: Optional[int] = Field(default=0, index=False, description='0: 未知 1: 手动；2: 审计, 3: api')
+    source: Optional[int] = Field(default=0, index=False, description='0: 未知 1: 手动；2: 审计, 3: api, 4: 批量导入')
     status: Optional[int] = Field(default=1, index=False, description='1: 解析中；2: 解析成功；3: 解析失败')
     extra_meta: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
@@ -103,7 +103,7 @@ class KnowledgeFileCreate(KnowledgeFileBase):
 class QAKnowledgeUpsert(QAKnowledgeBase):
     """支持修改"""
     id: Optional[int] = None
-    answers: Optional[List[str]] = None
+    answers: Optional[List[str] | str] = None
 
 
 class KnowledgeFileDao(KnowledgeFileBase):

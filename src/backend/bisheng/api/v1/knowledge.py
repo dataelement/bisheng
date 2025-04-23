@@ -516,15 +516,15 @@ def post_import_file(*,
         d = QAKnowledgeUpsert(
             user_id=login_user.user_id,
             knowledge_id=qa_knowledge_id,
-            answers=[dd['答案']],
-            questions=[dd['问题']],
+            answers=[str(dd['答案'])],
+            questions=[str(dd['问题'])],
             source=4,
             status=1,
             create_time=datetime.now(),
             update_time=datetime.now())
         for key, value in dd.items():
             if key.startswith('相似问题'):
-                d.questions.append(value)
+                d.questions.append(str(value))
         insert_data.append(d)
     try:
         if size>0 and offset>=0:
