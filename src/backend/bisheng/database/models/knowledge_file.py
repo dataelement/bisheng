@@ -102,8 +102,8 @@ class KnowledgeFileCreate(KnowledgeFileBase):
 
 class QAKnowledgeUpsert(QAKnowledgeBase):
     """支持修改"""
-    id: Optional[int]
-    answers: Optional[List[str]]
+    id: Optional[int] = None
+    answers: Optional[List[str]] = None
 
 
 class KnowledgeFileDao(KnowledgeFileBase):

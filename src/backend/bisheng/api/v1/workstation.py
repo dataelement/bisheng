@@ -103,7 +103,7 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
     return f'event: message\ndata: {msg}\n\n'
 
 
-@router.get('/config', response_model=UnifiedResponseModel[WorkstationConfig])
+@router.get('/config')
 def get_config(
     request: Request,
     login_user: UserPayload = Depends(get_login_user),
@@ -113,7 +113,7 @@ def get_config(
     return resp_200(data=ret)
 
 
-@router.post('/config', response_model=UnifiedResponseModel[WorkstationConfig])
+@router.post('/config')
 def update_config(
     request: Request,
     login_user: UserPayload = Depends(get_admin_user),
