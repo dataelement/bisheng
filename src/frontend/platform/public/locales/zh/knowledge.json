@@ -93,6 +93,8 @@
     "createQa": "创建 QA",
     "similarQuestions": "相似问题",
     "aiGenerate": "AI生成",
+    "errorMsg": "文件解析成功，其中{{value}}条问题上传失败，请检查文件后再试",
+    "successMsg": "文件上传成功",
     "cancel2": "取消",
     "confirm": "确认"
 }
