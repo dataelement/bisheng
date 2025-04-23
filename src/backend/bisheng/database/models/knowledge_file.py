@@ -284,7 +284,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             try:
                 qas = []
                 for qa_knowledge in qa_knowledges:
-                    qa = QAKnowledge.validate(qa_knowledge)
+                    qa = QAKnowledge.model_validate(qa_knowledge)
                     qas.append(qa)
                 session.add_all(qas)
                 session.commit()
