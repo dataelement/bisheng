@@ -126,14 +126,14 @@ export default function index() {
                             <IconUploadSection
                                 label="左侧边栏图标"
                                 enabled={formData.sidebarIcon.enabled}
-                                image={formData.sidebarIcon.image || '/logo.svg'}
+                                image={formData.sidebarIcon.image}
                                 onToggle={(enabled) => toggleFeature('sidebarIcon', enabled)}
                                 onUpload={(fileUrl) => uploadAvator(fileUrl, 'sidebar')}
                             />
                             <IconUploadSection
                                 label="欢迎页面图标&对话头像"
                                 enabled={formData.assistantIcon.enabled}
-                                image={formData.assistantIcon.image || '/logo.svg'}
+                                image={formData.assistantIcon.image}
                                 onToggle={(enabled) => toggleFeature('assistantIcon', enabled)}
                                 onUpload={(fileUrl) => uploadAvator(fileUrl, 'assistant')}
                             />
@@ -297,8 +297,8 @@ export default function index() {
 const useChatConfig = () => {
     const [formData, setFormData] = useState<ChatConfigForm>({
         menuShow: true,
-        sidebarIcon: { enabled: true, image: '' },
-        assistantIcon: { enabled: true, image: '' },
+        sidebarIcon: { enabled: true, image: '/logo.svg' },
+        assistantIcon: { enabled: true, image: '/logo.svg' },
         sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
