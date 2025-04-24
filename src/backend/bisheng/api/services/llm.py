@@ -115,6 +115,12 @@ class LLMService:
 
         handle_types = []
         for one in server.models:
+            # test model status
+            try:
+                bisheng_model = cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
+                bisheng_model.invoke('hello')
+            except Exception as e:
+                logger.exception('test model status')
             if one.model_type in handle_types:
                 continue
             handle_types.append(one.model_type)
