@@ -9,6 +9,7 @@ from bisheng.workflow.callback.event import NodeEndData, NodeStartData
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 
 class BaseNode(ABC):
@@ -125,6 +126,23 @@ class BaseNode(ABC):
             if one.sourceHandle == source_handle:
                 next_nodes.append(one.target)
         return next_nodes
+
+    def parse_msg_with_variables(self, msg: str) -> (str, list[str]):
+        """
+        params:
+            msg: user input msg with node variables
+        return:
+            0: new msg after replaced variable
+            1: list of variables node_id.xxxx
+        """
+        msg_template = PromptTemplateParser(template=msg)
+        variables = msg_template.extract()
+        if len(variables) > 0:
+            var_map = {}
+            for one in variables:
+                var_map[one] = self.get_other_node_variable(one)
+            msg = msg_template.format(var_map)
+        return msg, variables
 
     def run(self, state: dict) -> Any:
         """

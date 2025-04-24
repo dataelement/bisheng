@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, Any, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class NodeType(Enum):
@@ -49,11 +49,20 @@ class BaseNodeData(BaseModel):
     group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
     tab: Optional[dict] = Field({}, description="tab config")
     tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
-    v: Optional[str | int] = Field(default="", description="node version")
+    v: Optional[int] = Field(default=0, description="node version")
+
+    @field_validator('v', mode='before')
+    @classmethod
+    def convert_v_to_int(cls, v: str | int | None) -> int:
+        if isinstance(v, str):
+            return int(v)
+        elif v is None:
+            return 0
+        return v
 
     def get_variable_info(self, variable_key: str) -> NodeParams | None:
         for group_info in self.group_params:
             for one in group_info.params:
                 if one.key == variable_key:
                     return one
-
+        return None
