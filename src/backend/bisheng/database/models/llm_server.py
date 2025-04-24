@@ -215,6 +215,13 @@ class LLMDao:
             session.commit()
 
     @classmethod
+    def update_model_check(cls, model_id: int, check: bool):
+        """ 更新模型在线状态 """
+        with session_getter() as session:
+            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(check=check))
+            session.commit()
+
+    @classmethod
     def delete_server_by_id(cls, server_id: int):
         """ 根据服务ID删除服务提供方 """
         with session_getter() as session:
