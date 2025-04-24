@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Optional, List
 
 from pydantic import validator
+from sqlalchemy.dialects import mysql
 from sqlmodel import Field, Column, DateTime, text, select, update, func
 
 from bisheng.database.base import session_getter
@@ -146,6 +147,7 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(MessageSession.create_time.desc())
         with session_getter() as session:
+            print("filter_session Compiled SQL:",statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
             return session.exec(statement).all()
 
     @classmethod

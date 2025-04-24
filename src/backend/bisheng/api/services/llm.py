@@ -223,7 +223,7 @@ class LLMService:
         if not exist_model:
             raise NotFoundError.http_exception()
         exist_model.check = check
-        LLMDao.update_model_online(exist_model.id, check)
+        LLMDao.update_model_check(exist_model.id, check)
         return LLMModelInfo(**exist_model.dict())
 
     @classmethod

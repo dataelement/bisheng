@@ -523,7 +523,7 @@ class AuditLogService:
                 if len(chat_ids) == 0:
                     chat_ids = [""]
                 chat_ids = list(set(chat_ids))
-        print(f"get_session_list chat_ids {chat_ids}")
+        logger.info(f"get_session_list chat_ids {chat_ids}")
         res = MessageSessionDao.filter_session(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback, page=page, limit=page_size)
         total = MessageSessionDao.filter_session_count(chat_ids=chat_ids, review_status=review_status, flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date, end_date=end_date, feedback=feedback)
 
