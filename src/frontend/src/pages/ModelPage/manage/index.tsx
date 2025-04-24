@@ -124,7 +124,7 @@ export default function Management() {
     //是否开启模型监控
     const handleMonitoring = (index, bool, id) => {
         captureAndAlertRequestErrorHoc(changeLLmCheckStatus(id, bool))
-        data[index].models = data[index].models.map(el => el.id === id ? { ...el, online: bool } : el)
+        data[index].models = data[index].models.map(el => el.id === id ? { ...el, check: bool } : el)
         setData([...data])
     }
 
