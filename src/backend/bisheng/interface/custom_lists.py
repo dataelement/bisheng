@@ -12,7 +12,7 @@ from langchain import llms, memory, text_splitter
 from langchain_community.utilities import requests
 from langchain_anthropic import ChatAnthropic
 from langchain_community import agent_toolkits, document_loaders, embeddings
-from langchain_community.chat_models import ChatVertexAI, MiniMaxChat
+from langchain_community.chat_models import ChatVertexAI, MiniMaxChat, ChatTongyi, QianfanChatEndpoint
 from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
 from langchain_ollama.chat_models import ChatOllama
 
@@ -29,6 +29,8 @@ llm_type_to_cls_dict['ChatOpenAI'] = ChatOpenAI  # type: ignore
 llm_type_to_cls_dict['ChatVertexAI'] = ChatVertexAI  # type: ignore
 llm_type_to_cls_dict['MiniMaxChat'] = MiniMaxChat
 llm_type_to_cls_dict['ChatOllama'] = ChatOllama
+llm_type_to_cls_dict['ChatTongyi'] = ChatTongyi
+llm_type_to_cls_dict['QianfanChatEndpoint'] = QianfanChatEndpoint
 llm_type_to_cls_dict["OpenAI"] = OpenAI
 
 # llm contribute

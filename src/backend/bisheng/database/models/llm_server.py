@@ -25,6 +25,10 @@ class LLMServerType(Enum):
     DEEPSEEK = 'deepseek'
     SPARK = 'spark'  # 讯飞星火大模型
     BISHENG_RT = 'bisheng_rt'
+    TENCENT = 'tencent'  # 腾讯云
+    MOONSHOT = 'moonshot'  # 月之暗面的kimi
+    VOLCENGINE = 'volcengine'  # 火山引擎的大模型
+    SILICON = 'silicon'  # 硅基流动
 
 
 # 模型类型枚举
