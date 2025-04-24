@@ -69,6 +69,16 @@ def update_model_online(
     ret = LLMService.update_model_online(request, login_user, model_id, online)
     return resp_200(data=ret)
 
+@router.post('/check', response_model=UnifiedResponseModel[LLMModelInfo])
+def update_model_check(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        model_id: int = Body(..., embed=True, description="模型的唯一ID"),
+        check: bool = Body(..., embed=True, description="是否校验模型状态"),
+) -> UnifiedResponseModel[LLMModelInfo]:
+    ret = LLMService.update_model_online(request, login_user, model_id, check)
+    return resp_200(data=ret)
+
 
 @router.get('/knowledge', response_model=UnifiedResponseModel[KnowledgeLLMConfig])
 def get_knowledge_llm(

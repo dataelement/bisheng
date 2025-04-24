@@ -2,7 +2,7 @@ import { FlagIcon } from "@/components/bs-icons";
 import { ThunmbIcon } from "@/components/bs-icons/thumbs";
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { copyTrackingApi, likeChatApi } from "@/controllers/API";
+import { copyTrackingApi, disLikeCommentApi, likeChatApi } from "@/controllers/API";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -22,9 +22,12 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
     const handleClick = (type: ThumbsState) => {
         if (mark || onlyRead) return
         setState(_type => {
-            const newType = type === _type ? ThumbsState.Default : type
+            const isRecover = type === _type;
+            const newType = isRecover ? ThumbsState.Default : type
             // api
             likeChatApi(id, newType);
+            // 状态不是点踩 则应该把评论置为空
+            (newType !== ThumbsState.ThumbsDown) && disLikeCommentApi(id, '');
             return newType
         })
         if (state !== ThumbsState.ThumbsDown && type === ThumbsState.ThumbsDown) onUnlike?.(id)

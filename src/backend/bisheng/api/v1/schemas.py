@@ -368,6 +368,7 @@ class LLMModelCreateReq(BaseModel):
     model_name: str = Field(..., description='模型名称')
     model_type: str = Field(..., description='模型类型')
     online: bool = Field(default=True, description='是否在线')
+    check: bool = Field(default=True, description='用于检测是否进行定时校验，1 表示开启，0 表示关闭')
     config: Optional[dict] = Field(default=None, description='模型配置')
 
 

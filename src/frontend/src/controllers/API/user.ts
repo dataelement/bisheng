@@ -235,13 +235,13 @@ export function getUserGroupsApi() {
 }
 
 // 审计视角获取用户组列表
-export function getAuditGroupsApi() {
-  return axios.get(`/api/v1/group/list_audit`);
+export function getAuditGroupsApi(params: { keyword, page, page_size }) {
+  return axios.get(`/api/v1/group/list_audit`, {params});
 }
 
 // 运营视角获取用户组列表
-export function getOperationGroupsApi() {
-  return axios.get(`/api/v1/group/list_operation`);
+export function getOperationGroupsApi(params: { keyword, page, page_size }) {
+  return axios.get(`/api/v1/group/list_operation`, {params});
 }
 
 // 删除用户组post

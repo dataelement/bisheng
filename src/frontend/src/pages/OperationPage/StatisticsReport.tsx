@@ -24,7 +24,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         const now = new Date();
         const now2 = new Date();
         return {
-            userGroup: '',
+            userGroup: [],
             appName: [],
             dateRange: [new Date(now.setDate(now.getDate() - 7)), new Date(now2.setDate(now2.getDate() - 1))],
         }
@@ -36,7 +36,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         const [start_date, end_date] = getStrTime(filters.dateRange)
         return getOperationChatStatisticsApi({
             flow_ids: filters.appName.map(el => el.value),
-            group_ids: filters.userGroup || undefined,
+            group_ids: filters.userGroup?.[0]?.value || undefined,
             start_date,
             end_date,
             page: param.page,
@@ -55,7 +55,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         const now = new Date();
         const now2 = new Date();
         const param = {
-            userGroup: '',
+            userGroup: [],
             appName: [],
             dateRange: [new Date(now.setDate(now.getDate() - 7)), new Date(now2.setDate(now2.getDate() - 1))],
         }
@@ -68,7 +68,7 @@ export default function StatisticsReport({ onBack, onJump }) {
         const [start_date, end_date] = getStrTime(filters.dateRange)
         const params = {
             flow_ids: filters.appName.map(el => el.value),
-            group_ids: filters.userGroup || undefined,
+            group_ids: filters.userGroup?.[0]?.value || undefined,
             like_type: goodValue,
             start_date,
             end_date,
