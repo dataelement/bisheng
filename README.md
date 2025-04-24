@@ -57,11 +57,11 @@ BISHENG is an open LLM application devops platform, focusing on enterprise scena
 ## Quick start 
 
 Please ensure the following conditions are met before installing BISHENG:
-- CPU >= 8 Core
-- RAM >= 32 GB
+- CPU >= 4 Virtual Cores
+- RAM >= 8 GB
 - Docker 19.03.9+
 - Docker Compose 1.25.1+
-> In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
+> Recommended hardware condition: 18 virtual cores, 48G. In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
 
 Download BISHENG
 ```bash
