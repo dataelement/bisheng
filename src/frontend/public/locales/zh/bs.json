@@ -251,6 +251,7 @@
         "serviceProvider": "模型服务提供方",
         "actions": "操作",
         "modelType": "模型类型",
+        "enableMonitoring": "模型状态监控",
         "onlineOfflineOperation": "上下线操作",
         "available": "可用",
         "abnormal": "异常",

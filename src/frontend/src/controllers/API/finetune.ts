@@ -140,6 +140,12 @@ export const deleteLLmServer = async (server_id: string) => {
     return await axios.delete(`/api/v1/llm`, { data: { server_id } })
 }
 
+
+// 模型上下线
+export const changeLLmCheckStatus = async (model_id: string, check: number) => {
+    return await axios.post(`/api/v1/llm/check`, { model_id, check })
+}
+
 // 模型上下线
 export const changeLLmServerStatus = async (model_id: string, online: number) => {
     return await axios.post(`/api/v1/llm/online`, { model_id, online })
