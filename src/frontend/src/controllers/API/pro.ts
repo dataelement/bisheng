@@ -73,8 +73,16 @@ export const saveGroupApi = async (data: any): Promise<any> => {
 };
 
 // 用户组列表
-export function getUserGroupsProApi() {
-    return axios.get(`/api/group/list`);
+export function getUserGroupsProApi({ name = '', page, pageSize, groupId, roleId }: {
+    name: string,
+    page: number,
+    pageSize: number,
+    groupId?: number[],
+    roleId?: number[],
+}): Promise<{ data: any[]; total: number }>  {
+    const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
+    const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
+    return axios.get(`/api/group/list?page=${page}&page_size=${pageSize}&keyword=${name}`);
 }
 
 // GET sso URL

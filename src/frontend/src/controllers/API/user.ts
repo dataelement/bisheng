@@ -234,6 +234,19 @@ export function getUserGroupsApi() {
   return axios.get(`/api/v1/group/list`);
 }
 
+// 用户组列表 用于列表页
+export function getUserGroupsProApiV2({ name = '', page, pageSize, groupId, roleId }: {
+  name: string,
+  page: number,
+  pageSize: number,
+  groupId?: number[],
+  roleId?: number[],
+}): Promise<{ data: User[]; total: number }> {
+    const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
+    const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
+    return axios.get(`/api/v1/group/list_v2?page=${page}&page_size=${pageSize}&keyword=${name}`);
+}
+
 // 审计视角获取用户组列表
 export function getAuditGroupsApi() {
   return axios.get(`/api/v1/group/list_audit`);

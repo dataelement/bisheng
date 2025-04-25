@@ -2,10 +2,10 @@ import { useTranslation } from "react-i18next"
 import { Button } from "../../../components/bs-ui/button";
 import { SearchInput } from "../../../components/bs-ui/input";
 import { PlusIcon } from "@/components/bs-icons/plus";
-import { getUserGroupsApi, delUserGroupApi, getAdminsApi } from "@/controllers/API/user"
+import { getUserGroupsApi, delUserGroupApi, getAdminsApi, getUserGroupsProApiV2 } from "@/controllers/API/user"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
     Table,
     TableBody,
@@ -19,6 +19,8 @@ import EditUserGroup from "./EditUserGroup";
 import { UserGroup } from "@/types/api/user";
 import { locationContext } from "@/contexts/locationContext";
 import { getUserGroupsProApi } from "@/controllers/API/pro";
+import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import { useTable } from "@/util/hook";
 
 export default function UserGroups() {
     const { t } = useTranslation()
@@ -28,29 +30,44 @@ export default function UserGroups() {
     const { appConfig } = useContext(locationContext)
     const defaultAdminsRef = useRef([])
 
-    const loadData = async () => {
-        const res: any = await (appConfig.isPro ? getUserGroupsProApi : getUserGroupsApi)()
-        defaultAdminsRef.current = await getAdminsApi()
-        res.records.forEach(g => {
-            g.group_admins = [...defaultAdminsRef.current, ...g.group_admins];
-            g.group_audits = [...defaultAdminsRef.current, ...g.group_audits];
-            g.group_operations = [...defaultAdminsRef.current, ...g.group_operations];
+    
+    const { page, pageSize, data: groupsData, total, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
+        (appConfig.isPro ? getUserGroupsProApi : getUserGroupsProApiV2)({
+            ...param,
+            name: param.keyword
         })
-        setUserGroups(res.records)
-        tempRef.current = res.records
-    }
+    )
+    
+    useEffect(() => {
+        getAdmins();
+     }, [])
 
-    const handleSearch = (e) => {
-        const word = e.target.value
-        const newUgs = tempRef.current.filter(ug => ug.group_name.toUpperCase().includes(word.toUpperCase()))
-        setUserGroups(newUgs)
-    }
+    const getAdmins = async () => {
+        defaultAdminsRef.current = await getAdminsApi();
+    } 
+
+    useEffect(() => {
+        const groups = groupsData.map((g: any)=> {
+            const group_admins = [...defaultAdminsRef.current, ...g.group_admins];
+            const group_audits = [...defaultAdminsRef.current, ...g.group_audits];
+            const group_operations = [...defaultAdminsRef.current, ...g.group_operations];
+            return {
+                ...g,
+                group_admins,
+                group_audits,
+                group_operations
+            }
+        });
+        setUserGroups(groups);
+        tempRef.current = groups;
+     }, [groupsData, defaultAdminsRef])
+
     const handleDelete = (userGroup) => {
         bsConfirm({
             desc: t('system.deleteGroup', { name: userGroup.group_name }),
             okTxt: t('delete'),
             onOk(next) {
-                captureAndAlertRequestErrorHoc(delUserGroupApi(userGroup.id).then(loadData))
+                captureAndAlertRequestErrorHoc(delUserGroupApi(userGroup.id).then(reload))
                 next()
             }
         })
@@ -60,12 +77,11 @@ export default function UserGroups() {
         return (userGroups.find(ug =>
             ug.group_name === name && ug.id !== userGroup.id))
     }
-    const handleChange = (flag: boolean) => {
-        flag && loadData()
+    const handleChange = () => {
         setUserGroup(null)
+        reload()
     }
 
-    useEffect(() => { loadData() }, [])
 
     if (userGroup) return <EditUserGroup
         data={userGroup}
@@ -77,7 +93,7 @@ export default function UserGroups() {
         <div className="h-[calc(100vh-128px)] overflow-y-auto pb-10">
             <div className="flex gap-6 items-center justify-end">
                 <div className="w-[180px] relative">
-                    <SearchInput placeholder={t('system.groupName')} onChange={handleSearch}></SearchInput>
+                    <SearchInput placeholder={t('system.groupName')} onChange={(e) => search(e.target.value)}></SearchInput>
                 </div>
                 <Button className="flex justify-around" onClick={() => setUserGroup({})}>
                     <PlusIcon className="text-primary" />
@@ -129,8 +145,17 @@ export default function UserGroups() {
                 </TableFooter>
             </Table>
         </div>
+        {/* 分页 */}
+        {/* <Pagination count={10}></Pagination> */}
         <div className="bisheng-table-footer bg-background-login">
-            <p className="desc">{t('system.userGroupList')}.</p>
+        <p className="desc">{t('system.userGroupList')}</p>
+            <AutoPagination
+                className="float-right justify-end w-full mr-6"
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={(newPage) => setPage(newPage)}
+            />
         </div>
     </div>
 }
