@@ -297,7 +297,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
 
         if (data.type === 'close') {
             //本轮会话已结束
-            insetSeparator('先不打扰您啦，有问题欢迎再次联系我哦~')
+            insetSeparator('先不打扰您啦，有问题欢迎再次咨询我哦~')
             setInputLock({ locked: true, reason: '' })
             setInputForm(null)
             // 重启会话按钮,接收close确认后端处理结束后重启会话
