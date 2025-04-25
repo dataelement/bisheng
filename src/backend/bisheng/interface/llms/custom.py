@@ -214,6 +214,9 @@ class BishengLLM(BaseChatModel):
             messages, kwargs = self.parse_kwargs(messages, kwargs)
             if self.server_info.type == LLMServerType.MOONSHOT.value:
                 ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
+            elif self.server_info.type == LLMServerType.QWEN.value:
+                ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+                ret = self.convert_qwen_generate(ret)
             else:
                 ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
@@ -253,6 +256,15 @@ class BishengLLM(BaseChatModel):
             raise e
         return result
 
+    def convert_qwen_generate(self, ret: ChatResult)-> ChatResult:
+        if isinstance(ret.generations[0].message.content, list):
+            # 对多模态的结果的特殊处理
+            tmp_content = ''
+            for one in ret.generations[0].message.content:
+                tmp_content += one.get('text', '')
+            ret.generations[0].message.content = tmp_content
+        return ret
+
     @wrapper_bisheng_model_limit_check_async
     async def _agenerate(
             self,
@@ -266,6 +278,9 @@ class BishengLLM(BaseChatModel):
             messages, kwargs = self.parse_kwargs(messages, kwargs)
             if self.server_info.type == LLMServerType.MOONSHOT.value:
                 ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
+            elif self.server_info.type == LLMServerType.QWEN.value:
+                ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+                ret = self.convert_qwen_generate(ret)
             else:
                 ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
