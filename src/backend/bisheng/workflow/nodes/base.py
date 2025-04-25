@@ -4,6 +4,8 @@ import uuid
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
+from langchain_core.messages import HumanMessage
+
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeEndData, NodeStartData
@@ -150,6 +152,23 @@ class BaseNode(ABC):
             file_data = f.read()
             base64_data = base64.b64encode(file_data).decode('utf-8')
         return base64_data
+
+    def contact_file_into_prompt(self, human_message: HumanMessage, variable_list: List[str]) -> HumanMessage:
+        if not variable_list:
+            return human_message
+        for image_variable in variable_list:
+            image_value = self.get_other_node_variable(image_variable)
+            if not image_value:
+                continue
+            for file_path in image_value:
+                base64_image = self.get_file_base64_data(file_path)
+                human_message.content.append({
+                    "type": "image",
+                    "source_type": "base64",
+                    "mime_type": "image/jpeg",
+                    "data": base64_image,
+                })
+        return human_message
 
     def run(self, state: dict) -> Any:
         """

@@ -80,7 +80,7 @@ class InputNode(BaseNode):
             }
             self.graph_state.save_context(content=f'{res["dialog_files_content"]}\n{res["user_input"]}',
                                           msg_sender='human')
-            return {'user_input': self.node_params['user_input']}
+            return res
 
         ret = {}
         # 表单形式的需要去处理对应的文件上传
@@ -89,8 +89,6 @@ class InputNode(BaseNode):
             key_info = self._node_params_map[key]
             if key_info['type'] == 'file':
                 new_params = self.parse_upload_file(key, key_info, value)
-                if key_info['multiple']:
-                    new_params = {key_info['key']: new_params[key_info['key']]}
                 ret.update(new_params)
 
         return ret

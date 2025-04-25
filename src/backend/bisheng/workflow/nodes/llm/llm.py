@@ -120,16 +120,7 @@ class LLMNode(BaseNode):
             'type': 'text',
             'text': user
         }])
-        for image_variable in self._image_prompt:
-            image_value = self.get_other_node_variable(image_variable)
-            for file_path in image_value:
-                base64_image = self.get_file_base64_data(file_path)
-                human_message.content.append({
-                    "type": "image",
-                    "source_type": "base64",
-                    "mime_type": "image/jpeg",
-                    "data": base64_image,
-                })
+        human_message = self.contact_file_into_prompt(human_message, self._image_prompt)
         inputs.append(human_message)
 
         result = self._llm.invoke(inputs, config=config)
