@@ -212,6 +212,7 @@ def get_QA_list(*,
 
     if keyword:
         question = keyword
+        answer = keyword
     qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                  page_num, question, answer,
                                                                  status)
