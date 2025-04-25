@@ -1,3 +1,4 @@
+import base64
 import copy
 import uuid
 from abc import ABC, abstractmethod
@@ -143,6 +144,12 @@ class BaseNode(ABC):
                 var_map[one] = self.get_other_node_variable(one)
             msg = msg_template.format(var_map)
         return msg, variables
+
+    def get_file_base64_data(self, file_path: str) -> str:
+        with open(file_path, "rb") as f:
+            file_data = f.read()
+            base64_data = base64.b64encode(file_data).decode('utf-8')
+        return base64_data
 
     def run(self, state: dict) -> Any:
         """

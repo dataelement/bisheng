@@ -38,6 +38,8 @@ class AgentNode(BaseNode):
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
 
+        self._image_prompt = self.node_params.get('image_prompt', [])
+
         self._batch_variable_list = []
         self._system_prompt_list = []
         self._user_prompt_list = []
@@ -350,19 +352,29 @@ class AgentNode(BaseNode):
                                               tool_list=tool_invoke_list,
                                               cancel_llm_end=True)
         config = RunnableConfig(callbacks=[llm_callback])
+        human_message = HumanMessage(content=[{
+            'type': 'text',
+            'text': user
+        }])
+        for image_variable in self._image_prompt:
+            image_value = self.get_other_node_variable(image_variable)
+            for file_path in image_value:
+                base64_image = self.get_file_base64_data(file_path)
+                human_message.content.append({
+                    "type": "image",
+                    "source_type": "base64",
+                    "mime_type": "image/jpeg",
+                    "data": base64_image,
+                })
         logger.debug(f'user_prompt: {user}, history: {chat_history}')
+        chat_history.append(human_message)
 
         if self._agent_executor_type == 'ReAct':
-            result = self._agent.invoke({
-                'input': user,
-                'chat_history': chat_history
-            },
-                config=config)
+            result = self._agent.invoke(chat_history, config=config)
             output = result['agent_outcome'].return_values['output']
             if isinstance(output, dict):
                 output = list(output.values())[0]
             return output, llm_callback.reasoning_content
         else:
-            chat_history.append(HumanMessage(content=user))
             result = self._agent.invoke(chat_history, config=config)
             return result[-1].content, llm_callback.reasoning_content

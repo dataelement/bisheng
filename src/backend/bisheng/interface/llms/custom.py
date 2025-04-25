@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage
 from langchain_core.outputs import ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
@@ -146,7 +146,7 @@ class BishengLLM(BaseChatModel):
     def _llm_type(self):
         return self.llm._llm_type
 
-    def parse_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def parse_kwargs(self, messages: List[BaseMessage],  kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:
             if self.get_model_info_config().get('enable_web_search'):
                 if 'tools' not in kwargs:
@@ -187,7 +187,19 @@ class BishengLLM(BaseChatModel):
                                 "name": "$web_search",
                             },
                         })
-        return kwargs
+        elif self.server_info.type == LLMServerType.QWEN.value:
+            # 对多模态的支持
+            user_message = messages[-1]
+            if isinstance(user_message, HumanMessage):
+                if isinstance(user_message.content, list):
+                    for one in user_message.content:
+                        if one.get('type') == 'image' and one.get('data'):
+                            one['type'] = 'image'
+                            one['image'] = f"data:{one.get('mime_type')};{one.get('source_type')},{one.get('data')}"
+                        elif one.get('type') == 'image_url' and one.get('image_url'):
+                            one['type'] = 'image'
+                            one['image'] = one.pop('image_url', {}).get('url')
+        return messages, kwargs
 
     @wrapper_bisheng_model_limit_check
     def _generate(
@@ -199,7 +211,7 @@ class BishengLLM(BaseChatModel):
             **kwargs: Any,
     ) -> ChatResult:
         try:
-            kwargs = self.parse_kwargs(kwargs)
+            messages, kwargs = self.parse_kwargs(messages, kwargs)
             if self.server_info.type == LLMServerType.MOONSHOT.value:
                 ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
             else:
@@ -251,7 +263,7 @@ class BishengLLM(BaseChatModel):
             **kwargs: Any,
     ) -> ChatResult:
         try:
-            kwargs = self.parse_kwargs(kwargs)
+            messages, kwargs = self.parse_kwargs(messages, kwargs)
             if self.server_info.type == LLMServerType.MOONSHOT.value:
                 ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
             else:

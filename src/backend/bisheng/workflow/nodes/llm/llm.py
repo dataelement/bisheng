@@ -19,6 +19,8 @@ class LLMNode(BaseNode):
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
 
+        self._image_prompt = self.node_params.get('image_prompt', [])
+
         # 初始化prompt
         self._system_prompt = PromptTemplateParser(template=self.node_params['system_prompt'])
         self._system_variables = self._system_prompt.extract()
@@ -113,7 +115,22 @@ class LLMNode(BaseNode):
         inputs = []
         if system:
             inputs.append(SystemMessage(content=system))
-        inputs.append(HumanMessage(content=user))
+
+        human_message = HumanMessage(content=[{
+            'type': 'text',
+            'text': user
+        }])
+        for image_variable in self._image_prompt:
+            image_value = self.get_other_node_variable(image_variable)
+            for file_path in image_value:
+                base64_image = self.get_file_base64_data(file_path)
+                human_message.content.append({
+                    "type": "image",
+                    "source_type": "base64",
+                    "mime_type": "image/jpeg",
+                    "data": base64_image,
+                })
+        inputs.append(human_message)
 
         result = self._llm.invoke(inputs, config=config)
 
