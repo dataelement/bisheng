@@ -40,7 +40,7 @@ class BishengLLM(BaseChatModel):
         # 官方api服务
         LLMServerType.OPENAI.value: 'ChatOpenAI',
         LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
-        LLMServerType.QWEN.value: 'ChatOpenAI',
+        LLMServerType.QWEN.value: 'ChatTongyi',
         LLMServerType.QIAN_FAN.value: 'QianfanChatEndpoint',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
         LLMServerType.MINIMAX.value: 'ChatOpenAI',
