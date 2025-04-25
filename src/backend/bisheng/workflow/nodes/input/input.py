@@ -39,7 +39,7 @@ class InputNode(BaseNode):
                 self._node_params_map[value_info['key']] = value_info
 
         self.node_params = new_node_params
-        self._image_ext = ['png', 'jgp', 'jpeg', 'bmp']
+        self._image_ext = ['png', 'jpg', 'jpeg', 'bmp']
 
         self._embedding = None
         self._vector_client = None
