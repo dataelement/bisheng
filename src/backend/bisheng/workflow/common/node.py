@@ -1,3 +1,4 @@
+import copy
 from enum import Enum
 from typing import Optional, Any, List
 
@@ -64,5 +65,5 @@ class BaseNodeData(BaseModel):
         for group_info in self.group_params:
             for one in group_info.params:
                 if one.key == variable_key:
-                    return one
+                    return copy.deepcopy(one)
         return None
