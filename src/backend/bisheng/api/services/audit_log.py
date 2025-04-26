@@ -1,9 +1,12 @@
 import json
+import time
 from datetime import datetime
+from io import BytesIO
 from tempfile import NamedTemporaryFile
 from typing import Any, List, Optional
 from uuid import UUID
 
+import pandas as pd
 from celery.schedules import crontab
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
@@ -544,11 +547,65 @@ class AuditLogService:
                                       user_groups=user.get_user_groups(one.user_id),
                                       review_status=one.review_status,
                                       create_time=one.create_time,
+                                      update_time=one.update_time,
                                       like_count=one.like,
                                       dislike_count=one.dislike,
                                       copied_count=one.copied))
 
         return result, total
+
+    @classmethod
+    def session_export(cls, all_session: list[AppChatList]):
+        excel_data = [["会话ID","应用名称","会话创建时间","用户名称","消息角色","组织架构",
+                       "消息发送时间","用户消息文本内容","消息角色","点赞","点踩","点踩反馈","复制","是否命中安全审查",
+                       "消息发送时间","用户消息文本内容","消息角色","点赞","点踩","点踩反馈","复制","是否命中安全审查"]] # 获取用户名
+        for session in all_session:
+            flow_id = str(session.flow_id).replace("-", '')
+            chat_id = session.chat_id
+            where = select(ChatMessage).where(ChatMessage.flow_id == flow_id, ChatMessage.chat_id == chat_id)
+            with session_getter() as query_session:
+                db_message = query_session.exec(where.order_by(ChatMessage.id.asc())).all()
+                c_qa = []
+                for msg in db_message:
+                    if msg.category not in {"question", "stream_msg"}:
+                        continue
+                    if msg.category == "question":
+                        if len(c_qa) != 0:
+                            excel_data.append(c_qa)
+                        c_qa = [session.chat_id,
+                                session.flow_name,
+                                session.create_time,
+                                session.user_name,
+                                "用户",session.user_groups[-1]["name"]]
+                    c_qa.append(msg.create_time) #会话ID
+                    c_qa.append(msg.message)
+                    c_qa.append("用户")
+                    c_qa.append("是" if msg.liked == 1 else "否")
+                    c_qa.append("是" if msg.liked == 2 else "否")
+                    c_qa.append(msg.remark)
+                    c_qa.append("是" if msg.copied == 1 else "否")
+                    c_qa.append(["未审查","通过","违规","审查失败"][msg.review_status])
+                if len(c_qa) != 0:
+                    excel_data.append(c_qa)
+        wb = Workbook()
+        ws = wb.active
+        print(excel_data)
+        for i in range(len(excel_data)):
+            print(excel_data[i])
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+        return file_path
 
     @classmethod
     def review_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,

@@ -69,6 +69,7 @@ def get_env():
     # add env dict from settings
     env.update(settings.settings.get_from_db('env') or {})
     env['pro'] = settings.settings.get_system_login_method().bisheng_pro
+    env['pro'] = True
     env['version'] = __version__
     return resp_200(env)
 

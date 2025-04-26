@@ -12,6 +12,7 @@ class AppChatList(BaseModel):
     chat_id: str
     flow_id: UUID
     create_time: datetime
+    update_time: datetime
     like_count: int
     dislike_count: int
     copied_count: int

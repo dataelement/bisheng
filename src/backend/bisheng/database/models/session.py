@@ -145,7 +145,7 @@ class MessageSessionDao(MessageSessionBase):
                                                           feedback, start_date, end_date, include_delete, exclude_chats)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(MessageSession.create_time.desc())
+        statement = statement.order_by(MessageSession.update_time.desc())
         with session_getter() as session:
             print("filter_session Compiled SQL:",statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
             return session.exec(statement).all()
