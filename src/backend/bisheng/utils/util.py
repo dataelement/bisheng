@@ -72,7 +72,7 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
 
             variables = {'_type': _type}
 
-            if getattr(_class, 'model_fields'):
+            if getattr(_class, 'model_fields', None):
                 for class_field_items, value in _class.model_fields.items():
                     if class_field_items in ['callback_manager']:
                         continue
@@ -89,6 +89,16 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
 
                     variables[class_field_items]['placeholder'] = (
                         docs.params[class_field_items] if class_field_items in docs.params else '')
+            else:
+                for name, param in inspect.signature(_class.__init__).parameters.items():
+                    if name == 'self':
+                        continue
+                    variables[name] = {}
+                    variables[name]['default'] = get_default_factory(module=_class.__base__.__module__, function=str(param.annotation))
+                    variables[name]['annotation'] = str(param.annotation)
+                    variables[name]['required'] = False
+
+
             base_classes = get_base_classes(_class)
             # Adding function to base classes to allow
             # the output to be a function
@@ -99,6 +109,7 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
                 'description': docs.short_description or '',
                 'base_classes': base_classes,
             }
+    return None
 
 
 def build_template_from_method(
