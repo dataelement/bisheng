@@ -123,7 +123,7 @@ class LLMNode(BaseNode):
         human_message = self.contact_file_into_prompt(human_message, self._image_prompt)
         inputs.append(human_message)
 
-        logger.debug(f'llm invoke chat_history: {inputs}')
+        logger.debug(f'llm invoke chat_history: {inputs} {self._image_prompt}')
 
         result = self._llm.invoke(inputs, config=config)
 
