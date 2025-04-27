@@ -118,7 +118,7 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
     all_session, total = AuditLogService.get_session_list(login_user, flow_ids, user_ids, group_ids, start_date, end_date,
                                                    feedback, review_status, page, page_size, keyword)
     url = AuditLogService.session_export(all_session)
-    return resp_200(data={"filelist": url})
+    return resp_200(data={"file": url})
 
 
 @router.get('/session/review', response_model=UnifiedResponseModel)
