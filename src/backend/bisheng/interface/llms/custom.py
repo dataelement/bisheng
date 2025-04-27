@@ -1,14 +1,14 @@
 import json
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage
 from langchain_core.outputs import ChatResult
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import Field
-from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
-from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
@@ -146,7 +146,7 @@ class BishengLLM(BaseChatModel):
     def _llm_type(self):
         return self.llm._llm_type
 
-    def parse_kwargs(self, messages: List[BaseMessage],  kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
+    def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:
             if self.get_model_info_config().get('enable_web_search'):
                 if 'tools' not in kwargs:
@@ -312,8 +312,40 @@ class BishengLLM(BaseChatModel):
         LLMDao.update_model_status(self.model_id, status, remark)
 
     def bind_tools(
-        self,
-        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
-        **kwargs: Any,
+            self,
+            tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+            **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         return self.llm.bind_tools(tools, **kwargs)
+
+    def convert_qwen_result(self, message: BaseMessage) -> BaseMessage:
+        # ChatTongYi model vl model message.content is list
+        if isinstance(message.content, list):
+            message.content = ''.join([one.get('text', '') for one in message.content])
+        return message
+
+    def invoke(
+            self,
+            input: LanguageModelInput,
+            config: Optional[RunnableConfig] = None,
+            *,
+            stop: Optional[list[str]] = None,
+            **kwargs: Any,
+    ) -> BaseMessage:
+        ret = self.llm.invoke(input, config=config, stop=stop, **kwargs)
+        if self.server_info.type == LLMServerType.QWEN.value:
+            ret = self.convert_qwen_result(ret)
+        return ret
+
+    async def ainvoke(
+            self,
+            input: LanguageModelInput,
+            config: Optional[RunnableConfig] = None,
+            *,
+            stop: Optional[list[str]] = None,
+            **kwargs: Any,
+    ) -> BaseMessage:
+        ret = await self.llm.ainvoke(input, config=config, stop=stop, **kwargs)
+        if self.server_info.type == LLMServerType.QWEN.value:
+            ret = self.convert_qwen_result(ret)
+        return ret
