@@ -332,7 +332,7 @@ class BishengLLM(BaseChatModel):
             stop: Optional[list[str]] = None,
             **kwargs: Any,
     ) -> BaseMessage:
-        ret = self.llm.invoke(input, config=config, stop=stop, **kwargs)
+        ret = super().invoke(input, config=config, stop=stop, **kwargs)
         if self.server_info.type == LLMServerType.QWEN.value:
             ret = self.convert_qwen_result(ret)
         return ret
@@ -345,7 +345,7 @@ class BishengLLM(BaseChatModel):
             stop: Optional[list[str]] = None,
             **kwargs: Any,
     ) -> BaseMessage:
-        ret = await self.llm.ainvoke(input, config=config, stop=stop, **kwargs)
+        ret = await super().ainvoke(input, config=config, stop=stop, **kwargs)
         if self.server_info.type == LLMServerType.QWEN.value:
             ret = self.convert_qwen_result(ret)
         return ret
