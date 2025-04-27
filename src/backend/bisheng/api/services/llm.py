@@ -5,7 +5,7 @@ from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, VoiceLLMConfig
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
@@ -217,7 +217,7 @@ class LLMService:
 
     @classmethod
     def update_model_check(cls, request: Request, login_user: UserPayload, model_id: int,
-                            check: bool) -> LLMModelInfo:
+                           check: bool) -> LLMModelInfo:
         """ 更新模型是否上线 """
         exist_model = LLMDao.get_model_by_id(model_id)
         if not exist_model:
@@ -362,6 +362,27 @@ class LLMService:
         if config:
             ret = json.loads(config.value)
         return EvaluationLLMConfig(**ret)
+
+    @classmethod
+    def get_voice_llm(cls) -> VoiceLLMConfig:
+        """ 获取评测功能的默认模型配置 """
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.VOICE_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return VoiceLLMConfig(**ret)
+
+    @classmethod
+    def update_voice_llm(cls, request: Request, login_user: UserPayload, data: VoiceLLMConfig) \
+            -> VoiceLLMConfig:
+        """ 更新知识库相关的默认模型配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.VOICE_LLM)
+        if config:
+            config.value = json.dumps(data.dict())
+        else:
+            config = Config(key=ConfigKeyEnum.VOICE_LLM.value, value=json.dumps(data.dict()))
+        ConfigDao.insert_config(config)
+        return data
 
     @classmethod
     def update_audit_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \

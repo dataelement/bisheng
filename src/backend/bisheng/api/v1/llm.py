@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, Depends, Body, Query
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import UnifiedResponseModel, LLMServerInfo, resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, LLMModelInfo
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, LLMModelInfo,VoiceLLMConfig
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -97,6 +97,25 @@ def update_knowledge_llm(
 ) -> UnifiedResponseModel[KnowledgeLLMConfig]:
     """ 更新知识库相关的默认模型配置 """
     ret = LLMService.update_knowledge_llm(request, login_user, data)
+    return resp_200(data=ret)
+
+@router.get('/voice', response_model=UnifiedResponseModel[KnowledgeLLMConfig])
+def get_knowledge_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[VoiceLLMConfig]:
+    ret = LLMService.get_voice_llm()
+    return resp_200(data=ret)
+
+
+@router.post('/voice', response_model=UnifiedResponseModel[VoiceLLMConfig])
+def update_voice_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        data: VoiceLLMConfig = Body(..., description="语音模型配置"),
+) -> UnifiedResponseModel[VoiceLLMConfig]:
+    """ 更新知识库相关的默认模型配置 """
+    ret = LLMService.update_voice_llm(request, login_user, data)
     return resp_200(data=ret)
 
 

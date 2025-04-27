@@ -19,6 +19,7 @@ class ConfigKeyEnum(Enum):
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
     AUDIT_LLM = 'audit_llm'  # 审计默认模型配置
     REVIEW_SESSION_CONFIG = 'session_config'  # 审计的会话分析策略配置
+    VOICE_LLM = 'voice_llm'
 
 
 class ConfigBase(SQLModelSerializable):
