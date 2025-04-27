@@ -4,6 +4,22 @@ import time
 from typing import Any, Dict, List, Optional
 
 import requests
+from bisheng_langchain.document_loaders import ElemUnstructuredLoader
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
+from langchain.embeddings.base import Embeddings
+from langchain.schema.document import Document
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.vectorstores.base import VectorStore
+from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
+                                                  UnstructuredMarkdownLoader,
+                                                  UnstructuredPowerPointLoader,
+                                                  UnstructuredWordDocumentLoader)
+from loguru import logger
+from pymilvus import Collection
+from sqlalchemy import func, or_
+from sqlmodel import select
+
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
@@ -21,21 +37,6 @@ from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from langchain.embeddings.base import Embeddings
-from langchain.schema.document import Document
-from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores.base import VectorStore
-from langchain_community.document_loaders import (BSHTMLLoader, PyPDFLoader, TextLoader,
-                                                  UnstructuredMarkdownLoader,
-                                                  UnstructuredPowerPointLoader,
-                                                  UnstructuredWordDocumentLoader)
-from loguru import logger
-from pymilvus import Collection
-from sqlalchemy import func, or_
-from sqlmodel import select
 
 filetype_load_map = {
     'txt': TextLoader,
@@ -617,21 +618,16 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         extra = json.loads(QA.extra_meta) or {}
     extra.update({'answer': answer, 'main_question': questions[0]})
     docs = [Document(page_content=question, metadata=extra) for question in questions]
-    try:
-        embeddings = decide_embeddings(db_knowledge.model)
-        vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
-        if not vectore_config_dict:
-            raise Exception('向量数据库必须配置')
-        vectore_client_list = [
-            decide_vectorstores(db_knowledge.index_name or db_knowledge.collection_name, db,
-                                embeddings) if db == 'ElasticKeywordsSearch' else
-            decide_vectorstores(db_knowledge.collection_name, db, embeddings)
-            for db in vectore_config_dict.keys()
-        ]
-        logger.info('vector_init_conn_done col={} dbs={}', db_knowledge.collection_name,
-                    vectore_config_dict.keys())
-    except Exception as e:
-        logger.exception(e)
+
+    embeddings = decide_embeddings(db_knowledge.model)
+    vector_config_dict: dict = settings.get_knowledge().get('vectorstores')
+    if not vector_config_dict:
+        raise Exception('向量数据库必须配置')
+
+    milvus_client = decide_vectorstores(db_knowledge.collection_name, 'Milvus', embeddings)
+    es_client = decide_vectorstores(db_knowledge.index_name, 'ElasticKeywordsSearch', embeddings)
+    logger.info('vector_init_conn_done col={} dbs={}', db_knowledge.collection_name,
+                vector_config_dict.keys())
 
     try:
         # 统一document
@@ -646,23 +642,29 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             'extra': json.dumps(doc.metadata, ensure_ascii=False)
         } for index, doc in enumerate(docs)]
 
+        es_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        logger.debug('write qa into es over')
         # 向量存储
-        for vectore_client in vectore_client_list:
-            vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        milvus_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        logger.debug('write qa into milvus over')
+        # 判断是否写入成功
+        i = 0
+        while i < 3:
+            res = milvus_client.col.query(
+                expr=f"file_id == {QA.id} and knowledge_id==\"{db_knowledge.id}\"",
+                output_fields=['file_id', 'knowledge_id'])
+            if res and len(res) > 0:
+                break
+            milvus_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
 
+        logger.debug('update qa status')
         QA.status = 1
-        with session_getter() as session:
-            session.add(QA)
-            session.commit()
-            session.refresh(QA)
+        QAKnoweldgeDao.update(QA)
     except Exception as e:
         logger.error(e)
         setattr(QA, 'status', 0)
         setattr(QA, 'remark', str(e)[:500])
-        with session_getter() as session:
-            session.add(QA)
-            session.commit()
-            session.refresh(QA)
+        QAKnoweldgeDao.update(QA)
 
     return QA
 

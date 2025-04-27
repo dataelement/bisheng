@@ -93,6 +93,7 @@ class QAKnowledge(QAKnowledgeBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     answers: Optional[str] = Field(default=None, sa_column=Column(String(length=2048)))
+    status: Optional[int] = Field(index=False, description='是否成功写入milvus和es. 1: 成功；0: 失败；')
 
 
 class KnowledgeFileRead(KnowledgeFileBase):

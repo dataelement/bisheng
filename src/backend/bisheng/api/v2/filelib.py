@@ -250,7 +250,8 @@ def download_statistic_file(file_path: str):
 def add_qa(*,
            knowledge_id: int = Body(embed=True),
            data: List[APIAddQAParam] = Body(embed=True),
-           user_id: Optional[int] = Body(default=None, embed=True)):
+           user_id: Optional[int] = Body(default=None, embed=True),
+           background_tasks: BackgroundTasks):
     user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
@@ -262,8 +263,9 @@ def add_qa(*,
                                       user_id=user_id,
                                       extra_meta=json.dumps(item.extra),
                                       source=3)
-
-        res.append(knowledge_imp.add_qa(knowledge, qa_insert))
+        qa = QAKnoweldgeDao.insert_qa(qa_insert)
+        res.append(qa)
+        background_tasks.add_task(knowledge_imp.QA_save_knowledge, knowledge, qa)
 
     return resp_200(res)
 
