@@ -94,9 +94,9 @@ class MessageSessionDao(MessageSessionBase):
         if exclude_chats:
             statement = statement.where(MessageSession.chat_id.not_in(exclude_chats))
         if start_date:
-            statement = statement.where(MessageSession.create_time >= start_date)
+            statement = statement.where(MessageSession.update_time >= start_date)
         if end_date:
-            statement = statement.where(MessageSession.create_time <= end_date)
+            statement = statement.where(MessageSession.update_time <= end_date)
         if review_status:
             statement = statement.where(MessageSession.review_status.in_([one.value for one in review_status]))
         return statement

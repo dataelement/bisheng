@@ -12,6 +12,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.session import ReviewStatus
 from bisheng.database.models.user_group import UserGroup
+from bisheng.database.models.session import MessageSession
 
 
 class ChatMessageType(Enum):
@@ -277,7 +278,11 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def insert_one(cls, message: ChatMessage) -> ChatMessage:
+        statement = update(MessageSession).where(MessageSession.chat_id == message.chat_id).values(
+            update_time = datetime.now(),
+        )
         with session_getter() as session:
+            session.exec(statement)
             session.add(message)
             session.commit()
             session.refresh(message)
@@ -285,7 +290,12 @@ class ChatMessageDao(MessageBase):
 
     @classmethod
     def insert_batch(cls, messages: List[ChatMessage]):
+        chat_ids = [message.chat_id for message in messages]
+        statement = update(MessageSession).where(MessageSession.chat_id.in_(chat_ids)).values(
+            update_time=datetime.now(),
+        )
         with session_getter() as session:
+            session.execute(statement)
             session.add_all(messages)
             session.commit()
 
