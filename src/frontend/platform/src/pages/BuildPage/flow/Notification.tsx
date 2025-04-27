@@ -23,7 +23,7 @@ export default function Notification() {
                     <Bell size={16} />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-2 cursor-pointer w-[400px] h-[500px]">
+            <PopoverContent className="p-2 cursor-pointer w-[400px] h-[500px] pb-10">
                 <div className="text-md flex flex-row justify-between pl-3 font-medium text-foreground">
                     {t("flow.notification")}
                     <div className="flex gap-3 pr-3">

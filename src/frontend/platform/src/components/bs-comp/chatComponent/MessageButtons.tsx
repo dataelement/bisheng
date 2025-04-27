@@ -38,7 +38,7 @@ export default function MessageButtons({ mark = false, id, onCopy, data, onUnlik
         copyTrackingApi(id)
     }
 
-    return <div className="flex gap-1">
+    return <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {mark && <Button className="h-6 text-xs group-hover:opacity-100 opacity-0" onClick={onMarkClick}>
             <FlagIcon width={12} height={12} className="cursor-pointer" />
             <span>{t('addQa')}</span>

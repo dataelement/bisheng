@@ -162,7 +162,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    const host = appConfig.websocketHost || ''
+    const host = appConfig.websocketHost || window.location.host;
     let wsUrl = type === AppNumType.SKILL ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${id}?type=L1&t=${token}` :
         type === AppNumType.ASSISTANT ? `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${id}?t=${token}` :
             `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${id}?t=${token}&chat_id=${chatId}`

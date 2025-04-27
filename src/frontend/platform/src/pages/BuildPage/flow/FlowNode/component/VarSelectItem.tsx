@@ -8,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
 
-const valueToOutput = (newValues, varZh) => {
+export const valueToOutput = (newValues, varZh) => {
     return newValues.map(el => {
         const labelName = varZh[el];
         return {

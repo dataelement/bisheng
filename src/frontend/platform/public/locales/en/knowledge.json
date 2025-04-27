@@ -1,7 +1,7 @@
 {
     "fileManagement": "File Management",
     "chunkManagement": "Chunk Management",
-    "back": "Exit",
+    "back": "Return",
     "previewHint": "Click the button on the left to preview the results",
     "uploadHint": "Please complete file upload first",
     "nameRequired": "Knowledge Base Name Cannot Be Empty",

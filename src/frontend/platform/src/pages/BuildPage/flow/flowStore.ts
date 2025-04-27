@@ -61,7 +61,7 @@ const useFlowStore = create<State & Actions & { notifications: Notification[]; a
     // 添加消息到队列
     addNotification: (notification) =>
         set((state) => ({
-            notifications: [...state.notifications, notification]
+            notifications: [notification, ...state.notifications,]
         })),
     // 清空消息队列
     clearNotifications: () => set({ notifications: [] }),

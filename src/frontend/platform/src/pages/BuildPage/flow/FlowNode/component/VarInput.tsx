@@ -56,6 +56,7 @@ export default function VarInput({
     itemKey,
     placeholder = '',
     flowNode,
+    label = undefined,
     full = false,
     value,
     error = false,
@@ -186,7 +187,7 @@ export default function VarInput({
             <div className="flex justify-between gap-1 border-b dark:border-gray-600 px-2 py-1" onClick={() => textareaRef.current.focus()}>
                 <Label className="bisheng-label text-xs" onClick={validateVarAvailble}>
                     {flowNode.required && <span className="text-red-500">*</span>}
-                    {flowNode.label}
+                    {label ?? flowNode.label}
                 </Label>
                 <div className="flex gap-2">
                     <SelectVar ref={selectVarRef} nodeId={nodeId} itemKey={itemKey} onSelect={handleInsertVariable}>

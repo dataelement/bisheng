@@ -1,7 +1,7 @@
 {
     "fileManagement": "文件管理",
     "chunkManagement": "分段管理",
-    "back": "退出",
+    "back": "返回",
     "previewHint": "左侧点击按钮预览结果",
     "uploadHint": "请先完成文件上传",
     "nameRequired": "知识库名称不可为空",

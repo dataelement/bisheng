@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { downloadFile } from "@/util/utils";
+import { downloadFile, formatDate } from "@/util/utils";
 import { ArrowLeft } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -329,7 +329,7 @@ export default function QasPage() {
                         <Button variant="outline" className="px-8" onClick={() => {
                             getQaFile(id).then(res => {
                                 const fileUrl = res.file_list[0];
-                                downloadFile(checkSassUrl(fileUrl), `${title}.xlsx`);
+                                downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                             })
                         }}>导出</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
@@ -369,7 +369,7 @@ export default function QasPage() {
                                         {el.answers}
                                     </div>
                                 </TableCell>
-                                <TableCell>{[t('unknown'), t('manualCreation'), t('auditTag')][el.source]}</TableCell>
+                                <TableCell>{['未知', '手动创建', '标注导入', 'API导入', '批量导入'][el.source]}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.user_name}</TableCell>
