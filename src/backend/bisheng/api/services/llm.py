@@ -373,6 +373,16 @@ class LLMService:
         return VoiceLLMConfig(**ret)
 
     @classmethod
+    def get_default_tts_model_id(cls):
+        conf = cls.get_voice_llm()
+        return conf.tts_model_id
+
+    @classmethod
+    def get_default_stt_model_id(cls):
+        conf = cls.get_voice_llm()
+        return conf.stt_model_id
+
+    @classmethod
     def update_voice_llm(cls, request: Request, login_user: UserPayload, data: VoiceLLMConfig) \
             -> VoiceLLMConfig:
         """ 更新知识库相关的默认模型配置 """

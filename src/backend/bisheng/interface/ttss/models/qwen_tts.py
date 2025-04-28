@@ -26,17 +26,12 @@ class QwenTTS:
         :param file_path: 保存音频的文件路径
         """
         try:
-            # 发送待合成文本，获取二进制音频
-            #dashscope.api_key = self.api_key
             audio = self.synthesizer.call(text)
-            print('[Metric] requestId: {}, first package delay ms: {}'.format(
-                self.synthesizer.get_last_request_id(),
-                self.synthesizer.get_first_package_delay()))
-
             # 将音频保存至本地
-            with open(file_path, 'wb') as f:
-                f.write(audio)
-            print(f"音频已成功保存到 {file_path}")
+            if file_path:
+                with open(file_path, 'wb') as f:
+                    f.write(audio)
+            return audio
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
