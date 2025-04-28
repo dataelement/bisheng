@@ -249,7 +249,7 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         if qa_knowledge.id is None:
             raise ValueError('id不能为空')
         with session_getter() as session:
-            session.add(QAKnowledge.validate(qa_knowledge))
+            session.add(qa_knowledge)
             session.commit()
             session.refresh(qa_knowledge)
         return qa_knowledge
