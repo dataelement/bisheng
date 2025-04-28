@@ -51,7 +51,7 @@ class QAKnowledgeBase(SQLModelSerializable):
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
     source: Optional[int] = Field(default=0, index=False, description='0: 未知 1: 手动；2: 审计, 3: api, 4: 批量导入')
-    status: Optional[int] = Field(default=1, index=False, description='1: 解析中；2: 解析成功；3: 解析失败')
+    status: Optional[int] = Field(default=1, index=False, description='1: 开启；0: 关闭，未写入到向量库或写入失败；')
     extra_meta: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -272,28 +272,24 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     @classmethod
     def insert_qa(cls, qa_knowledge: QAKnowledgeUpsert):
         with session_getter() as session:
-            qa = QAKnowledge.validate(qa_knowledge)
+            qa = QAKnowledge.model_validate(qa_knowledge)
             session.add(qa)
             session.commit()
             session.refresh(qa)
         return qa
 
     @classmethod
-    def batch_insert_qa(cls, qa_knowledges: List[QAKnowledgeUpsert]):
+    def batch_insert_qa(cls, qa_knowledges: List[QAKnowledgeUpsert]) -> List[QAKnowledge]:
         with session_getter() as session:
-            try:
-                qas = []
-                for qa_knowledge in qa_knowledges:
-                    qa = QAKnowledge.model_validate(qa_knowledge)
-                    qas.append(qa)
-                session.add_all(qas)
-                session.commit()
-                for qa in qas:
-                    session.refresh(qa)
-                return 1
-            except Exception as e:
-                session.rollback()
-                raise 0
+            qas = []
+            for qa_knowledge in qa_knowledges:
+                qa = QAKnowledge.model_validate(qa_knowledge)
+                qas.append(qa)
+            session.add_all(qas)
+            session.commit()
+            for qa in qas:
+                session.refresh(qa)
+            return qas
 
     @classmethod
     def total_count(cls, sql):
