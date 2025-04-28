@@ -9,8 +9,6 @@ export const modules = {
     container: '#toolbar',
     handlers: {
       bsfile: function (this: any) {
-        console.log('handlersfile');
-        
         const fileInput = document.createElement('input');
         fileInput.setAttribute('type', 'file');
         fileInput.setAttribute('accept', '*');
@@ -19,7 +17,16 @@ export const modules = {
         fileInput.onchange = async () => {
           if (fileInput.files && fileInput.files[0]) {
             const file = fileInput.files[0];
-            //TODO： 限制文件上传大小 zzy
+            if (!file) return;
+            // 限制文件最大上传50MB
+            const MAX_FILE_SIZE = 50 * 1024 * 1024;
+            if (file.size > MAX_FILE_SIZE) {
+                const quill = this.quill;
+                const range = quill.getSelection(true);
+                quill.insertText(range.index, '文件大小超过50MB限制', { color: 'red' });
+                quill.setSelection(range.index + 1, 0, 'silent');
+                return;
+            }
             const quill = this.quill;
             const range = quill.getSelection(true);
             
@@ -60,16 +67,24 @@ export const modules = {
         };
       },
       image: function (this: any) {
-        console.log('123213132');
         const input = document.createElement('input');
         input.setAttribute('type', 'file');
         input.setAttribute('accept', 'image/*');
         input.click();
         
         input.onchange = async () => {
-          //TODO： 限制文件上传大小 zzy
           const file = input.files[0];
           if (!file) return;
+          
+          // 限制图片最大上传10MB
+          const MAX_FILE_SIZE = 10 * 1024 * 1024;
+          if (file.size > MAX_FILE_SIZE) {
+              const quill = this.quill;
+              const range = quill.getSelection(true);
+              quill.insertText(range.index, '图片大小超过10MB限制', { color: 'red' });
+              quill.setSelection(range.index + 1, 0, 'silent');
+              return;
+          }
           const quill = this.quill;
           try {
             // 这里调用你的图片上传函数
