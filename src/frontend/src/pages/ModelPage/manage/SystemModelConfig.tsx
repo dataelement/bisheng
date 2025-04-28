@@ -8,6 +8,7 @@ import EvaluationModel from "./tabs/EvaluationModel";
 import KnowledgeModle from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import AuditModelConfig from "./tabs/AuditModel";
+import SpeechModel from "./tabs/SpeechModel";
 
 export default function SystemModelConfig({ data, onBack }) {
     const { t } = useTranslation('model')
@@ -52,6 +53,7 @@ export default function SystemModelConfig({ data, onBack }) {
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
                         <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
                         <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
+                        <TabsTrigger value="speech" className="w-[150px]">{t('model.speechModel')}</TabsTrigger>
                         <TabsTrigger value="audit" className="w-[150px]">审计</TabsTrigger>
                     </TabsList>
                     <TabsContent value="knowledge">
@@ -65,6 +67,9 @@ export default function SystemModelConfig({ data, onBack }) {
                     </TabsContent>
                     <TabsContent value="workflow">
                         <WorkflowModel llmOptions={llmOptions} onBack={onBack}></WorkflowModel>
+                    </TabsContent>
+                    <TabsContent value="speech">
+                        <SpeechModel llmOptions={llmOptions} onBack={onBack}></SpeechModel>
                     </TabsContent>
                     <TabsContent value="audit">
                         <AuditModelConfig llmOptions={llmOptions} onBack={onBack}></AuditModelConfig>

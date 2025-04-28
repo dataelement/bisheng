@@ -21,6 +21,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
     const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
+    const [voice, setVoice] = useState(data.config?.voice ?? '')
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -56,6 +57,12 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const handleSwitchChange = (checked) => {
         setIsWebSearchEnabled(checked)
         onConfig({ enable_web_search: checked, max_tokens: maxTokens })
+    }
+
+    const handleVoiceChange = (e) => {
+        const value = e.target.value
+        setVoice(value)
+        onConfig({ voice: value })
     }
 
     const handleMaxTokensChange = (e) => {
@@ -102,10 +109,20 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
                                 <SelectItem value="llm">LLM</SelectItem>
                                 <SelectItem value="embedding">Embedding</SelectItem>
                                 <SelectItem value="rerank">Rerank</SelectItem>
+                                <SelectItem value="tts">TTS</SelectItem>
+                                <SelectItem value="stt">STT</SelectItem>
                             </SelectGroup>
                         </SelectContent>
                     </Select>
                 </div>
+                {model.model_type === 'tts' && (<div>
+                    <Label className="bisheng-label">音色</Label>
+                    <Input
+                        value={voice}
+                        onChange={handleVoiceChange}
+                        className="h-8"
+                    />
+                </div>)}
                 {model.model_type === 'llm' && (
                     <>
                         {['qwen', 'tencent', 'moonshot'].includes(type) && <div className="flex gap-2 items-center">
