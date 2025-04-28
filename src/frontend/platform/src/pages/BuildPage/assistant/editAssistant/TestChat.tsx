@@ -47,6 +47,7 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
             <span className="text-sm ">{t('build.debugPreview')}</span>
         </div>
         <ChatComponent
+            debug
             clear
             logo={assistantState.logo}
             questions={guideQuestion}

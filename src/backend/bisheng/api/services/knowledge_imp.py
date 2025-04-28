@@ -483,6 +483,8 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         for one in documents:
             # 配置了相关llm的话，就对文档做总结
             title = extract_title(llm, one.page_content)
+            # remove <think>.*</think> tag content
+            title = re.sub('<think>.*</think>', '', title)
             one.metadata['title'] = title
         logger.info('file_extract_title=success timecost={}', time.time() - t)
 

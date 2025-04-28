@@ -19,7 +19,7 @@ import { useParams } from 'react-router-dom';
 
 const ApiAccessFlow = () => {
     const { t } = useTranslation()
-    const {id} = useParams()
+    const { id } = useParams()
     // const { flow, getTweak, tabsState } = useContext(TabsContext);
     // const curl_code = getCurlCode(flow, getTweak, tabsState);
     // const pythonCode = getPythonApiCode(flow, getTweak, tabsState);
@@ -52,6 +52,8 @@ url = "${location.origin}/api/v2/workflow/invoke"
 
 payload = json.dumps({
    "workflow_id": "${id}",
+   "stream": False, # 为空或者不传，都会请求流式返回工作流事件。本示例为了直观展示返回结果，所以改
+为非流式请求，真实场景下为了用户体验建议请求流式。
 })
 
 headers = {

@@ -20,7 +20,7 @@ const OutputItem = ({ nodeId, node, data, onChange, onValidate }) => {
     }, [data.options]);
 
     const nData = useMemo(() => {
-        return { ...data, label: '变量输入', required: false }
+        return { ...data, label: '用户输入内容', required: false }
     }, [data])
 
     // 根据交互类型切换不同的展示

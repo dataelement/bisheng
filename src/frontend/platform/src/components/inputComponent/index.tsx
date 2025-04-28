@@ -33,6 +33,7 @@ export default function InputComponent({
         value={myValue}
         // maxLength={maxLength}
         className={classNames(
+          "whitespace-normal",
           disabled ? " input-disable " : "",
           password && !pwdVisible && myValue !== ""
             ? " text-clip password "

@@ -1,3 +1,4 @@
+import os
 import asyncio
 import json
 import time
@@ -200,8 +201,12 @@ class RedisCallback(BaseCallback):
                 for key_info in old_message['input_schema']['value']:
                     user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"
             else:
-                # 说明对话框输入
+                # 说明对话框输入, 需要加下上传的文件信息, 和输入节点的数据结构有关
                 user_input_message = user_input[old_message['input_schema']['key']]
+                dialog_files_content = user_input.get('dialog_files_content', [])
+                for one in dialog_files_content:
+                    user_input_message += f"\n{os.path.basename(one).split('?')[0]}"
+
             self.save_chat_message(ChatResponse(
                 message=user_input_message,
                 category='question',
@@ -259,7 +264,8 @@ class RedisCallback(BaseCallback):
 
             is_bot=chat_response.is_bot,
             source=chat_response.source,
-            message=json.dumps(chat_response.message, ensure_ascii=False),
+            message=chat_response.message if isinstance(chat_response.message, str) else json.dumps(
+                chat_response.message, ensure_ascii=False),
             extra=chat_response.extra,
             category=chat_response.category,
             files=json.dumps(chat_response.files, ensure_ascii=False)

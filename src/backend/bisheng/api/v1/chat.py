@@ -336,6 +336,7 @@ def add_chat_messages(*,
 def update_chat_message(*,
                         message_id: int,
                         message: str = Body(embed=True),
+                        category: str = Body(default=None, embed=True),
                         login_user: UserPayload = Depends(get_login_user)):
     """ 更新一条消息的内容 安全检查使用"""
     logger.info(
@@ -348,6 +349,8 @@ def update_chat_message(*,
         return resp_200(message='用户不一致')
 
     chat_message.message = message
+    if category:
+        chat_message.category = category
     chat_message.source = False
     chat_message.sensitive_status = SensitiveStatus.VIOLATIONS.value
 
@@ -360,7 +363,6 @@ def update_chat_message(*,
 
 @router.delete('/chat/message/{message_id}', status_code=200)
 def del_message_id(*, message_id: str, login_user: UserPayload = Depends(get_login_user)):
-    # 删除一条消息，安全检查使用
     ChatMessageDao.delete_by_message_id(login_user.user_id, message_id)
 
     return resp_200(message='删除成功')

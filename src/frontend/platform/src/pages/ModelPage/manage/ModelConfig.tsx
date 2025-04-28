@@ -15,10 +15,12 @@ import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
-function ModelItem({ data, onDelete, onInput }) {
+function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
     const [model, setModel] = useState(data)
     const [error, setError] = useState('')
+    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
+    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -26,14 +28,19 @@ function ModelItem({ data, onDelete, onInput }) {
         const repeated = onInput(value, model.model_type)
 
         setError('')
-        if (repeated) setError(t('model.modelNameDuplicate'))
         if (!value) setError(t('model.modelNameEmpty'))
         if (value.length > 100) setError(t('model.modelNameLength'))
+        if (repeated) setError(t('model.modelNameDuplicate'))
     }
 
     const handleSelectChange = (val) => {
         setModel({ ...model, model_type: val })
         onInput(model.model_name, val)
+
+        // Reset states when model_type changes
+        setIsWebSearchEnabled(false)  // Reset web search toggle to false
+        setMaxTokens('')  // Reset max tokens input
+        // onConfig(null)
     }
 
     const handleDelClick = () => {
@@ -46,38 +53,81 @@ function ModelItem({ data, onDelete, onInput }) {
         })
     }
 
-    return <div className="group w-full border rounded-sm p-4 mb-2">
-        <div className="flex items-center justify-between">
-            <span>{model.name.replace('model', t('model.model'))}</span>
-            <Trash2Icon onClick={handleDelClick} className="w-[16px] h-[16px] opacity-0 group-hover:opacity-100 cursor-pointer text-gray-500" />
-        </div>
-        <div className="space-y-2 mt-2">
-            <div>
-                <Label className="bisheng-label">
-                    <span>{t('model.modelName')}</span>
-                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.modelNameTooltip')} />
-                </Label>
-                <Label className="bisheng-label"></Label>
-                <Input value={model.model_name} onChange={handleInput} className="h-8"></Input>
-                {error && <span className="text-red-500 text-xs">{error}</span>}
+    const handleSwitchChange = (checked) => {
+        setIsWebSearchEnabled(checked)
+        onConfig({ enable_web_search: checked, max_tokens: maxTokens })
+    }
+
+    const handleMaxTokensChange = (e) => {
+        const value = e.target.value
+        setMaxTokens(value)
+
+        if (value === '') {
+            onConfig({ enable_web_search: isWebSearchEnabled })
+        } else {
+            onConfig({ enable_web_search: isWebSearchEnabled, max_tokens: parseInt(value, 10) })
+        }
+    }
+
+    return (
+        <div className="group w-full border rounded-sm p-4 mb-2">
+            <div className="flex items-center justify-between">
+                <span>{model.name.replace('model', t('model.model'))}</span>
+                <Trash2Icon
+                    onClick={handleDelClick}
+                    className="w-[16px] h-[16px] opacity-0 group-hover:opacity-100 cursor-pointer text-gray-500"
+                />
             </div>
-            <div>
-                <Label className="bisheng-label">{t('model.modelType')}</Label>
-                <Select value={model.model_type} onValueChange={handleSelectChange}>
-                    <SelectTrigger className="h-8">
-                        <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            <SelectItem value="llm">LLM</SelectItem>
-                            <SelectItem value="embedding">Embedding</SelectItem>
-                            <SelectItem value="rerank">Rerank</SelectItem>
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
+            <div className="space-y-2 mt-2">
+                <div>
+                    <Label className="bisheng-label">
+                        <span>{t('model.modelName')}</span>
+                        <QuestionTooltip
+                            className="relative top-0.5 ml-1"
+                            content={t('model.modelNameTooltip')}
+                        />
+                    </Label>
+                    <Label className="bisheng-label"></Label>
+                    <Input value={model.model_name} onChange={handleInput} className="h-8"></Input>
+                    {error && <span className="text-red-500 text-xs">{error}</span>}
+                </div>
+                <div>
+                    <Label className="bisheng-label">{t('model.modelType')}</Label>
+                    <Select value={model.model_type} onValueChange={handleSelectChange}>
+                        <SelectTrigger className="h-8">
+                            <SelectValue placeholder="" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                <SelectItem value="llm">LLM</SelectItem>
+                                <SelectItem value="embedding">Embedding</SelectItem>
+                                <SelectItem value="rerank">Rerank</SelectItem>
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
+                </div>
+                {model.model_type === 'llm' && (
+                    <>
+                        {['qwen', 'tencent', 'moonshot'].includes(type) && <div className="flex gap-2 items-center">
+                            <Label className="bisheng-label">联网搜索</Label>
+                            <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
+                        </div>}
+                        <div>
+                            <Label className="bisheng-label">
+                                {type === 'qianfan' ? 'max_output_tokens' : (type === 'ollama' ? 'num_ctx' : 'max_tokens')}
+                            </Label>
+                            <Input
+                                type="number"
+                                value={maxTokens}
+                                onChange={handleMaxTokensChange}
+                                className="h-8"
+                            />
+                        </div>
+                    </>
+                )}
             </div>
         </div>
-    </div>
+    )
 }
 
 
@@ -90,12 +140,16 @@ export const modelProvider = [
     { "name": "llamacpp", "value": "llamacpp" },
     { "name": "vllm", "value": "vllm" },
     { "name": "通义千问", "value": "qwen" },
-    { "name": "百度千帆", "value": "qianfan" },
+    { "name": "Deepseek", "value": "deepseek" },
+    { "name": "硅基流动", "value": "silicon" },
+    { "name": "火山引擎", "value": "火山引擎" },
     { "name": "智谱 AI", "value": "zhipu" },
+    { "name": "讯飞星火", "value": "spark" },
+    { "name": "腾讯云", "value": "tencent" },
+    { "name": "Moonshot", "value": "moonshot" },
+    { "name": "百度千帆", "value": "qianfan" },
     { "name": "Minimax", "value": "minimax" },
     { "name": "Anthropic", "value": "anthropic" },
-    { "name": "Deepseek", "value": "deepseek" },
-    { "name": "讯飞星火", "value": "spark" }
 ]
 const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 
@@ -121,9 +175,12 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         })
     }, [id])
 
+    const getModelsByType = useSelectModel()
     const handleTypeChange = (val) => {
         const name = onGetName(val)
-        setFormData({ ...formData, type: val, name })
+        // 自动填充模型
+        const models = getModelsByType(val)
+        setFormData({ ...formData, type: val, name, models })
     }
 
     const handleAddModel = () => {
@@ -146,12 +203,21 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const handleModelChange = (name, type, index) => {
         const models = formData.models.map((el, i) => index === i ? {
             ...el,
+            config: type === 'llm' ? el.config : null,
             model_name: name,
             model_type: type
         } : el)
         setFormData({ ...formData, models })
         // 重复校验
         return formData.models.find((el, i) => index !== i && el.model_name === name)
+    }
+
+    const handleModelConfig = (config, index) => {
+        const models = formData.models.map((el, i) => index === i ? {
+            ...el,
+            config
+        } : el)
+        setFormData({ ...formData, models })
     }
 
     // submit 
@@ -293,9 +359,9 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
                         <div className={`flex items-center gap-x-2 ${formData.limit_flag ? '' : 'invisible'}`}>
                             <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                className="w-20 h-8"
+                                className="w-24 h-8"
                             ></Input>
-                            <span className="min-w-24">{t('model.timesPerDay')}</span>
+                            <span>{t('model.timesPerDay')}</span>
                         </div>
                     </div>
                 </div>
@@ -304,7 +370,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <Label className="bisheng-label">{t('model.model')}</Label>
                     <div className="w-[92%]">
                         {
-                            formData.models.map((m, i) => <ModelItem data={m} onInput={(name, type) => handleModelChange(name, type, i)} key={m.name} onDelete={() => handleDelete(i)} />)
+                            formData.models.map((m, i) => <ModelItem
+                                data={m}
+                                type={formData.type}
+                                onInput={(name, type) => handleModelChange(name, type, i)}
+                                onConfig={(config) => handleModelConfig(config, i)}
+                                key={m.name}
+                                onDelete={() => handleDelete(i)}
+                            />)
                         }
                         <Button className="w-full mt-2 border-dashed border-border" variant="outline" onClick={handleAddModel}>
                             <Plus className="size-5 text-primary mr-1" />
@@ -320,4 +393,32 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             <Button className="px-16" disabled={!formData.type} onClick={handleSave}>{t('model.save')}</Button>
         </div>
     </div>
+}
+
+
+const useSelectModel = () => {
+    const modelsRef = useRef<any>(null)
+
+    const loadData = async () => {
+        try {
+            const response = await fetch(__APP_ENV__.BASE_URL + '/models/data.json');
+            if (!response.ok) {
+                throw new Error('Failed to fetch data');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Failed to load commitments:', error);
+            return { title: '', commitments: [] }; // 返回默认的数据结构
+        }
+    }
+
+    useEffect(() => {
+        loadData().then(
+            res => modelsRef.current = res
+        )
+    }, [])
+
+    return (type) => {
+        return modelsRef.current?.[type] || []
+    }
 }

@@ -1,13 +1,14 @@
+import json
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 
-from langchain_core.messages import BaseMessage
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage
 from langchain_core.outputs import ChatResult
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import Field
-from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
-from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
@@ -39,13 +40,17 @@ class BishengLLM(BaseChatModel):
         # 官方api服务
         LLMServerType.OPENAI.value: 'ChatOpenAI',
         LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
-        LLMServerType.QWEN.value: 'ChatOpenAI',
-        LLMServerType.QIAN_FAN.value: 'ChatWenxin',
+        LLMServerType.QWEN.value: 'ChatTongyi',
+        LLMServerType.QIAN_FAN.value: 'QianfanChatEndpoint',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
         LLMServerType.MINIMAX.value: 'ChatOpenAI',
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
         LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
         LLMServerType.SPARK.value: 'ChatOpenAI',
+        LLMServerType.TENCENT.value: 'ChatOpenAI',
+        LLMServerType.MOONSHOT.value: 'ChatOpenAI',
+        LLMServerType.VOLCENGINE.value: 'ChatOpenAI',
+        LLMServerType.SILICON.value: 'ChatOpenAI',
     }
 
     # bisheng强相关的业务参数
@@ -97,8 +102,11 @@ class BishengLLM(BaseChatModel):
         params = {}
         if server_info.config:
             params.update(server_info.config)
+        enable_web_search = False
         if model_info.config:
-            params.update(model_info.config)
+            enable_web_search = model_info.config.get('enable_web_search', False)
+            if model_info.config.get('max_tokens'):
+                params['max_tokens'] = model_info.config.get('max_tokens')
 
         params.update({
             'model_name': model_info.model_name,
@@ -109,20 +117,89 @@ class BishengLLM(BaseChatModel):
         })
         if server_info.type == LLMServerType.OLLAMA.value:
             params['model'] = params.pop('model_name')
+            if params.get('max_tokens'):
+                params['num_ctx'] = params.pop('max_tokens')
         elif server_info.type == LLMServerType.AZURE_OPENAI.value:
             params['azure_deployment'] = params.pop('model_name')
         elif server_info.type == LLMServerType.QIAN_FAN.value:
             params['model'] = params.pop('model_name')
+            params['qianfan_ak'] = params.pop('wenxin_api_key')
+            params['qianfan_sk'] = params.pop('wenxin_secret_key')
+            if params.get('max_tokens'):
+                params['model_kwargs'] = {"max_output_tokens": params.pop('max_tokens')}
         elif server_info.type == LLMServerType.SPARK.value:
             params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
         elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
                                   LLMServerType.VLLM.value]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
+        elif server_info.type == LLMServerType.QWEN.value:
+            params['dashscope_api_key'] = params.pop('openai_api_key')
+            params.pop('openai_api_base', None)
+            params['model_kwargs'] = {'enable_search': enable_web_search}
+            if params.get('max_tokens'):
+                params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
+        elif server_info.type == LLMServerType.TENCENT.value:
+            params['extra_body'] = {'enable_enhancement': enable_web_search}
         return params
 
     @property
     def _llm_type(self):
         return self.llm._llm_type
+
+    def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
+        if self.server_info.type == LLMServerType.MINIMAX.value:
+            if self.get_model_info_config().get('enable_web_search'):
+                if 'tools' not in kwargs:
+                    kwargs.update({
+                        'tools': [{'type': 'web_search'}],
+                    })
+                else:
+                    tool_exists = False
+                    for tool in kwargs['tools']:
+                        if tool.get('type') == 'web_search':
+                            tool_exists = True
+                            break
+                    if not tool_exists:
+                        kwargs['tools'].append({
+                            'type': 'web_search',
+                        })
+        elif self.server_info.type == LLMServerType.MOONSHOT.value:
+            if self.get_model_info_config().get('enable_web_search'):
+                if 'tools' not in kwargs:
+                    kwargs.update({
+                        'tools': [{
+                            "type": "builtin_function",
+                            "function": {
+                                "name": "$web_search",
+                            },
+                        }],
+                    })
+                else:
+                    tool_exists = False
+                    for tool in kwargs['tools']:
+                        if tool.get('type') == 'builtin_function':
+                            tool_exists = True
+                            break
+                    if not tool_exists:
+                        kwargs['tools'].append({
+                            "type": "builtin_function",
+                            "function": {
+                                "name": "$web_search",
+                            },
+                        })
+        elif self.server_info.type == LLMServerType.QWEN.value:
+            # ChatTongYi 对多模态的入参比较特殊，需要转换以支持
+            user_message = messages[-1]
+            if isinstance(user_message, HumanMessage):
+                if isinstance(user_message.content, list):
+                    for one in user_message.content:
+                        if one.get('type') == 'image' and one.get('data'):
+                            one['type'] = 'image'
+                            one['image'] = f"data:{one.get('mime_type')};{one.get('source_type')},{one.get('data')}"
+                        elif one.get('type') == 'image_url' and one.get('image_url'):
+                            one['type'] = 'image'
+                            one['image'] = one.pop('image_url', {}).get('url')
+        return messages, kwargs
 
     @wrapper_bisheng_model_limit_check
     def _generate(
@@ -134,12 +211,47 @@ class BishengLLM(BaseChatModel):
             **kwargs: Any,
     ) -> ChatResult:
         try:
-            ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+            messages, kwargs = self.parse_kwargs(messages, kwargs)
+            if self.server_info.type == LLMServerType.MOONSHOT.value:
+                ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
+            else:
+                ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
             self._update_model_status(1, str(e))
             raise e
         return ret
+
+    def moonshot_generate(
+            self,
+            messages: List[BaseMessage],
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            result = None
+            finish_reason = None
+            while finish_reason is None or finish_reason == 'tool_calls':
+                result = self.llm._generate(messages, stop, run_manager, **kwargs)
+                result_message = result.generations[0].message
+                finish_reason = result.generations[0].generation_info.get('finish_reason')
+                for tool_call in result_message.tool_calls:
+                    tool_call_name = tool_call['name']
+                    if tool_call_name == "$web_search":
+                        messages.append(result_message)
+                        messages.append(ToolMessage(
+                            tool_call_id=tool_call['id'],
+                            name=tool_call_name,
+                            content=json.dumps(tool_call['args'], ensure_ascii=False),
+                        ))
+                    else:
+                        break
+            self._update_model_status(0)
+        except Exception as e:
+            self._update_model_status(1, str(e))
+            raise e
+        return result
 
     @wrapper_bisheng_model_limit_check_async
     async def _agenerate(
@@ -151,7 +263,11 @@ class BishengLLM(BaseChatModel):
             **kwargs: Any,
     ) -> ChatResult:
         try:
-            ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            messages, kwargs = self.parse_kwargs(messages, kwargs)
+            if self.server_info.type == LLMServerType.MOONSHOT.value:
+                ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
+            else:
+                ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             self._update_model_status(0)
         except Exception as e:
             self._update_model_status(1, str(e))
@@ -159,14 +275,77 @@ class BishengLLM(BaseChatModel):
             raise e
         return ret
 
+    async def moonshot_agenerate(
+            self,
+            messages: List[BaseMessage],
+            stop: Optional[List[str]] = None,
+            run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+    ) -> ChatResult:
+        try:
+            result = None
+            finish_reason = None
+            while finish_reason is None or finish_reason == 'tool_calls':
+                result = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+                result_message = result.generations[0].message
+                finish_reason = result.generations[0].generation_info.get('finish_reason')
+                for tool_call in result_message.tool_calls:
+                    tool_call_name = tool_call['name']
+                    if tool_call_name == "$web_search":
+                        messages.append(result_message)
+                        messages.append(ToolMessage(
+                            tool_call_id=tool_call['id'],
+                            name=tool_call_name,
+                            content=json.dumps(tool_call['args'], ensure_ascii=False),
+                        ))
+                    else:
+                        break
+            self._update_model_status(0)
+        except Exception as e:
+            self._update_model_status(1, str(e))
+            raise e
+        return result
+
     def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
         # todo 接入到异步任务模块
         LLMDao.update_model_status(self.model_id, status, remark)
 
     def bind_tools(
-        self,
-        tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
-        **kwargs: Any,
+            self,
+            tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
+            **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         return self.llm.bind_tools(tools, **kwargs)
+
+    def convert_qwen_result(self, message: BaseMessage) -> BaseMessage:
+        # ChatTongYi model vl model message.content is list
+        if isinstance(message.content, list):
+            message.content = ''.join([one.get('text', '') for one in message.content])
+        return message
+
+    def invoke(
+            self,
+            input: LanguageModelInput,
+            config: Optional[RunnableConfig] = None,
+            *,
+            stop: Optional[list[str]] = None,
+            **kwargs: Any,
+    ) -> BaseMessage:
+        ret = super().invoke(input, config=config, stop=stop, **kwargs)
+        if self.server_info.type == LLMServerType.QWEN.value:
+            ret = self.convert_qwen_result(ret)
+        return ret
+
+    async def ainvoke(
+            self,
+            input: LanguageModelInput,
+            config: Optional[RunnableConfig] = None,
+            *,
+            stop: Optional[list[str]] = None,
+            **kwargs: Any,
+    ) -> BaseMessage:
+        ret = await super().ainvoke(input, config=config, stop=stop, **kwargs)
+        if self.server_info.type == LLMServerType.QWEN.value:
+            ret = self.convert_qwen_result(ret)
+        return ret

@@ -152,7 +152,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                             {type === 'input' ?
                                 <div>
                                     <Textarea
-                                        className="w-96"
+                                        className="w-full"
                                         ref={textRef}
                                         disabled={inputSended}
                                         defaultValue={data.message.input_msg}
@@ -168,11 +168,11 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                 : <div>
                                     {data.message.options.map(opt => <div
                                         key={opt.id}
-                                        className="min-w-56 bg-[#fff] dark:bg-background rounded-xl p-4 mt-2 hover:bg-gray-200 cursor-pointer flex justify-between"
+                                        className="min-w-56 bg-[#fff] dark:bg-background rounded-xl p-4 mt-2 hover:bg-gray-200 cursor-pointer flex justify-between items-center break-all"
                                         onClick={() => handleSelect(opt)}
                                     >
                                         {opt.label}
-                                        {selected === opt.id && <CheckCircle size={20} />}
+                                        {selected === opt.id && <CheckCircle size={20} className="min-w-5" />}
                                     </div>)
                                     }
                                 </div>

@@ -136,7 +136,7 @@ export default function index() {
         <div className="bg-background-login px-4">
             <div className="flex justify-between items-center py-4">
                 <div className="flex items-center">
-                    <ShadTooltip content="back" side="top">
+                    <ShadTooltip content={t('back')} side="top">
                         <Button
                             className="w-[36px] px-2 rounded-full"
                             variant="outline"

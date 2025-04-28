@@ -8,7 +8,7 @@ import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { useMessageStore } from "./messageStore";
 
-export default function MessageUser({ mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
+export default function MessageUser({ debug, mark = false, useName = '', data, onMarkClick }: { data: ChatMessageType }) {
     const { t } = useTranslation()
     const msg = data.message[data.chatKey]
 
@@ -54,13 +54,13 @@ export default function MessageUser({ mark = false, useName = '', data, onMarkCl
                             <span>{t('addSimilarQuestion')}</span>
                         </Button>}
                     </div>
-                </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2">
+                </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <span></span>
-                    <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
+                    {!debug && <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
                         {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
                         {!running && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
                         {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
-                    </div>
+                    </div>}
                 </div>)
             }
         </div>

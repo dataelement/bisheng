@@ -14,6 +14,7 @@ export default function InputItem({ type = 'text', data, onChange }) {
         <Input className="mt-2 nodrag"
             value={value}
             type={type}
+            min={data.min}
             onChange={(e) => {
                 setValue(e.target.value);
                 onChange(e.target.value);

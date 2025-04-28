@@ -97,7 +97,12 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             return
         if not self.output:
             return
-        msg = response.generations[0][0].text
+        msg = response.generations[0][0].message
+        # ChatTongYi vl model special text
+        if isinstance(msg.content, list):
+            msg = ''.join([one.get('text', '') for one in msg.content])
+        else:
+            msg = msg.content
         if not msg:
             logger.warning('LLM output is empty')
             return

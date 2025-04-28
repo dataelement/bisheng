@@ -33,7 +33,7 @@ export default function FilesUpload() {
         {/* 文件上传 */}
         <div className="w-[44%] min-w-[520px]">
             <div className="flex items-center">
-                <ShadTooltip content="back" side="top">
+                <ShadTooltip content={t('back')} side="top">
                     <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}  >
                         <ArrowLeft className="side-bar-button-size" />
                     </button>

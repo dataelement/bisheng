@@ -63,4 +63,4 @@ class StreamMsgData(BaseModel):
 
 
 class StreamMsgOverData(StreamMsgData):
-    source_documents: Optional[List[Any]] = Field([], description='Source documents')
+    source_documents: Optional[List[Any]] = Field(default=[], description='Source documents')

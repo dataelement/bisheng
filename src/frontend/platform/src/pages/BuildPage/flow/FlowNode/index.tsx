@@ -246,6 +246,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 node={node}
                                 cate={group}
                                 onOutPutChange={handleChangeOutPut}
+                                onFouceUpdate={() => setFocusUpdate(!focusUpdate)}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
                                 onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
                             />

@@ -81,7 +81,7 @@ function QaTable({ dataList }) {
                 </TableRow>
                 <TableBody>
                     {dataList.map(el => {
-                        const questions = [1,2,3,4] // el.questions.filter(item => !!item);
+                        const questions = el.questions.filter(item => !!item);
                         const mainQuestion = questions.shift() || '';
                         const answers = JSON.parse(el.answers);
                         const answer = answers[0] || '';
@@ -275,7 +275,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                         <SimpleUpload
                             filekey="file"
                             uploadUrl={'/api/v1/knowledge/upload'}
-                            accept={['xlsx']}
+                            accept={['xls', 'xlsx']}
                             className={`${error.fileUrl ? 'border-red-400' : ''}`}
                             onSuccess={handleFileUploadSuccess}
                             preCheck={excelPreCheck}
@@ -285,7 +285,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                 </div>
                 {!!dataList.length && <div>
                     <label htmlFor="dataSetName" className="bisheng-label">
-                    导入预览（仅显示前十条）
+                        导入预览（仅显示前十条）
                     </label>
                     <div className="flex flex-col gap-4 py-2 max-h-[36vh] overflow-y-auto">
                         <QaTable dataList={dataList} />

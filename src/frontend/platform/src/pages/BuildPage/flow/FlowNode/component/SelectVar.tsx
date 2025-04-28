@@ -53,7 +53,10 @@ const getSpecialVar = (obj, type) => {
  * @param  nodeId 节点id, itemKey 当前变量key, children, onSelect
  * @returns 
  */
-const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
+const SelectVar = forwardRef(({
+    nodeId,
+    findInputFile = false, // 只展示input节点file_image变量
+    itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
     const [select, setSelect] = useState(['', ''])
@@ -151,7 +154,16 @@ const SelectVar = forwardRef(({ nodeId, itemKey, multip = false, value = [], chi
     const nodeTemps = useMemo(() => {
         if (!flow.nodes || !open) return []
         return flow.nodes.reduce((list, temp) => {
-            const newNode = getNodeDataByTemp(temp.data)
+            let tempData = temp.data
+            if (findInputFile) {
+                // 过滤非input节点
+                if (temp.data.type !== 'input') return list
+                tempData = cloneDeep(temp.data)
+                const groupParam = tempData.group_params.find(grouparam =>
+                    grouparam.params.some(param => param.key === 'dialog_image_files'))
+                groupParam.params = groupParam.params.filter(param => param.key === 'dialog_image_files')
+            }
+            const newNode = getNodeDataByTemp(tempData)
             newNode.data && list.push(newNode)
             return list
         }, [])

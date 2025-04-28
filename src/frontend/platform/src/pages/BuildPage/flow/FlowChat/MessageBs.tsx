@@ -1,11 +1,14 @@
 import MessageButtons from "@/components/bs-comp/chatComponent/MessageButtons";
 import SourceEntry from "@/components/bs-comp/chatComponent/SourceEntry";
+import { ToastIcon } from "@/components/bs-icons";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { cname } from "@/components/bs-ui/utils";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
+import { ChevronDown } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
@@ -13,9 +16,6 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import ChatFile from "./ChatFileFile";
 import { useMessageStore } from "./messageStore";
-import { ChevronDown } from "lucide-react";
-import { cname } from "@/components/bs-ui/utils";
-import { ToastIcon } from "@/components/bs-icons";
 
 // 颜色列表
 const colorList = [
@@ -61,7 +61,8 @@ const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ mark = false, logo, data, onUnlike = () => { }, disableBtn = false, onSource, onMarkClick }: { logo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }:
+    { debug?: boolean, ogo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -167,7 +168,7 @@ export default function MessageBs({ mark = false, logo, data, onUnlike = () => {
                             message,
                         })}
                     />
-                    {!disableBtn && <MessageButtons
+                    {!debug && <MessageButtons
                         mark={mark}
                         id={data.id || data.message_id}
                         data={data.liked}

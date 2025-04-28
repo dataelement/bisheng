@@ -1,3 +1,4 @@
+import { message } from '@/components/bs-ui/toast/use-toast';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
@@ -27,6 +28,7 @@ type State = {
      * 控制引导问题的显示状态
      */
     showGuideQuestion: boolean
+    inputForm: null | any
 }
 
 type Actions = {
@@ -44,6 +46,7 @@ type Actions = {
     insetBsMsg: (text: string) => void;
     setShowGuideQuestion: (text: boolean) => void;
     clearMsgs: () => void;
+    setInputForm: (inputForm: any) => void;
 }
 
 
@@ -83,7 +86,7 @@ let currentChatId = ''
 export const useMessageStore = create<State & Actions>((set, get) => ({
     chatId: '',
     messages: [],
-
+    inputForm: null,
     running: false,
     hisMessages: [],
     historyEnd: false,
@@ -226,8 +229,19 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             set({ historyEnd: true })
         }
     },
-
-
+    overWsMsg(data) {
+        // 删除所有未结束消息
+        if (data.type === 'end' && data.message) {
+            console.log('触发安全审计,删除所有未结束消息 :>> ');
+            data.category = "stream_msg"
+            data.type = 'over'
+            data.message_id = generateUUID(8)
+            get().createWsMsg(data)
+            setTimeout(() => {
+                set((state) => ({ messages: state.messages.filter(msg => msg.end) }))
+            }, 0);
+        }
+    },
     // stream end old
     updateCurrentMessage(data) {
         const messages = get().messages
@@ -256,9 +270,15 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         }, 0);
     },
     destory() {
-        set({ chatId: '', messages: [] })
+        set({
+            chatId: '',
+            messages: [],
+            inputForm: null
+        })
     },
-
+    setInputForm(form) {
+        set({ inputForm: form })
+    },
 
     // // stream end
     // updateCurrentMessage(wsdata, cover = false) {

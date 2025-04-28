@@ -121,6 +121,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                     {
                         modal && <Cascader
                             defaultValue={modal}
+                            placholder="请在模型管理中配置 embedding 模型"
                             options={options}
                             onChange={(a, val) => setModal(val)}
                         />

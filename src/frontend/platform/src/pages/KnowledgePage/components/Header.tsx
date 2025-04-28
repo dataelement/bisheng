@@ -44,7 +44,7 @@ export default function Header() {
     }
 
     return <div className="flex items-start h-14">
-        <ShadTooltip content="back" side="top">
+        <ShadTooltip content={t('back')} side="top">
             <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
                 <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
             </button>

@@ -14,16 +14,11 @@ export default defineConfig({
     port: 4001,
     strictPort: false,
     proxy: {
-      '^/api/': {
-        target: 'http://192.168.106.116:7861',
-        // target: 'http://localhost:3080',
-        changeOrigin: true,
-      },
-      '/oauth': {
-        // target: 'http://localhost:3080',
-        target: 'http://192.168.106.116:7861',
-        changeOrigin: true,
-      },
+      // '^/api/': {
+      //   target: 'http://192.168.106.116:7861',
+      //   // target: 'http://localhost:3080',
+      //   changeOrigin: true,
+      // },
       '/workspace/bisheng': {
         target: "http://192.168.106.116:9000",
         changeOrigin: true,
@@ -44,6 +39,14 @@ export default defineConfig({
             console.log('Proxying request to:', proxyReq.path);
           });
         }
+      },
+      '/workspace/tmp-dir': {
+        target: 'http://192.168.106.116:9000',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => {
+          return path.replace(/^\/workspace\/tmp-dir/, '/tmp-dir');
+        },
       }
     },
   },

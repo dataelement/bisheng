@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import VarInput from "./VarInput";
+import { Badge } from "@/components/bs-ui/badge";
 
 export default function VarTextareaUploadItem({ nodeId, data, onChange, onValidate, onVarEvent }) {
     // console.log('data.value :>> ', data.value);
@@ -34,10 +35,12 @@ export default function VarTextareaUploadItem({ nodeId, data, onChange, onValida
 
     return (
         <div className='node-item mb-4 nodrag' data-key={data.key}>
-            {/* <Label className='bisheng-label'>
-                {data.required && <span className="text-red-500">*</span>}
-                {data.label}
-            </Label> */}
+            <div className="flex justify-between items-center">
+                <Label className="flex items-center bisheng-label">
+                    消息内容变量
+                </Label>
+                <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">{data.key}</Badge>
+            </div>
             <VarInput
                 error={error}
                 placeholder={data.placeholder}

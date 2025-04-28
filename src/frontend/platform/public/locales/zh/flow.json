@@ -130,7 +130,7 @@
     "atLeastOneFormItem": "至少添加一个表单项",
     "editFormItem": "修改表单项",
     "addFormItem": "添加表单项",
-    "userInputLabel": "用户输入框展示内容",
+    "userInputLabel": "用户输入内容变量",
     "userInputPlaceholder": "此处为空时，需要用户手动输入意见；预置文本时，可允许用户在预置文本的基础上修改并提交。",
     "optionsCannotBeEmpty": "选项不可为空",
     "noInteraction": "无交互",

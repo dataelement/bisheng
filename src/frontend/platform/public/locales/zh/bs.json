@@ -234,7 +234,7 @@
     "searchLabels": "搜索标签",
     "confirmed": "已确认",
     "confirm": "确认",
-    "runNewWorkflow": "运行新工作流",
+    "runNewWorkflow": "开启新会话",
     "chatEndMessage": "本轮会话已结束"
   },
   "model": {

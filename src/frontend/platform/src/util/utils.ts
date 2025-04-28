@@ -172,14 +172,14 @@ export function exportCsv(data: any[], fileName: string = 'test_result.csv') {
 // 校验合法json
 export function isValidJSON(str) {
     if (typeof str !== 'string') return false;
-    
+
     // 简单的前置检查
     str = str.trim();
-    if (!(str.startsWith('{') && str.endsWith('}')) && 
+    if (!(str.startsWith('{') && str.endsWith('}')) &&
         !(str.startsWith('[') && str.endsWith(']'))) {
         return false;
     }
-    
+
     // 完整解析验证
     try {
         JSON.parse(str);
@@ -187,4 +187,11 @@ export function isValidJSON(str) {
     } catch (e) {
         return false;
     }
+}
+
+// 取后缀名
+export function getFileExtension(filename) {
+    const basename = filename.split(/[\\/]/).pop(); // 去除路径
+    const match = basename.match(/\.([^.]+)$/);
+    return (match ? match[1] : '').toUpperCase();
 }

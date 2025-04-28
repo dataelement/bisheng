@@ -71,6 +71,7 @@ class BishengEmbedding(BaseModel, Embeddings):
         LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
         LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
         LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
+        LLMServerType.TENCENT.value: 'OpenAIEmbeddings',
     }
 
     # bisheng强相关的业务参数
