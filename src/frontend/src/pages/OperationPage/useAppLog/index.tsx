@@ -183,7 +183,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             keyword: filters.keyword || undefined,
         }).then((res) => {
             if (res) {
-                const fileUrl = res.file_list[0];
+                const fileUrl = res.file;
                 downloadFile(checkSassUrl(fileUrl), generateFileName(start_date, end_date));
             } else {
                 console.error('导出失败');
