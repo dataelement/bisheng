@@ -63,7 +63,7 @@ class InputNode(BaseNode):
                 self.node_data.get_variable_info('dialog_files_content'),
                 self.node_data.get_variable_info('dialog_file_accept')
             ]
-            return self.node_data.get_variable_info('user_input')
+            return user_input_info
         form_input_info = self.node_data.get_variable_info('form_input')
         for one in form_input_info['value']:
             one['value'], _ = self.parse_msg_with_variables(one['value'])
