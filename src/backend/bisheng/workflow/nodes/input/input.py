@@ -75,7 +75,7 @@ class InputNode(BaseNode):
             dislog_files_content, self._dialog_images_files = self.parse_dialog_files()
             res = {
                 'user_input': self.node_params['user_input'],
-                'dialog_files_content': self.parse_dialog_files(),
+                'dialog_files_content': dislog_files_content,
                 'dialog_image_files': self._dialog_images_files
             }
             self.graph_state.save_context(content=f'{res["dialog_files_content"]}\n{res["user_input"]}',

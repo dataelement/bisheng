@@ -14,7 +14,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import add_qa
+from bisheng.api.services.knowledge_imp import add_qa, QA_save_knowledge
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
@@ -210,12 +210,9 @@ def get_QA_list(*,
     """ 获取知识库文件信息. """
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
-    if keyword:
-        question = keyword
-        answer = keyword
     qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                  page_num, question, answer,
-                                                                 status)
+                                                                 keyword, status)
     user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
     user_map = {user.user_id: user.user_name for user in user_list}
     data = [jsonable_encoder(qa) for qa in qa_list]
@@ -523,8 +520,8 @@ def post_import_file(*,
             create_time=datetime.now(),
             update_time=datetime.now())
         for key, value in dd.items():
-            if key.startswith('相似问题'):
-                d.questions.append(str(value) if value != np.nan else '')
+            if key.startswith('相似问题') and value != np.nan and value != '' and value is not None:
+                d.questions.append(str(value))
         insert_data.append(d)
     try:
         if size > 0 and offset >= 0:
@@ -541,6 +538,7 @@ def post_import_file(*,
 def post_import_file(*,
                      qa_knowledge_id: int,
                      file_list: list[str] = Body(..., embed=True),
+                     background_tasks: BackgroundTasks,
                      login_user: UserPayload = Depends(get_login_user)):
     # 查询当前知识库，是否有写入权限
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
@@ -573,8 +571,8 @@ def post_import_file(*,
                     if value is not np.nan and value and value is not None and str(value) != 'nan' and str(
                             value) != 'null':
                         if value not in tmp_questions:
-                            QACreate.questions.append(value)
-                            tmp_questions.add(value)
+                            QACreate.questions.append(str(value))
+                            tmp_questions.add(str(value))
 
             db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
             if db_q and not QACreate.id or len(tmp_questions & all_questions) > 0:
@@ -583,7 +581,11 @@ def post_import_file(*,
                 insert_data.append(QACreate)
                 all_questions = all_questions | tmp_questions
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
-        insert_result.append(result)
+
+        # async task add qa into milvus and es
+        for one in result:
+            background_tasks.add_task(QA_save_knowledge, db_knowledge, one)
+
         error_result.append(have_data)
 
-    return resp_200({"result": insert_result, "errors": error_result})
+    return resp_200({"errors": error_result})
