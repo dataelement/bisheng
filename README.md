@@ -7,7 +7,6 @@
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
-    <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
     <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
