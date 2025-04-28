@@ -5,6 +5,7 @@ import { GripVertical, Maximize2, Minus, X } from "lucide-react";
 import { forwardRef, useContext, useImperativeHandle, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import ChatPane from "./ChatPane";
+import { cloneDeep } from "lodash-es";
 
 // ref
 export const ChatTest = forwardRef((props, ref) => {
@@ -25,7 +26,8 @@ export const ChatTest = forwardRef((props, ref) => {
                 setOpen(true);  // 通过 `run` 方法打开 `Sheet`
                 setSmall(false);
 
-                setFlow(flow);
+                // 克隆flow用于调试
+                setFlow(cloneDeep(flow));
                 setChatId(`test_${generateUUID(16)}`);
             }, 0);
         },

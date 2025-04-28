@@ -55,7 +55,7 @@ const getSpecialVar = (obj, type) => {
  */
 const SelectVar = forwardRef(({
     nodeId,
-    findInputFile = false, // 只展示input节点file_image变量
+    findInputFile = false, // 只展示input节点file_image变量(视觉表单项使用)
     itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
@@ -152,22 +152,62 @@ const SelectVar = forwardRef(({
     }
 
     const nodeTemps = useMemo(() => {
-        if (!flow.nodes || !open) return []
-        return flow.nodes.reduce((list, temp) => {
-            let tempData = temp.data
-            if (findInputFile) {
-                // 过滤非input节点
-                if (temp.data.type !== 'input') return list
-                tempData = cloneDeep(temp.data)
-                const groupParam = tempData.group_params.find(grouparam =>
-                    grouparam.params.some(param => param.key === 'dialog_image_files'))
-                groupParam.params = groupParam.params.filter(param => param.key === 'dialog_image_files')
+        // 如果节点数据未加载或组件未打开，返回空数组
+        if (!flow?.nodes || !open) return [];
+
+        return flow.nodes.reduce((processedNodes, node) => {
+            let nodeData = node.data;
+
+            // 特殊处理输入节点
+            if (node.data.type === 'input') {
+                nodeData = processInputNode(node.data, findInputFile);
             }
-            const newNode = getNodeDataByTemp(tempData)
-            newNode.data && list.push(newNode)
-            return list
-        }, [])
-    }, [open])
+            // 其他节点，跳过
+            else if (findInputFile) {
+                return processedNodes;
+            }
+
+            const newNode = getNodeDataByTemp(nodeData);
+            newNode.data && processedNodes.push(newNode);
+            return processedNodes;
+        }, []);
+    }, [open, flow.nodes]);
+
+    /**
+     * 根据文件类型过滤dialog_image_files文件变量
+     * 限制findInputFileOnly为true时，过滤其他变量,只返回dialog_image_files文件变量
+     */
+    function processInputNode(inputNodeData, findInputFileOnly) {
+        const processedData = cloneDeep(inputNodeData);
+        let acceptType = 'all';
+
+        const groupParam = processedData.group_params.find(group =>
+            group.params.some(param => {
+                if (param.key === "dialog_file_accept") {
+                    acceptType = param.value;
+                    return true;
+                }
+                return false;
+            })
+        );
+
+        if (!groupParam) return processedData;
+
+        // 根据文件类型过滤参数
+        if (acceptType === 'file') {
+            groupParam.params = groupParam.params.filter(param =>
+                param.key !== 'dialog_image_files'
+            );
+        }
+        // 如果只需要文件输入参数
+        if (findInputFileOnly) {
+            groupParam.params = groupParam.params.filter(param =>
+                param.key === 'dialog_image_files'
+            );
+        }
+
+        return processedData;
+    }
 
     // 三级变量 预置问题
     const [questions, setQuestions] = useState([])
