@@ -295,7 +295,7 @@ def add_chat_messages(*,
                               sensitive_status=SensitiveStatus.PASS.value,
                               type='bot',
                               category='answer')
-    ChatMessageDao.insert_batch([human_message, bot_message])
+    message_dbs = ChatMessageDao.insert_batch([human_message, bot_message])
     # 更新会话的状态
     MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
 
@@ -329,7 +329,7 @@ def add_chat_messages(*,
                 AuditLogService.create_chat_assistant(login_user, get_request_ip(request),
                                                       flow_id)
 
-    return resp_200(message='添加成功')
+    return resp_200(data=message_dbs, message='添加成功')
 
 
 @router.put('/chat/message/{message_id}', status_code=200)
