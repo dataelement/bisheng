@@ -4,9 +4,9 @@ import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
-import { formatStrTime } from "@/util/utils";
+import { bindQuillEvent, formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -19,6 +19,8 @@ import { ToastIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
+import { SourceType } from "@/constants";
+import RichText from "@/components/bs-comp/richText";
 
 // 颜色列表
 const colorList = [
@@ -42,7 +44,7 @@ const ReasoningLog = ({ loading, msg = '' }) => {
     if (!msg) return null
 
     return <div className="py-1">
-        <div className="rounded-sm border">s
+        <div className="rounded-sm border">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ? <div className="flex items-center font-bold gap-2 text-sm">
                     <LoadIcon className="text-primary duration-300" />
@@ -113,6 +115,17 @@ export default function MessageBs({operation, audit, mark = false, logo, data, o
         ),
         [message]
     )
+    // 输出富文本
+    const richText = useMemo(
+        () => {
+            // 命中QA了 说明返回的大概率是富文本
+            if (data.source === SourceType.HAS_QA && /<[a-z][\s\S]*>/i.test(message)) {
+                return <RichText msg={message}/>;
+            }
+            return '';
+        },
+        [message]
+    )
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
@@ -134,7 +147,6 @@ export default function MessageBs({operation, audit, mark = false, logo, data, o
                 {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
-                        {/* TODO */}
                         {<TitleLogo url={flow?.logo} className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden" id={flow?.id}></TitleLogo>}
                         {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                             <img className="w-6 h-6" src={logo} />
@@ -144,7 +156,7 @@ export default function MessageBs({operation, audit, mark = false, logo, data, o
                             </div>} */}
                         {message || data.files.length ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {message && mkdown}
+                                {message && (richText || mkdown)}
                                 {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}

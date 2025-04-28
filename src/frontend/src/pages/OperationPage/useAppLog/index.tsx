@@ -230,6 +230,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead className="w-[300px]">{t('log.appName')}</TableHead>
                             <TableHead>{t('log.userName')}</TableHead>
                             <TableHead>{t('system.userGroup')}</TableHead>
+                            <TableHead>{t('createTime')}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead>{t('log.userFeedback')}</TableHead>
                             <TableHead className="text-right">{t('operations')}</TableHead>
@@ -244,6 +245,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 </TableCell>
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>{el.user_groups.map(el => el.name).join(',')}</TableCell>
+                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="break-all flex gap-2">
                                     <div className="text-center text-xs relative">

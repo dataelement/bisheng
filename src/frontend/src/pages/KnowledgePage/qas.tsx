@@ -9,7 +9,6 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState, useCallba
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useTranslation } from "react-i18next";
-import { useDropzone } from 'react-dropzone';
 import { Link, useParams } from "react-router-dom";
 import { Label } from "@/components/bs-ui/label";
 import ShadTooltip from "../../components/ShadTooltipComponent";
@@ -34,7 +33,8 @@ import { downloadFile } from "@/util/utils";
 import SimpleUpload from "@/components/bs-ui/upload/simple";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { generateUUID } from "@/components/bs-ui/utils";
-import RichInput from "./components/RichInput";
+import RichInput from "./components/RichInput/index";
+import RichText from "@/components/bs-comp/richText";
 
 const defaultQa = {
     question: '',
@@ -326,6 +326,13 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
             [name]: value
         }));
     };
+    
+    const handleAnswerChange = (value) => {
+        setForm((prevForm) => ({
+            ...prevForm,
+            answer: value
+        }));
+    };
 
     const handleSimilarQuestionsChange = (list) => {
         setForm((prevForm) => ({
@@ -375,18 +382,18 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
         }
 
         const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
-        if (_similarQuestions.some((q) => q.length > 100)) {
-            return message({
-                variant: 'warning',
-                description: t('max100CharactersForSimilarQuestion')
-            });
-        }
-        if (form.answer.length > 1000) {
-            return message({
-                variant: 'warning',
-                description: t('max1000CharactersForAnswer')
-            });
-        }
+        // if (_similarQuestions.some((q) => q.length > 100)) {
+        //     return message({
+        //         variant: 'warning',
+        //         description: t('max100CharactersForSimilarQuestion')
+        //     });
+        // }
+        // if (form.answer.length > 1000) {
+        //     return message({
+        //         variant: 'warning',
+        //         description: t('max1000CharactersForAnswer')
+        //     });
+        // }
 
         setSaveLoad(true);
         await captureAndAlertRequestErrorHoc(updateQa(idRef.current, {
@@ -453,9 +460,8 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
                         /> */}
                         <RichInput
                             className={`col-span-3 h-36 ${error.answer && 'border-red-400'}`}
-                            url={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
                             value={form.answer}
-                            onChange={handleInputChange}
+                            onChange={handleAnswerChange}
                         />
                     </div>
                 </div>
@@ -625,6 +631,10 @@ export default function QasPage() {
         })
     }
     
+    useEffect(() => {
+        // TODO: 绑定事件
+        // bindQuillEvent(ref);
+    }, [])
 
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -692,7 +702,7 @@ export default function QasPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {datalist.map(el => (
+                        {datalist.map((el: any) => (
                             <TableRow key={el.id}>
                                 <TableCell className="font-medium">
                                     <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
@@ -704,7 +714,7 @@ export default function QasPage() {
                                 </TableCell>
                                 <TableCell className="font-medium">
                                     <div className="max-h-48 overflow-y-auto scrollbar-hide">
-                                        {el.answers}
+                                        <RichText msg={el.answers}/>
                                     </div>
                                 </TableCell>
                                 <TableCell>{[t('unknown'), t('manualCreation'), t('APIImport'), t('bulkImport') , t('bulkImport')][el.source]}</TableCell>

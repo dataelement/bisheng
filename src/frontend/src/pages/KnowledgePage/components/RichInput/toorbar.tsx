@@ -2,11 +2,11 @@ import React from 'react';
 import FileIcon from './icons/FileIcon';
 
 const TOOLBAR_ITEMS = [
-  [{ header: [1, 2, 3, false] }],
+  // [{ header: [1, 2, 3, false] }],
   ['bold', 'italic', 'underline', 'strike'],
-  [{ list: 'ordered' }, { list: 'bullet' }],
-  ['link', 'image', 'bsfile'], // 添加了自定义文件按钮
-  ['clean'],
+  // [{ list: 'ordered' }, { list: 'bullet' }],
+  ['image', 'bsfile'], // 添加了自定义文件按钮
+  // ['clean'],
 ];
 
 const CustomToolbar = () => (

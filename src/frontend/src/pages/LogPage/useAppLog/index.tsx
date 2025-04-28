@@ -250,7 +250,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                     <FilterByUser isAudit={true} value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
                     <FilterByUsergroup isAudit={true} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
-                    <div className="w-[200px] relative">
+                    {/* 20250428 开会说 审计不展示用户反馈 */}
+                    {/* <div className="w-[200px] relative">
                         <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="用户反馈" />
@@ -263,7 +264,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
-                    </div>
+                    </div> */}
                     {showReviewResult &&
                         <div className="w-[200px] relative">
                             <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
@@ -296,8 +297,10 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
                             <TableHead>{t('log.userName')}</TableHead>
                             <TableHead>{t('system.userGroup')}</TableHead>
+                            <TableHead>{t('createTime')}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
-                            <TableHead>{t('log.userFeedback')}</TableHead>
+                            {/* 20250428 开会说 审计不展示用户反馈 */}
+                            {/* <TableHead>{t('log.userFeedback')}</TableHead> */}
                             {showReviewResult && <TableHead>审查结果</TableHead>} {/* Conditionally render the review result column */}
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
@@ -311,8 +314,10 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 </TableCell>
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>{el.user_groups.map(el => el.name).join(',')}</TableCell>
+                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                <TableCell className="break-all flex gap-2">
+                                {/* 20250428 开会说 审计不展示用户反馈 */}
+                                {/* <TableCell className="break-all flex gap-2">
                                     <div className="text-center text-xs relative">
                                         <ThunmbIcon
                                             type='like'
@@ -334,7 +339,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         />
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
-                                </TableCell>
+                                </TableCell> */}
                                 {showReviewResult && (
                                     <TableCell className={getResultClass(el.review_status)}>
                                         {el.review_status === 1 && '未审查'}

@@ -28,15 +28,16 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     setMounted(true);
   }, []);
 
+  // 考虑后面优化为 外部传入formats
   const formats = [
-    'header',
+    // 'header',
     'bold',
     'italic',
     'underline',
     'strike',
-    'list',
-    'bullet',
-    'link',
+    // 'list',
+    // 'bullet',
+    // 'link',
     'image',
     'bsfile', // 与blotName一致
   ];

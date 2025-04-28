@@ -16,6 +16,8 @@ import { Badge } from "@/components/bs-ui/badge";
 import { ShieldAlert } from "lucide-react";
 import { TitleLogo } from "../cardComponent";
 import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
+import RichText from "../richText";
+import { SourceType } from "@/constants";
 
 // 颜色列表
 const colorList = [
@@ -86,6 +88,18 @@ export default function MessageBs({ operation = false, mark = false, audit = fal
         [data.message]
     )
 
+    // 输出富文本
+    const richText = useMemo(
+        () => {
+            // 命中QA了 说明返回的大概率是富文本
+            if (data.source === SourceType.HAS_QA && /<[a-z][\s\S]*>/i.test(message)) {
+                return <RichText msg={message}/>;
+            }
+            return '';
+        },
+        [message]
+    )
+
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
         // api data.id
@@ -114,7 +128,7 @@ export default function MessageBs({ operation = false, mark = false, audit = fal
                         </div>} */}
                     {data.message.toString() ?
                         <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                            {mkdown}
+                            {richText || mkdown}
                             {/* @user */}
                             {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                             {/* 光标 */}

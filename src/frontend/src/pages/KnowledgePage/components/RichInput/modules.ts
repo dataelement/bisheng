@@ -1,6 +1,8 @@
 import { Quill } from "react-quill";
 import { uploadFile } from '@/util/utils'
 import { Delta } from "quill";
+import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 
 export const modules = {
   toolbar: {
@@ -14,11 +16,11 @@ export const modules = {
         fileInput.setAttribute('accept', '*');
         fileInput.style.display = 'none';
         fileInput.click();
-        const that = this;
         fileInput.onchange = async () => {
           if (fileInput.files && fileInput.files[0]) {
             const file = fileInput.files[0];
-            const quill = that.quill;
+            //TODO： 限制文件上传大小 zzy
+            const quill = this.quill;
             const range = quill.getSelection(true);
             
             // 插入临时占位文本
@@ -57,6 +59,33 @@ export const modules = {
           }
         };
       },
+      image: function (this: any) {
+        console.log('123213132');
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/*');
+        input.click();
+        
+        input.onchange = async () => {
+          //TODO： 限制文件上传大小 zzy
+          const file = input.files[0];
+          if (!file) return;
+          const quill = this.quill;
+          try {
+            // 这里调用你的图片上传函数
+            const res = await uploadFileWithProgress(file, (progress) => { }, 'icon');
+            if (res) {
+              //file_path
+              const imageUrl = res.file_path;
+              const range = quill.getSelection();
+              quill.insertEmbed(range.index, 'image', checkSassUrl(imageUrl));
+              quill.setSelection(range.index + 1);
+            }
+          } catch (error) {
+            console.error('图片上传失败:', error);
+          }
+        };
+      }
     },
   },
   clipboard: {
