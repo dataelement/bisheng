@@ -523,8 +523,8 @@ def post_import_file(*,
             create_time=datetime.now(),
             update_time=datetime.now())
         for key, value in dd.items():
-            if key.startswith('相似问题'):
-                d.questions.append(str(value) if value != np.nan else '')
+            if key.startswith('相似问题') and value != np.nan and value != '' and value is not None:
+                d.questions.append(str(value))
         insert_data.append(d)
     try:
         if size > 0 and offset >= 0:
