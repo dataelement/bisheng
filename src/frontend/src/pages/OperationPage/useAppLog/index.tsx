@@ -18,6 +18,7 @@ import { getStrTime } from "../StatisticsReport";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { downloadFile, formatDate } from "@/util/utils";
 import { message } from "@/components/bs-ui/toast/use-toast";
+import FilterByFeeback from "@/components/bs-comp/filterTableDataComponent/FilterByFeeback";
 
 export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
@@ -204,18 +205,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                     <FilterByUsergroup isAudit={false} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
                     <div className="w-[200px] relative">
-                        <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
-                            <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="用户反馈" />
-                            </SelectTrigger>
-                            <SelectContent className="max-w-[200px] break-all">
-                                <SelectGroup>
-                                    <SelectItem value={'like'}>赞</SelectItem>
-                                    <SelectItem value={'dislike'}>踩</SelectItem>
-                                    <SelectItem value={'copied'}>复制</SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                        <FilterByFeeback placeholder={"用户反馈"} value={filters.feedback} onChange={(value) => handleFilterChange('feedback', value)}/>
                     </div>
                     <SearchInput className="w-64" value={filters.keyword} placeholder={'历史聊天记录查询'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>

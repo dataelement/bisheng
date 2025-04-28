@@ -19,6 +19,7 @@ import { getStrTime } from "../StatisticsReport";
 import { downloadFile, formatDate } from "@/util/utils";
 import { message } from "@/components/bs-ui/toast/use-toast";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
+import FilterByResult from "@/components/bs-comp/filterTableDataComponent/FilterByResult";
 
 export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
@@ -265,23 +266,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             </SelectContent>
                         </Select>
                     </div> */}
-                    {showReviewResult &&
-                        <div className="w-[200px] relative">
-                            <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
-                                <SelectTrigger className="w-[200px]">
-                                    <SelectValue placeholder="审查结果" />
-                                </SelectTrigger>
-                                <SelectContent className="max-w-[200px] break-all">
-                                    <SelectGroup>
-                                        <SelectItem value={'1'}>未审查</SelectItem>
-                                        <SelectItem value={'2'}>通过</SelectItem>
-                                        <SelectItem value={'3'}>违规</SelectItem>
-                                        <SelectItem value={'4'}>审查失败</SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    }
+                    {showReviewResult && <FilterByResult placeholder={"审查结果"} value={filters.result} onChange={(value) => handleFilterChange('result', value)}/>}
                     <SearchInput className="w-64" value={filters.keyword} placeholder={'历史聊天记录查询'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
