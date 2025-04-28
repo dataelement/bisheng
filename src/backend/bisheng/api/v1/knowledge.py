@@ -210,12 +210,9 @@ def get_QA_list(*,
     """ 获取知识库文件信息. """
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
 
-    if keyword:
-        question = keyword
-        answer = keyword
     qa_list, total_count = knowledge_imp.list_qa_by_knowledge_id(qa_knowledge_id, page_size,
                                                                  page_num, question, answer,
-                                                                 status)
+                                                                 keyword, status)
     user_list = UserDao.get_user_by_ids([qa.user_id for qa in qa_list])
     user_map = {user.user_id: user.user_name for user in user_list}
     data = [jsonable_encoder(qa) for qa in qa_list]
