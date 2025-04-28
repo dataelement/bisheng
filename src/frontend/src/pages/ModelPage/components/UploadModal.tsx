@@ -1,5 +1,4 @@
-
-
+// 上传文件组件
 import { useContext, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";

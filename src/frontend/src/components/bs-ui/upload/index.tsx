@@ -1,3 +1,4 @@
+// 上传文件组件
 import { UploadIcon } from "@/components/bs-icons/upload";
 import axios from "axios";
 import { X } from "lucide-react";
