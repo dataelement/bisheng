@@ -564,3 +564,5 @@ export const enum SourceType {
   /** 已命中的QA */
   HAS_QA = 4,
 }
+
+export const KNOWLEDGE_ANALYSIS_FILE_TYPES = ['pdf', 'txt', 'docx', 'pptx', 'md', 'html', 'xls', 'xlsx', 'doc', 'ppt', 'png', 'jpg', 'jpeg', 'bmp'];
