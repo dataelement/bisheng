@@ -66,7 +66,7 @@ function QaTable({ dataList }) {
                                 {mainQuestion}
                             </TableCell>
                             <TableCell className="font-medium">
-                                {answer}
+                                <RichText msg={answer}/>
                             </TableCell>
                             <TableCell className="font-medium cursor-pointer text-primary">
                                 <Button variant="link" className="px-1" onClick={() => {
@@ -630,11 +630,6 @@ export default function QasPage() {
             localStorage.setItem('libdesc', form.desc)
         })
     }
-    
-    useEffect(() => {
-        // TODO: 绑定事件
-        // bindQuillEvent(ref);
-    }, [])
 
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
