@@ -27838,7 +27838,7 @@
   {
     "update_time": "2025-03-03 20:06:19",
     "parameters": null,
-    "name": "「多助手并行+穿行报告生成」",
+    "name": "「多助手并行+串行报告生成」",
     "description": "",
     "flow_id": "497051c652b94cc3a2ffb482c520b1bd",
     "api_parameters": null,
