@@ -254,6 +254,11 @@ class ChatMessageDao(MessageBase):
         with session_getter() as session:
             session.add_all(messages)
             session.commit()
+            ret = []
+            for one in messages:
+                session.refresh(one)
+                ret.append(one)
+            return ret
 
     @classmethod
     def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:

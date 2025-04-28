@@ -286,7 +286,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             messageIdRef.current = data.message_id
             // 限制文件类型
             if (input_schema.tab === 'dialog_input') {
-                const schemaItem = input_schema.value?.find(el => el.key === 'file_accept_select')
+                const schemaItem = input_schema.value?.find(el => el.key === 'dialog_file_accept')
                 const fileAccept = schemaItem?.value
                 if (fileAccept === 'image') {
                     setAccepts(FileTypes.IMAGE.join(','))

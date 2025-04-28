@@ -40,8 +40,11 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
 
     const { takeSnapshot } = useUndoRedo()
 
-    const { reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        setNodes, onNodesChange, onSelectionChange, onEdgesChange, onEdgeSelect, onConnect, onDragOver, onDrop } = useFlow(reactFlowInstance, flow, takeSnapshot)
+    const {
+        reactFlowWrapper, nodes, edges, keyBoardPanneRef,
+        setNodes, onNodesChange, onSelectionChange, onEdgesChange,
+        onEdgeSelect, onConnect, onDragOver, onDrop
+    } = useFlow(reactFlowInstance, flow, takeSnapshot)
 
     /**
      * 监听节点变化，更新flow数据
@@ -89,7 +92,17 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
     const [showApiPage, setShowApiPage] = useState(false)
 
     return <div className="flex flex-col h-full overflow-hidden">
-        <Header flow={flow} onTabChange={(type) => setShowApiPage('api' === type)} preFlow={preFlow}></Header>
+        <Header
+            flow={flow}
+            nodes={nodes}
+            onTabChange={(type) => setShowApiPage('api' === type)}
+            preFlow={preFlow}
+            onPreFlowChange={() => {
+                // 返回上一步前, 更新flow数据再对比
+                const { nodes } = reactFlowInstance.toObject()
+                setNodes(nodes)
+            }}
+        ></Header>
         <div className={`flex-1 min-h-0 overflow-hidden ${showApiPage ? 'hidden' : ''} relative`}>
             <Sidebar onInitStartNode={node => {
                 // start node
