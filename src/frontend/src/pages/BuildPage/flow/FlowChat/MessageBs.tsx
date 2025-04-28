@@ -4,7 +4,7 @@ import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
-import { bindQuillEvent, formatStrTime } from "@/util/utils";
+import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
