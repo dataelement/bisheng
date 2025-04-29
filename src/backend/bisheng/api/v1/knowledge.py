@@ -2,7 +2,7 @@ import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional
+from typing import List, Optional, Any
 
 import numpy as np
 import pandas as pd
@@ -497,6 +497,13 @@ def get_export_url(*,
     return resp_200({"file_list": file_list})
 
 
+def convert_excel_value(value: Any):
+    if value is None or value == "":
+        return ''
+    if str(value) == 'nan' or str(value) == 'null':
+        return ''
+    return str(value)
+
 @router.post('/qa/preview/{qa_knowledge_id}', status_code=200)
 def post_import_file(*,
                      qa_knowledge_id: int,
@@ -514,15 +521,15 @@ def post_import_file(*,
         d = QAKnowledgeUpsert(
             user_id=login_user.user_id,
             knowledge_id=qa_knowledge_id,
-            answers=[str(dd['答案']) if dd['答案'] != np.nan else ''],
-            questions=[str(dd['问题']) if dd['问题'] != np.nan else ''],
+            answers=[convert_excel_value(dd['答案'])],
+            questions=[convert_excel_value(dd['问题'])],
             source=4,
             status=1,
             create_time=datetime.now(),
             update_time=datetime.now())
         for key, value in dd.items():
-            if key.startswith('相似问题') and value != np.nan and value != '' and value is not None:
-                d.questions.append(str(value))
+            if key.startswith('相似问题') and convert_excel_value(value):
+                d.questions.append(convert_excel_value(value))
         insert_data.append(d)
     try:
         if size > 0 and offset >= 0:
@@ -562,18 +569,17 @@ def post_import_file(*,
             QACreate = QAKnowledgeUpsert(
                 user_id=login_user.user_id,
                 knowledge_id=qa_knowledge_id,
-                answers=[str(dd['答案']) if dd['答案'] != np.nan else ''],
-                questions=[str(dd['问题']) if dd['问题'] != np.nan else ''],
+                answers=[convert_excel_value(dd['答案'])],
+                questions=[convert_excel_value(dd['问题'])],
                 source=4,
                 status=1)
             tmp_questions.add(QACreate.questions[0])
             for key, value in dd.items():
                 if key.startswith('相似问题'):
-                    if value is not np.nan and value and value is not None and str(value) != 'nan' and str(
-                            value) != 'null':
-                        if value not in tmp_questions:
-                            QACreate.questions.append(str(value))
-                            tmp_questions.add(str(value))
+                    if tmp_value := convert_excel_value(value):
+                        if tmp_value not in tmp_questions:
+                            QACreate.questions.append(tmp_value)
+                            tmp_questions.add(tmp_value)
 
             db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
             if db_q and not QACreate.id or len(tmp_questions & all_questions) > 0:
