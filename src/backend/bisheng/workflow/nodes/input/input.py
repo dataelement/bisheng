@@ -166,8 +166,10 @@ class InputNode(BaseNode):
                     'extra': '',
                     'bbox': '',  # 临时文件不能溯源，因为没有持久化存储源文件
                 })
-        except Exception:
+        except Exception as e:
             logger.exception('parse input node file error')
+            if str(e).find('类型不支持') == -1:
+                raise e
 
         return file_name, original_file_path, texts, metadatas
 
