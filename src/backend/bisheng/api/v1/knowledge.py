@@ -10,7 +10,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPExcept
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.base import UnAuthorizedError, ServerError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
@@ -573,6 +573,8 @@ def post_import_file(*,
                 questions=[convert_excel_value(dd['问题'])],
                 source=4,
                 status=1)
+            if not QACreate.questions[0] or not QACreate.answers:
+                raise ServerError.http_exception(msg='上传失败，请重试')
             tmp_questions.add(QACreate.questions[0])
             for key, value in dd.items():
                 if key.startswith('相似问题'):
