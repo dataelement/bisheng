@@ -24,7 +24,7 @@ class KnowledgeSimilarError(BaseErrorCode):
 
 class KnowledgeQAError(BaseErrorCode):
     Code: int = 10930
-    Msg: str = '该问题已被标注过'
+    Msg: str = '该问题已存在'
 
 
 class KnowledgeCPError(BaseErrorCode):

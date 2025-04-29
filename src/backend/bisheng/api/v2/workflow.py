@@ -69,10 +69,13 @@ async def invoke_workflow(request: Request,
         async for event in workflow.get_response_until_break():
             if event.category == WorkflowEventType.NodeRun.value:
                 continue
+            # 非流式请求，过滤掉节点产生的流式输出事件
+            if not stream and event.category == WorkflowEventType.StreamMsg.value and event.type == 'stream':
+                continue
             workflow_stream = WorkflowStream(session_id=session_id,
                                              data=WorkFlowService.convert_chat_response_to_workflow_event(event))
             event_list.append(workflow_stream.data)
-            yield f'data: {workflow_stream.json()}\n\n'
+            yield f'data: {workflow_stream.model_dump_json()}\n\n'
         tmp_status_info = workflow.get_workflow_status()
         if tmp_status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
             workflow.clear_workflow_status()
@@ -80,7 +83,7 @@ async def invoke_workflow(request: Request,
             workflow_stream = WorkflowStream(session_id=session_id,
                                              data=WorkflowEvent(event=WorkflowEventType.Close.value))
             event_list.append(workflow_stream.data)
-            yield f'data: {workflow_stream.json()}\n\n'
+            yield f'data: {workflow_stream.model_dump_json()}\n\n'
 
     res = []
     # 非流式返回累计的事件列表
