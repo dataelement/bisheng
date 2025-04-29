@@ -65,7 +65,7 @@ class InputNode(BaseNode):
             ]
             return user_input_info
         form_input_info = self.node_data.get_variable_info('form_input')
-        for one in form_input_info['value']:
+        for one in form_input_info.value:
             one['value'], _ = self.parse_msg_with_variables(one['value'])
         return form_input_info
 
