@@ -199,6 +199,22 @@ export async function setLlmDefaultModel(data: { model_id: string }): Promise<an
 export async function getLlmDefaultModel(): Promise<any> {
     return await axios.get(`/api/v1/llm/workflow`)
 }
+
+
+/**
+ * 语音模型
+ */
+export async function setVoiceDefaultModel(data: { tts_model_id: string, stt_model_id: string, }): Promise<any> {
+    return await axios.post(`/api/v1/llm/voice`, data)
+}
+
+/**
+ * 语音模型
+ */
+export async function getVoiceDefaultModel(): Promise<any> {
+    return await axios.get(`/api/v1/llm/voice`)
+}
+
 /**
  * 审计默认模型
  */

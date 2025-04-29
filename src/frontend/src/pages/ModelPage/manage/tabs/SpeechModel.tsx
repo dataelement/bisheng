@@ -2,7 +2,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getLlmDefaultModel, setLlmDefaultModel } from "@/controllers/API/finetune";
+import { getLlmDefaultModel, getVoiceDefaultModel, setLlmDefaultModel, setVoiceDefaultModel } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,26 +10,32 @@ import { ModelSelect } from "./KnowledgeModel";
 
 export default function SpeechModel({ llmOptions, onBack }) {
     const { t } = useTranslation('model')
-    const [selectedModel, setSelectedModel] = useState(null);
+    const [selectedTtsModel, setSelectedTtsModel] = useState(null);
+    const [selectedSttModel, setSelectedSttModel] = useState(null);
     const [loading, setLoading] = useState(true)
     useEffect(() => {
         setLoading(true)
-        getLlmDefaultModel().then(res => {
-            setSelectedModel(res.model_id)
+        getVoiceDefaultModel().then(res => {
+            setSelectedTtsModel(res.tts_model_id)
+            setSelectedSttModel(res.stt_model_id)
             setLoading(false)
         })
     }, []);
 
     const { message } = useToast()
     const handleSave = () => {
-        if (!selectedModel) {
-            return message({ variant: 'error', description: t('model.defaultEvaluationFeature') + t('bs:required') })
+        if (!selectedTtsModel) {
+            return message({ variant: 'error', description: t('model.ttsDefaultModal') + t('bs:required') })
+        }
+        if (!selectedSttModel) {
+            return message({ variant: 'error', description: t('model.sttDefaultModal') + t('bs:required') })
         }
         const data = {
-            model_id: selectedModel
+            tts_model_id: selectedTtsModel,
+            stt_model_id: selectedSttModel,
         };
 
-        captureAndAlertRequestErrorHoc(setLlmDefaultModel(data).then(res => {
+        captureAndAlertRequestErrorHoc(setVoiceDefaultModel(data).then(res => {
             message({ variant: 'success', description: t('model.saveSuccess') })
         }));
     };
@@ -44,18 +50,18 @@ export default function SpeechModel({ llmOptions, onBack }) {
                 <Label className="bisheng-label">{t('model.ttsDefaultModal')}<span className="text-red-500 text-xs">*</span></Label>
                 <ModelSelect
                     label={''}
-                    value={selectedModel}
+                    value={selectedTtsModel}
                     options={llmOptions}
-                    onChange={(val) => setSelectedModel(val)}
+                    onChange={(val) => setSelectedTtsModel(val)}
                 />
             </div>
             <div className="mt-10">
                 <Label className="bisheng-label">{t('model.sttDefaultModal')}<span className="text-red-500 text-xs">*</span></Label>
                 <ModelSelect
                     label={''}
-                    value={selectedModel}
+                    value={selectedSttModel}
                     options={llmOptions}
-                    onChange={(val) => setSelectedModel(val)}
+                    onChange={(val) => setSelectedSttModel(val)}
                 />
             </div>
             <div className="mt-10 text-center space-x-6">
