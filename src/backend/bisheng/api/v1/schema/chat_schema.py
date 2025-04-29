@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class AppChatList(BaseModel):
@@ -22,6 +22,13 @@ class AppChatList(BaseModel):
     mark_status: Optional[int] = None
     mark_id: Optional[int] = None
     messages: Optional[List[dict]] = None # 会话的所有消息列表数据
+
+    @field_validator('user_name', mode='before')
+    @classmethod
+    def convert_user_name(cls, v: Any):
+        if not isinstance(v, str):
+            return str(v)
+        return v
 
 
 class APIAddQAParam(BaseModel):
