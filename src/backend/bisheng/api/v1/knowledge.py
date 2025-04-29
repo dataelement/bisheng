@@ -321,8 +321,9 @@ async def qa_add(*, QACreate: QAKnowledgeUpsert,
     if db_knowledge.type != KnowledgeTypeEnum.QA.value:
         raise HTTPException(status_code=404, detail='知识库类型错误')
 
-    db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
-    if db_q and not QACreate.id:
+    db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id, exclude_id=QACreate.id)
+    # create repeat question or update
+    if (db_q and not QACreate.id) or (db_q and QACreate.id and db_q.id != QACreate.id):
         raise KnowledgeQAError.http_exception()
 
     add_qa(db_knowledge=db_knowledge, data=QACreate)
