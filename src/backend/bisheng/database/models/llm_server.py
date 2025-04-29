@@ -34,8 +34,8 @@ class LLMModelType(Enum):
     LLM = 'llm'
     EMBEDDING = 'embedding'
     RERANK = 'rerank'
-    TTS = 'ttss'
-    STT = 'stts'
+    TTS = 'tts'
+    STT = 'stt'
 
 
 class LLMServerBase(SQLModelSerializable):

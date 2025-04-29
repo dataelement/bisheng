@@ -16,7 +16,7 @@ from loguru import logger
 from pydantic import Field
 
 
-class BishengSTT():
+class BishengSTT:
     """
          Use the llm model that has been launched in model management
         """
@@ -29,7 +29,6 @@ class BishengSTT():
     }
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         self.model_name = kwargs.get('model_name')
         self.streaming = kwargs.get('streaming', True)
@@ -59,8 +58,8 @@ class BishengSTT():
         class_object = self._get_stt_class(server_info.type)
         params = self._get_stt_params(server_info, model_info)
         try:
-            self.stt = class_object(params)
-            logger.debug(f'init_bisheng_stt: {self.llm.__dir__()}')
+            self.stt = class_object(**params)
+            logger.debug(f'init_bisheng_stt: {self.stt.__dir__()}')
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
@@ -75,7 +74,7 @@ class BishengSTT():
             params.update(server_info.config)
         if server_info.type == LLMServerType.QWEN.value:
             params["api_key"] = params.pop("openai_api_key")
-            params["model_name"] = model_info.model_name
+            params["model"] = model_info.model_name
         return params
 
     def transcribe(self,file_url):

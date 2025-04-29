@@ -16,7 +16,7 @@ from loguru import logger
 from pydantic import Field
 
 
-class BishengTTS():
+class BishengTTS:
     model_id: int = Field(description="后端服务保存的model唯一ID")
     model_name: Optional[str] = Field(default='', description="后端服务保存的model名称")
 
@@ -25,7 +25,6 @@ class BishengTTS():
     }
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         self.model_name = kwargs.get('model_name')
         self.streaming = kwargs.get('streaming', True)
@@ -44,8 +43,8 @@ class BishengTTS():
         server_info = LLMDao.get_server_by_id(model_info.server_id)
         if not server_info:
             raise Exception('服务提供方配置已被删除，请重新配置tts模型')
-        if model_info.model_type != LLMModelType.tts.value:
-            raise Exception(f'只支持LLM类型的模型，不支持{model_info.model_type}类型的模型')
+        if model_info.model_type != LLMModelType.TTS.value:
+            raise Exception(f'只支持{LLMModelType.TTS.value}类型的模型，不支持{model_info.model_type}类型的模型')
         if not ignore_online and not model_info.online:
             raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
         logger.debug(f'init_bisheng_tts: server_id: {server_info.id}, model_id: {model_info.id}')
@@ -55,8 +54,8 @@ class BishengTTS():
         class_object = self._get_tts_class(server_info.type)
         params = self._get_tts_params(server_info, model_info)
         try:
-            self.tts = class_object(params)
-            logger.debug(f'init_bisheng_tts: {self.llm.__dir__()}')
+            self.tts = class_object(**params)
+            logger.debug(f'init_bisheng_tts: {self.tts.__dir__()}')
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
@@ -81,7 +80,7 @@ class BishengTTS():
         if server_info.type == LLMServerType.QWEN.value:
             params["api_key"] = params.pop("openai_api_key")
             params["voice"] = model_info.config.get("voice")
-            params["model_name"] = model_info.model_name
+            params["model"] = model_info.model_name
         return params
 
     def _update_model_status(self, status: int, remark: str = ''):
