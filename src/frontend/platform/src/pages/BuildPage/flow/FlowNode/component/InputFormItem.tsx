@@ -281,6 +281,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
             /> */}
             <VarInput
+                mini
                 key={formData.variableName}
                 label={''}
                 itemKey={''}
@@ -434,6 +435,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             type='number'
             data={
                 {
+                    min: 0,
                     label: "文件内容长度限制(字)",
                     value: formData.fileContentSize,
                 }
@@ -551,6 +553,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
             variableName: key,
             filecontent: file_content,
             filepath: file_path,
+            fileType: file_type,
             fileContentSize: file_content_size,
             imageFile: image_file
         } = _data;
@@ -569,6 +572,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                         options,
                         file_content,
                         file_path,
+                        file_type,
                         file_content_size,
                         image_file
                     }
@@ -584,6 +588,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                 multiple,
                 file_content,
                 file_path,
+                file_type,
                 options,
                 file_content_size,
                 image_file
@@ -634,7 +639,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                     ref={scrollRef}
                     options={data.value.map((el) => ({
                         key: el.key,
-                        text: el.type === FormType.File && !el.multiple ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
+                        text: `${el.value}(${el.key},${el.file_content},${el.file_path})`,
                         type: el.type,
                     }))}
                     onEditClick={handleEditClick} // 点击编辑时执行的逻辑

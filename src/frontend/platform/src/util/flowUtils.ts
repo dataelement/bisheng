@@ -109,9 +109,11 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
                     return false
                 } else if (param.type === 'form') {
                     return param.value.some(item => {
-                        if (item.multiple) return `${node.id}.${item.key}` === varName
-                        return [`${node.id}.${item.key}`, `${node.id}.${item.file_content}`, `${node.id}.${item.file_path}`].includes(varName)
+                        // if (item.multiple) return `${node.id}.${item.key}` === varName
+                        return [`${node.id}.${item.key}`, `${node.id}.${item.file_content}`, `${node.id}.${item.file_path}`, `${node.id}.${item.image_file}`].includes(varName)
                     })
+                } else if (param.hidden) {
+                    return false
                 } else {
                     return `${node.id}.${param.key}` === varName
                 }

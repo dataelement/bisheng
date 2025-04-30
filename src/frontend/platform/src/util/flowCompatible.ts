@@ -72,8 +72,8 @@ const comptibleInput = (node) => {
 
         node.group_params[0].params.push({
             key: "dialog_files_content_size",
-            label: "文件内容长度上限(字)",
-            type: "number",
+            label: "文件内容长度上限",
+            type: "char_number",
             min: 0,
             value: 15000,
             tab: "dialog_input"

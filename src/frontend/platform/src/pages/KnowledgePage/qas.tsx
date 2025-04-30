@@ -369,7 +369,7 @@ export default function QasPage() {
                                         {el.answers}
                                     </div>
                                 </TableCell>
-                                <TableCell>{['未知', '手动创建', '标注导入', 'API导入', '批量导入'][el.source]}</TableCell>
+                                <TableCell>{['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.user_name}</TableCell>

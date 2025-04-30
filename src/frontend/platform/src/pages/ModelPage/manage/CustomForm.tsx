@@ -252,7 +252,6 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "https://api.hunyuan.cloud.tencent.com/v1",
             default: "https://api.hunyuan.cloud.tencent.com/v1",
             required: true,
             key: "base_url",

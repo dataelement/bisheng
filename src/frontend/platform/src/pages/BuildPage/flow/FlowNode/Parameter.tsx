@@ -115,6 +115,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
             />;
         case 'number':
             return <InputItem type='number' data={item} onChange={handleOnNewValue} />;
+        case 'char_number':
+            return <InputItem char type='number' data={item} onChange={handleOnNewValue} />;
         case 'code_input':
             return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'code':
@@ -147,7 +149,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
                 onFouceUpdate()
             }} />;
         case 'image_prompt':
-            return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate}/>;
+            return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
         default:
             return <div>Unsupported parameter type</div>;
     }

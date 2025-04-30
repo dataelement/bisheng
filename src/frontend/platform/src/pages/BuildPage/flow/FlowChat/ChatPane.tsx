@@ -38,6 +38,8 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
             )
             return {
                 action,
+                flow_id: flow.id,
+                chat_id: chatId.startsWith('test') ? undefined : chatId,
                 data: {
                     [nodeId]: {
                         data: {
