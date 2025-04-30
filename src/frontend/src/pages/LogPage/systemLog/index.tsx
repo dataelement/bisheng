@@ -16,7 +16,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 const useGroups = () => {
     const [groups, setGroups] = useState([])
     const loadData = () => {
-        getAuditGroupsApi().then((res: any) => setGroups(res.records))
+        getAuditGroupsApi().then((res: any) => setGroups(res.data))
     }
     return { groups, loadData }
 }
