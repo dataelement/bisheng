@@ -1,7 +1,9 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
+
+from pydantic import field_validator
 
 from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.knowledge import KnowledgeService
@@ -183,6 +185,13 @@ class WorkstationConversation(BaseModel):
             model=None,
             title=session.flow_name,
         )
+
+    @field_validator('user', mode='before')
+    @classmethod
+    def convert_user(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return v
+        return str(v)
 
 
 class SSECallbackClient:

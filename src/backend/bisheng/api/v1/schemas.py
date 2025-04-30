@@ -428,39 +428,39 @@ class EvaluationLLMConfig(BaseModel):
 
 class Icon(BaseModel):
     enabled: bool
-    image: Optional[str]
+    image: Optional[str] = None
 
 
 class WSModel(BaseModel):
-    key: Optional[str]
+    key: Optional[str] = None
     id: str
-    name: Optional[str]
-    displayName: Optional[str]
+    name: Optional[str] = None
+    displayName: Optional[str] = None
 
 
 class WSPrompt(BaseModel):
     enabled: bool
-    prompt: Optional[str]
-    model: Optional[str]
-    tool: Optional[str]
-    bingKey: Optional[str]
-    bingUrl: Optional[str]
+    prompt: Optional[str] = None
+    model: Optional[str] = None
+    tool: Optional[str] = None
+    bingKey: Optional[str] = None
+    bingUrl: Optional[str] = None
 
 
 class WorkstationConfig(BaseModel):
     menuShow: bool = Field(default=True, description='是否显示左侧菜单栏')
     maxTokens: Optional[int] = Field(default=1500, description='最大token数')
-    sidebarIcon: Optional[Icon]
-    assistantIcon: Optional[Icon]
-    sidebarSlogan: Optional[str] = Field(description='侧边栏slogan')
-    welcomeMessage: Optional[str] = Field()
-    functionDescription: Optional[str] = Field()
-    inputPlaceholder: Optional[str]
-    models: Optional[Union[List[WSModel], str]]
-    voiceInput: Optional[WSPrompt]
-    webSearch: Optional[WSPrompt]
-    knowledgeBase: Optional[WSPrompt]
-    fileUpload: Optional[WSPrompt]
+    sidebarIcon: Optional[Icon] = None
+    assistantIcon: Optional[Icon] = None
+    sidebarSlogan: Optional[str] = Field(default='', description='侧边栏slogan')
+    welcomeMessage: Optional[str] = Field(default='')
+    functionDescription: Optional[str] = Field(default='')
+    inputPlaceholder: Optional[str] = ''
+    models: Optional[Union[List[WSModel], str]] = None
+    voiceInput: Optional[WSPrompt] = None
+    webSearch: Optional[WSPrompt] = None
+    knowledgeBase: Optional[WSPrompt] = None
+    fileUpload: Optional[WSPrompt] = None
 
 
 # 文件切分请求基础参数
