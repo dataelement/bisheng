@@ -566,15 +566,15 @@ def post_import_file(*,
         all_questions = set()
         for index, dd in enumerate(data):
             tmp_questions = set()
+            dd_question = convert_excel_value(dd['问题'])
+            dd_answer = convert_excel_value(dd['答案'])
             QACreate = QAKnowledgeUpsert(
                 user_id=login_user.user_id,
                 knowledge_id=qa_knowledge_id,
-                answers=[convert_excel_value(dd['答案'])],
-                questions=[convert_excel_value(dd['问题'])],
+                answers=[dd_answer],
+                questions=[dd_question],
                 source=4,
-                status=1)
-            if not QACreate.questions[0] or not QACreate.answers:
-                raise ServerError.http_exception(msg='上传失败，请重试')
+                status=0)
             tmp_questions.add(QACreate.questions[0])
             for key, value in dd.items():
                 if key.startswith('相似问题'):
@@ -584,7 +584,7 @@ def post_import_file(*,
                             tmp_questions.add(tmp_value)
 
             db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
-            if db_q and not QACreate.id or len(tmp_questions & all_questions) > 0:
+            if (db_q and not QACreate.id) or len(tmp_questions & all_questions) > 0 or not dd_question or not dd_answer:
                 have_data.append(index)
             else:
                 insert_data.append(QACreate)
