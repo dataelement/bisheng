@@ -1,10 +1,10 @@
 import json
-from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
+from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable, Iterator, AsyncIterator
 
-from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
-from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage
-from langchain_core.outputs import ChatResult
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk
+from langchain_core.outputs import ChatResult, ChatGenerationChunk
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -13,7 +13,8 @@ from pydantic import Field
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
-from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
+from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
+    wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
 
 
 class BishengLLM(BaseChatModel):
@@ -216,6 +217,8 @@ class BishengLLM(BaseChatModel):
                 ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
             else:
                 ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+                if self.server_info.type == LLMServerType.QWEN.value:
+                    ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
             self._update_model_status(0)
         except Exception as e:
             self._update_model_status(1, str(e))
@@ -268,6 +271,8 @@ class BishengLLM(BaseChatModel):
                 ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
             else:
                 ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+                if self.server_info.type == LLMServerType.QWEN.value:
+                    ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
             self._update_model_status(0)
         except Exception as e:
             self._update_model_status(1, str(e))
@@ -308,8 +313,10 @@ class BishengLLM(BaseChatModel):
 
     def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
-        # todo 接入到异步任务模块
-        LLMDao.update_model_status(self.model_id, status, remark)
+        # todo 接入到异步任务模块 累计5分钟更新一次
+        if self.model_info.status != status:
+            self.model_info.status = status
+            LLMDao.update_model_status(self.model_id, status, remark)
 
     def bind_tools(
             self,
@@ -318,34 +325,44 @@ class BishengLLM(BaseChatModel):
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         return self.llm.bind_tools(tools, **kwargs)
 
-    def convert_qwen_result(self, message: BaseMessage) -> BaseMessage:
+    def convert_qwen_result(self, message: BaseMessageChunk | BaseMessage) -> BaseMessageChunk | BaseMessage:
         # ChatTongYi model vl model message.content is list
         if isinstance(message.content, list):
             message.content = ''.join([one.get('text', '') for one in message.content])
         return message
 
-    def invoke(
+    @wrapper_bisheng_model_generator
+    def _stream(
             self,
-            input: LanguageModelInput,
-            config: Optional[RunnableConfig] = None,
-            *,
+            messages: list[BaseMessage],
             stop: Optional[list[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
             **kwargs: Any,
-    ) -> BaseMessage:
-        ret = super().invoke(input, config=config, stop=stop, **kwargs)
-        if self.server_info.type == LLMServerType.QWEN.value:
-            ret = self.convert_qwen_result(ret)
-        return ret
+    ) -> Iterator[ChatGenerationChunk]:
+        try:
+            for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                if self.server_info.type == LLMServerType.QWEN.value:
+                    one.message = self.convert_qwen_result(one.message)
+                yield one
+            self._update_model_status(0)
+        except Exception as e:
+            self._update_model_status(1, str(e))
+            raise e
 
-    async def ainvoke(
+    @wrapper_bisheng_model_generator_async
+    async def _astream(
             self,
-            input: LanguageModelInput,
-            config: Optional[RunnableConfig] = None,
-            *,
+            messages: list[BaseMessage],
             stop: Optional[list[str]] = None,
+            run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
             **kwargs: Any,
-    ) -> BaseMessage:
-        ret = await super().ainvoke(input, config=config, stop=stop, **kwargs)
-        if self.server_info.type == LLMServerType.QWEN.value:
-            ret = self.convert_qwen_result(ret)
-        return ret
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        try:
+            async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+                if self.server_info.type == LLMServerType.QWEN.value:
+                    one.message = self.convert_qwen_result(one.message)
+                yield one
+            self._update_model_status(0)
+        except Exception as e:
+            self._update_model_status(1, str(e))
+            raise e
