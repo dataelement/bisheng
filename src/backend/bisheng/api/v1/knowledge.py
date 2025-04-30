@@ -10,7 +10,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import add_qa
+from bisheng.api.services.knowledge_imp import add_qa,add_qa_batch
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UnifiedResponseModel,
                                     UpdatePreviewFileChunk, UploadFileResponse, resp_200, resp_500)
@@ -408,7 +408,7 @@ def qa_auto_question(
     return resp_200(data={'questions': questions})
 
 @router.get('/qa/export/template', status_code=200)
-def get_export_url():
+def get_export_template_url():
     data = [{"问题":"","答案":"","相似问题1":"","相似问题2":""}]
     df = pd.DataFrame(data)
     bio = BytesIO()
@@ -599,7 +599,8 @@ def post_import_file(*,
             else:
                 insert_data.append(QACreate)
                 all_questions = all_questions | tmp_questions
-        result = QAKnoweldgeDao.batch_insert_qa(insert_data)
+        db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
+        result = add_qa_batch(db_knowledge,insert_data)
         insert_result.append(result)
         error_result.append(have_data)
 

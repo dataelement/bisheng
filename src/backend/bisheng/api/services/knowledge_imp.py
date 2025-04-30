@@ -677,6 +677,13 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
         logger.exception(e)
         raise e
 
+def add_qa_batch(db_knowledge: Knowledge, data_list: List[QAKnowledgeUpsert]) -> List[QAKnowledge]:
+    result = []
+    for data in data_list:
+        QA = add_qa(db_knowledge, data)
+        result.append(QA)
+    return result
+
 
 def qa_status_change(qa_id: int, target_status: int):
     """QA 状态切换"""
