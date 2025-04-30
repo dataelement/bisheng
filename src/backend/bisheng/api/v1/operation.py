@@ -55,8 +55,8 @@ def get_session_list(*, request: Request, login_user: UserPayload = Depends(get_
                      end_date: Optional[datetime] = Query(default=None, description='结束时间'),
                      feedback: Optional[str] = Query(default=None, description='like：点赞；dislike：点踩；copied：复制'),
                      review_status: Optional[int] = Query(default=None, description='审查状态'),
-                     page: Optional[int] = Query(default=1, description='页码'),
-                     page_size: Optional[int] = Query(default=10, description='每页条数'),
+                     page: Optional[int] = Query(default=0, description='页码'),
+                     page_size: Optional[int] = Query(default=0, description='每页条数'),
                      keyword: Optional[str] = Query(default=None,description='历史记录')):
     """ 筛选所有会话列表 """
     if not login_user.is_admin():
