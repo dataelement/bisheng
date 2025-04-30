@@ -8,14 +8,14 @@ import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
-import { changeLLmServerStatus, getModelListApi } from "@/controllers/API/finetune"
+import { changeLLmCheckStatus, changeLLmServerStatus, getModelListApi } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import ModelConfig from "./ModelConfig"
 import SystemModelConfig from "./SystemModelConfig"
 import { LoadingIcon } from "@/components/bs-icons/loading"
 
-function CustomTableRow({ data, index, user, onModel, onCheck }) {
+function CustomTableRow({ data, index, user, onModel, onCheck, onMotinor }) {
     const { t } = useTranslation()
     const [expand, setExpand] = useState(false)
 
@@ -45,6 +45,7 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                             <TableHead className="w-[200px]">{t('model.modelName')}</TableHead>
                             <TableHead className="w-[200px] min-w-[100px]">{t('model.modelType')}</TableHead>
                             <TableHead className="w-[200px] min-w-[100px]">{t('model.status')}</TableHead>
+                            <TableHead className="w-[100px] min-w-[100px]">{t('model.enableMonitoring')}</TableHead>
                             <TableHead className="w-[100px] min-w-[100px]">{t('model.onlineOfflineOperation')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -58,6 +59,9 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                         {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
                                     </span>
                                     {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
+                                </TableCell>
+                                <TableCell>
+                                    <Switch disabled={user.role !== 'admin'} checked={m.check} onCheckedChange={(bool) => onMotinor(index, bool, m.id)} />
                                 </TableCell>
                                 <TableCell>
                                     <Switch disabled={user.role !== 'admin'} checked={m.online} onCheckedChange={(bool) => onCheck(index, bool, m.id)} />
@@ -117,6 +121,13 @@ export default function Management() {
         setData([...data])
     }
 
+    //是否开启模型监控
+    const handleMonitoring = (index, bool, id) => {
+        captureAndAlertRequestErrorHoc(changeLLmCheckStatus(id, bool))
+        data[index].models = data[index].models.map(el => el.id === id ? { ...el, check: bool } : el)
+        setData([...data])
+    }
+
     if (modelId) return <ModelConfig
         id={modelId}
         onGetName={handleGetRepeatName}
@@ -159,6 +170,7 @@ export default function Management() {
                             data={d}
                             index={index}
                             onCheck={handleCheck}
+                            onMotinor={handleMonitoring}
                             onModel={setModelId}
                         />)
                     }

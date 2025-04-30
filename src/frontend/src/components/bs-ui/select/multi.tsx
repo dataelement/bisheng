@@ -214,7 +214,19 @@ const MultiSelect = ({
     >
         <SelectTrigger className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
-                !multiple && (values.length ? <span className="text-foreground">{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
+                !multiple && (values.length ? <div className="text-foreground inline-flex flex-1 flex-row justify-between items-center">
+                    <span>{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span>
+                    <X className="
+                        h-3.5 w-3.5 min-w-3.5 
+                        opacity-0 group-hover:opacity-100
+                        transition-opacity duration-200
+                        bg-black rounded-full
+                        flex items-center justify-center
+                        "
+                    color="#ffffff" onPointerDown={(e) => e.stopPropagation()}  onClick={() => {
+                        handleDelete(values[0]?.value);
+                    }}></X>
+                </div> : placeholder)
             }
             {
                 multiple && (values.length ? (

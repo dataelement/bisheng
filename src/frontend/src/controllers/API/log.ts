@@ -260,6 +260,36 @@ export async function getAuditAppListApi(params: {
     })
 }
 
+//导出审计信息exportAduitDataApi
+export async function exportAduitDataApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status,
+    keyword,
+}) {
+    return await axios.get('/api/v1/audit/export', {
+        params, paramsSerializer
+    })
+}
+
+//导出运营信息exportAduitDataApi
+export async function exportOperationDataApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    keyword,
+}) {
+    return await axios.get('/api/v1/operation/export', {
+        params, paramsSerializer
+    })
+}
 
 // 手动审查应用使用情况
 export async function auditApi(params: {
@@ -282,7 +312,6 @@ export async function getOperationAppListApi(params: {
     start_date,
     end_date,
     feedback,
-    review_status,
     page,
     page_size,
     keyword,

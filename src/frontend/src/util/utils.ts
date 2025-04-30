@@ -3,9 +3,66 @@ import clsx, { ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { APITemplateType } from "../types/api";
 import { checkUpperWords } from "../utils";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 
 export function classNames(...classes: Array<string>): string {
     return classes.filter(Boolean).join(" ");
+}
+
+/**
+ * 统一绑定quill富文本渲染自定义bolt的事件
+ * 考虑安全性
+*/
+export const bindQuillEvent = (ref: any) => {
+    if (!ref?.current) return;
+    const links = ref.current.querySelectorAll("div.ql-bsfile");
+    links.forEach(link => {
+        const url = link.getAttribute('data-url');
+        const name = link.getAttribute('data-name');
+        link.addEventListener("click", (e) => {
+            e.preventDefault();
+            downloadFile(checkSassUrl(url), name)
+        });
+    });
+    const images = ref.current.querySelectorAll("img");
+    images.forEach(image => {
+        const url = image.getAttribute('src');
+        image.setAttribute('src', checkSassUrl(url));
+    });
+}
+
+export const uploadFile = async ({ url, fileName = 'file', file, callback, cancel = null }) : Promise<any> => {
+    try {
+        const CancelToken = axios.CancelToken;    
+        const formData = new FormData();
+        formData.append(fileName, file);
+        const config = {
+            headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
+            onUploadProgress: (progressEvent) => {
+                const { loaded, total } = progressEvent;
+                const progress = Math.round((loaded * 100) / total);
+                console.log(`Upload progress: ${file.name} ${progress}%`);
+                callback?.(progress)
+                // You can update your UI with the progress information here
+            },
+            cancelToken: new CancelToken(function executor(c) {
+                if (cancel) cancel = c;
+            })
+        };
+
+        // Convert the FormData to binary using the FileReader API
+        const data = await axios.post(url, formData, config);
+
+        data && callback?.(100);
+
+        console.log('Upload complete:', data);
+        return data.data
+        // Handle the response data as needed
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        return ''
+        // Handle errors
+    }
 }
 
 export function downloadFile(url, label) {

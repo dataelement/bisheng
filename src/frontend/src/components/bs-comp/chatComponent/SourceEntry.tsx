@@ -1,19 +1,7 @@
 import { Badge } from "@/components/bs-ui/badge";
 import { Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-const enum SourceType {
-    /** 无溯源 */
-    NONE = 0,
-    /** 文件 */
-    FILE = 1,
-    /** 无权限 */
-    NO_PERMISSION = 2,
-    /** 链接s */
-    LINK = 3,
-    /** 已命中的QA */
-    HAS_QA = 4,
-}
+import { SourceType } from '@/constants';
 
 export default function SourceEntry({ extra, end, source, className = '', onSource }) {
     const { t } = useTranslation()

@@ -1,3 +1,4 @@
+// 上传文件组件
 import { UploadIcon } from "@/components/bs-icons";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";

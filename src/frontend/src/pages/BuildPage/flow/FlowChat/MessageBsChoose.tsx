@@ -14,6 +14,9 @@ import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { SourceType } from "@/constants";
+import RichText from "@/components/bs-comp/richText";
+
 // 颜色列表
 const colorList = [
     "#111",
@@ -112,6 +115,18 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow = {i
         ),
         [data.message]
     )
+    // 输出富文本
+    const richText = useMemo(
+        () => {
+            const message = data.message;
+            // 命中QA了 说明返回的大概率是富文本
+            if (data.source === SourceType.HAS_QA && /<[a-z][\s\S]*>/i.test(message)) {
+                return <RichText msg={message}/>
+            }
+            return ''
+        },
+        [data.message]
+    )
 
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
@@ -132,7 +147,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data, flow = {i
                         </div>} */}
                     <div className="text-sm max-w-[calc(100%-24px)]">
                         {/* message */}
-                        <div>{mkdown}</div>
+                        <div>{richText || mkdown}</div>
                         {/* files */}
                         <div>
                             {data.files?.map((file) => <div

@@ -2,6 +2,7 @@
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import Upload from "@/components/bs-ui/upload";
+import { KNOWLEDGE_ANALYSIS_FILE_TYPES } from "@/constants";
 import { locationContext } from "@/contexts/locationContext";
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,7 +33,7 @@ export default function FileUploadStep1({ hidden, onNext, onChange }) {
         <Upload
             ref={uploadRef}
             url={__APP_ENV__.BASE_URL + '/api/v1/knowledge/upload'}
-            accept={appConfig.libAccepts}
+            accept={KNOWLEDGE_ANALYSIS_FILE_TYPES}
             progressClassName='max-h-[374px]'
             onFileCountChange={(count, all) => {
                 console.log('count all :>> ', count, all);

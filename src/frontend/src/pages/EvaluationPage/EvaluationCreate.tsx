@@ -1,3 +1,4 @@
+// 上传文件组件
 import { QuestionMarkIcon } from "@/components/bs-icons/questionMark";
 import { UploadIcon } from "@/components/bs-icons/upload";
 import { Input } from "@/components/bs-ui/input";

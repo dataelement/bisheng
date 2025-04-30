@@ -9,13 +9,17 @@ import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { auditApi, getAuditAppListApi, getChatAnalysisConfigApi } from "@/controllers/API/log";
+import { auditApi, exportAduitDataApi, getAuditAppListApi, getChatAnalysisConfigApi } from "@/controllers/API/log";
 import { useTable } from "@/util/hook";
 import { useEffect, useState } from "react";
 import { SearchInput } from "@/components/bs-ui/input";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { getStrTime } from "../StatisticsReport";
+import { downloadFile, formatDate } from "@/util/utils";
+import { message } from "@/components/bs-ui/toast/use-toast";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
+import FilterByResult from "@/components/bs-comp/filterTableDataComponent/FilterByResult";
 
 export default function AppUseLog({ initFilter, clearFilter }) {
     const { t } = useTranslation();
@@ -150,6 +154,91 @@ export default function AppUseLog({ initFilter, clearFilter }) {
             }
         })
     }
+    const handleExport = async () => {
+        const generateFileName = (start_date, end_date) => {
+            let str = '审计';
+            if (start_date && end_date) {
+                const startDatePart = start_date.split(' ')[0];
+                const endDatePart = end_date.split(' ')[0];
+                str = `${startDatePart}_${endDatePart}_`;
+            }
+            return `Export_${str}_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.xlsx`;
+        };
+        setAuditing(true);
+         // 处理时间范围逻辑
+         const dateRange = filters.dateRange || [];
+         let originalStart = dateRange[0];
+         let originalEnd = dateRange[1];
+ 
+         let adjustedStart = originalStart;
+         let adjustedEnd = originalEnd;
+         let showToast = false;
+         let toastMessage = '';
+ 
+         // 未选择时间范围
+         if (!originalStart && !originalEnd) {
+             adjustedEnd = new Date();
+             adjustedStart = new Date(adjustedEnd.getTime() - 59 * 24 * 60 * 60 * 1000); // 最近60天
+             showToast = true;
+             toastMessage = '未选择时间范围，已自动为你导出最近 60 天数据';
+         }
+         // 部分选择时间（只选开始或结束）
+         else if (!originalStart || !originalEnd) {
+             if (originalStart) {
+                 adjustedEnd = new Date(originalStart);
+                 adjustedEnd.setDate(adjustedEnd.getDate() + 59);
+             } else {
+                 adjustedStart = new Date(originalEnd);
+                 adjustedStart.setDate(adjustedStart.getDate() - 59);
+             }
+             showToast = true;
+             const formattedStart = formatDate(adjustedStart, 'yyyy-MM-dd');
+             const formattedEnd = formatDate(adjustedEnd, 'yyyy-MM-dd');
+             toastMessage = `未选择时间范围，已自动为你导出 ${formattedStart} - ${formattedEnd} 数据`;
+         }
+         // 已选择时间范围，检查跨度
+         else {
+             const diffTime = adjustedEnd.getTime() - adjustedStart.getTime();
+             const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000)) + 1; // 包含起止日期的总天数
+             if (diffDays > 60) {
+                 message({
+                     variant: 'error',
+                     description: '导出时间范围不能超过 60 天，请缩小范围后重试',
+                 })
+                 setAuditing(false);
+                 return;
+             }
+         }
+ 
+         // 显示提示信息
+         if (showToast) {
+             message({
+                 variant: 'warning',
+                 description: toastMessage,
+             })
+         }
+ 
+         // 生成请求参数
+         const [start_date, end_date] = getStrTime([adjustedStart, adjustedEnd]);
+         exportAduitDataApi({
+            flow_ids: filters.appName?.map(el => el.value) || undefined,
+            user_ids: filters.userName?.[0]?.value || undefined,
+            group_ids: filters.userGroup?.[0]?.value || undefined,
+            start_date,
+            end_date,
+            feedback: filters.feedback || undefined,
+            review_status: filters.result || undefined,
+            keyword: filters.keyword || undefined,
+        }).then((res) => {
+            if (res) {
+                const fileUrl = res.file;
+                downloadFile(checkSassUrl(fileUrl), generateFileName(start_date, end_date));
+            } else {
+                console.error('导出失败');
+            }
+            setAuditing(false);
+        })
+    }
 
     return (
         <div className="relative">
@@ -162,7 +251,8 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                     <FilterByUser isAudit={true} value={filters.userName} onChange={(value) => handleFilterChange('userName', value)} />
                     <FilterByUsergroup isAudit={true} value={filters.userGroup} onChange={(value) => handleFilterChange('userGroup', value)} />
                     <FilterByDate value={filters.dateRange} onChange={(value) => handleFilterChange('dateRange', value)} />
-                    <div className="w-[200px] relative">
+                    {/* 20250428 开会说 审计不展示用户反馈 */}
+                    {/* <div className="w-[200px] relative">
                         <Select value={filters.feedback} onValueChange={(value) => handleFilterChange('feedback', value)}>
                             <SelectTrigger className="w-[200px]">
                                 <SelectValue placeholder="用户反馈" />
@@ -175,27 +265,14 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
-                    </div>
-                    {showReviewResult &&
-                        <div className="w-[200px] relative">
-                            <Select value={filters.result} onValueChange={(value) => handleFilterChange('result', value)}>
-                                <SelectTrigger className="w-[200px]">
-                                    <SelectValue placeholder="审查结果" />
-                                </SelectTrigger>
-                                <SelectContent className="max-w-[200px] break-all">
-                                    <SelectGroup>
-                                        <SelectItem value={'1'}>未审查</SelectItem>
-                                        <SelectItem value={'2'}>通过</SelectItem>
-                                        <SelectItem value={'3'}>违规</SelectItem>
-                                        <SelectItem value={'4'}>审查失败</SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    }
+                    </div> */}
+                    {showReviewResult && <FilterByResult placeholder={"审查结果"} value={filters.result} onChange={(value) => handleFilterChange('result', value)}/>}
                     <SearchInput className="w-64" value={filters.keyword} placeholder={'历史聊天记录查询'} onChange={(e) => handleFilterChange('keyword', e.target.value)}></SearchInput>
                     <Button onClick={searchClick} >查询</Button>
                     <Button onClick={resetClick} variant="outline">重置</Button>
+                    <Button onClick={handleExport} disabled={auditing}>
+                        {auditing && <LoadIcon className="mr-1" />}导出 
+                    </Button>
                     {showReviewResult && <Button onClick={handleRunClick} disabled={auditing}>
                         {auditing && <LoadIcon className="mr-1" />}手动审查</Button>}
                 </div>
@@ -206,7 +283,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                             <TableHead>{t('log.userName')}</TableHead>
                             <TableHead>{t('system.userGroup')}</TableHead>
                             <TableHead>{t('createTime')}</TableHead>
-                            <TableHead>{t('log.userFeedback')}</TableHead>
+                            <TableHead>{t('updateTime')}</TableHead>
+                            {/* 20250428 开会说 审计不展示用户反馈 */}
+                            {/* <TableHead>{t('log.userFeedback')}</TableHead> */}
                             {showReviewResult && <TableHead>审查结果</TableHead>} {/* Conditionally render the review result column */}
                             <TableHead className="text-right">{t('operations')}</TableHead>
                         </TableRow>
@@ -221,7 +300,9 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>{el.user_groups.map(el => el.name).join(',')}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                                <TableCell className="break-all flex gap-2">
+                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                {/* 20250428 开会说 审计不展示用户反馈 */}
+                                {/* <TableCell className="break-all flex gap-2">
                                     <div className="text-center text-xs relative">
                                         <ThunmbIcon
                                             type='like'
@@ -243,7 +324,7 @@ export default function AppUseLog({ initFilter, clearFilter }) {
                                         />
                                         <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
                                     </div>
-                                </TableCell>
+                                </TableCell> */}
                                 {showReviewResult && (
                                     <TableCell className={getResultClass(el.review_status)}>
                                         {el.review_status === 1 && '未审查'}
