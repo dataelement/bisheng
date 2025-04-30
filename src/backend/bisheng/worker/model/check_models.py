@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from dirtyjson.compat import long_type
 from langchain_core.messages import BaseMessage,HumanMessage
@@ -13,6 +14,7 @@ from bisheng.interface.ttss.custom import BishengTTS
 from bisheng.worker import bisheng_celery
 from loguru import logger
 task_name = 'check_model_status'
+last_run_time = None
 
 def insert_start(task_id):
     data = ScheduledTaskLogs(task_id=task_id,task_name=task_name,log_type=LogType.STARTED.value)
@@ -29,8 +31,15 @@ def insert_finish(task_id):
 
 @bisheng_celery.task
 def check_model_status_task():
+    global last_run_time
     task_id = str(uuid.uuid4())
     insert_start(task_id)
+    logger.info(f"check_model_status_task last_run_time={last_run_time}")
+    if last_run_time is not None:
+        if (datetime.now() - last_run_time).total_seconds() < 60*1:
+            insert_finish(task_id)
+            return
+    last_run_time = datetime.now()
     models = LLMDao.get_all_model()
     llm_models = [one for one in models if one.model_type == LLMModelType.LLM.value]
     msg = HumanMessage(content="1+1=?")

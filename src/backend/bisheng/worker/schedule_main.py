@@ -1,5 +1,6 @@
 import datetime
 import time
+import uuid
 
 from loguru import logger
 import schedule
@@ -7,6 +8,8 @@ import schedule
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schema.audit import DayCron
 from bisheng.database.models.message import MessageDao
+from bisheng.database.models.scheduled_task_logs import ScheduledTaskLogs, ScheduledTaskLogsDao, LogType
+from bisheng.worker import check_model_status_task
 
 # day: bool
 EXEC_TASKS = {}
@@ -70,12 +73,21 @@ def check_review_message_task():
 
 
 def catch_task():
+    task_id = str(uuid.uuid4())
+    task_name = "check_review_message_task"
+    data = ScheduledTaskLogs(task_id=task_id, task_name=task_name, log_type=LogType.STARTED.value)
+    ScheduledTaskLogsDao.insert_one(data)
     try:
         check_review_message_task()
+        data = ScheduledTaskLogs(task_id=task_id, task_name=task_name, log_type=LogType.FINISHED.value,log_content={"status":"success"})
+        ScheduledTaskLogsDao.insert_one(data)
     except Exception as e:
         logger.exception(f'catch_task error')
+        data = ScheduledTaskLogs(task_id=task_id, task_name=task_name, log_type=LogType.FINISHED.value,log_content={"status":"failed","message":str(e)})
+        ScheduledTaskLogsDao.insert_one(data)
 
 schedule.every(1).minute.do(catch_task)
+schedule.every(20).minutes.do(check_model_status_task)
 
 def main():
     logger.info('start schedule')
