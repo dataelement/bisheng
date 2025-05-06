@@ -195,7 +195,7 @@ class InputNode(BaseNode):
         original_file_path = ''
         file_id = md5_hash(f'{key}:{value[0]}')
         image_files_path = []
-        file_content_max_size = key_info.get('file_content_size', 15000)
+        file_content_max_size = int(key_info.get('file_content_size', 15000))
         file_content_length = 0
         for one_file_url in value:
             file_name, file_path, texts, metadatas = self.get_upload_file_path_content(one_file_url)
