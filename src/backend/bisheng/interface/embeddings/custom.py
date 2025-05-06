@@ -183,7 +183,10 @@ class BishengEmbedding(BaseModel, Embeddings):
 
     def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
-        LLMDao.update_model_status(self.model_id, status, remark)
+        # todo 接入到异步任务模块 累计5分钟更新一次
+        if self.model_info.status != status:
+            self.model_info.status =  status
+            LLMDao.update_model_status(self.model_id, status, remark)
 
 
 CUSTOM_EMBEDDING = {

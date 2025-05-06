@@ -53,6 +53,7 @@ export default function RunLog({ node, children }) {
                                 hasKeys.push(value.key);
                             });
                         } else if (newData.has(param.key)) {
+                            if (param.hidden) return newData.delete(param.key);
                             newData.get(param.key)['label'] = param.label || param.key;
                             hasKeys.push(param.key);
                         } else if (param.key === 'tool_list') {

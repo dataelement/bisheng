@@ -29,10 +29,11 @@ const getSpecialVar = (obj, type) => {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
                 if (item.type === 'file') {
-                    if (item.multiple) return res
+                    // if (item.multiple) return res
                     // res.push({ label: item.key, value: item.key })
                     res.push({ label: item.file_content, value: item.file_content })
                     res.push({ label: item.file_path, value: item.file_path })
+                    res.push({ label: item.image_file, value: item.image_file })
                 } else {
                     res.push({ label: item.key, value: item.key })
                 }
@@ -160,6 +161,8 @@ const SelectVar = forwardRef(({
 
             // 特殊处理输入节点
             if (node.data.type === 'input') {
+                // 输入节点，跳过自己
+                if (node.data.id === nodeId) return processedNodes
                 nodeData = processInputNode(node.data, findInputFile);
             }
             // 其他节点，跳过
@@ -354,7 +357,7 @@ const SelectVar = forwardRef(({
                         </div>
                     )}
                 </div>
-                {!!vars.length && <div className="w-36 border-l first:border-none">
+                {!!vars.length && <div className="w-36 border-l first:border-none overflow-y-auto scrollbar-hide">
                     {vars.map(v =>
                         <div
                             className={`${select[1] === v.value && 'bg-[#EBF0FF]'} relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`}

@@ -349,7 +349,7 @@ export async function runTestCase(data: { question_list, version_list, node_id, 
 export async function uploadChatFile(v, file: File, onProgress): Promise<any> {
     const formData = new FormData();
     formData.append("file", file);
-    return await axios.post(`/api/${v}/knowledge/upload`, formData, {
+    return await axios.post(`/api/v1/knowledge/upload`, formData, {
         headers: {
             "Content-Type": "multipart/form-data"
         },

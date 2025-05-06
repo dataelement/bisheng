@@ -192,13 +192,14 @@ class InputNode(BaseNode):
         # 解析文件
         all_metadata = []
         all_file_content = ''
-        original_file_path = ''
+        original_file_path = []
         file_id = md5_hash(f'{key}:{value[0]}')
         image_files_path = []
-        file_content_max_size = key_info.get('file_content_size', 15000)
+        file_content_max_size = int(key_info.get('file_content_size', 15000))
         file_content_length = 0
         for one_file_url in value:
             file_name, file_path, texts, metadatas = self.get_upload_file_path_content(one_file_url)
+            original_file_path.append(file_path)
             file_ext = file_name.split('.')[-1].lower()
             if file_ext in self._image_ext:
                 image_files_path.append(file_path)

@@ -15,7 +15,7 @@ class InputArgs(BaseModel):
     content: str = Field(description="邮件正文内容")
 
 
-class EmailMessageTool(APIToolBase):
+class EmailMessageTool(BaseModel):
 
     email_account: str = Field(description="发件人邮箱")
     email_password: str = Field(description="邮箱授权码/密码")

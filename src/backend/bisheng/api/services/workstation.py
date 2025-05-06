@@ -1,9 +1,12 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
+
+from pydantic import field_validator
 
 from bisheng.api.services import knowledge_imp, llm
+from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
@@ -18,7 +21,7 @@ from loguru import logger
 from openai import BaseModel
 
 
-class WorkStationService:
+class WorkStationService(BaseService):
 
     @classmethod
     def update_config(cls, request: Request, login_user: UserPayload, data: WorkstationConfig) \
@@ -35,11 +38,15 @@ class WorkStationService:
     @classmethod
     def get_config(cls) -> WorkstationConfig | None:
         """ 获取评测功能的默认模型配置 """
-        ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         if config:
             ret = json.loads(config.value)
-            return WorkstationConfig(**ret)
+            ret = WorkstationConfig(**ret)
+            if ret.assistantIcon and ret.assistantIcon.relative_path:
+                ret.assistantIcon.image = cls.get_logo_share_link(ret.assistantIcon.relative_path)
+            if ret.sidebarIcon and ret.sidebarIcon.relative_path:
+                ret.sidebarIcon.image = cls.get_logo_share_link(ret.sidebarIcon.relative_path)
+            return ret
         return None
 
     @classmethod
@@ -183,6 +190,13 @@ class WorkstationConversation(BaseModel):
             model=None,
             title=session.flow_name,
         )
+
+    @field_validator('user', mode='before')
+    @classmethod
+    def convert_user(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return v
+        return str(v)
 
 
 class SSECallbackClient:

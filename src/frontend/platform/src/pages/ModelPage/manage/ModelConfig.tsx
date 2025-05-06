@@ -146,7 +146,7 @@ export const modelProvider = [
     { "name": "智谱 AI", "value": "zhipu" },
     { "name": "讯飞星火", "value": "spark" },
     { "name": "腾讯云", "value": "tencent" },
-    { "name": "Moonshot", "value": "moonshot" },
+    { "name": "月之暗面", "value": "moonshot" },
     { "name": "百度千帆", "value": "qianfan" },
     { "name": "Minimax", "value": "minimax" },
     { "name": "Anthropic", "value": "anthropic" },

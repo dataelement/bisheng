@@ -436,9 +436,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }
 
     const placholder = useMemo(() => {
-        if (inputForm) {
-            return '      点击刷新按钮可开启新对话'
-        }
+        // if (inputForm) {
+        //     return '      点击刷新按钮可开启新对话'
+        // }
         const reason = inputLock.reason || ' '
         return inputLock.locked ? reason : t('chat.inputPlaceholder')
     }, [inputForm, inputLock])
