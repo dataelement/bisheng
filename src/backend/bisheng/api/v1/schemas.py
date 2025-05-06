@@ -429,6 +429,7 @@ class EvaluationLLMConfig(BaseModel):
 class Icon(BaseModel):
     enabled: bool
     image: Optional[str] = None
+    relative_path: Optional[str] = None
 
 
 class WSModel(BaseModel):
