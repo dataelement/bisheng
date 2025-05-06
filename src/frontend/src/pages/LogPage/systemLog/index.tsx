@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { transformEvent, transformModule, transformObjectType } from "../utils";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { X } from "lucide-react";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -83,16 +84,46 @@ export default function SystemLog() {
                     ></MultiSelect>
                 </div>
                 <div className="w-[200px] relative">
-                    <Select onOpenChange={loadData} value={keys.groupId} onValueChange={(value) => setKeys({ ...keys, groupId: value })}>
-                        <SelectTrigger className="w-[200px]">
-                            <SelectValue placeholder={t('log.selectUserGroup')} />
-                        </SelectTrigger>
-                        <SelectContent className="max-w-[200px] break-all">
-                            <SelectGroup>
-                                {groups.map(g => <SelectItem value={g.id} key={g.id}>{g.group_name}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                <Select 
+                onOpenChange={loadData} 
+                value={keys.groupId} 
+                onValueChange={(value) => setKeys({ ...keys, groupId: value })}
+                >
+                <SelectTrigger className="w-[200px] group">
+                    <div className="flex flex-1 items-center justify-between overflow-hidden">
+                    <div className="flex-1 truncate mr-2 min-w-0 text-left">
+                        <SelectValue placeholder={t('log.selectUserGroup')} />
+                    </div>
+                    {keys.groupId && (
+                        <X
+                        className="
+                            h-3.5 w-3.5 min-w-3.5
+                            opacity-0 group-hover:opacity-100
+                            transition-opacity duration-200
+                            bg-black rounded-full
+                            flex items-center justify-center
+                            flex-shrink-0
+                        "
+                        color="#ffffff"
+                        onPointerDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault(); // 防止触发select打开
+                            setKeys({ ...keys, groupId: "" });
+                        }}
+                        />
+                    )}
+                    </div>
+                </SelectTrigger>
+                <SelectContent className="max-w-[200px]">
+                    <SelectGroup>
+                    {groups.map(g => (
+                        <SelectItem value={g.id} key={g.id} className="truncate">
+                        {g.group_name}
+                        </SelectItem>
+                    ))}
+                    </SelectGroup>
+                </SelectContent>
+                </Select>
                 </div>
                 <div className="w-[180px] relative">
                     <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
@@ -101,28 +132,100 @@ export default function SystemLog() {
                     <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
                 </div>
                 <div className="w-[180px] relative">
-                    <Select value={keys.moduleId} onOpenChange={loadModules} onValueChange={(value) => setKeys({ ...keys, action: '', moduleId: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.systemModule')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {modules.map(m => <SelectItem value={m.value} key={m.value}>{t(m.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                <Select 
+                    value={keys.moduleId} 
+                    onOpenChange={loadModules} 
+                    onValueChange={(value) => setKeys({ ...keys, action: '', moduleId: value })}
+                >
+                    <SelectTrigger className="w-[180px] group">
+                        <div className="flex flex-1 items-center justify-between overflow-hidden">
+                        <span className="flex-1 truncate text-left mr-2 min-w-0">
+                            {keys.moduleId ? (
+                            modules.find(m => m.value === keys.moduleId)?.name 
+                                ? t(modules.find(m => m.value === keys.moduleId).name)
+                                : t('log.systemModule')
+                            ) : (
+                            <span className="text-muted-foreground">{t('log.systemModule')}</span>
+                            )}
+                        </span>
+                        {keys.moduleId && (
+                            <X
+                            className="
+                                h-3.5 w-3.5 min-w-3.5
+                                opacity-0 group-hover:opacity-100
+                                transition-opacity duration-200
+                                bg-black rounded-full
+                                flex items-center justify-center
+                                flex-shrink-0
+                            "
+                            color="#ffffff"
+                            onPointerDown={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setKeys({ ...keys, moduleId: "", action: "" });
+                            }}
+                            />
+                        )}
+                        </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectGroup>
+                        {modules.map(m => (
+                            <SelectItem value={m.value} key={m.value} className="truncate">
+                            {t(m.name)}
+                            </SelectItem>
+                        ))}
+                        </SelectGroup>
+                    </SelectContent>
+                </Select>
                 </div>
                 <div className="w-[180px] relative">
-                    <Select value={keys.action} onOpenChange={handleActionOpen} onValueChange={(value) => setKeys({ ...keys, action: value })}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder={t('log.actionBehavior')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                {actions.map(a => <SelectItem value={a.value} key={a.value}>{t(a.name)}</SelectItem>)}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
+                <Select 
+                value={keys.action} 
+                onOpenChange={handleActionOpen}
+                onValueChange={(value) => setKeys({ ...keys, action: value })}
+                >
+                <SelectTrigger className="w-[180px] group">
+                    <div className="flex flex-1 items-center justify-between overflow-hidden">
+                    <span className="flex-1 truncate text-left mr-2 min-w-0">
+                        {keys.action ? (
+                        actions.find(a => a.value === keys.action)?.name 
+                            ? t(actions.find(a => a.value === keys.action).name)
+                            : t('log.actionBehavior')
+                        ) : (
+                        <span className="text-muted-foreground">{t('log.actionBehavior')}</span>
+                        )}
+                    </span>
+                    {keys.action && (
+                        <X
+                        className="
+                            h-3.5 w-3.5 min-w-3.5
+                            opacity-0 group-hover:opacity-100
+                            transition-opacity duration-200
+                            bg-black rounded-full
+                            flex items-center justify-center
+                            flex-shrink-0
+                        "
+                        color="#ffffff"
+                        onPointerDown={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setKeys({ ...keys, action: "" });
+                        }}
+                        />
+                    )}
+                    </div>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectGroup>
+                    {actions.map(a => (
+                        <SelectItem value={a.value} key={a.value} className="truncate">
+                        {t(a.name)}
+                        </SelectItem>
+                    ))}
+                    </SelectGroup>
+                </SelectContent>
+                </Select>
                 </div>
                 <div>
                     <Button className="mr-3 px-6" onClick={handleSearch}>
