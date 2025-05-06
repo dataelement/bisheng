@@ -44,7 +44,7 @@ class BishengLLM(BaseChatModel):
         LLMServerType.QWEN.value: 'ChatTongyi',
         LLMServerType.QIAN_FAN.value: 'QianfanChatEndpoint',
         LLMServerType.ZHIPU.value: 'ChatOpenAI',
-        LLMServerType.MINIMAX.value: 'ChatOpenAI',
+        LLMServerType.MINIMAX.value: 'MiniMaxChat',
         LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
         LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
         LLMServerType.SPARK.value: 'ChatOpenAI',
@@ -141,11 +141,19 @@ class BishengLLM(BaseChatModel):
                 params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
         elif server_info.type == LLMServerType.TENCENT.value:
             params['extra_body'] = {'enable_enhancement': enable_web_search}
+        elif server_info.type == LLMServerType.MINIMAX.value:
+            params['api_key'] = params.pop('openai_api_key', None)
+            params.pop('openai_api_base', None)
         return params
 
     @property
     def _llm_type(self):
         return self.llm._llm_type
+
+    def get_model_info_config(self):
+        if self.model_info.config:
+            return self.model_info.config
+        return {}
 
     def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:
