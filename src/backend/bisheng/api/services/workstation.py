@@ -153,6 +153,13 @@ class WorkstationMessage(BaseModel):
     error: Optional[bool] = False
     unfinished: Optional[bool] = False
 
+    @field_validator('messageId', mode='before')
+    @classmethod
+    def convert_message_id(cls, value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        return str(value)
+
     @classmethod
     def from_chat_message(cls, message: ChatMessage):
         files = json.loads(message.files) if message.files else []
