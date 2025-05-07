@@ -117,8 +117,12 @@ class LLMService:
         for one in server.models:
             # test model status
             try:
-                bisheng_model = cls.get_bisheng_llm(model_id=one.id, ignore_online=True)
-                bisheng_model.invoke('hello')
+                if one.model_type == LLMModelType.LLM.value:
+                    bisheng_model = cls.get_bisheng_llm(model_id=one.id, ignore_online=True, cache=False)
+                    bisheng_model.invoke('hello')
+                elif one.model_type == LLMModelType.EMBEDDING.value:
+                    bisheng_embed = cls.get_bisheng_embedding(model_id=one.id, ignore_online=True, cache=False)
+                    bisheng_embed.embed_query('hello')
             except Exception as e:
                 logger.exception('test model status')
             if one.model_type in handle_types:

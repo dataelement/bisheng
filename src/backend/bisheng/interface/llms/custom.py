@@ -5,7 +5,7 @@ from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackMana
 from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import Field
@@ -16,6 +16,132 @@ from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
     wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
 
+
+def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['base_url'] = server_config.get('base_url', '')
+    params['extract_reasoning'] = True
+    params['stream'] = params.pop('streaming', True)
+    if params.get('max_tokens'):
+        params['num_ctx'] = params.pop('max_tokens', None)
+    return params
+
+
+def _get_xinference_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['stream'] = params.pop('streaming', True)
+    new_params = {
+        'server_url': server_config.get('openai_api_base', '').replace('/v1', ''),  # replace old config
+        'model_uid': params.pop('model_name', ''),
+        'model_kwargs': params
+    }
+    return new_params
+
+def _get_bisheng_rt_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update(server_config)
+    return params
+
+def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    if server_config:
+        params.update({
+            'api_key': server_config.get('openai_api_key') or server_config.get('api_key'),
+            'base_url': server_config.get('openai_api_base')
+        })
+    if server_config.get('openai_proxy'):
+        params['openai_proxy'] = server_config.get('openai_proxy')
+    return params
+
+
+def _get_azure_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update({
+        'azure_endpoint': server_config.get('azure_endpoint'),
+        'openai_api_key': server_config.get('openai_api_key'),
+        'openai_api_version': server_config.get('openai_api_version'),
+        'azure_deployment': params.pop('model'),
+    })
+    return params
+
+
+def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['dashscope_api_key'] = server_config.get('openai_api_key', '')
+    params['model_kwargs'] = {
+        'enable_search': model_config.get('enable_web_search', False),
+        'temperature': params.pop('temperature', 0.3),
+    }
+    if params.get('max_tokens'):
+        params['model_kwargs']['max_tokens'] = params.get('max_tokens')
+    return params
+
+
+def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['qianfan_ak'] = server_config.get('wenxin_api_key')
+    params['qianfan_sk'] = server_config.get('wenxin_secret_key')
+    if params.get('max_tokens'):
+        params['model_kwargs'] = {"max_output_tokens": params.pop('max_tokens')}
+    return params
+
+
+def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['minimax_api_key'] = server_config.get('openai_api_key')
+    params['base_url'] = server_config.get('openai_api_base')
+    if '/chat/completions' not in params['base_url']:
+        params['base_url'] = f"{params['base_url']}/chat/completions"
+    return params
+
+
+def _get_anthropic_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update(server_config)
+    return params
+
+
+def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params['zhipuai_api_key'] = server_config.get('openai_api_key')
+    params['zhipuai_api_base'] = server_config.get('openai_api_base')
+    return params
+
+def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update({
+        'api_key': f'{server_config.get("api_key")}:{server_config.get("api_secret")}',
+        'base_url': server_config.get('openai_api_base'),
+    })
+    return params
+
+def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update({
+        'hunyuan_secret_id': server_config.get('hunyuan_secret_id'),
+        'hunyuan_secret_key': server_config.get('hunyuan_secret_key'),
+    })
+    params['extra_body'] = {'enable_enhancement': model_config.get('enable_web_search', False)}
+    return params
+
+def _get_volcengine_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params.update({
+        'volc_engine_maas_ak': server_config.get('volc_engine_maas_ak'),
+        'volc_engine_maas_sk': server_config.get('volc_engine_maas_sk'),
+    })
+    return params
+
+_llm_node_type: Dict = {
+    # 开源推理框架
+    LLMServerType.OLLAMA.value: {'client': 'ChatOllama', 'params_handler': _get_ollama_params},
+    LLMServerType.XINFERENCE.value: {'client':' ChatXinference', 'params_handler': _get_xinference_params},
+    LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+    LLMServerType.VLLM.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
+    LLMServerType.BISHENG_RT.value: {'client': 'HostChatGLM', 'params_handler': _get_bisheng_rt_params},
+
+    # 官方api服务
+    LLMServerType.OPENAI.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
+    LLMServerType.AZURE_OPENAI.value: {'client': 'AzureChatOpenAI', 'params_handler': _get_azure_openai_params},
+    LLMServerType.QWEN.value: {'client': 'ChatTongyi', 'params_handler': _get_qwen_params},
+    LLMServerType.QIAN_FAN.value: {'client': 'QianfanChatEndpoint', 'params_handler': _get_qianfan_params},
+    LLMServerType.ZHIPU.value: {'client': 'ChatZhipuAI', 'params_handler': _get_zhipu_params},
+    LLMServerType.MINIMAX.value: {'client': 'MiniMaxChat', 'params_handler': _get_minimax_params},
+    LLMServerType.ANTHROPIC.value: {'client': 'ChatAnthropic', 'params_handler': _get_anthropic_params},
+    LLMServerType.DEEPSEEK.value: {'client': 'ChatDeepSeek', 'params_handler': _get_openai_params},
+    LLMServerType.SPARK.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_spark_params},
+    LLMServerType.TENCENT.value: {'client': 'ChatHunyuan', 'params_handler': _get_tencent_params},
+    LLMServerType.MOONSHOT.value: {'client': 'MoonshotChat', 'params_handler': _get_openai_params},
+    LLMServerType.VOLCENGINE.value: {'client': 'VolcEngineMaasChat', 'params_handler': _get_volcengine_params},
+    LLMServerType.SILICON.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
+}
 
 class BishengLLM(BaseChatModel):
     """
@@ -30,29 +156,7 @@ class BishengLLM(BaseChatModel):
     cache: bool = Field(default=False, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
-    llm_node_type: Dict = {
-        # 开源推理框架
-        LLMServerType.OLLAMA.value: 'ChatOllama',
-        LLMServerType.XINFERENCE.value: 'ChatOpenAI',
-        LLMServerType.LLAMACPP.value: 'ChatOpenAI',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
-        LLMServerType.VLLM.value: 'ChatOpenAI',
-        LLMServerType.BISHENG_RT.value: "HostChatGLM",
 
-        # 官方api服务
-        LLMServerType.OPENAI.value: 'ChatOpenAI',
-        LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
-        LLMServerType.QWEN.value: 'ChatTongyi',
-        LLMServerType.QIAN_FAN.value: 'QianfanChatEndpoint',
-        LLMServerType.ZHIPU.value: 'ChatOpenAI',
-        LLMServerType.MINIMAX.value: 'ChatOpenAI',
-        LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
-        LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
-        LLMServerType.SPARK.value: 'ChatOpenAI',
-        LLMServerType.TENCENT.value: 'ChatOpenAI',
-        LLMServerType.MOONSHOT.value: 'ChatOpenAI',
-        LLMServerType.VOLCENGINE.value: 'ChatOpenAI',
-        LLMServerType.SILICON.value: 'ChatOpenAI',
-    }
 
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None)
@@ -86,20 +190,30 @@ class BishengLLM(BaseChatModel):
         self.model_info = model_info
         self.server_info = server_info
 
-        class_object = self._get_llm_class(server_info.type)
+        class_object, class_name = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
         try:
-            self.llm = instantiate_llm(self.llm_node_type.get(server_info.type), class_object, params)
+            self.llm = instantiate_llm(class_name, class_object, params)
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
 
-    def _get_llm_class(self, server_type: str) -> BaseLanguageModel:
-        node_type = self.llm_node_type[server_type]
+    def _get_llm_class(self, server_type: str) -> (BaseLanguageModel, str):
+        if server_type not in _llm_node_type:
+            raise Exception(f'not support llm type: {server_type}')
+        node_type = _llm_node_type[server_type]['client']
         class_object = import_by_type(_type='llms', name=node_type)
-        return class_object
+        return class_object, node_type
 
     def _get_llm_params(self, server_info: LLMServer, model_info: LLMModel) -> dict:
+        server_config = self.get_server_info_config()
+        model_config = self.get_model_info_config()
+        default_params = self._get_default_params(server_config, model_config)
+
+        params_handler = _llm_node_type[server_info.type]['params_handler']
+        params = params_handler(default_params, server_config, model_config)
+        return params
+
         params = {}
         if server_info.config:
             params.update(server_info.config)
@@ -141,11 +255,37 @@ class BishengLLM(BaseChatModel):
                 params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
         elif server_info.type == LLMServerType.TENCENT.value:
             params['extra_body'] = {'enable_enhancement': enable_web_search}
+        elif server_info.type == LLMServerType.MINIMAX.value:
+            params['api_key'] = params.pop('openai_api_key', None)
+            params.pop('openai_api_base', None)
         return params
+
+    def _get_default_params(self, server_config: dict, model_config: dict) -> dict:
+        default_params = {
+            'model': self.model_info.model_name,
+            'streaming': self.streaming,
+            'temperature': self.temperature,
+            'top_p': self.top_p,
+            'cache': self.cache
+        }
+        if model_config.get('max_tokens'):
+            default_params['max_tokens'] = model_config.get('max_tokens')
+
+        return default_params
 
     @property
     def _llm_type(self):
         return self.llm._llm_type
+
+    def get_server_info_config(self):
+        if self.server_info.config:
+            return self.server_info.config
+        return {}
+
+    def get_model_info_config(self):
+        if self.model_info.config:
+            return self.model_info.config
+        return {}
 
     def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:
