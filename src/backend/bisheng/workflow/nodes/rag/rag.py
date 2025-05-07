@@ -193,8 +193,6 @@ class RagNode(BaseNode):
         self._qa_prompt = ChatPromptTemplate.from_messages(messages_general)
 
     def init_milvus(self):
-        if self._milvus:
-            return
         if self._knowledge_type == 'knowledge':
             node_type = 'MilvusWithPermissionCheck'
             params = {
@@ -228,8 +226,6 @@ class RagNode(BaseNode):
         self._milvus = instantiate_vectorstore(node_type, class_object=class_obj, params=params)
 
     def init_es(self):
-        if self._es:
-            return
         if self._knowledge_type == 'knowledge':
             node_type = 'ElasticsearchWithPermissionCheck'
             params = {
