@@ -840,7 +840,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop('id')
         knowldge_dict.pop('create_time')
-        knowldge_dict['update_time'] = ''
+        knowldge_dict.pop('update_time', None)
         knowldge_dict['user_id'] = login_user.user_id
         knowldge_dict['index_name'] = f'col_{int(time.time())}_{generate_uuid()[:8]}'
         knowldge_dict['name'] = f'{knowledge.name} 副本'
