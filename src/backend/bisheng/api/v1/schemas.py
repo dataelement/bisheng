@@ -301,7 +301,7 @@ class AssistantInfo(AssistantBase):
 
 
 class FlowVersionCreate(BaseModel):
-    name: Optional[str] = Field(default=..., description='版本的名字')
+    name: Optional[str] = Field(default=None, description='版本的名字')
     description: Optional[str] = Field(default=None, description='版本的描述')
     data: Optional[Dict] = Field(default=None, description='技能版本的节点数据数据')
     original_version_id: Optional[int] = Field(default=None, description='版本的来源版本ID')
