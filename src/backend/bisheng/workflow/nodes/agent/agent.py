@@ -80,8 +80,6 @@ class AgentNode(BaseNode):
         self._agent = None
 
     def _init_agent(self, system_prompt: str):
-        if self._agent:
-            return
         # 获取配置的助手模型列表
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
