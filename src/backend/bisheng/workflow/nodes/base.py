@@ -155,6 +155,8 @@ class BaseNode(ABC):
 
     def contact_file_into_prompt(self, human_message: HumanMessage, variable_list: List[str]) -> HumanMessage:
         if not variable_list:
+            if isinstance(human_message.content, list):
+                human_message.content = human_message.content[0].get('text')
             return human_message
         for image_variable in variable_list:
             image_value = self.get_other_node_variable(image_variable)
