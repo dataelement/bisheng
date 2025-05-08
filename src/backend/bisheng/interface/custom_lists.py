@@ -10,7 +10,6 @@ from langchain_community.utilities import requests
 from langchain_deepseek import ChatDeepSeek
 from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
-from langchain_xinference import ChatXinference
 
 from bisheng_langchain import chat_models
 from bisheng_langchain import document_loaders as contribute_loader
@@ -36,7 +35,6 @@ llm_type_to_cls_dict['ChatOllama'] = ChatOllama
 llm_type_to_cls_dict['ChatTongyi'] = ChatTongyi
 llm_type_to_cls_dict['QianfanChatEndpoint'] = QianfanChatEndpoint
 llm_type_to_cls_dict["OpenAI"] = OpenAI
-llm_type_to_cls_dict['ChatXinference'] = ChatXinference
 llm_type_to_cls_dict['ChatZhipuAI'] = ChatZhipuAI
 llm_type_to_cls_dict['ChatDeepSeek'] = ChatDeepSeek
 llm_type_to_cls_dict['ChatHunyuan'] = ChatHunyuan

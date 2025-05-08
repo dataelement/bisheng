@@ -28,13 +28,10 @@ def _get_ollama_params(params: dict, server_config: dict, model_config: dict) ->
 
 
 def _get_xinference_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['stream'] = params.pop('streaming', True)
-    new_params = {
-        'server_url': server_config.get('openai_api_base', '').replace('/v1', ''),  # replace old config
-        'model_uid': params.pop('model_name', ''),
-        'model_kwargs': params
-    }
-    return new_params
+    params = _get_openai_params(params, server_config, model_config)
+    if not params.get('api_key', None):
+        params['api_key'] = 'Empty'
+    return params
 
 def _get_bisheng_rt_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update(server_config)
@@ -116,7 +113,7 @@ def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -
 _llm_node_type: Dict = {
     # 开源推理框架
     LLMServerType.OLLAMA.value: {'client': 'ChatOllama', 'params_handler': _get_ollama_params},
-    LLMServerType.XINFERENCE.value: {'client':' ChatXinference', 'params_handler': _get_xinference_params},
+    LLMServerType.XINFERENCE.value: {'client':'ChatOpenAI', 'params_handler': _get_xinference_params},
     LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},  # 此组件是加载本地的模型文件，待确认是否有api服务提供
     LLMServerType.VLLM.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.BISHENG_RT.value: {'client': 'HostChatGLM', 'params_handler': _get_bisheng_rt_params},
