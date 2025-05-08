@@ -206,7 +206,7 @@ class InputNode(BaseNode):
 
             if file_content_length < file_content_max_size:
                 file_content = "\n".join(texts)
-                file_content = file_content[:self._dialog_files_length - file_content_length]
+                file_content = file_content[:file_content_max_size - file_content_length]
                 file_content_length += len(file_content)
                 all_file_content += f"[file name]: {file_name}\n[file content begin]\n{file_content}\n[file content end]\n"
 
