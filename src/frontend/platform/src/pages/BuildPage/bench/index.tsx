@@ -33,10 +33,12 @@ export interface ChatConfigForm {
     sidebarIcon: {
         enabled: boolean;
         image: string;
+        relative_path: string;
     };
     assistantIcon: {
         enabled: boolean;
         image: string;
+        relative_path: string;
     };
     sidebarSlogan: string;
     welcomeMessage: string;
@@ -83,11 +85,11 @@ export default function index() {
             navigate('/build/apps')
         }
     }, [user])
-    
-    const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant') => {
+
+    const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
-            [`${type}Icon`]: { ...prev[`${type}Icon`], image: fileUrl }
+            [`${type}Icon`]: { ...prev[`${type}Icon`], image: fileUrl, relative_path: relativePath }
         }));
     };
 
@@ -128,14 +130,14 @@ export default function index() {
                                 enabled={formData.sidebarIcon.enabled}
                                 image={formData.sidebarIcon.image}
                                 onToggle={(enabled) => toggleFeature('sidebarIcon', enabled)}
-                                onUpload={(fileUrl) => uploadAvator(fileUrl, 'sidebar')}
+                                onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'sidebar', relativePath)}
                             />
                             <IconUploadSection
                                 label="欢迎页面图标&对话头像"
                                 enabled={formData.assistantIcon.enabled}
                                 image={formData.assistantIcon.image}
                                 onToggle={(enabled) => toggleFeature('assistantIcon', enabled)}
-                                onUpload={(fileUrl) => uploadAvator(fileUrl, 'assistant')}
+                                onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'assistant', relativePath)}
                             />
                         </div>
 
@@ -297,8 +299,8 @@ export default function index() {
 const useChatConfig = () => {
     const [formData, setFormData] = useState<ChatConfigForm>({
         menuShow: true,
-        sidebarIcon: { enabled: true, image: '' },
-        assistantIcon: { enabled: true, image: '' },
+        sidebarIcon: { enabled: true, image: '', relative_path: '' },
+        assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',

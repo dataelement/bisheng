@@ -18,7 +18,7 @@ export const IconUploadSection = ({
     enabled: boolean;
     image: string;
     onToggle: (enabled: boolean) => void;
-    onUpload: (url: string) => void;
+    onUpload: (url: string, relative_path?: string) => void;
 }) => {
 
     const { toast } = useToast();
@@ -34,7 +34,7 @@ export const IconUploadSection = ({
                 // 压缩后的文件（result 是 Blob 类型）
                 const compressedFile = new File([result], file.name, { type: result.type });
                 uploadFileWithProgress(compressedFile, (progress) => { }, 'icon', '').then(res => {
-                    onUpload(res.file_path)
+                    onUpload(res.file_path, res.relative_path)
                 });
             },
             error(err) {

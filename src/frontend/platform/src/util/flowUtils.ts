@@ -1,3 +1,4 @@
+import { copyReportTemplate } from "@/controllers/API/workflow";
 import { Node } from "@xyflow/react";
 import i18next from "i18next";
 import { cloneDeep } from "lodash-es";
@@ -110,7 +111,10 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
                 } else if (param.type === 'form') {
                     return param.value.some(item => {
                         // if (item.multiple) return `${node.id}.${item.key}` === varName
-                        return [`${node.id}.${item.key}`, `${node.id}.${item.file_content}`, `${node.id}.${item.file_path}`, `${node.id}.${item.image_file}`].includes(varName)
+                        const vars = [`${node.id}.${item.key}`, `${node.id}.${item.file_content}`, `${node.id}.${item.file_path}`]
+                        // 图片类型追加校验变量
+                        item.file_type !== 'file' && vars.push(`${node.id}.${item.image_file}`)
+                        return vars.includes(varName)
                     })
                 } else if (param.hidden) {
                     return false
@@ -244,5 +248,31 @@ export function filterUselessFlow(nodes, edges) {
         const sourceNode = nodes.find(node => node.id === edge.source);
         const targetNode = nodes.find(node => node.id === edge.target);
         return sourceNode && targetNode;
+    })
+}
+
+// 导入工作流
+export function importFlow() {
+    return new Promise((resolve, reject) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".json";
+        input.onchange = (e: Event) => {
+            if ((e.target as HTMLInputElement).files[0].type === "application/json") {
+                const currentfile = (e.target as HTMLInputElement).files[0];
+                currentfile.text().then(async (text) => {
+                    let flow = JSON.parse(text);
+
+                    // 使用 Promise.all 等待所有的 copyReportTemplate 完成
+                    await Promise.all(flow.nodes.map(async (node) => {
+                        await copyReportTemplate(node.data);
+                    }));
+
+                    resolve(flow)
+                });
+            }
+        };
+        input.onerror = reject
+        input.click();
     })
 }

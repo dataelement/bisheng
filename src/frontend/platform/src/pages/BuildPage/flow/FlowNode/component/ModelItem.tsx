@@ -84,7 +84,7 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             {data.label}
         </Label>
         <Cascader
-            key={defaultValue[0]?.value}
+            key={options[0]?.value}
             error={error}
             placholder={data.placeholder}
             defaultValue={defaultValue}

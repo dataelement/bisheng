@@ -81,6 +81,8 @@ export default function HomePage({ onSelect }) {
         if (shouldClose) {
             await fetchCategoryTags()
             setIsLabelModalOpen(false)
+        } else {
+            setIsLabelModalOpen(shouldClose)
         }
     }
 

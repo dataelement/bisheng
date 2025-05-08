@@ -17,7 +17,8 @@ import { copyReportTemplate, onlineWorkflow, onlineWorkflowApi, saveWorkflow } f
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
-import { findParallelNodes } from "@/util/flowUtils";
+import { flowVersionCompatible } from "@/util/flowCompatible";
+import { findParallelNodes, importFlow } from "@/util/flowUtils";
 import { cloneDeep, isEqual } from "lodash-es";
 import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -28,12 +29,12 @@ import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
 
-const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange }) => {
+const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFlow }) => {
     const { message } = useToast()
     const { dark } = useContext(darkContext);
     const testRef = useRef(null)
     const updateAppModalRef = useRef(null)
-    const { uploadFlow } = useFlowStore()
+    // const { uploadFlow } = useFlowStore()
     const { t, i18n } = useTranslation('flow')
     const [modelVersionId, setModelVersionId] = useState(0)
 
@@ -131,7 +132,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange }) => {
             variant: 'success',
             description: t('changesSaved')
         })
-        setFlow({ ...flow })
+
         return res
     }
 
@@ -159,10 +160,25 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange }) => {
         bsConfirm({
             desc: t('confirmImport'),
             onOk(next) {
-                uploadFlow()
+                _importFlow()
                 next()
             }
         })
+
+        const _importFlow = async () => {
+            const flow = await importFlow()
+            const newFlow = flowVersionCompatible(flow)
+            const { nodes, edges, viewport } = newFlow
+            onImportFlow(nodes, edges, viewport)
+            setFitView()
+        }
+    }
+
+    const forceUpdateFlow = (_flow) => {
+        setFlow(null)
+        setTimeout(() => {
+            setFlow(_flow)
+        }, 0);
     }
     // versions
     const [loading, setLoading] = useState(false)
@@ -177,10 +193,8 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange }) => {
         const res = await getVersionDetails(versionId)
         // console.log('res :>> ', res)
         // 自动触发 page的 clone flow
-        setFlow(null)
-        setTimeout(() => {
-            setFlow({ ...f, ...res.data })
-        }, 0);
+        forceUpdateFlow({ ...f, ...res.data })
+
         message({
             variant: "success",
             title: t('switchToVersion', { versionName: res.name }),
@@ -295,7 +309,10 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange }) => {
                     <Play className="size-3.5 mr-1" />
                     {t('run')}
                 </Button>
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleSaveClick}>
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={async () => {
+                    await handleSaveClick()
+                    forceUpdateFlow({ ...flow }) // 用于对比差异
+                }}>
                     {t('save')}
                 </Button>
                 {

@@ -4,9 +4,11 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { isVarInFlow } from "@/util/flowUtils";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
+import useFlowStore from "../../flowStore";
 import DragOptions from "./DragOptions";
 import FileTypeSelect from "./FileTypeSelect";
 import InputItem from "./InputItem";
@@ -169,8 +171,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             } else if (formData.filecontent.length > 50) {
                 newErrors.filecontent = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.file_content === formData.filecontent) &&
-                formData.filecontent !== oldcontentNameRef.current
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_content === formData.filecontent)
+                && formData.filecontent !== oldcontentNameRef.current
             ) {
                 newErrors.filecontent = t("variableNameExists");
             }
@@ -183,8 +186,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             } else if (formData.filepath.length > 50) {
                 newErrors.filepath = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.file_path === formData.filepath) &&
-                formData.filepath !== oldPathNameRef.current
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_path === formData.filepath)
+                && formData.filepath !== oldPathNameRef.current
             ) {
                 newErrors.filepath = t("variableNameExists");
             }
@@ -226,8 +230,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         }
 
         // 5. 不能重复
-        if (existingOptions?.some(opt => opt.image_file === formData.imageFile) &&
-            formData.imageFile !== oldImageFileRef.current) {
+        if (existingOptions?.some(opt => opt.type === 'file'
+            && opt.image_file === formData.imageFile)
+            && formData.imageFile !== oldImageFileRef.current) {
             return '变量名已存在';
         }
 
@@ -266,6 +271,14 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         }
     }
 
+    // var check
+    const checkVarFuncRef = useRef(null);
+    useEffect(() => {
+        if (checkVarFuncRef.current && formData.formType === FormType.Text) {
+            checkVarFuncRef.current();
+        }
+    }, [formData.formType, checkVarFuncRef.current])
+
     // text form
     const InputForm = <div className="space-y-4">
         <div>
@@ -290,6 +303,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 value={formData.displayName}
                 placeholder={namePlaceholders[formData.formType]}
                 onChange={(val) => setFormData({ ...formData, displayName: val })}
+                onVarEvent={(func) => checkVarFuncRef.current = func}
             >
             </VarInput>
             {errors.displayName && <p className="text-red-500 text-sm">{errors.displayName}</p>}
@@ -433,10 +447,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </div>
         <InputItem
             type='number'
+            char
+            linefeed
             data={
                 {
                     min: 0,
-                    label: "文件内容长度限制(字)",
+                    label: "文件内容长度上限",
                     value: formData.fileContentSize,
                 }
             }
@@ -522,7 +538,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </form>
     );
 }
-export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
+export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(""); // 控制编辑模式
@@ -631,6 +647,27 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
         return () => onValidate(() => { });
     }, [data.value]);
 
+    const { flow } = useFlowStore();
+    // 校验变量是否可用
+    const validateVarAvailble = () => {
+        const errors = data.value.reduce((acc, value) => {
+            if (value.type === 'text') {
+                value.value.replace(/{{#(.*?)#}}/g, (a, part) => {
+                    console.log('a, part :>> ', a, part);
+                    const _error = isVarInFlow(nodeId, flow.nodes, part, data.varZh?.[part])
+                    _error && acc.push(_error)
+                })
+            }
+            return acc
+        }, [])
+        return Promise.resolve(errors);
+    };
+
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data]);
+
     return (
         <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
@@ -639,7 +676,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                     ref={scrollRef}
                     options={data.value.map((el) => ({
                         key: el.key,
-                        text: `${el.value}(${el.key},${el.file_content},${el.file_path})`,
+                        text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
                         type: el.type,
                     }))}
                     onEditClick={handleEditClick} // 点击编辑时执行的逻辑

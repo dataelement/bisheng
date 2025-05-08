@@ -24,17 +24,19 @@ const isMatch = (obj, expression) => {
 };
 
 // 特殊结构提取变量
-const getSpecialVar = (obj, type) => {
+const getSpecialVar = (obj, type, onlyImg = false) => {
     switch (type) {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
                 if (item.type === 'file') {
                     // if (item.multiple) return res
                     // res.push({ label: item.key, value: item.key })
-                    res.push({ label: item.file_content, value: item.file_content })
-                    res.push({ label: item.file_path, value: item.file_path })
-                    res.push({ label: item.image_file, value: item.image_file })
-                } else {
+                    if (!onlyImg) {
+                        res.push({ label: item.file_content, value: item.file_content })
+                        res.push({ label: item.file_path, value: item.file_path })
+                    }
+                    item.file_type !== 'file' && res.push({ label: item.image_file, value: item.image_file })
+                } else if (!onlyImg) {
                     res.push({ label: item.key, value: item.key })
                 }
                 return res
@@ -103,7 +105,7 @@ const SelectVar = forwardRef(({
                 // 过滤当前节点的output变量
                 if (nodeId === item.id && param.key.indexOf('output') === 0) return
                 // 不能选自己(相同变量名视为self) param.key
-                if (param.key === itemKey) return
+                if (nodeId === item.id && param.key === itemKey) return
                 if (!param.global) return
                 // 处理code表达式
                 if (param.global.indexOf('code') === 0) {
@@ -118,7 +120,7 @@ const SelectVar = forwardRef(({
                     _vars = [..._vars, ...result]
                     // 特殊变量(getSpecialVar前端策略)
                 } else if (param.global.startsWith('item')) {
-                    const result = getSpecialVar(param, param.global)
+                    const result = getSpecialVar(param, param.global, findInputFile)
                     _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {
@@ -181,6 +183,7 @@ const SelectVar = forwardRef(({
      * 限制findInputFileOnly为true时，过滤其他变量,只返回dialog_image_files文件变量
      */
     function processInputNode(inputNodeData, findInputFileOnly) {
+        if (inputNodeData.tab.value === 'form_input') return inputNodeData;
         const processedData = cloneDeep(inputNodeData);
         let acceptType = 'all';
 

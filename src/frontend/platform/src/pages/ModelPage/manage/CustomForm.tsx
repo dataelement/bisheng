@@ -169,6 +169,14 @@ const modelProviders = {
         },
     ],
     spark: [
+        // {
+        //     label: "App ID",
+        //     type: "text",
+        //     placeholder: "",
+        //     default: "",
+        //     required: true,
+        //     key: "appid",
+        // },
         {
             label: "API Key",
             type: "password",
@@ -250,19 +258,19 @@ const modelProviders = {
     ],
     tencent: [
         {
-            label: "Base URL",
-            type: "text",
-            default: "https://api.hunyuan.cloud.tencent.com/v1",
+            label: "SecretId",
+            type: "password",
+            default: "",
             required: true,
-            key: "base_url",
+            key: "hunyuan_secret_id",
         },
         {
-            label: "API Key",
+            label: "SecretKey",
             type: "password",
             placeholder: "",
             default: "",
             required: true,
-            key: "api_key",
+            key: "hunyuan_secret_key",
         },
     ],
     moonshot: [
@@ -283,7 +291,7 @@ const modelProviders = {
             key: "api_key",
         },
     ],
-    "火山引擎": [
+    volcengine: [
         {
             label: "Base URL",
             type: "text",
@@ -368,7 +376,7 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
         <div className="overflow-hidden">
             {fields.map((field) => (
                 <FormField
-                    key={field.key}
+                    key={provider + field.key}
                     showDefault={showDefault}
                     field={field}
                     value={form[field.key] || ''}

@@ -15,7 +15,7 @@ import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import Tip from "@/components/bs-ui/tooltip/tip";
 
-const FileTypes = {
+export const FileTypes = {
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
@@ -182,14 +182,15 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 };
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
-                    console.log('result message data :>> ', data);
 
                     if (data.type === 'begin') {
                         setStop({ show: true, disable: false })
-                    } else if (data.type === 'close' && !reRunStateRef.current) {
-                        // 重试时阻止关闭stop
+                    } else if (data.type === 'close') {
+                        if (!reRunStateRef.current) {
+                            // 重试时阻止关闭stop
+                            setStop({ show: false, disable: false })
+                        }
                         reRunStateRef.current = false
-                        setStop({ show: false, disable: false })
                     }
 
                     // const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
@@ -432,7 +433,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         //         sendWsMsg(onBeforSend('init_data', {}))
         //     })
         // }, 300);
-        reRunStateRef.current = true
+        if (stop.show) {
+            reRunStateRef.current = true
+        }
     }
 
     const placholder = useMemo(() => {
@@ -456,7 +459,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Tip content={"重新运行"}>
+                <Tip side='right' content={"重新运行"}>
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
@@ -481,9 +484,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 </div>
             </div>
             {/* stop & 重置 */}
-            <div className="absolute w-full flex justify-center bottom-20">
+            <div className="absolute w-full flex justify-center bottom-16">
                 {!stop.show && <Button
-                    className="rounded-full"
+                    className="rounded-full bg-[#fff] dark:bg-[#1B1B1B]"
                     variant="outline"
                     disabled={restarted}
                     onClick={handleRestartClick}>

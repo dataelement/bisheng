@@ -49,10 +49,11 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
   async function saveFlow(flow: FlowType) {
     // save api
-    const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(flow))
+    const {data, ...info} = flow
+    const newFlow = await captureAndAlertRequestErrorHoc(updateFlowApi(info))
     if (!newFlow) return null;
     console.log('action :>> ', 'save');
-    setFlow(newFlow)
+    setFlow((flow) => ({...newFlow, data: flow.data}))
     setTabsState((prev) => {
       return {
         ...prev,
