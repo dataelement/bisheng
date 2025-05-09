@@ -405,6 +405,7 @@ class KnowledgeLLMConfig(BaseModel):
     source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
     extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
     qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
+    abstract_prompt: Optional[str] = Field(None, description='摘要提示词')
 
 
 class AssistantLLMItem(BaseModel):
