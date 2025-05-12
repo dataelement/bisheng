@@ -33,9 +33,11 @@ def _get_xinference_params(params: dict, server_config: dict, model_config: dict
         params['api_key'] = 'Empty'
     return params
 
+
 def _get_bisheng_rt_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update(server_config)
     return params
+
 
 def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
     if server_config:
@@ -95,6 +97,7 @@ def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> 
     params['zhipuai_api_base'] = server_config.get('openai_api_base')
     return params
 
+
 def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update({
         'api_key': f'{server_config.get("api_key")}:{server_config.get("api_secret")}',
@@ -102,19 +105,13 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
     })
     return params
 
-def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params.update({
-        'hunyuan_secret_id': server_config.get('hunyuan_secret_id'),
-        'hunyuan_secret_key': server_config.get('hunyuan_secret_key'),
-    })
-    params['extra_body'] = {'enable_enhancement': model_config.get('enable_web_search', False)}
-    return params
 
 _llm_node_type: Dict = {
     # 开源推理框架
     LLMServerType.OLLAMA.value: {'client': 'ChatOllama', 'params_handler': _get_ollama_params},
-    LLMServerType.XINFERENCE.value: {'client':'ChatOpenAI', 'params_handler': _get_xinference_params},
-    LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+    LLMServerType.XINFERENCE.value: {'client': 'ChatOpenAI', 'params_handler': _get_xinference_params},
+    LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
+    # 此组件是加载本地的模型文件，待确认是否有api服务提供
     LLMServerType.VLLM.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.BISHENG_RT.value: {'client': 'HostChatGLM', 'params_handler': _get_bisheng_rt_params},
 
@@ -128,11 +125,12 @@ _llm_node_type: Dict = {
     LLMServerType.ANTHROPIC.value: {'client': 'ChatAnthropic', 'params_handler': _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {'client': 'ChatDeepSeek', 'params_handler': _get_openai_params},
     LLMServerType.SPARK.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_spark_params},
-    LLMServerType.TENCENT.value: {'client': 'ChatHunyuan', 'params_handler': _get_tencent_params},
+    LLMServerType.TENCENT.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.MOONSHOT.value: {'client': 'MoonshotChat', 'params_handler': _get_openai_params},
     LLMServerType.VOLCENGINE.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.SILICON.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
 }
+
 
 class BishengLLM(BaseChatModel):
     """
@@ -147,7 +145,6 @@ class BishengLLM(BaseChatModel):
     cache: bool = Field(default=False, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
-
 
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None)
