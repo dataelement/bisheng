@@ -95,6 +95,8 @@ def _get_anthropic_params(params: dict, server_config: dict, model_config: dict)
 def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['zhipuai_api_key'] = server_config.get('openai_api_key')
     params['zhipuai_api_base'] = server_config.get('openai_api_base')
+    if 'chat/completions' not in params['zhipuai_api_base']:
+        params['zhipuai_api_base'] = f"{params['zhipuai_api_base'].rstrip('/')}/chat/completions"
     return params
 
 
