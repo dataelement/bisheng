@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, Any, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class WorkflowEventType(Enum):
@@ -52,6 +52,13 @@ class WorkflowEvent(BaseModel):
     node_execution_id: Optional[str] = Field(default=None, description='The node exec unique id')
     output_schema: Optional[WorkflowOutputSchema] = Field(default=None, description='The output schema')
     input_schema: Optional[WorkflowInputSchema] = Field(default=None, description='The input schema')
+
+    @field_validator('message_id', mode='before')
+    @classmethod
+    def validate_message_id(cls, v: Any) -> Optional[str]:
+        if isinstance(v, str) or v is None:
+            return v
+        return str(v)
 
 
 class WorkflowStream(BaseModel):
