@@ -16,7 +16,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileStatus, ParseType, QAKnoweldgeDao,
-                                                    QAKnowledge, QAKnowledgeUpsert)
+                                                    QAKnowledge, QAKnowledgeUpsert, QAStatus)
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -671,14 +671,14 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         for vectore_client in vectore_client_list:
             vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
 
-        QA.status = 1
+        QA.status = QAStatus.ENABLED.value
         with session_getter() as session:
             session.add(QA)
             session.commit()
             session.refresh(QA)
     except Exception as e:
         logger.error(e)
-        setattr(QA, 'status', 0)
+        setattr(QA, 'status', QAStatus.FAILED.value)
         setattr(QA, 'remark', str(e)[:500])
         with session_getter() as session:
             session.add(QA)
@@ -723,7 +723,7 @@ def qa_status_change(qa_id: int, target_status: int):
         return
 
     db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
-    if target_status == 0:
+    if target_status == QAStatus.DISABLED.value:
         delete_vector_data(db_knowledge, [qa_id])
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)

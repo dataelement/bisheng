@@ -21,7 +21,7 @@ from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, Upda
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
-                                                    QAKnoweldgeDao, QAKnowledgeUpsert)
+                                                    QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
@@ -524,7 +524,6 @@ def post_import_file(*,
             answers=[convert_excel_value(dd['答案'])],
             questions=[convert_excel_value(dd['问题'])],
             source=4,
-            status=1,
             create_time=datetime.now(),
             update_time=datetime.now())
         for key, value in dd.items():
@@ -574,7 +573,7 @@ def post_import_file(*,
                 answers=[dd_answer],
                 questions=[dd_question],
                 source=4,
-                status=0)
+                status=QAStatus.PROCESSING.value)
             tmp_questions.add(QACreate.questions[0])
             for key, value in dd.items():
                 if key.startswith('相似问题'):
