@@ -52,12 +52,13 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+        result = output if isinstance(output, str) else getattr(output, 'content', output)
         if self.tool_list is not None:
             self.tool_list.append({
                 'type': 'end',
                 'run_id': kwargs.get('run_id').hex,
                 'name': kwargs['name'],
-                'output': output,
+                'output': result,
             })
         if kwargs['name'] == 'sql_agent':
             self.output = True
