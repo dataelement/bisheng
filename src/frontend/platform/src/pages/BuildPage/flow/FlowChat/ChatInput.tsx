@@ -8,12 +8,12 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { RefreshCw } from "lucide-react";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import Tip from "@/components/bs-ui/tooltip/tip";
 
 export const FileTypes = {
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
@@ -305,6 +305,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
         } else if (data.category === 'end_cover') {
+            setInputLock({ locked: true, reason: '' })
             return overWsMsg(data)
         }
 
@@ -318,6 +319,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             }
         } else if (data.type === 'over') {
             createWsMsg(data)
+        } else if (data.type === 'end_cover') {
+            overWsMsg(data)
         }
     }
 
@@ -345,9 +348,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         }
         const handleOutPutEvent = async (e) => {
             const { nodeId, data, message } = e.detail
+            const { flow_id, chat_id } = onBeforSend('flowInfo', {})
             await createWebSocket()
             sendWsMsg({
                 action: 'input',
+                flow_id,
+                chat_id,
                 data: {
                     [nodeId]: {
                         data,
@@ -422,7 +428,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         restartCallBackRef.current[chatId] = () => {
             createWebSocket().then(() => {
                 setRestarted(false)
-                sendWsMsg(onBeforSend('init_data', {}))
+                onBeforSend('refresh_flow', {}).then((data) => {
+                    sendWsMsg(data)
+                })
             })
         }
         // wsRef.current?.close()

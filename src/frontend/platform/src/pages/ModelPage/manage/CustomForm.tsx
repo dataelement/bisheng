@@ -258,19 +258,19 @@ const modelProviders = {
     ],
     tencent: [
         {
-            label: "SecretId",
-            type: "password",
-            default: "",
+            label: "Base URL",
+            type: "text",
+            default: "https://api.hunyuan.cloud.tencent.com/v1",
             required: true,
-            key: "hunyuan_secret_id",
+            key: "base_url",
         },
         {
-            label: "SecretKey",
+            label: "API Key",
             type: "password",
             placeholder: "",
             default: "",
             required: true,
-            key: "hunyuan_secret_key",
+            key: "api_key",
         },
     ],
     moonshot: [
