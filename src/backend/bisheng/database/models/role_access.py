@@ -2,25 +2,23 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Union
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class RoleAccessBase(SQLModelSerializable):
     role_id: str = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False)
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         index=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class RoleAccess(RoleAccessBase, table=True):
@@ -28,7 +26,7 @@ class RoleAccess(RoleAccessBase, table=True):
 
 
 class RoleAccessRead(RoleAccessBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class RoleAccessCreate(RoleAccessBase):
@@ -46,8 +44,8 @@ class AccessType(Enum):
     ASSISTANT_WRITE = 6
     GPTS_TOOL_READ = 7
     GPTS_TOOL_WRITE = 8
-    WORK_FLOW= 9
-    WORK_FLOW_WRITE= 10
+    WORK_FLOW = 9
+    WORK_FLOW_WRITE = 10
 
     WEB_MENU = 99  # 前端菜单栏权限限制
 
@@ -76,6 +74,7 @@ class RoleAccessDao(RoleAccessBase):
                 return session.exec(
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
                                              RoleAccess.type.in_([x.value for x in access_type]))).all()
+
     @classmethod
     def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
         with session_getter() as session:

@@ -7,7 +7,7 @@ from bisheng.settings import settings
 from bisheng.template.frontend_node.llms import LLMFrontendNode
 from bisheng.utils.logger import logger
 from bisheng.utils.util import build_template_from_class
-
+from bisheng.interface.llms.chat_spark import ChatSparkOpenAI
 
 class LLMCreator(LangChainTypeCreator):
     type_name: str = 'llms'
@@ -21,7 +21,8 @@ class LLMCreator(LangChainTypeCreator):
         if self.type_dict is None:
             self.type_dict = llm_type_to_cls_dict
             self.type_dict.update({
-                'BishengLLM': BishengLLM
+                'BishengLLM': BishengLLM,
+                'ChatSparkOpenAI': ChatSparkOpenAI
             })
         return self.type_dict
 

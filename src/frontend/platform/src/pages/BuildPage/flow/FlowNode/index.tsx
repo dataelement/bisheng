@@ -246,6 +246,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                 node={node}
                                 cate={group}
                                 onOutPutChange={handleChangeOutPut}
+                                onFouceUpdate={() => setFocusUpdate(!focusUpdate)}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
                                 onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
                             />
@@ -300,7 +301,9 @@ const useEventMaster = (node, setNodeError) => {
             if (param.tab && node.tab && node.tab.value !== param.tab) return;
 
             const msg = await validate(config); // 获取验证结果
-            if (msg) errors.push(msg);
+            if (msg) {
+                Array.isArray(msg) ? errors.push(...msg) : errors.push(msg);
+            }
         });
 
         await Promise.all(promises);

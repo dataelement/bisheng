@@ -6,6 +6,6 @@ from pydantic import BaseModel
 DataT = TypeVar('DataT')
 
 
-class PageList(Generic[DataT], BaseModel):
+class PageList(BaseModel, Generic[DataT]):
     list: List[DataT]
     total: int

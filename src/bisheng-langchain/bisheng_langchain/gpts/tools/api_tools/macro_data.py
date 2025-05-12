@@ -4,15 +4,15 @@ from typing import Any
 
 import pandas as pd
 import requests
-from langchain.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
 
 from .base import MultArgsSchemaTool
 
 
 class QueryArg(BaseModel):
-    start_date: str = Field(default='', description='开始月份, 使用YYYY-MM-DD 方式表示', example='2023-01-01')
-    end_date: str = Field(default='', description='结束月份，使用YYYY-MM-DD 方式表示', example='2023-05-01')
+    start_date: str = Field(default='', description='开始月份, 使用YYYY-MM-DD 方式表示', examples=['2023-01-01'])
+    end_date: str = Field(default='', description='结束月份，使用YYYY-MM-DD 方式表示', examples=['2023-05-01'])
 
 
 class MacroData(BaseModel):

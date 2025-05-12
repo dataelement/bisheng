@@ -258,7 +258,7 @@ def decide_knowledge_llm() -> Any:
         return None
 
     # 获取llm对象
-    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id)
+    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id, cache=False)
 
 
 def addEmbedding(collection_name: str,
@@ -483,6 +483,8 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         for one in documents:
             # 配置了相关llm的话，就对文档做总结
             title = extract_title(llm, one.page_content)
+            # remove <think>.*</think> tag content
+            title = re.sub('<think>.*</think>', '', title, flags=re.S).strip()
             one.metadata['title'] = title
         logger.info('file_extract_title=success timecost={}', time.time() - t)
 

@@ -3,6 +3,7 @@ import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";
 import CodePythonItem from "./component/CodePythonItem";
 import ConditionItem from "./component/ConditionItem";
+import FileTypeSelect from "./component/FileTypeSelect";
 import HistoryNumItem from "./component/HistoryNumItem";
 import InputFormItem from "./component/InputFormItem";
 import InputItem from "./component/InputItem";
@@ -21,9 +22,10 @@ import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
+import ImagePromptItem from "./component/ImagePromptItem";
 
 // 节点表单项
-export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onVarEvent }
+export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
     : {
         nodeId: string,
         node: WorkflowNode,
@@ -31,6 +33,7 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         onOutPutChange: (key: string, value: any) => void
         onStatusChange: (key: string, obj: any) => void
         onVarEvent: (key: string, obj: any) => void
+        onFouceUpdate: () => void
     }) {
 
     const handleOnNewValue = (newValue: any, validate?: any) => {
@@ -47,6 +50,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         onVarEvent(item.key, { param: item, validate })
     }
 
+    if (item.hidden) return null
+
     // 渲染逻辑根据 `type` 返回不同的组件
     switch (item.type) {
         case 'textarea':
@@ -60,13 +65,13 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'chat_history_num':
             return <HistoryNumItem data={item} onChange={handleOnNewValue} />
         case 'form':
-            return <InputFormItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <InputFormItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'var_textarea':
             return <VarTextareaItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'var_textarea_file':
             return <VarTextareaUploadItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'output_form':
-            return <OutputItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <OutputItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'bisheng_model':
             return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
         case 'agent_model':
@@ -110,6 +115,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
             />;
         case 'number':
             return <InputItem type='number' data={item} onChange={handleOnNewValue} />;
+        case 'char_number':
+            return <InputItem char type='number' data={item} onChange={handleOnNewValue} />;
         case 'code_input':
             return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'code':
@@ -131,6 +138,18 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'sql_config':
             return <SqlConfigItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+        case 'select_fileaccept':
+            return <FileTypeSelect data={item} onChange={(val) => {
+                // group_params[0] 受input模板影响
+                const imageFileItem = node.group_params[0].params.find(param => {
+                    if (param.key === 'dialog_image_files') return true
+                })
+                imageFileItem.hidden = val === 'file'
+                handleOnNewValue(val)
+                onFouceUpdate()
+            }} />;
+        case 'image_prompt':
+            return <ImagePromptItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} />;
         default:
             return <div>Unsupported parameter type</div>;
     }

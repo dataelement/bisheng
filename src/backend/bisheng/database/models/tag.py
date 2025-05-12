@@ -13,19 +13,17 @@ class TagBase(SQLModelSerializable):
     """
     标签表
     """
-    name: Optional[str] = Field(index=True, unique=True, description="标签名称")
+    name: Optional[str] = Field(default=None, index=True, unique=True, description="标签名称")
     user_id: int = Field(default=0, description='创建用户ID')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="创建时间")
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')), description="更新时间")
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')),
+                                            description="更新时间")
 
 
 class Tag(TagBase, table=True):
-    id: Optional[int] = Field(index=True, primary_key=True, description="标签唯一ID")
+    id: Optional[int] = Field(default=None, index=True, primary_key=True, description="标签唯一ID")
 
 
 class TagLinkBase(SQLModelSerializable):
@@ -36,18 +34,16 @@ class TagLinkBase(SQLModelSerializable):
     resource_id: str = Field(description="资源唯一ID")
     resource_type: int = Field(description="资源类型")  # 使用group_resource.ResourceTypeEnum枚举值
     user_id: int = Field(default=0, description='创建用户ID')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="创建时间")
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')), description="更新时间")
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')),
+                                            description="更新时间")
 
 
 class TagLink(TagLinkBase, table=True):
     __table_args__ = (UniqueConstraint('resource_id', 'resource_type', 'tag_id', name='resource_tag_uniq'),)
-    id: Optional[int] = Field(index=True, primary_key=True, description="标签关联唯一ID")
+    id: Optional[int] = Field(default=None, index=True, primary_key=True, description="标签关联唯一ID")
 
 
 class TagDao(Tag):

@@ -23,7 +23,7 @@ from bisheng.database.models.user_group import UserGroupDao, UserGroupRead
 router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(get_login_user)])
 
 
-@router.get('/list', response_model=UnifiedResponseModel[List[GroupRead]])
+@router.get('/list')
 async def get_all_group(Authorize: AuthJWT = Depends()):
     """
     获取所有分组
@@ -48,7 +48,7 @@ async def get_all_group(Authorize: AuthJWT = Depends()):
     return resp_200({'records': groups_res})
 
 
-@router.post('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
+@router.post('/create')
 async def create_group(request: Request, group: GroupCreate, Authorize: AuthJWT = Depends()):
     """
     新建用户组
@@ -59,7 +59,7 @@ async def create_group(request: Request, group: GroupCreate, Authorize: AuthJWT 
     return resp_200(RoleGroupService().create_group(request, login_user, group))
 
 
-@router.put('/create', response_model=UnifiedResponseModel[GroupRead], status_code=200)
+@router.put('/create')
 async def update_group(request: Request,
                        group: Group,
                        login_user: UserPayload = Depends(get_login_user)):
@@ -84,9 +84,7 @@ async def delete_group(request: Request,
     return RoleGroupService().delete_group(request, login_user, group_id)
 
 
-@router.post('/set_user_group',
-             response_model=UnifiedResponseModel[UserGroupRead],
-             status_code=200)
+@router.post('/set_user_group')
 async def set_user_group(request: Request,
                          user_id: Annotated[int, Body(embed=True)],
                          group_id: Annotated[List[int], Body(embed=True)],
@@ -100,9 +98,7 @@ async def set_user_group(request: Request,
     return resp_200(RoleGroupService().replace_user_groups(request, login_user, user_id, group_id))
 
 
-@router.get('/get_user_group',
-            response_model=UnifiedResponseModel[List[GroupRead]],
-            status_code=200)
+@router.get('/get_user_group')
 async def get_user_group(user_id: int, Authorize: AuthJWT = Depends()):
     """
     获取用户所属分组
@@ -111,7 +107,7 @@ async def get_user_group(user_id: int, Authorize: AuthJWT = Depends()):
     return resp_200(RoleGroupService().get_user_groups_list(user_id))
 
 
-@router.get('/get_group_user', response_model=UnifiedResponseModel[List[User]], status_code=200)
+@router.get('/get_group_user')
 async def get_group_user(group_id: int,
                          page_size: int = None,
                          page_num: int = None,
@@ -123,9 +119,7 @@ async def get_group_user(group_id: int,
     return RoleGroupService().get_group_user_list(group_id, page_size, page_num)
 
 
-@router.post('/set_group_admin',
-             response_model=UnifiedResponseModel[List[UserGroupRead]],
-             status_code=200)
+@router.post('/set_group_admin')
 async def set_group_admin(
         request: Request,
         user_ids: Annotated[List[int], Body(embed=True)],
@@ -152,9 +146,7 @@ async def set_update_user(group_id: Annotated[int, Body(embed=True)],
     return resp_200(RoleGroupService().set_group_update_user(login_user, group_id))
 
 
-@router.get('/get_group_resources',
-            response_model=UnifiedResponseModel[List[UserGroupRead]],
-            status_code=200)
+@router.get('/get_group_resources')
 async def get_group_resources(*,
                               group_id: int,
                               resource_type: int,
@@ -180,7 +172,7 @@ async def get_group_resources(*,
     })
 
 
-@router.get("/roles", response_model=UnifiedResponseModel)
+@router.get("/roles")
 async def get_group_roles(*,
                           group_id: List[int] = Query(..., description="用户组ID列表"),
                           keyword: str = Query(None, description="搜索关键字"),
@@ -203,7 +195,7 @@ async def get_group_roles(*,
     })
 
 
-@router.get("/manage/resources", response_model=UnifiedResponseModel)
+@router.get("/manage/resources")
 async def get_manage_resources(login_user: UserPayload = Depends(get_login_user),
                                keyword: str = Query(None, description="搜索关键字"),
                                page: int = 1,

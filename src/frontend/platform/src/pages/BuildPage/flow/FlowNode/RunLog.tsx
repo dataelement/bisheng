@@ -1,6 +1,6 @@
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { downloadFile } from "@/util/utils";
 import { Check, ChevronsRightIcon, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,14 +22,13 @@ export default function RunLog({ node, children }) {
     const setRunCache = useFlowStore(state => state.setRunCache) // 缓存TODO
     const [data, setData] = useState<any>([])
     const { t } = useTranslation('flow')
-
     // 订阅日志事件
     useEffect(() => {
         const buildData = (data) => {
             if (data) {
                 /**
                  * newData
-                 * key: {type: value}  
+                 * key: {type, value}  
                  * "current_time": {type: "param", value: "2023-11-20 16:00:00"}
                  */
                 const newData = data.reduce((res, item) => {
@@ -43,6 +42,7 @@ export default function RunLog({ node, children }) {
                 }, new Map()); // 使用 Map 保持插入顺序
 
                 let hasKeys = [];
+                const isFormInputNode = node.type === 'input' && node.tab.value === 'form_input'
                 // 根据node params替换newData的key值 替换为name
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
@@ -54,6 +54,7 @@ export default function RunLog({ node, children }) {
                                 hasKeys.push(value.key);
                             });
                         } else if (newData.has(param.key)) {
+                            if (param.hidden) return newData.delete(param.key);
                             newData.get(param.key)['label'] = param.label || param.key;
                             hasKeys.push(param.key);
                         } else if (param.key === 'tool_list') {
@@ -62,9 +63,12 @@ export default function RunLog({ node, children }) {
                                 if (newData.has(p.tool_key)) {
                                     newData.get(p.tool_key)['label'] = p.label;
                                     hasKeys.push(p.tool_key);
-                                    return true;
                                 }
                             });
+                        } else if (isFormInputNode && param.key === 'form_input') {
+                            param.value.forEach(value => {
+                                value.file_type === 'file' && newData.delete(value.image_file);
+                            })
                         }
                     });
                 });

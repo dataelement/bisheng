@@ -1,25 +1,23 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Column, DateTime, delete, text
 from sqlmodel import Field, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class DatasetBase(SQLModelSerializable):
     user_id: Optional[int] = Field(index=True, description='创建用户id')
     name: str = Field(index=True, description='数据集名称')
     type: str = Field(index=False, default=0, description='预留字段')
-    description: Optional[str] = Field(index=False, description='数据集描述')
-    object_name: Optional[str] = Field(index=False, description='数据集S3名称')
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    description: Optional[str] = Field(default=None, index=False, description='数据集描述')
+    object_name: Optional[str] = Field(default=None, index=False, description='数据集S3名称')
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class Dataset(DatasetBase, table=True):

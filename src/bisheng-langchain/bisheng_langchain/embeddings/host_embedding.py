@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import requests
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import model_validator, BaseModel, Field
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
 
@@ -42,7 +42,7 @@ class HostEmbeddings(BaseModel, Embeddings):
     """host embedding models.
     """
 
-    client: Optional[Any]  #: :meta private:
+    client: Optional[Any] = None  #: :meta private:
     """Model name to use."""
     model: str = 'embedding-host'
     host_base_url: str = None
@@ -64,7 +64,8 @@ class HostEmbeddings(BaseModel, Embeddings):
 
     url_ep: Optional[str] = None
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')
@@ -164,7 +165,8 @@ class CustomHostEmbedding(HostEmbeddings):
     model: str = Field('custom-embedding', alias='model')
     embedding_ctx_length: int = 512
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values['host_base_url'] = get_from_dict_or_env(values, 'host_base_url', 'HostBaseUrl')

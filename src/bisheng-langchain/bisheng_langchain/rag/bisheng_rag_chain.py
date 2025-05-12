@@ -10,7 +10,7 @@ from langchain_core.callbacks import (AsyncCallbackManagerForChainRun, CallbackM
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
-from langchain_core.pydantic_v1 import Extra, Field
+from pydantic import ConfigDict, Field
 
 from .bisheng_rag_tool import BishengRAGTool
 
@@ -52,13 +52,7 @@ class BishengRetrievalQA(Chain):
     """Return the source documents or not."""
     bisheng_rag_tool: BishengRAGTool = Field(default_factory=BishengRAGTool,
                                              description='RAG tool')
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
-        arbitrary_types_allowed = True
-        allow_population_by_field_name = True
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, validate_by_name=True)
 
     @property
     def input_keys(self) -> List[str]:

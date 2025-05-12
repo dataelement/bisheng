@@ -46,8 +46,8 @@ export const ResultText = ({ title, value }: { title: string, value: any }) => {
 
     return <div className="nowheel nodrag mb-2 rounded-md border bg-search-input text-sm shadow-sm" onKeyDown={e => e.stopPropagation()}>
         <div className="border-b px-2 flex justify-between items-center">
-            <p>{title}</p>
-            {copyed ? <CopyCheck size={14} /> : <Copy size={14} className="cursor-pointer" onClick={handleCopy} />}
+            <p className="truncate">{title}</p>
+            {copyed ? <CopyCheck size={14} /> : <Copy size={14} className="cursor-pointer min-w-3" onClick={handleCopy} />}
         </div>
         <textarea defaultValue={text} readOnly className="w-full min-h-28 p-2 block text-muted-foreground bg-gray-100 dark:bg-black outline-none" />
     </div>

@@ -15,7 +15,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.vectorstores import VectorStoreRetriever
@@ -24,7 +24,7 @@ from loguru import logger
 
 class MultArgsSchemaTool(Tool):
 
-    def _to_args_and_kwargs(self, tool_input: Union[str, Dict]) -> Tuple[Tuple, Dict]:
+    def _to_args_and_kwargs(self, tool_input: Union[str, Dict], tool_call_id: Optional[str]) -> Tuple[Tuple, Dict]:
         # For backwards compatibility, if run_input is a string,
         # pass as a positional argument.
         if isinstance(tool_input, str):

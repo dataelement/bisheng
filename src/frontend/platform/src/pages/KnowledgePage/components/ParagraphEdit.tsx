@@ -47,9 +47,13 @@ const ParagraphEdit = ({
         //     arrData.splice(arrData.indexOf(prioritizedItem), 1);
         //     arrData.unshift(prioritizedItem);
         // }
+        // 当前chunk优先排前面
+        const newArrData = arrData.slice();
+        const [element] = newArrData.splice(newArrData.findIndex(item => item.metadata.chunk_index === chunkId), 1);
+        newArrData.unshift(element);
 
         const seenIds = new Set()
-        arrData.forEach(chunk => {
+        newArrData.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
             const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
 
@@ -96,7 +100,7 @@ const ParagraphEdit = ({
         const _value = markDownRef.current.getValue().trim()
         setValue(_value)
         if (!_value) return
-
+        
         const bbox = {
             chunk_bboxes: prevOvergapData.current.reduce((arr, item) => {
                 if (item.active) {

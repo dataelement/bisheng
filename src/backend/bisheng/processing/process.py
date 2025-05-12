@@ -146,7 +146,7 @@ def generate_result(langchain_object: Union[Chain, VectorStore], inputs: dict):
 
 
 class Result(BaseModel):
-    result: Any
+    result: Any = None
     session_id: str
 
 

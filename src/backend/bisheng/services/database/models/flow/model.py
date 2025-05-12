@@ -20,7 +20,8 @@ class FlowBase(SQLModel):
     folder: Optional[str] = Field(default=None, nullable=True)
 
     @field_validator('data')
-    def validate_json(v):
+    @classmethod
+    def validate_json(cls, v):
         if not v:
             return v
         if not isinstance(v, dict):
@@ -42,6 +43,7 @@ class FlowBase(SQLModel):
         return dt.isoformat()
 
     @field_validator('updated_at', mode='before')
+    @classmethod
     def validate_dt(cls, v):
         if v is None:
             return v

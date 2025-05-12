@@ -234,7 +234,7 @@
     "searchLabels": "搜索标签",
     "confirmed": "已确认",
     "confirm": "确认",
-    "runNewWorkflow": "运行新工作流",
+    "runNewWorkflow": "开启新会话",
     "chatEndMessage": "本轮会话已结束"
   },
   "model": {
@@ -566,9 +566,9 @@
   },
   "tools": {
     "addTool": "添加工具",
-    "createCustomTool": "自定义工具",
+    "createCustomTool": "API工具",
     "builtinTools": "内置工具",
-    "customTools": "自定义工具",
+    "customTools": "API工具",
     "search": "搜索",
     "empty": "空空如也",
     "manageCustomTools": "在此页面管理您的自定义工具，对自定义工具创建、编辑等等",
@@ -914,7 +914,7 @@
     "10606": "用户组和角色不能为空",
     "10610": "用户组内还有用户，不能删除",
     "10920": "未配置QA知识库相似问模型",
-    "10930": "该问题已被标注过",
+    "10930": "该问题已存在",
     "10527": "工作流等待用户输入超时",
     "10528": "{{type}}节点执行超过最大次数",
     "10531": "{{type}}功能已升级,需删除后重新拖入",

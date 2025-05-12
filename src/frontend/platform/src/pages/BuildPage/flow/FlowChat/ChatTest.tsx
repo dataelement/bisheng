@@ -5,6 +5,7 @@ import { GripVertical, Maximize2, Minus, X } from "lucide-react";
 import { forwardRef, useContext, useImperativeHandle, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import ChatPane from "./ChatPane";
+import { cloneDeep } from "lodash-es";
 
 // ref
 export const ChatTest = forwardRef((props, ref) => {
@@ -25,7 +26,8 @@ export const ChatTest = forwardRef((props, ref) => {
                 setOpen(true);  // 通过 `run` 方法打开 `Sheet`
                 setSmall(false);
 
-                setFlow(flow);
+                // 克隆flow用于调试
+                setFlow(cloneDeep(flow));
                 setChatId(`test_${generateUUID(16)}`);
             }, 0);
         },
@@ -72,7 +74,7 @@ export const ChatTest = forwardRef((props, ref) => {
 
     if (!open) return null;
 
-    const host = appConfig.websocketHost || '';
+    const host = appConfig.websocketHost || window.location.host;
     return (
         <div
             ref={resizableRef}
@@ -97,7 +99,7 @@ export const ChatTest = forwardRef((props, ref) => {
                 </div>
             </div>
             <div className={`h-[calc(100vh-28px)] relative overflow-y-auto ${small ? 'hidden' : ''}`} onKeyDown={(e) => e.stopPropagation()}>
-                <ChatPane autoRun chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
+                <ChatPane debug autoRun chatId={chatId} flow={flow} wsUrl={`${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${flow?.id}`} />
             </div>
             {!small && <div
                 className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center"
