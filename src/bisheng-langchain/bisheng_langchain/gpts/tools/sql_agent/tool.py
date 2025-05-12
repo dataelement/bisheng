@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph.graph import CompiledGraph
 from langgraph.prebuilt import create_react_agent
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 _agent_system_prompt = """You are an autonomous agent that answers user questions by querying an SQL database through the provided tools.
 
@@ -46,6 +46,8 @@ Remember:
 
 
 class SqlAgentAPIWrapper(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     llm: BaseLanguageModel = Field(description="llm to use for sql agent")
     sql_address: str = Field(description="sql database address for SQLDatabase uri")
 
