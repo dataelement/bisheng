@@ -296,12 +296,28 @@ export default function QasPage() {
         });
     };
 
-    const handleStatusClick = async (id, checked) => {
-        const status = checked ? 1 : 0
-        await updateQaStatus(id, status)
-        refreshData((item) => item.id === id, { status })
-    }
-
+    const handleStatusClick = async (id: number, checked: boolean) => {
+        try {
+          // 调用API更新状态
+          const targetStatus = checked ? 1 : 0;
+          const result = await updateQaStatus(id, targetStatus);
+          
+          if (result.success) {
+            refreshData((item) => item.id === id, { status: targetStatus });
+          } else {
+            // 只有尝试开启失败时才设为3（显示"未启用，请重试"）
+            // 关闭失败时保持原状态（不显示提示）
+            refreshData((item) => item.id === id, { 
+              status: targetStatus === 1 ? 3 : 0 
+            });
+          }
+        } catch (error) {
+          // 捕获异常时同样逻辑：只有尝试开启失败才显示提示
+          refreshData((item) => item.id === id, { 
+            status: checked ? 3 : 0 
+          });
+        }
+      };
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -374,9 +390,21 @@ export default function QasPage() {
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>
-                                    <Switch checked={el.status === 1} onCheckedChange={(bln) => handleStatusClick(el.id, bln)} />
+                                    <div className="flex items-center">
+                                        <Switch
+                                        checked={el.status === 1}
+                                        disabled={ el.status === 0||el.status === 3}
+                                        onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                        />
+                                        {el.status === 2 && (
+                                        <span className="ml-2 text-sm">处理中...</span>
+                                        )}
+                                        {el.status === 3 && (
+                                        <span className="ml-2 text-sm">未启用，请重试</span>
+                                        )}
+                                    </div>
                                 </TableCell>
-                                {hasPermission ? <TableCell className="text-right">
+                                                                {hasPermission ? <TableCell className="text-right">
                                     <Button variant="link" onClick={() => editRef.current.edit(el)} className="ml-4">{t('update')}</Button>
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button>
                                 </TableCell> : <TableCell className="text-right">
