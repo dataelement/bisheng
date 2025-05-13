@@ -309,7 +309,7 @@ def add_chat_messages(*,
             MessageSessionDao.insert_one(MessageSession(
                 chat_id=chat_id,
                 flow_id=flow_id,
-                flow_type=FlowType.FLOW.value,
+                flow_type=flow_info.flow_type,
                 flow_name=flow_info.name,
                 user_id=login_user.user_id,
                 sensitive_status=SensitiveStatus.VIOLATIONS.value,
