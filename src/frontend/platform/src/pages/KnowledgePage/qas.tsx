@@ -296,25 +296,19 @@ export default function QasPage() {
         });
     };
 
+
     const handleStatusClick = async (id: number, checked: boolean) => {
+        const targetStatus = checked ? 1 : 0;
+        const isOpening = checked;
         try {
-          // 调用API更新状态
-          const targetStatus = checked ? 1 : 0;
-          const result = await updateQaStatus(id, targetStatus);
-          
-          if (result.success) {
-            refreshData((item) => item.id === id, { status: targetStatus });
-          } else {
-            // 只有尝试开启失败时才设为3（显示"未启用，请重试"）
-            // 关闭失败时保持原状态（不显示提示）
-            refreshData((item) => item.id === id, { 
-              status: targetStatus === 1 ? 3 : 0 
-            });
-          }
+            if (isOpening) {
+                refreshData(item => item.id === id, { status: 2 });
+              }
+            await updateQaStatus(id, targetStatus);
+            refreshData(item => item.id === id, { status: targetStatus });
         } catch (error) {
-          // 捕获异常时同样逻辑：只有尝试开启失败才显示提示
-          refreshData((item) => item.id === id, { 
-            status: checked ? 3 : 0 
+            refreshData(item => item.id === id, {
+            status:3 
           });
         }
       };
@@ -393,7 +387,7 @@ export default function QasPage() {
                                     <div className="flex items-center">
                                         <Switch
                                         checked={el.status === 1}
-                                        disabled={ el.status === 0||el.status === 3}
+                                        disabled={el.status === 3}
                                         onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
                                         />
                                         {el.status === 2 && (

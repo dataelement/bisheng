@@ -350,8 +350,8 @@ export async function getQaFilePreview(id, params): Promise<{
  */
 export async function updateQaStatus(id, status) {
   return await axios.post(`/api/v1/knowledge/qa/status_switch`, {
-    id:1461,
-    status:3
+    id,
+    status
   });
 }
 
