@@ -127,7 +127,11 @@ export default function apps() {
         })
     }
 
+    const { toast } = useToast()
     const handleSetting = (data) => {
+        if (!data.write) {
+            return toast({ variant: 'warning', description: '无编辑权限' })
+        }
         if (data.flow_type === 5) {
             // 上线状态下，助手不能进入编辑
             navigate(`/assistant/${data.id}`)
@@ -215,7 +219,8 @@ export default function apps() {
                                     id={item.id}
                                     logo={item.logo}
                                     type={TypeNames[item.flow_type]}
-                                    edit={item.write}
+                                    edit
+                                    // edit={item.write}
                                     title={item.name}
                                     isAdmin={user.role === 'admin'}
                                     description={item.description}

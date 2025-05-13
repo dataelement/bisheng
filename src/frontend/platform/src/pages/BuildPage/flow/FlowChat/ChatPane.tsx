@@ -16,7 +16,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
                 const { data, ...other } = f
                 const { edges, nodes, viewport } = data
                 return {
-                    action,
+                    action: 'init_data',
                     chat_id: chatId.startsWith('test') ? undefined : chatId,
                     flow_id: flow.id,
                     data: {

@@ -98,11 +98,11 @@ const comptibleInput = (node) => {
 
         // 兼容文件类型
         const formInput = node.group_params[0].params.find(item => item.key === 'form_input')
-        formInput.value = formInput.value.map((item) => {
+        formInput.value = formInput.value.map((item, index) => {
             if (item.type === 'file') {
                 item.file_type = 'all'
                 item.file_content_size = 15000
-                item.image_file = 'image_file' + generateUUID(2)
+                item.image_file = 'image_file' + (index || '')
                 return item
             }
             return item
