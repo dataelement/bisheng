@@ -210,6 +210,9 @@ class InputNode(BaseNode):
                 file_content_length += len(file_content)
                 all_file_content += f"[file name]: {file_name}\n[file content begin]\n{file_content}\n[file content end]\n"
 
+            if not texts:
+                continue
+
             # 同一个变量对应的文件，放在一个file_id里
             for one in metadatas:
                 one.update({

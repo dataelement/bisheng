@@ -82,6 +82,8 @@ def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -
 def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['minimax_api_key'] = server_config.get('openai_api_key')
     params['base_url'] = server_config.get('openai_api_base')
+    if 'max_tokens' not in params:
+        params['max_tokens'] = 2048
     if '/chat/completions' not in params['base_url']:
         params['base_url'] = f"{params['base_url']}/chat/completions"
     return params

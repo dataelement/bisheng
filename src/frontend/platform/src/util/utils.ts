@@ -150,12 +150,17 @@ export function exportCsv(data: any[], fileName: string = 'test_result.csv') {
     // 将Worksheet转换为CSV字符串
     const csv = XLSX.utils.sheet_to_csv(ws);
 
+    // 处理Unicode字符并转换为Base64
+    const base64String = btoa(unescape(encodeURIComponent(csv)));
+    // 创建Data URL（使用base64编码避免URL编码问题）
+    const csvContent = `data:text/csv;charset=utf-8;base64,${base64String}`;
     // 生成CSV文件
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    // const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     // 创建下载链接
-    const url = URL.createObjectURL(blob);
+    // const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = csvContent;
+    // a.href = url;
     a.download = fileName;
 
     // 模拟点击下载链接
@@ -165,7 +170,7 @@ export function exportCsv(data: any[], fileName: string = 'test_result.csv') {
     // 清理URL对象
     setTimeout(function () {
         document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
+        // window.URL.revokeObjectURL(url);
     }, 0);
 }
 

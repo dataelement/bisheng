@@ -127,6 +127,7 @@ export default function ChatMessages({
                     case 'guide_word':
                     case 'output_msg':
                     case 'stream_msg':
+                    case "answer":
                         return <MessageBs
                             debug={debug}
                             mark={mark}

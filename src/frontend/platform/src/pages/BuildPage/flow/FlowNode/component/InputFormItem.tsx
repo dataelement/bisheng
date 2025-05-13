@@ -6,13 +6,14 @@ import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { isVarInFlow } from "@/util/flowUtils";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
 import useFlowStore from "../../flowStore";
 import DragOptions from "./DragOptions";
 import FileTypeSelect from "./FileTypeSelect";
 import InputItem from "./InputItem";
 import VarInput from "./VarInput";
+import { cloneDeep } from "lodash-es";
 
 const enum FormType {
     Text = "text",
@@ -647,6 +648,24 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
         return () => onValidate(() => { });
     }, [data.value]);
 
+    const options = useMemo(() => {
+        const _options = cloneDeep(data.value)
+        return _options.map((el) => {
+            // cn
+            if (el.type === 'text') {
+                el.value = el.value.replace(/{{#(.*?)#}}/g, (a, key) => {
+                    return data.varZh?.[key] || key;
+                })
+            }
+            
+            return {
+                key: el.key,
+                text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
+                type: el.type,
+            }
+        });
+    }, [data.value])
+
     const { flow } = useFlowStore();
     // 校验变量是否可用
     const validateVarAvailble = () => {
@@ -674,11 +693,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 <DragOptions
                     scroll
                     ref={scrollRef}
-                    options={data.value.map((el) => ({
-                        key: el.key,
-                        text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
-                        type: el.type,
-                    }))}
+                    options={options}
                     onEditClick={handleEditClick} // 点击编辑时执行的逻辑
                     onChange={handleOptionsChange} // 拖拽排序后的更新
                 />

@@ -1,5 +1,5 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { set } from "date-fns";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
@@ -21,6 +22,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
     const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
+
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -220,70 +222,79 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         setFormData({ ...formData, models })
     }
 
-    // submit 
+    // submit 1
+
     const { message, toast } = useToast()
     const formRef = useRef(null)
-    const handleSave = () => {
-        const exists = onBerforSave(formData.id, formData.name)
-        if (exists) {
-            return message({
-                variant: 'warning',
-                description: t('model.duplicateServiceProviderName')
-            })
-        }
-        if (!formData.name || formData.name.length > 100) {
-            return message({
-                variant: 'warning',
-                description: t('model.duplicateServiceProviderNameValidation')
-            })
-        }
-        const [config, errorKey] = formRef.current.getData();
-        if (errorKey) {
-            return message({
-                variant: 'warning',
-                description: `${errorKey} ${t('model.notBeEmpty')}`
-            })
-        }
+    const [isLoading, setIsLoading] = useState(false);
+    const handleSave = async () => {
+        setIsLoading(true)
+        try {
+            const exists = onBerforSave(formData.id, formData.name)
+            if (exists) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.duplicateServiceProviderName')
+                })
+            }
+            if (!formData.name || formData.name.length > 100) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.duplicateServiceProviderNameValidation')
+                })
+            }
+            const [config, errorKey] = formRef.current.getData();
+            if (errorKey) {
+                return message({
+                    variant: 'warning',
+                    description: `${errorKey} ${t('model.notBeEmpty')}`
+                })
+            }
 
-        // 重复检验map
-        const map = {}
-        let repeat = false
-        const error = formData.models.some(model => {
-            if (map[model.model_name]) repeat = true
-            map[model.model_name] = true
-            return !model.model_name || model.model_name.length > 100
-        })
-        if (error) {
-            return message({
-                variant: 'warning',
-                description: t('model.modelNameValidation')
+            // 重复检验map
+            const map = {}
+            let repeat = false
+            const error = formData.models.some(model => {
+                if (map[model.model_name]) repeat = true
+                map[model.model_name] = true
+                return !model.model_name || model.model_name.length > 100
             })
-        }
-        if (repeat) {
-            return message({
-                variant: 'warning',
-                description: t('model.modelDuplicate')
-            })
-        }
+            if (error) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.modelNameValidation')
+                })
+            }
+            if (repeat) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.modelDuplicate')
+                })
+            }
 
-        if (id === -1) {
-            captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
-                if (res.code === 10802) {
-                    return toast({
-                        variant: 'error',
-                        description: res.msg
-                    })
-                }
-                onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
-                onBack()
-            }))
-        } else {
-            captureAndAlertRequestErrorHoc(updateLLmServer({ ...formData, config }).then(res => {
-                onAfterSave(t('model.updateSuccess'))
-                onBack()
-            }))
+            if (id === -1) {
+                captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
+                    // if (res.code === 10802) {
+                    //     return toast({
+                    //         variant: 'error',
+                    //         description: res.msg
+                    //     })
+                    // }
+                    onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
+                    onBack()
+                }))
+            } else {
+                await captureAndAlertRequestErrorHoc(updateLLmServer({ ...formData, config }).then(res => {
+                    onAfterSave(t('model.updateSuccess'))
+                    onBack()
+                }))
+            }
+        } catch (error) {
+            console.error('Save error:', error);
+        } finally {
+            setIsLoading(false);
         }
-    }
+    };
 
     const handleModelDel = () => {
         bsConfirm({
@@ -390,7 +401,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">
             {id !== -1 && <Button className="px-8" variant="destructive" onClick={handleModelDel}>{t('model.delete')}</Button>}
             <Button className="px-8" variant="outline" onClick={() => onBack()}>{t('model.cancel')}</Button>
-            <Button className="px-16" disabled={!formData.type} onClick={handleSave}>{t('model.save')}</Button>
+            <LoadButton
+                className="px-16"
+                disabled={!formData.type}
+                loading={isLoading}
+                onClick={handleSave}
+            >
+                {isLoading ? '模型状态检测中' : t('model.save')}
+            </LoadButton>
         </div>
     </div>
 }

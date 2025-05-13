@@ -58,27 +58,29 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/\t/g, '\\t')                  // 转义制表符
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
-    return data.filter(item => ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "input", "node_run"].includes(item.category)).map(item => {
-        let { message, files, is_bot, intermediate_steps, category, ...other } = item
-        try {
-            message = message && message[0] === '{' ? JSON.parse(message) : message || ''
-        } catch (e) {
-            // 未考虑的情况暂不处理
-            console.error('消息 to JSON error :>> ', e);
-        }
-        return {
-            ...other,
-            category,
-            chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
-            end: true,
-            files: files ? JSON.parse(files) : [],
-            isSend: !is_bot,
-            message,
-            thought: intermediate_steps,
-            reasoning_log: message.reasoning_content || '',
-            noAccess: true
-        }
-    })
+    return data.filter(item =>
+        ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
+        && (item.message || item.reasoning_log)).map(item => {
+            let { message, files, is_bot, intermediate_steps, category, ...other } = item
+            try {
+                message = message && message[0] === '{' ? JSON.parse(message) : message || ''
+            } catch (e) {
+                // 未考虑的情况暂不处理
+                console.error('消息 to JSON error :>> ', e);
+            }
+            return {
+                ...other,
+                category,
+                chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
+                end: true,
+                files: files ? JSON.parse(files) : [],
+                isSend: !is_bot,
+                message,
+                thought: intermediate_steps,
+                reasoning_log: message.reasoning_content || '',
+                noAccess: true
+            }
+        })
 }
 
 let currentChatId = ''
