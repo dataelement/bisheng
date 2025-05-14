@@ -110,7 +110,10 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
                     return false
                 } else if (param.type === 'form') {
                     return param.value.some(item => {
+                        // 文本类型
+                        if (item.type === 'text' && `${node.id}.${item.key}` !== varName) return false
                         // if (item.multiple) return `${node.id}.${item.key}` === varName
+                        // 文件类型
                         const vars = [`${node.id}.${item.key}`, `${node.id}.${item.file_content}`, `${node.id}.${item.file_path}`]
                         // 图片类型追加校验变量
                         item.file_type !== 'file' && vars.push(`${node.id}.${item.image_file}`)

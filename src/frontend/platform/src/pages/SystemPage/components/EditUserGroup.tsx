@@ -40,17 +40,21 @@ function FlowRadio({ limit, onChange }) {
     const { t } = useTranslation()
     const [status, setStatus] = useState(LimitType.UNLIMITED)
     const [limitState, setLimitState] = useState<any>(limit)
+    const limitRef = useRef(0)
 
     const handleCommit = (type: LimitType, value: string = '0') => {
+        if (value === '') return
         const valueNum = parseInt(value)
         if (valueNum < 0 || valueNum > 9999) return
         setStatus(type)
         setLimitState(value)
         onChange(Number(value))
+        limitRef.current = Number(value)
     }
     useEffect(() => {
         setStatus(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
         setLimitState(limit)
+        limitRef.current = limit
     }, [limit])
 
     return <div>
@@ -72,7 +76,13 @@ function FlowRadio({ limit, onChange }) {
                     type="number"
                     value={limitState}
                     className="inline h-5 w-[70px] font-medium"
-                    onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)} />
+                    onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)}
+                    onBlur={(e) => {
+                        if(e.target.value === '') {
+                            e.target.value = limitRef.current + ''
+                        }
+                    }}
+                />
                 <Label className="whitespace-nowrap">{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>

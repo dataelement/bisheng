@@ -137,6 +137,7 @@ class LLMService:
                 bisheng_embed = cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, cache=False)
                 bisheng_embed.embed_query('hello')
         except Exception as e:
+            LLMDao.update_model_status(model.id, 1, str(e))
             logger.exception(f'test model status: {model.id} {model.model_name}')
 
     @classmethod

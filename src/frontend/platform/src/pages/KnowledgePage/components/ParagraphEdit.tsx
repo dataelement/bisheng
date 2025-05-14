@@ -48,19 +48,28 @@ const ParagraphEdit = ({
         //     arrData.unshift(prioritizedItem);
         // }
         // 当前chunk优先排前面
-        const newArrData = arrData.slice();
-        const [element] = newArrData.splice(newArrData.findIndex(item => item.metadata.chunk_index === chunkId), 1);
-        newArrData.unshift(element);
+        // const newArrData = arrData.slice();
+        // const [element] = newArrData.splice(newArrData.findIndex(item => item.metadata.chunk_index === chunkId), 1);
+        // newArrData.unshift(element);
 
         const seenIds = new Set()
-        newArrData.forEach(chunk => {
+        arrData.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
             const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
 
             const active = chunk_index === chunkId
             const resData = labels.reduce((acc, label) => {
                 const id = [label.page, ...label.bbox].join('-');
-                if (!seenIds.has(id)) {
+                if (seenIds.has(id) && active) {
+                    // 优先使用高亮的label
+                    labelsData[labelsData.findIndex(item => item.id === id)] = {
+                        id: id,
+                        page: label.page,
+                        label: label.bbox,
+                        active: active,
+                        txt: chunk.text
+                    }
+                } else if (!seenIds.has(id)) {
                     seenIds.add(id);
                     acc.push({
                         id: id,
@@ -100,7 +109,7 @@ const ParagraphEdit = ({
         const _value = markDownRef.current.getValue().trim()
         setValue(_value)
         if (!_value) return
-        
+
         const bbox = {
             chunk_bboxes: prevOvergapData.current.reduce((arr, item) => {
                 if (item.active) {

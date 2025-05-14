@@ -310,8 +310,9 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     {t('run')}
                 </Button>
                 <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={async () => {
+                    window.flow_version = Number(version.id)
                     await handleSaveClick()
-                    forceUpdateFlow({ ...flow }) // 用于对比差异
+                    forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
                 }}>
                     {t('save')}
                 </Button>
@@ -438,7 +439,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 <DialogContent className="sm:max-w-[425px]" close={false}>
                     <DialogHeader>
                         <DialogTitle>{t('prompt')}</DialogTitle>
-                        {isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}
+                        <p className="bisheng-label pt-2">{isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}</p>
                     </DialogHeader>
                     <DialogFooter>
                         <Button className="leave h-8" onClick={handleSaveAndClose}>

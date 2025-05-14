@@ -273,7 +273,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             }
 
             if (id === -1) {
-                captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
+                await captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
                     // if (res.code === 10802) {
                     //     return toast({
                     //         variant: 'error',
@@ -382,11 +382,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <div className="w-[92%]">
                         {
                             formData.models.map((m, i) => <ModelItem
+                                key={m.name + m.model_name}
                                 data={m}
                                 type={formData.type}
                                 onInput={(name, type) => handleModelChange(name, type, i)}
                                 onConfig={(config) => handleModelConfig(config, i)}
-                                key={m.name}
                                 onDelete={() => handleDelete(i)}
                             />)
                         }

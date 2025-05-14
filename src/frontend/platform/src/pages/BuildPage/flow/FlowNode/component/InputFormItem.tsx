@@ -5,6 +5,7 @@ import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { isVarInFlow } from "@/util/flowUtils";
+import { cloneDeep } from "lodash-es";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
@@ -13,7 +14,6 @@ import DragOptions from "./DragOptions";
 import FileTypeSelect from "./FileTypeSelect";
 import InputItem from "./InputItem";
 import VarInput from "./VarInput";
-import { cloneDeep } from "lodash-es";
 
 const enum FormType {
     Text = "text",
@@ -52,6 +52,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     const [errors, setErrors] = useState<any>({});
     const editRef = useRef(false); // 编辑状态
     const oldFormTypeRef = useRef('')
+    const displayNameRef = useRef({ // 记忆变量名
+        [FormType.Text]: '',
+        [FormType.Select]: '',
+        [FormType.File]: '',
+    });
+
 
     const oldVarNameRef = useRef("");
     const oldcontentNameRef = useRef("");
@@ -256,10 +262,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
     // if the form type hasn't changed, it keeps the variable name as it was. Otherwise, it generates a new unique variable name.
     const handleChangeFormType = (formType) => {
-        setFormData({ ...formData, formType })
+        displayNameRef.current[formData.formType] = formData.displayName;
+        const displayName = displayNameRef.current[formType] || '';
+        setFormData({ ...formData, displayName, formType })
         if (editRef.current) {
             if (oldFormTypeRef.current === formType) {
-                setFormData({ ...formData, formType, variableName: oldVarNameRef.current })
+                setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
             } else {
                 let counter = 1;
                 let initialVarName = names[formType];
@@ -267,7 +275,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                     counter += 1;
                     initialVarName = `${names[formType]}${counter}`;
                 }
-                setFormData({ ...formData, formType, variableName: initialVarName })
+                setFormData({ ...formData, formType, variableName: initialVarName, displayName })
             }
         }
     }
@@ -539,6 +547,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </form>
     );
 }
+
+// node input form item
 export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
@@ -597,7 +607,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             );
         } else {
             // 新建模式，添加表单项
-            data.value.push({
+            data.value = [...data.value, {
                 key,
                 type,
                 value,
@@ -609,7 +619,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 options,
                 file_content_size,
                 image_file
-            });
+            }];
             setTimeout(() => {
                 scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
             }, 0);
@@ -657,7 +667,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                     return data.varZh?.[key] || key;
                 })
             }
-            
+
             return {
                 key: el.key,
                 text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
@@ -715,7 +725,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                         </DialogTitle>
                     </DialogHeader>
 
-                    <Form
+                    {isOpen && <Form
                         nodeId={nodeId}
                         nodeData={data}
                         initialData={
@@ -727,6 +737,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                         onCancel={handleClose} // 取消关闭弹窗
                         existingOptions={data.value} // 传递当前所有 options 以检查重复
                     />
+                    }
                 </DialogContent>
             </Dialog>
         </div>

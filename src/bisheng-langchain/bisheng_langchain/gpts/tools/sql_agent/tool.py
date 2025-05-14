@@ -63,7 +63,7 @@ class SqlAgentAPIWrapper(BaseModel):
         toolkit = SQLDatabaseToolkit(db=self.db, llm=self.llm)
         tools = toolkit.get_tools()
         self.agent = create_react_agent(
-            llm,
+            self.llm,
             tools,
             prompt=_agent_system_prompt.format(dialect=self.db.dialect),
             checkpointer=False,

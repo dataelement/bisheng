@@ -222,7 +222,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                         }
                         setInputLock({ locked: true, reason: '' })
                     }
-                    addNotification({
+                    event.reason && addNotification({
                         type: 'error',
                         title: '运行异常',
                         description: event.reason
@@ -304,9 +304,10 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
-        } else if (data.category === 'end_cover') {
-            setInputLock({ locked: true, reason: '' })
-            return overWsMsg(data)
+        } else if (data.category === 'end_cover' && data.type === 'end') {
+            // setInputLock({ locked: true, reason: '' })
+            overWsMsg(data)
+            return handleRestartClick()
         }
 
         if (data.type === 'close') {
