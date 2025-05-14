@@ -73,6 +73,7 @@ class BishengEmbedding(BaseModel, Embeddings):
         LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
         LLMServerType.TENCENT.value: 'OpenAIEmbeddings',
         LLMServerType.VOLCENGINE.value: 'OpenAIEmbeddings',
+        LLMServerType.SILICON.value: 'OpenAIEmbeddings',
     }
 
     # bisheng强相关的业务参数
