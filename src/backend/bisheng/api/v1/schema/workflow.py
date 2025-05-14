@@ -37,6 +37,7 @@ class WorkflowInputItem(BaseModel):
     multiple: bool = Field(default=False, description='The input is multi select')
     required: bool = Field(default=False, description='The input is required')
     options: Optional[Any] = Field(default=None, description='The select type options')
+    file_type: Optional[str] = Field(default=None, description='The allow upload file type')
 
 
 class WorkflowInputSchema(BaseModel):
