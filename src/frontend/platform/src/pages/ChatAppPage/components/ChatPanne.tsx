@@ -84,7 +84,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setFlow(null)
             flowRef.current = null
             setWorkflow(null)
-            const _flow = { id, data: { nodes: [], edges: [], viewport: {} } } // await getFlowApi(id, version)
+            let _flow = { id, data: { nodes: [], edges: [], viewport: {} } } // await getFlowApi(id, version)
+            try {
+                _flow = await getFlowApi(id, version)
+            } catch (e) {
+                console.error('e :>> ', e);
+            }
 
             if (isV1) {
                 const res = await loadFlowHistoryMsg(_flow.id, chatId, {
