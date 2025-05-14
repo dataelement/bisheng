@@ -2,18 +2,15 @@ import { LoadIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
-import { Label } from "@/components/bs-ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
-
+import SplitRules from "@/pages/KnowledgePage/components/splitRules"
+import ExcelList from "@/pages/KnowledgePage/components/ExcelList"
 const initialStrategies = [
     { id: '1', regex: '\\n\\n', position: 'after' },
     // { id: '2', regex: '\\n', position: 'after' }
@@ -127,29 +124,36 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
                 <TabsTrigger value="smart" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
                 <TabsTrigger value="chunk">{t('customStrategy')}</TabsTrigger>
             </TabsList>
-            <TabsContent value="smart">
-            </TabsContent>
-            <TabsContent value="chunk">
-                <div className="grid items-start gap-4 mt-8 max-w-[760px] mx-auto" style={{ gridTemplateColumns: '114px 1fr' }}>
-                    <Label htmlFor="name" className="mt-2.5 flex justify-end text-left">
-                        {t('splitMethod')}
-                        <QuestionTooltip content={t('splitMethodHint')} />
-                    </Label>
-                    <FileUploadSplitStrategy data={strategies} onChange={setStrategies} />
-                    <Label htmlFor="name" className="mt-2.5 text-right">{t('splitLength')}</Label>
-                    <Input id="name" type="number" value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('splitSizePlaceholder')} />
-                    <Label htmlFor="name" className="mt-2.5 text-right">{t('chunkOverlap')}</Label>
-                    <Input id="name" value={overlap} onChange={(e) => setOverlap(e.target.value)} placeholder={t('chunkOverlapPlaceholder')} />
-                </div>
-            </TabsContent>
+            <ExcelList
+              strategies={strategies}
+              setStrategies={setStrategies}
+              size={size}
+              setSize={setSize}
+              overlap={overlap}
+              setOverlap={setOverlap}
+              t={t}
+              handlePreview={handlePreview}
+              onChange={onChange}
+            />
+            <SplitRules
+                strategies={strategies}
+                setStrategies={setStrategies}
+                size={size}
+                setSize={setSize}
+                overlap={overlap}
+                setOverlap={setOverlap}
+                t={t}
+                handlePreview={handlePreview}
+            />
+           
         </Tabs>
-
+        
         <div className="flex justify-end mt-8 gap-4">
             <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
             <Button disabled={loading} className="h-8" onClick={handleSubmit}>
-                {loading && <LoadIcon />} {t('submit')}
+                {loading && <LoadIcon />} {t('nextStep')}
             </Button>
-            <Button className="h-8" id={'preview-btn'} onClick={handlePreview}>{t('previewResults')}</Button>
+            
         </div>
 
         {/* 重复文件提醒 */}

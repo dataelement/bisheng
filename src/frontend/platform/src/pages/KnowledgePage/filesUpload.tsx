@@ -31,7 +31,7 @@ export default function FilesUpload() {
 
     return <div className="flex px-2 py-4 h-full gap-2">
         {/* 文件上传 */}
-        <div className="w-[44%] min-w-[520px]">
+        <div className="w-full min-w-[520px]">
             <div className="flex items-center">
                 <ShadTooltip content={t('back')} side="top">
                     <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}  >
@@ -51,7 +51,7 @@ export default function FilesUpload() {
             )}
         </div>
         {/* 段落 */}
-        <div className="flex-1 bg-muted h-full relative overflow-x-auto">
+        {/* <div className="flex-1 bg-muted h-full relative overflow-x-auto">
             <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={(change) => {
                 setChange(change)
                 document.getElementById('preview-btn')?.click()
@@ -62,6 +62,6 @@ export default function FilesUpload() {
                     {stepEnd ? t('previewHint') : t('uploadHint')}
                 </div>
             )}
-        </div>
+        </div> */}
     </div>
 };
