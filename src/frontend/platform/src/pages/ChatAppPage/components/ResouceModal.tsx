@@ -1,4 +1,5 @@
 import { checkSassUrl } from "@/components/bs-comp/FileView";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
@@ -212,12 +213,26 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
         setKeywords(keywords.filter((wd, i) => i !== index))
     }
 
-    return <div>
+    const [loading, setLoading] = useState(true)
+    const handleAnwserInit = (words) => {
+        setKeywords(words)
+        if (words.length) {
+            setLoading(false)
+        }
+    }
+
+
+    return <div className="relative">
+        {
+            loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                <LoadingIcon />
+            </div>
+        }
         <Anwser
             id={data.messageId}
             fullScreen={fullScreen}
             msg={data.message}
-            onInit={setKeywords}
+            onInit={handleAnwserInit}
             onAdd={handleAddWord}></Anwser>
         <ResultPanne
             words={keywords}

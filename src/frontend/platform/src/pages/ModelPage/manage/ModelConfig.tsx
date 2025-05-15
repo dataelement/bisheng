@@ -1,3 +1,4 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
@@ -6,6 +7,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { generateUUID } from "@/components/bs-ui/utils";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -13,8 +15,6 @@ import { ArrowLeft, Plus, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { set } from "date-fns";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
@@ -190,6 +190,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         const maxIndex = formData.models.reduce((max, el, i) => el.name.match(/model (\d+)/) ? Math.max(max, +el.name.match(/model (\d+)/)[1]) : max, 0)
 
         const model = {
+            id: generateUUID(4),
             name: `model ${maxIndex + 1}`,
             model_name: '',
             model_type: 'llm'
@@ -382,7 +383,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <div className="w-[92%]">
                         {
                             formData.models.map((m, i) => <ModelItem
-                                key={m.name + m.model_name}
+                                key={m.id}
                                 data={m}
                                 type={formData.type}
                                 onInput={(name, type) => handleModelChange(name, type, i)}
@@ -437,6 +438,10 @@ const useSelectModel = () => {
     }, [])
 
     return (type) => {
-        return modelsRef.current?.[type] || []
+        return (modelsRef.current?.[type] || [])
+            .map(item => ({
+                ...item,
+                id: generateUUID(4)
+            }))
     }
 }
