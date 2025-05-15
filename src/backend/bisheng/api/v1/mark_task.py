@@ -202,8 +202,8 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
 
             if len(top_queue) and len(bottom_queue) == 0:
                 return resp_200()
-            record = bottom_queue.pop() or top_queue.pop()
-            logger.info("top_queue={} bottom_queue={} record={}", top_queue, bottom_queue, record)
+            logger.info("top_queue={} bottom_queue={}", top_queue, bottom_queue)
+            record = bottom_queue.popleft() if len(bottom_queue) else top_queue.popleft()
             chat = MessageSessionDao.get_one(record.session_id)
             result["chat_id"] = chat.chat_id
             result["flow_type"] = chat.flow_type
