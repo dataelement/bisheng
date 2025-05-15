@@ -310,6 +310,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             streamWsMsg(data)
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             setInputLock({ locked: true, reason: '' })
+            sendWsMsg({ "action": "stop" });
             return overWsMsg(data)
             // return handleRestartClick()
         }
