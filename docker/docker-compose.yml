@@ -2,18 +2,18 @@ services:
   mysql:
     container_name: bisheng-mysql
     image: mysql:8.0
-    
+
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
+      MYSQL_ROOT_PASSWORD: "1234" # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
       MYSQL_DATABASE: bisheng
       TZ: Asia/Shanghai
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
       - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "exit | mysql -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test: [ "CMD-SHELL", "exit | mysql -u root -p$$MYSQL_ROOT_PASSWORD" ]
       start_period: 30s
       interval: 20s
       timeout: 10s
@@ -32,7 +32,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf
     command: redis-server /etc/redis.conf
     healthcheck:
-      test: ["CMD-SHELL", 'redis-cli ping|grep -e "PONG\|NOAUTH"']
+      test: [ "CMD-SHELL", 'redis-cli ping|grep -e "PONG\|NOAUTH"' ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -62,7 +62,7 @@ services:
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
       BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
-      BS_ELASTICSEARCH_SSL_VERIFY: '{}'  # 可根据自己部署的密码进行配置 '{"basic_auth": ("elastic", "elastic")}'
+      BS_ELASTICSEARCH_SSL_VERIFY: '{}' # 可根据自己部署的密码进行配置 '{"basic_auth": ("elastic", "elastic")}'
       BS_MINIO_SCHEMA: 'false'
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
@@ -78,7 +78,7 @@ services:
     command: sh entrypoint.sh # --workers 表示使用几个进程，提高并发度
     restart: on-failure
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:7860/health" ]
       start_period: 30s
       interval: 90s
       timeout: 30s
@@ -93,7 +93,8 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v1.1.1
+    build: ../src/frontend
+    image: bisheng-frontend:v1.1.1
     ports:
       - "3001:3001"
     environment:
@@ -132,7 +133,7 @@ services:
     command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
     restart: on-failure
     healthcheck:
-      test: ["CMD", "etcdctl", "endpoint", "health"]
+      test: [ "CMD", "etcdctl", "endpoint", "health" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -152,7 +153,7 @@ services:
     command: minio server /minio_data --console-address ":9001"
     restart: on-failure
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -160,9 +161,9 @@ services:
   milvus:
     container_name: milvus-standalone
     image: milvusdb/milvus:v2.3.3
-    command: ["milvus", "run", "standalone"]
+    command: [ "milvus", "run", "standalone" ]
     security_opt:
-    - seccomp:unconfined
+      - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
@@ -171,7 +172,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus
     restart: on-failure
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9091/healthz" ]
       start_period: 90s
       interval: 30s
       timeout: 20s
