@@ -303,15 +303,15 @@ export default function QasPage() {
         try {
             if (isOpening) {
                 refreshData(item => item.id === id, { status: 2 });
-              }
+            }
             await updateQaStatus(id, targetStatus);
             refreshData(item => item.id === id, { status: targetStatus });
         } catch (error) {
             refreshData(item => item.id === id, {
-            status:3 
-          });
+                status: 3
+            });
         }
-      };
+    };
     return <div className="relative px-2 pt-4 size-full">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -386,19 +386,19 @@ export default function QasPage() {
                                 <TableCell>
                                     <div className="flex items-center">
                                         <Switch
-                                        checked={el.status === 1}
-                                        disabled={el.status === 3}
-                                        onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                            checked={el.status === 1}
+                                            disabled={el.status === 3}
+                                            onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
                                         />
                                         {el.status === 2 && (
-                                        <span className="ml-2 text-sm">处理中...</span>
+                                            <span className="ml-2 text-sm">处理中</span>
                                         )}
                                         {el.status === 3 && (
-                                        <span className="ml-2 text-sm">未启用，请重试</span>
+                                            <span className="ml-2 text-sm">未启用，请重试</span>
                                         )}
                                     </div>
                                 </TableCell>
-                                                                {hasPermission ? <TableCell className="text-right">
+                                {hasPermission ? <TableCell className="text-right">
                                     <Button variant="link" onClick={() => editRef.current.edit(el)} className="ml-4">{t('update')}</Button>
                                     <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button>
                                 </TableCell> : <TableCell className="text-right">

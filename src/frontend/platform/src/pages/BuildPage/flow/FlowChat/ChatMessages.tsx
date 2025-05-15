@@ -123,7 +123,13 @@ export default function ChatMessages({
                     case 'input':
                         return null
                     case 'question':
-                        return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick?.('question', msg.id, findQa(messagesList, index)) }} />;
+                        return <MessageUser
+                            mark={mark}
+                            key={msg.message_id}
+                            useName={useName}
+                            data={msg}
+                            onMarkClick={() => { onMarkClick?.('question', msg.id, findQa(messagesList, index)) }}
+                        />;
                     case 'guide_word':
                     case 'output_msg':
                     case 'stream_msg':

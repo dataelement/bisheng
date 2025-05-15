@@ -182,10 +182,14 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 };
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
+                    // 过滤一些不需要的数据
+                    if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
+                        return
+                    }
 
                     if (data.type === 'begin') {
                         setStop({ show: true, disable: false })
-                    } else if (data.type === 'close') {
+                    } else if (data.type === 'close' && data.category === 'processing') {
                         if (!reRunStateRef.current) {
                             // 重试时阻止关闭stop
                             setStop({ show: false, disable: false })
@@ -304,13 +308,13 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
-        } else if (data.category === 'end_cover' && data.type === 'end') {
-            // setInputLock({ locked: true, reason: '' })
-            overWsMsg(data)
-            return handleRestartClick()
+        } else if (data.category === 'end_cover' && data.type === 'end_cover') {
+            setInputLock({ locked: true, reason: '' })
+            return overWsMsg(data)
+            // return handleRestartClick()
         }
 
-        if (data.type === 'close') {
+        if (data.type === 'close' && data.category === 'processing') {
             insetSeparator(t('chat.chatEndMessage'))
             setInputLock({ locked: true, reason: '' })
             // 重启会话按钮,接收close确认后端处理结束后重启会话
@@ -320,8 +324,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             }
         } else if (data.type === 'over') {
             createWsMsg(data)
-        } else if (data.type === 'end_cover') {
-            overWsMsg(data)
         }
     }
 
@@ -373,8 +375,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             setInputForm(null)
             createSendMsg(msg)
             await createWebSocket()
+            const { flow_id, chat_id } = onBeforSend('flowInfo', {})
             sendWsMsg({
                 action: 'input',
+                flow_id,
+                chat_id,
                 data: {
                     [inputNodeIdRef.current]: {
                         data,

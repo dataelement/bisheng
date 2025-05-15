@@ -233,7 +233,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     overWsMsg(data) {
         // 删除所有未结束消息
-        if (data.type === 'end' && data.message) {
+        if (data.type === 'end_cover' && data.message) {
             console.log('触发安全审计,删除所有未结束消息 :>> ');
             data.category = "stream_msg"
             data.type = 'over'
