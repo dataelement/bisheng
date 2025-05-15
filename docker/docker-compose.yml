@@ -1,6 +1,6 @@
 services:
   mysql:
-    container_name: bisheng-mysql
+    container_name: tsoai-mysql
     image: mysql:8.0
 
     ports:
@@ -21,7 +21,7 @@ services:
     restart: on-failure
 
   redis:
-    container_name: bisheng-redis
+    container_name: tsoai-redis
     image: redis:7.0.4
     ports:
       - "6379:6379"
@@ -39,7 +39,7 @@ services:
     restart: on-failure
 
   office:
-    container_name: bisheng-office
+    container_name: tsoai-office
     image: onlyoffice/documentserver:7.1.1
     ports:
       - "8701:80"
@@ -52,7 +52,7 @@ services:
     restart: on-failure
 
   backend:
-    container_name: bisheng-backend
+    container_name: tsoai-backend
     image: dataelement/bisheng-backend:v1.1.1
     ports:
       - "7860:7860"
@@ -92,9 +92,9 @@ services:
         condition: service_started
 
   frontend:
-    container_name: bisheng-frontend
+    container_name: tsoai-frontend
     build: ../src/frontend
-    image: bisheng-frontend:v1.1.1
+    image: tsoai-frontend:v1.1.1
     ports:
       - "3001:3001"
     environment:
@@ -107,7 +107,7 @@ services:
       - backend
 
   elasticsearch:
-    container_name: bisheng-es
+    container_name: tsoai-es
     image: docker.io/bitnami/elasticsearch:8.12.0
     user: root
     ports:
