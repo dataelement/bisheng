@@ -541,7 +541,7 @@ def read_chunk_text(
         md_file_name, local_image_dir, doc_id = handler(file_name=file_name, input_file_name= input_file)
         if md_file_name:
             loader = filetype_load_map['md'](file_path= md_file_name)
-            if knowledge_id:
+            if knowledge_id and local_image_dir:
                 from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
                 put_doc_images_to_minio(local_image_dir=local_image_dir, doc_id=doc_id)
             documents = loader.load()

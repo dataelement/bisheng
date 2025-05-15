@@ -2,6 +2,7 @@ import pypandoc
 from loguru import logger
 from pathlib import Path
 from fastapi import UploadFile
+from uuid import uuid4
 # from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
 
 try:
@@ -87,7 +88,7 @@ def handler(cache_dir, file_name):
     """
 
     # /Users/tju/Library/Caches/bisheng/bisheng/4d78ebe25ecc7751a1bb8df2dd5c8abad734a785551314366a14f
-    doc_id = file_name.split(".")[0].split("/")[-1]
+    doc_id = str(uuid4())
     md_file_name = f"{cache_dir}/{doc_id}.md"
     local_image_dir = f"{cache_dir}/{doc_id}"
     convert_doc_to_md_pandoc_high_quality(
@@ -95,8 +96,7 @@ def handler(cache_dir, file_name):
         output_md_str=md_file_name,
         image_dir_name=local_image_dir,
     )
-    # put_doc_images_to_minio(local_image_dir, knowledge_id, doc_id)
-    return md_file_name, local_image_dir, doc_id
+    return md_file_name, f"{local_image_dir}/media", doc_id
 
 if __name__ == "__main__":
     # 示例用法

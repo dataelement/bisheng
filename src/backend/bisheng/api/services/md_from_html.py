@@ -5,7 +5,7 @@ import os
 import re
 import base64
 from urllib.parse import urljoin, urlparse
-import uuid
+from uuid import uuid4
 from loguru import logger
 from email import message_from_bytes
 from email.policy import default as default_policy
@@ -154,7 +154,7 @@ class HTML2MarkdownConverter:
 
                     if not ext or len(ext) > 5 or not ext.isalnum():
                         ext = "png"
-                    unique_filename = f"media_{uuid.uuid4().hex}.{ext}"
+                    unique_filename = f"media_{uuid4().hex}.{ext}"
                     absolute_filepath = os.path.join(
                         media_absolute_save_dir, unique_filename
                     )
@@ -234,7 +234,7 @@ class HTML2MarkdownConverter:
                         ext = (
                             local_file_to_copy.suffix[1:].lower() or "dat"
                         )  # Get ext from local file if not from URL
-                    unique_filename = f"media_{uuid.uuid4().hex}.{ext}"
+                    unique_filename = f"media_{uuid4().hex}.{ext}"
                     absolute_filepath_dest = os.path.join(
                         media_absolute_save_dir, unique_filename
                     )
@@ -294,7 +294,7 @@ class HTML2MarkdownConverter:
                             ext = candidate_ext_ct
 
                 ext = ext if ext else "dat"  # Final fallback extension
-                unique_filename = f"media_{uuid.uuid4().hex}.{ext}"
+                unique_filename = f"media_{uuid4().hex}.{ext}"
                 absolute_filepath = os.path.join(
                     media_absolute_save_dir, unique_filename
                 )
@@ -365,7 +365,7 @@ class HTML2MarkdownConverter:
                         candidate_ext = resource_filename_ext.split(".")[-1].lower()
                         if len(candidate_ext) <= 5 and candidate_ext.isalnum():
                             ext_from_mhtml = candidate_ext
-                    unique_filename = f"image_{uuid.uuid4().hex}.{ext_from_mhtml}"
+                    unique_filename = f"image_{uuid4().hex}.{ext_from_mhtml}"
                     absolute_filepath = os.path.join(
                         self.current_image_absolute_path, unique_filename
                     )
@@ -468,7 +468,7 @@ class HTML2MarkdownConverter:
                                     ):
                                         ext_from_mhtml = candidate_ext
                                 unique_filename = (
-                                    f"video_{uuid.uuid4().hex}.{ext_from_mhtml}"
+                                    f"video_{uuid4().hex}.{ext_from_mhtml}"
                                 )
                                 absolute_filepath = os.path.join(
                                     self.current_video_absolute_path, unique_filename
@@ -519,7 +519,7 @@ class HTML2MarkdownConverter:
                                 if len(candidate_ext) <= 5 and candidate_ext.isalnum():
                                     ext_from_mhtml = candidate_ext
                             unique_filename = (
-                                f"video_{uuid.uuid4().hex}.{ext_from_mhtml}"
+                                f"video_{uuid4().hex}.{ext_from_mhtml}"
                             )
                             absolute_filepath = os.path.join(
                                 self.current_video_absolute_path, unique_filename
@@ -711,12 +711,12 @@ class HTML2MarkdownConverter:
                 stem = f"{host_part}_{path_part}" if path_part else host_part
                 stem = re.sub(r"[^a-zA-Z0-9_-]", "", stem)[:100]
                 output_filename_stem = (
-                    stem if stem else f"url_conversion_{uuid.uuid4().hex[:8]}"
+                    stem if stem else f"url_conversion_{uuid4().hex[:8]}"
                 )
             else:
                 stem = os.path.splitext(os.path.basename(source))[0]
                 output_filename_stem = (
-                    stem if stem else f"file_conversion_{uuid.uuid4().hex[:8]}"
+                    stem if stem else f"file_conversion_{uuid4().hex[:8]}"
                 )
 
         logger.info(
@@ -853,7 +853,7 @@ class HTML2MarkdownConverter:
             return None
 
 
-def mhtml_handler(file_path, converter):
+def mhtml_handler(file_path, file_name, converter):
 
     if os.path.exists(file_path):
         md_path_mhtml = converter.convert(
@@ -879,25 +879,24 @@ def url_handler(url, converter):
         logger.warning(f"Failed to convert URL: {url}")
 
 
-def html_handler(html_file_name, converter):
-    if os.path.exists(html_file_name):
+def html_handler(input_file_name, doc_id, converter):
+    if os.path.exists(input_file_name):
         md_path_local_html = converter.convert(
-            html_file_name,
+            input_file_name,
             source_type="html_file",
-            output_filename_stem=Path(html_file_name).stem,
+            output_filename_stem=doc_id,
         )
         if not md_path_local_html:
-            logger.warning(f"Failed to convert local HTML: {html_file_name}")
+            logger.warning(f"Failed to convert local HTML: {input_file_name}")
     else:
         logger.debug(
-            f"\nLocal HTML test file not found at '{html_file_name}'. Please set up the test case as described in the comments."
+            f"\nLocal HTML test file not found at '{input_file_name}'. Please set up the test case as described in the comments."
         )
 
 
-def handler(file_or_url: str, knowledge_id: int):
+def handler(cache_dir, file_or_url: str):
 
-    base_dir = "/var/tmp/bisheng"  # Base directory for output
-    output_dir = f"{base_dir}/html"
+    output_dir = f"{cache_dir}"
 
     converter = HTML2MarkdownConverter(
         output_dir=output_dir,
@@ -906,12 +905,14 @@ def handler(file_or_url: str, knowledge_id: int):
         media_download_timeout=60,
     )
 
-    if file_or_url.startswith("http://") or file_or_url.startswith("https://"):
-        url_handler(file_or_url, converter)
+    doc_id = str(uuid4())
+
+    # if file_or_url.startswith("http://") or file_or_url.startswith("https://"):
+        # url_handler(file_or_url, converter)
     if file_or_url.endswith(".mhtml"):
         mhtml_handler(file_or_url, converter)
     if file_or_url.endswith(".html"):
-        html_handler(file_or_url, converter)
+        html_handler(file_or_url, doc_id, converter)
 
     # replace image url
     # upload image and video to oss
@@ -922,7 +923,8 @@ if __name__ == "__main__":
     local_html_file_path = (
         "/Users/tju/Resources/docs/html/f.html"  # <<-- UPDATE THIS PATH
     )
-    test_url = "https://www.zaobao.com/news/china/story20250510-6319065"  # Example BBC Chinese article
-    mhtml_file_path = (
-        "/Users/tju/Resources/docs/html/a.mhtml"  # Replace with your MHTML file path
-    )
+    # test_url = "https://www.zaobao.com/news/china/story20250510-6319065"  # Example BBC Chinese article
+    # mhtml_file_path = (
+    #     "/Users/tju/Resources/docs/html/a.mhtml"  # Replace with your MHTML file path
+    # )
+    handler("/Users/tju/Desktop/", local_html_file_path)

@@ -27,6 +27,8 @@ MINIO_IMAGE_BUCKET_NAME = "images"
 
 @celery_app.task()
 def put_doc_images_to_minio(local_image_dir, doc_id):
+    if not os.path.exists(local_image_dir):
+        return
     minio_client = MinioClient()
     files = [f for f in os.listdir(local_image_dir)]
     for file_name in files:
