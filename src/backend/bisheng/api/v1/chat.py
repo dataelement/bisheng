@@ -300,7 +300,7 @@ def add_chat_messages(*,
     MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
 
     # 写审计日志, 判断是否是新建会话
-    session_info = MessageSessionDao.get_session_by_chat_id(chat_id=chat_id)
+    session_info = MessageSessionDao.get_one(chat_id=chat_id)
     if not session_info:
         # 新建会话
         # 判断下是助手还是技能, 写审计日志
