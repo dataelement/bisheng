@@ -35,7 +35,7 @@ class RedisClient:
             hosts = [eval(x) for x in redis_conf.pop('sentinel_hosts')]
             password = redis_conf.pop('sentinel_password')
             master = redis_conf.pop('sentinel_master')
-            sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, password=password)
+            sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
             # 获取主节点的连接
             self.connection = sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
 
