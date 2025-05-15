@@ -286,7 +286,8 @@ def add_chat_messages(*,
         # 工作流的输入，需要从输入里解析出来实际的输入内容
         try:
             tmp_human_message = json.loads(data.human_message)
-            save_human_message = tmp_human_message.get('message')
+            for node_id, node_input in tmp_human_message.items():
+                save_human_message = node_input.get('message')
         except:
             save_human_message = data.human_message
 
