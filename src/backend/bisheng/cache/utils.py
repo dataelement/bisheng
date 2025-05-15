@@ -23,7 +23,6 @@ CACHE: Dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
 
-
 def create_cache_folder(func):
     def wrapper(*args, **kwargs):
         # Get the destination folder
@@ -221,6 +220,8 @@ def save_uploaded_file(file, folder_name, file_name, bucket_name: str = tmp_buck
         output_file = BytesIO()
         output_file = convert_encoding_cchardet(file, output_file)
 
+    # uuid file name
+    
     if settings.get_knowledge().get('minio'):
         minio_client = MinioClient()
         # 存储oss

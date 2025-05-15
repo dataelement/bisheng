@@ -34,6 +34,7 @@ from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient
+from bisheng.cache.redis import redis_client
 from bisheng.worker.knowledge import file_worker
 from fastapi import BackgroundTasks, Request
 from loguru import logger
@@ -511,10 +512,13 @@ class KnowledgeService(KnowledgeUtils):
                 minio_client.upload_tmp(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
             return db_file
+        
+        uuid_file_name = file_name.split(".")[0]
+        original_file_name = redis_client.get(uuid_file_name)
 
         # 插入新的数据，把原始文件上传到minio
         db_file = KnowledgeFile(knowledge_id=knowledge.id,
-                                file_name=file_name,
+                                file_name=original_file_name,
                                 md5=md5_,
                                 split_rule=json.dumps(split_rule),
                                 user_id=login_user.user_id)
