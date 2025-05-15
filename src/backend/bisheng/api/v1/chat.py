@@ -280,11 +280,21 @@ def add_chat_messages(*,
     chat_id = data.chat_id
     if not chat_id or not flow_id:
         raise HTTPException(status_code=500, detail='chat_id 和 flow_id 必传参数')
+    save_human_message = data.human_message
+    flow_info = FlowDao.get_flow_by_id(flow_id)
+    if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
+        # 工作流的输入，需要从输入里解析出来实际的输入内容
+        try:
+            tmp_human_message = json.loads(data.human_message)
+            save_human_message = tmp_human_message.get('message')
+        except:
+            save_human_message = data.human_message
+
     human_message = ChatMessage(flow_id=flow_id,
                                 chat_id=chat_id,
                                 user_id=login_user.user_id,
                                 is_bot=False,
-                                message=data.human_message,
+                                message=save_human_message,
                                 sensitive_status=SensitiveStatus.VIOLATIONS.value,
                                 type='human',
                                 category='question')
@@ -305,7 +315,6 @@ def add_chat_messages(*,
     if not session_info:
         # 新建会话
         # 判断下是助手还是技能, 写审计日志
-        flow_info = FlowDao.get_flow_by_id(flow_id)
         if flow_info:
             MessageSessionDao.insert_one(MessageSession(
                 chat_id=chat_id,
@@ -315,7 +324,10 @@ def add_chat_messages(*,
                 user_id=login_user.user_id,
                 sensitive_status=SensitiveStatus.VIOLATIONS.value,
             ))
-            AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id, flow_info)
+            if flow_info.flow_type == FlowType.FLOW.value:
+                AuditLogService.create_chat_flow(login_user, get_request_ip(request), flow_id, flow_info)
+            elif flow_info.flow_type == FlowType.WORKFLOW.value:
+                AuditLogService.create_chat_workflow(login_user, get_request_ip(request), flow_id, flow_info)
         else:
             assistant_info = AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
