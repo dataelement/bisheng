@@ -200,9 +200,9 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
                     continue
                 queue.append(r)
 
-            if len(top_queue) and len(bottom_queue) == 0:
-                return resp_200()
             logger.info("top_queue={} bottom_queue={}", top_queue, bottom_queue)
+            if len(top_queue) == 0 and len(bottom_queue) == 0:
+                return resp_200()
             record = bottom_queue.popleft() if len(bottom_queue) else top_queue.popleft()
             chat = MessageSessionDao.get_one(record.session_id)
             result["chat_id"] = chat.chat_id
