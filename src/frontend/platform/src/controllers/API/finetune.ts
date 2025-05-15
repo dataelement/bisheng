@@ -132,6 +132,13 @@ export const addLLmServer = async (data: any) => {
 
 // 修改模型
 export const updateLLmServer = async (data: any) => {
+    // 删除前端生成的id (id: string )
+    data.models = data.models.map((item) => {
+        const { id, ...other } = item
+        return typeof id === 'string' ? {
+            ...other
+        } : item
+    })
     return await axios.put(`/api/v1/llm`, data)
 }
 

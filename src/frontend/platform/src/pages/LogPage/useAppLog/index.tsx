@@ -230,7 +230,7 @@ export default function AppUseLog() {
                         msg.liked === 1 ? '是' : '否',
                         msg.liked === 2 ? '是' : '否',
                         msg.copied ? '是' : '否',
-                        msg.sensitive_status === 1 ? '是' : '否'
+                        msg.sensitive_status === 1 ? '通过' : '违规'
                     ])
                 })
             })

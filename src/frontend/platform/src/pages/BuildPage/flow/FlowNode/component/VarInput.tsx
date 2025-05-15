@@ -76,6 +76,8 @@ export default function VarInput({
     // 校验变量是否可用
     const validateVarAvailble = () => {
         const value = valueRef.current;
+        if (!value.trim()) return Promise.resolve('');
+
         const [html, error] = parseToHTML(value || '', true);
         textareaRef.current.innerHTML = html;
         return Promise.resolve(error);

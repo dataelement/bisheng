@@ -265,6 +265,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         displayNameRef.current[formData.formType] = formData.displayName;
         const displayName = displayNameRef.current[formType] || '';
         setFormData({ ...formData, displayName, formType })
+        setErrors({});
         if (editRef.current) {
             if (oldFormTypeRef.current === formType) {
                 setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
@@ -283,10 +284,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     // var check
     const checkVarFuncRef = useRef(null);
     useEffect(() => {
-        if (checkVarFuncRef.current && formData.formType === FormType.Text) {
+        if (initialData && checkVarFuncRef.current && formData.formType === FormType.Text) {
             checkVarFuncRef.current();
         }
-    }, [formData.formType, checkVarFuncRef.current])
+    }, [formData.formType, initialData])
 
     // text form
     const InputForm = <div className="space-y-4">
