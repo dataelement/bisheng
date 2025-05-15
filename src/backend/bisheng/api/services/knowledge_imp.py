@@ -86,7 +86,9 @@ class KnowledgeUtils:
         if not chunk.startswith('{<file_title>'):
             return chunk.split(cls.chunk_split)[-1]
 
-        return re.sub('<paragraph_content>.*</paragraph_content>', '', chunk, flags=re.S).strip()
+        chunk = chunk.split('<paragraph_content>')[-1]
+        chunk = chunk.split('</paragraph_content>')[0]
+        return chunk
 
     @classmethod
     def save_preview_cache(cls,
