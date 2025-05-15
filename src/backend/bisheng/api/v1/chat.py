@@ -275,6 +275,7 @@ def add_chat_messages(*,
     """
     添加一条完整问答记录， 安全检查写入使用
     """
+    logger.debug(f'gateway add_chat_messages {data}')
     flow_id = data.flow_id
     chat_id = data.chat_id
     if not chat_id or not flow_id:
