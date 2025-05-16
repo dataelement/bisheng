@@ -350,7 +350,7 @@ def load_settings_from_yaml(file_path: str) -> Settings:
     with open(os.path.join(current_path, 'default_node.yaml'), 'r', encoding='utf-8') as node:
         settings_dict.update(yaml.safe_load(node))
     for key in settings_dict:
-        if key not in Settings.__fields__.keys():
+        if key not in Settings.model_fields.keys():
             raise KeyError(f'Key {key} not found in settings')
         logger.debug(f'Loading {len(settings_dict[key])} {key} from {file_path}')
 
