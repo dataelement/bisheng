@@ -84,7 +84,7 @@
         "model_name": "MiniMax-Text-01",
         "model_type": "llm"
     }],
-    "火山引擎": [{
+    "volcengine": [{
             "name": "model 1",
             "model_name": "deepseek-v3",
             "model_type": "llm"

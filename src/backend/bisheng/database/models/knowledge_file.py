@@ -13,9 +13,16 @@ from bisheng.database.models.base import SQLModelSerializable
 
 
 class KnowledgeFileStatus(Enum):
-    PROCESSING = 1
-    SUCCESS = 2
-    FAILED = 3
+    PROCESSING = 1  # 处理中
+    SUCCESS = 2  # 成功
+    FAILED = 3  # 解析失败
+
+
+class QAStatus(Enum):
+    DISABLED = 0  # 用户手动关闭QA
+    ENABLED = 1  # 启用成功
+    PROCESSING = 2  # 处理中
+    FAILED = 3  # QA插入向量库失败
 
 
 class ParseType(Enum):
@@ -51,7 +58,8 @@ class QAKnowledgeBase(SQLModelSerializable):
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
     source: Optional[int] = Field(default=0, index=False, description='0: 未知 1: 手动；2: 审计, 3: api, 4: 批量导入')
-    status: Optional[int] = Field(default=1, index=False, description='1: 开启；0: 关闭，未写入到向量库或写入失败；')
+    status: Optional[int] = Field(default=1, index=False,
+                                  description='1: 开启；0: 关闭，用户手动关闭；2: 处理中；3：插入失败')
     extra_meta: Optional[str] = Field(default=None, index=False)
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=512)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(

@@ -109,7 +109,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def get_assistant_info(cls, assistant_id: str, login_user: UserPayload):
         assistant = AssistantDao.get_one_assistant(assistant_id)
-        if not assistant:
+        if not assistant or assistant.is_delete:
             return AssistantNotExistsError.return_resp()
         # 检查是否有权限获取信息
         if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):

@@ -83,7 +83,7 @@ def extract_answer_keys(answer, llm):
         llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
     try:
         keywords_str = llm_chain.run(answer)
-        keywords_str = re.sub('<think>.*</think>', '', keywords_str)
+        keywords_str = re.sub('<think>.*</think>', '', keywords_str, flags=re.S).strip()
         keywords = ast.literal_eval(keywords_str[9:])
     except Exception:
         import jieba.analyse

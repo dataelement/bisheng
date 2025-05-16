@@ -1,3 +1,4 @@
+import { locationContext } from "@/contexts/locationContext";
 import { FileSearch2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 import { alertContext } from "../../contexts/alertContext";
@@ -8,7 +9,6 @@ import { FileComponentType } from "../../types/components";
 import { LoadIcon } from "../bs-icons/loading";
 import { Button } from "../bs-ui/button";
 import { useToast } from "../bs-ui/toast/use-toast";
-import { locationContext } from "@/contexts/locationContext";
 
 export default function InputFileComponent({
   value,
@@ -52,13 +52,9 @@ export default function InputFileComponent({
   const checkFileSize = (file) => {
     const maxSize = (appConfig.uploadFileMaxSize || 50) * 1024 * 1024;
     if (file.size > maxSize) {
-      toast({
-        variant: 'error',
-        description: `上传文件大小不能超过 ${appConfig.uploadFileMaxSize} MB`
-      })
-      setLoading(false);
-      return true
+      return `文件：${file.name} 超过 ${appConfig.uploadFileMaxSize} MB，已移除`
     }
+    return ''
   }
 
   const handleButtonClick = () => {
@@ -76,7 +72,14 @@ export default function InputFileComponent({
       // Get the selected file
       const file = (e.target as HTMLInputElement).files?.[0];
 
-      if (checkFileSize(file)) return
+      const errorMsg = checkFileSize(file)
+      if (errorMsg) {
+        toast({
+          variant: 'error',
+          description: errorMsg
+        })
+        return setLoading(false);
+      }
       // Check if the file type is correct
       // if (file && checkFileType(file.name)) {
       // Upload the file
@@ -136,14 +139,30 @@ export default function InputFileComponent({
       setLoading(true);
 
       // Get the selected files
-      const files = (e.target as HTMLInputElement).files;
+      const _files = (e.target as HTMLInputElement).files;
 
-      if (files && files.length > 0) {
-        const fileNames = Array.from(files).map(file => file.name); // Extract file names
+      if (_files && _files.length > 0) {
         const filePaths = []; // This will hold the file paths after successful upload
-        for (let i = 0; i < files.length; i++) {
-          if (checkFileSize(files[i])) return
+
+        const errorMsgs = []
+        const files = []
+        for (let i = 0; i < _files.length; i++) {
+          const errorMsg = checkFileSize(_files[i])
+          errorMsg ? errorMsgs.push(errorMsg) : files.push(_files[i])
         }
+
+        if (errorMsgs.length) {
+          toast({
+            variant: 'error',
+            description: errorMsgs
+          })
+          // 文件都不符合要求 结束上传
+          if (errorMsgs.length === _files.length) {
+            return setLoading(false);
+          }
+        }
+
+        const fileNames = Array.from(files).map(file => file.name); // Extract file names
 
         // Perform the upload for each file
         const uploadPromises = Array.from(files).map(file => {
@@ -159,19 +178,17 @@ export default function InputFileComponent({
                   setLoading(false);
                   throw new Error(res); // Exit the upload if error occurs
                 }
-                const { file_path } = res;
-                filePaths.push(file_path); // Store file paths
+                return res.file_path
               })
             : uploadFile(file, flow.id).then((data) => {
               console.log("File uploaded successfully");
-              const { file_path } = data;
-              filePaths.push(file_path); // Store file paths
+              return data.file_path
             });
         });
 
         // Wait for all file uploads to finish
         Promise.all(uploadPromises)
-          .then(() => {
+          .then((filePaths) => {
             // After all files are uploaded successfully, update the state
             setMyValue(fileNames.join(",")); // Join file names with commas
             onChange(fileNames); // Pass an array of file names

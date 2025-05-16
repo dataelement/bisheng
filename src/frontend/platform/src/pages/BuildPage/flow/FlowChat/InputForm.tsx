@@ -7,6 +7,7 @@ import InputFileComponent from "@/components/inputFileComponent";
 import { WorkflowNodeParam } from "@/types/flow";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FileTypes } from "./ChatInput";
 
 const enum FormItemType {
     Text = 'text',
@@ -133,8 +134,8 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                     value={''}
                                                     multiple={item.multiple}
                                                     onChange={(name) => updataFileName(item, name)}
-                                                    fileTypes={["png", "jpg", "jpeg", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "md", "html", "pdf"]}
-                                                    suffixes={['xxx']}
+                                                    // fileTypes={FileTypes[item.file_type.toUpperCase()]}
+                                                    suffixes={FileTypes[item.file_type.toUpperCase()]}
                                                     onFileChange={(val) => handleChange(item, val)}
                                                 />
                                             )

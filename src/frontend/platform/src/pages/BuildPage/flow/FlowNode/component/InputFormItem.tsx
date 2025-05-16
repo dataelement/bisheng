@@ -4,9 +4,12 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { isVarInFlow } from "@/util/flowUtils";
+import { cloneDeep } from "lodash-es";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
+import useFlowStore from "../../flowStore";
 import DragOptions from "./DragOptions";
 import FileTypeSelect from "./FileTypeSelect";
 import InputItem from "./InputItem";
@@ -49,6 +52,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     const [errors, setErrors] = useState<any>({});
     const editRef = useRef(false); // 编辑状态
     const oldFormTypeRef = useRef('')
+    const displayNameRef = useRef({ // 记忆变量名
+        [FormType.Text]: '',
+        [FormType.Select]: '',
+        [FormType.File]: '',
+    });
+
 
     const oldVarNameRef = useRef("");
     const oldcontentNameRef = useRef("");
@@ -169,8 +178,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             } else if (formData.filecontent.length > 50) {
                 newErrors.filecontent = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.file_content === formData.filecontent) &&
-                formData.filecontent !== oldcontentNameRef.current
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_content === formData.filecontent)
+                && formData.filecontent !== oldcontentNameRef.current
             ) {
                 newErrors.filecontent = t("variableNameExists");
             }
@@ -183,8 +193,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             } else if (formData.filepath.length > 50) {
                 newErrors.filepath = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => opt.file_path === formData.filepath) &&
-                formData.filepath !== oldPathNameRef.current
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_path === formData.filepath)
+                && formData.filepath !== oldPathNameRef.current
             ) {
                 newErrors.filepath = t("variableNameExists");
             }
@@ -226,8 +237,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         }
 
         // 5. 不能重复
-        if (existingOptions?.some(opt => opt.image_file === formData.imageFile) &&
-            formData.imageFile !== oldImageFileRef.current) {
+        if (existingOptions?.some(opt => opt.type === 'file'
+            && opt.image_file === formData.imageFile)
+            && formData.imageFile !== oldImageFileRef.current) {
             return '变量名已存在';
         }
 
@@ -250,10 +262,13 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
     // if the form type hasn't changed, it keeps the variable name as it was. Otherwise, it generates a new unique variable name.
     const handleChangeFormType = (formType) => {
-        setFormData({ ...formData, formType })
+        displayNameRef.current[formData.formType] = formData.displayName;
+        const displayName = displayNameRef.current[formType] || '';
+        setFormData({ ...formData, displayName, formType })
+        setErrors({});
         if (editRef.current) {
             if (oldFormTypeRef.current === formType) {
-                setFormData({ ...formData, formType, variableName: oldVarNameRef.current })
+                setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
             } else {
                 let counter = 1;
                 let initialVarName = names[formType];
@@ -261,10 +276,18 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                     counter += 1;
                     initialVarName = `${names[formType]}${counter}`;
                 }
-                setFormData({ ...formData, formType, variableName: initialVarName })
+                setFormData({ ...formData, formType, variableName: initialVarName, displayName })
             }
         }
     }
+
+    // var check
+    const checkVarFuncRef = useRef(null);
+    useEffect(() => {
+        if (initialData && checkVarFuncRef.current && formData.formType === FormType.Text) {
+            checkVarFuncRef.current();
+        }
+    }, [formData.formType, initialData])
 
     // text form
     const InputForm = <div className="space-y-4">
@@ -290,6 +313,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 value={formData.displayName}
                 placeholder={namePlaceholders[formData.formType]}
                 onChange={(val) => setFormData({ ...formData, displayName: val })}
+                onVarEvent={(func) => checkVarFuncRef.current = func}
             >
             </VarInput>
             {errors.displayName && <p className="text-red-500 text-sm">{errors.displayName}</p>}
@@ -433,10 +457,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </div>
         <InputItem
             type='number'
+            char
+            linefeed
             data={
                 {
                     min: 0,
-                    label: "文件内容长度限制(字)",
+                    label: "文件内容长度上限",
                     value: formData.fileContentSize,
                 }
             }
@@ -522,7 +548,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </form>
     );
 }
-export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
+
+// node input form item
+export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(""); // 控制编辑模式
@@ -580,7 +608,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
             );
         } else {
             // 新建模式，添加表单项
-            data.value.push({
+            data.value = [...data.value, {
                 key,
                 type,
                 value,
@@ -592,7 +620,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                 options,
                 file_content_size,
                 image_file
-            });
+            }];
             setTimeout(() => {
                 scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
             }, 0);
@@ -631,17 +659,52 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
         return () => onValidate(() => { });
     }, [data.value]);
 
+    const options = useMemo(() => {
+        const _options = cloneDeep(data.value)
+        return _options.map((el) => {
+            // cn
+            if (el.type === 'text') {
+                el.value = el.value.replace(/{{#(.*?)#}}/g, (a, key) => {
+                    return data.varZh?.[key] || key;
+                })
+            }
+
+            return {
+                key: el.key,
+                text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
+                type: el.type,
+            }
+        });
+    }, [data.value])
+
+    const { flow } = useFlowStore();
+    // 校验变量是否可用
+    const validateVarAvailble = () => {
+        const errors = data.value.reduce((acc, value) => {
+            if (value.type === 'text') {
+                value.value.replace(/{{#(.*?)#}}/g, (a, part) => {
+                    console.log('a, part :>> ', a, part);
+                    const _error = isVarInFlow(nodeId, flow.nodes, part, data.varZh?.[part])
+                    _error && acc.push(_error)
+                })
+            }
+            return acc
+        }, [])
+        return Promise.resolve(errors);
+    };
+
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data]);
+
     return (
         <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
                 <DragOptions
                     scroll
                     ref={scrollRef}
-                    options={data.value.map((el) => ({
-                        key: el.key,
-                        text: `${el.value}(${el.key},${el.file_content},${el.file_path})`,
-                        type: el.type,
-                    }))}
+                    options={options}
                     onEditClick={handleEditClick} // 点击编辑时执行的逻辑
                     onChange={handleOptionsChange} // 拖拽排序后的更新
                 />
@@ -663,7 +726,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                         </DialogTitle>
                     </DialogHeader>
 
-                    <Form
+                    {isOpen && <Form
                         nodeId={nodeId}
                         nodeData={data}
                         initialData={
@@ -675,6 +738,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate }) {
                         onCancel={handleClose} // 取消关闭弹窗
                         existingOptions={data.value} // 传递当前所有 options 以检查重复
                     />
+                    }
                 </DialogContent>
             </Dialog>
         </div>

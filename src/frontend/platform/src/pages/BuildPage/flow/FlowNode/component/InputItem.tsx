@@ -3,16 +3,19 @@ import { Label } from "@/components/bs-ui/label";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useState } from "react";
 
-export default function InputItem({ type = 'text', char = false, data, onChange }) {
+export default function InputItem({ type = 'text', char = false, linefeed = false, data, onChange }) {
     const [value, setValue] = useState(data.value || '')
 
     // inline style
-    if (char) return <div className='node-item mb-4 flex items-center justify-between' data-key={data.key}>
+    if (char) return <div
+        className={`node-item mb-4 ${!linefeed ? 'flex items-center justify-between' : ''}`}
+        data-key={data.key}
+    >
         <Label className="flex items-center bisheng-label">
             {data.label}
             {data.help && <QuestionTooltip content={data.help} />}
         </Label>
-        <div className="nodrag w-32 flex items-center gap-3">
+        <div className={`nodrag ${char ? 'w-32 flex items-center gap-3' : ''} ${linefeed ? 'mt-2' : ''}`}>
             <Input
                 value={value}
                 type={type}

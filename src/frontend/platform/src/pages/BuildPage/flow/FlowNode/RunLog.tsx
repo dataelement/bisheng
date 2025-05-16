@@ -42,6 +42,7 @@ export default function RunLog({ node, children }) {
                 }, new Map()); // 使用 Map 保持插入顺序
 
                 let hasKeys = [];
+                const isFormInputNode = node.type === 'input' && node.tab.value === 'form_input'
                 // 根据node params替换newData的key值 替换为name
                 node.group_params.forEach(group => {
                     group.params.forEach(param => {
@@ -64,6 +65,10 @@ export default function RunLog({ node, children }) {
                                     hasKeys.push(p.tool_key);
                                 }
                             });
+                        } else if (isFormInputNode && param.key === 'form_input') {
+                            param.value.forEach(value => {
+                                value.file_type === 'file' && newData.delete(value.image_file);
+                            })
                         }
                     });
                 });

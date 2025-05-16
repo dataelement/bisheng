@@ -65,13 +65,13 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'chat_history_num':
             return <HistoryNumItem data={item} onChange={handleOnNewValue} />
         case 'form':
-            return <InputFormItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <InputFormItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'var_textarea':
             return <VarTextareaItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'var_textarea_file':
             return <VarTextareaUploadItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'output_form':
-            return <OutputItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <OutputItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'bisheng_model':
             return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
         case 'agent_model':

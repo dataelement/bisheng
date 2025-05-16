@@ -76,12 +76,10 @@ class AgentNode(BaseNode):
             self._sql_address = f'mysql+pymysql://{self._sql_agent["db_username"]}:{self._sql_agent["db_password"]}@{self._sql_agent["db_address"]}/{self._sql_agent["db_name"]}?charset=utf8mb4'
 
         # agent
-        self._agent_executor_type = 'get_react_agent_executor'
+        self._agent_executor_type = 'React'
         self._agent = None
 
     def _init_agent(self, system_prompt: str):
-        if self._agent:
-            return
         # 获取配置的助手模型列表
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
@@ -361,7 +359,10 @@ class AgentNode(BaseNode):
         logger.debug(f'agent invoke chat_history: {chat_history}')
 
         if self._agent_executor_type == 'ReAct':
-            result = self._agent.invoke(chat_history, config=config)
+            result = self._agent.invoke({
+                'input': chat_history[-1].content,
+                'chat_history': chat_history[:-1],
+            }, config=config)
             output = result['agent_outcome'].return_values['output']
             if isinstance(output, dict):
                 output = list(output.values())[0]

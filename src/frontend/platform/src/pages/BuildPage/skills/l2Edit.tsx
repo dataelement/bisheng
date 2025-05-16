@@ -12,7 +12,7 @@ import { Input, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { TabsContext } from "@/contexts/tabsContext";
 import { userContext } from "@/contexts/userContext";
-import { createCustomFlowApi, getFlowApi } from "@/controllers/API/flow";
+import { createCustomFlowApi, getFlowApi, updateVersion } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useHasForm } from "@/util/hook";
 import FormSet from "./FormSet";
@@ -108,6 +108,7 @@ export default function l2Edit() {
         formRef.current?.save()
 
         await saveFlow({ ...flow, name, description, guide_word: guideWords, logo })
+        await updateVersion(vid, { data: flow.data })
         setLoading(false)
         navigate('/skill/' + id, { replace: true })
     }
@@ -118,6 +119,8 @@ export default function l2Edit() {
         formRef.current?.save()
 
         const res = await captureAndAlertRequestErrorHoc(saveFlow({ ...flow, name, description, guide_word: guideWords, logo }))
+        await updateVersion(vid, { data: flow.data })
+        
         setLoading(false)
         if (res) {
             message({

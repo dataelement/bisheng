@@ -121,7 +121,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
         # from langchain.docstore.document import Document # noqa
         # result = eval(output).get('result')
-        result = output
+        result = output if isinstance(output, str) else getattr(output, 'content', output)
 
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result[:100]}'
@@ -333,7 +333,7 @@ class StreamingLLMCallbackHandler(BaseCallbackHandler):
 
         # from langchain.docstore.document import Document # noqa
         # result = eval(output).get('result')
-        result = output
+        result = output if isinstance(output, str) else getattr(output, 'content', output)
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}{result}'
 
@@ -502,7 +502,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
-        result = output
+        result = output if isinstance(output, str) else getattr(output, 'content', output)
         # Create a formatted message.
         intermediate_steps = f'{observation_prefix}\n\n{result}'
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))

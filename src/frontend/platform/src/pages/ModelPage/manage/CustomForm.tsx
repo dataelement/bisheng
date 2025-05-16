@@ -169,6 +169,14 @@ const modelProviders = {
         },
     ],
     spark: [
+        // {
+        //     label: "App ID",
+        //     type: "text",
+        //     placeholder: "",
+        //     default: "",
+        //     required: true,
+        //     key: "appid",
+        // },
         {
             label: "API Key",
             type: "password",
@@ -283,7 +291,7 @@ const modelProviders = {
             key: "api_key",
         },
     ],
-    "火山引擎": [
+    volcengine: [
         {
             label: "Base URL",
             type: "text",
@@ -368,7 +376,7 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
         <div className="overflow-hidden">
             {fields.map((field) => (
                 <FormField
-                    key={field.key}
+                    key={provider + field.key}
                     showDefault={showDefault}
                     field={field}
                     value={form[field.key] || ''}

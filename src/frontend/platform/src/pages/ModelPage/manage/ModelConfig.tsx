@@ -1,11 +1,13 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { generateUUID } from "@/components/bs-ui/utils";
 import ShadTooltip from "@/components/ShadTooltipComponent";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -13,7 +15,6 @@ import { ArrowLeft, Plus, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
 function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const { t } = useTranslation('model')
@@ -21,6 +22,7 @@ function ModelItem({ data, type, onDelete, onInput, onConfig }) {
     const [error, setError] = useState('')
     const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
     const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
+
 
     const handleInput = (e) => {
         const value = e.target.value
@@ -140,9 +142,9 @@ export const modelProvider = [
     { "name": "llamacpp", "value": "llamacpp" },
     { "name": "vllm", "value": "vllm" },
     { "name": "通义千问", "value": "qwen" },
-    { "name": "Deepseek", "value": "deepseek" },
+    { "name": "DeepSeek", "value": "deepseek" },
     { "name": "硅基流动", "value": "silicon" },
-    { "name": "火山引擎", "value": "火山引擎" },
+    { "name": "火山引擎", "value": "volcengine" },
     { "name": "智谱 AI", "value": "zhipu" },
     { "name": "讯飞星火", "value": "spark" },
     { "name": "腾讯云", "value": "tencent" },
@@ -177,7 +179,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     const getModelsByType = useSelectModel()
     const handleTypeChange = (val) => {
-        const name = onGetName(val)
+        const name = onGetName(_modelProvider.find(el => el.value === val).name || '')
         // 自动填充模型
         const models = getModelsByType(val)
         setFormData({ ...formData, type: val, name, models })
@@ -188,6 +190,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         const maxIndex = formData.models.reduce((max, el, i) => el.name.match(/model (\d+)/) ? Math.max(max, +el.name.match(/model (\d+)/)[1]) : max, 0)
 
         const model = {
+            id: generateUUID(4),
             name: `model ${maxIndex + 1}`,
             model_name: '',
             model_type: 'llm'
@@ -220,70 +223,79 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         setFormData({ ...formData, models })
     }
 
-    // submit 
+    // submit 1
+
     const { message, toast } = useToast()
     const formRef = useRef(null)
-    const handleSave = () => {
-        const exists = onBerforSave(formData.id, formData.name)
-        if (exists) {
-            return message({
-                variant: 'warning',
-                description: t('model.duplicateServiceProviderName')
-            })
-        }
-        if (!formData.name || formData.name.length > 100) {
-            return message({
-                variant: 'warning',
-                description: t('model.duplicateServiceProviderNameValidation')
-            })
-        }
-        const [config, errorKey] = formRef.current.getData();
-        if (errorKey) {
-            return message({
-                variant: 'warning',
-                description: `${errorKey} ${t('model.notBeEmpty')}`
-            })
-        }
+    const [isLoading, setIsLoading] = useState(false);
+    const handleSave = async () => {
+        setIsLoading(true)
+        try {
+            const exists = onBerforSave(formData.id, formData.name)
+            if (exists) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.duplicateServiceProviderName')
+                })
+            }
+            if (!formData.name || formData.name.length > 100) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.duplicateServiceProviderNameValidation')
+                })
+            }
+            const [config, errorKey] = formRef.current.getData();
+            if (errorKey) {
+                return message({
+                    variant: 'warning',
+                    description: `${errorKey} ${t('model.notBeEmpty')}`
+                })
+            }
 
-        // 重复检验map
-        const map = {}
-        let repeat = false
-        const error = formData.models.some(model => {
-            if (map[model.model_name]) repeat = true
-            map[model.model_name] = true
-            return !model.model_name || model.model_name.length > 100
-        })
-        if (error) {
-            return message({
-                variant: 'warning',
-                description: t('model.modelNameValidation')
+            // 重复检验map
+            const map = {}
+            let repeat = false
+            const error = formData.models.some(model => {
+                if (map[model.model_name]) repeat = true
+                map[model.model_name] = true
+                return !model.model_name || model.model_name.length > 100
             })
-        }
-        if (repeat) {
-            return message({
-                variant: 'warning',
-                description: t('model.modelDuplicate')
-            })
-        }
+            if (error) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.modelNameValidation')
+                })
+            }
+            if (repeat) {
+                return message({
+                    variant: 'warning',
+                    description: t('model.modelDuplicate')
+                })
+            }
 
-        if (id === -1) {
-            captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
-                if (res.code === 10802) {
-                    return toast({
-                        variant: 'error',
-                        description: res.msg
-                    })
-                }
-                onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
-                onBack()
-            }))
-        } else {
-            captureAndAlertRequestErrorHoc(updateLLmServer({ ...formData, config }).then(res => {
-                onAfterSave(t('model.updateSuccess'))
-                onBack()
-            }))
+            if (id === -1) {
+                await captureAndAlertRequestErrorHoc(addLLmServer({ ...formData, config }).then(res => {
+                    // if (res.code === 10802) {
+                    //     return toast({
+                    //         variant: 'error',
+                    //         description: res.msg
+                    //     })
+                    // }
+                    onAfterSave(res.code === 10803 ? res.msg : t('model.addSuccess'))
+                    onBack()
+                }))
+            } else {
+                await captureAndAlertRequestErrorHoc(updateLLmServer({ ...formData, config }).then(res => {
+                    onAfterSave(t('model.updateSuccess'))
+                    onBack()
+                }))
+            }
+        } catch (error) {
+            console.error('Save error:', error);
+        } finally {
+            setIsLoading(false);
         }
-    }
+    };
 
     const handleModelDel = () => {
         bsConfirm({
@@ -311,7 +323,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
 
     return <div className="relative size-full py-4">
         <div className="flex ml-6 items-center gap-x-3">
-            <ShadTooltip content={t('back')} side="right">
+            <ShadTooltip content={t('back', { ns: 'bs' })} side="right">
                 <button className="extra-side-bar-buttons w-[36px]" onClick={() => onBack()}>
                     <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
                 </button>
@@ -371,11 +383,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <div className="w-[92%]">
                         {
                             formData.models.map((m, i) => <ModelItem
+                                key={m.id}
                                 data={m}
                                 type={formData.type}
                                 onInput={(name, type) => handleModelChange(name, type, i)}
                                 onConfig={(config) => handleModelConfig(config, i)}
-                                key={m.name}
                                 onDelete={() => handleDelete(i)}
                             />)
                         }
@@ -390,7 +402,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">
             {id !== -1 && <Button className="px-8" variant="destructive" onClick={handleModelDel}>{t('model.delete')}</Button>}
             <Button className="px-8" variant="outline" onClick={() => onBack()}>{t('model.cancel')}</Button>
-            <Button className="px-16" disabled={!formData.type} onClick={handleSave}>{t('model.save')}</Button>
+            <LoadButton
+                className="px-16"
+                disabled={!formData.type}
+                loading={isLoading}
+                onClick={handleSave}
+            >
+                {isLoading ? '模型状态检测中' : t('model.save')}
+            </LoadButton>
         </div>
     </div>
 }
@@ -419,6 +438,10 @@ const useSelectModel = () => {
     }, [])
 
     return (type) => {
-        return modelsRef.current?.[type] || []
+        return (modelsRef.current?.[type] || [])
+            .map(item => ({
+                ...item,
+                id: generateUUID(4)
+            }))
     }
 }
