@@ -756,3 +756,49 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
     throw error;
   }
 }
+
+
+/**
+ * 上传文件
+ */
+export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFail, onAbort }:
+  {
+    fileKey: string,
+    file: File,
+    onProgress?: (progressEvent: number) => void,
+    onFail?: (error: any) => void,
+    onFinish?: (response: any) => void,
+    onAbort?: (abortCtlr: any) => void
+  }): Promise<any> {
+  // 创建新的控制器
+  const abortCtlr = new AbortController();
+  onAbort(abortCtlr);
+
+  try {
+    const formData = new FormData();
+    formData.append(fileKey, file);
+
+    const config = {
+      headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
+      onUploadProgress: (progressEvent) => {
+        const { loaded, total } = progressEvent;
+        const progress = Math.min(99.99, (loaded * 100) / total);
+        console.log(`Upload progress: ${file.name} ${progress}%`);
+        // UI with the progress information here
+        onProgress(progress)
+      },
+      signal: abortCtlr.signal,
+    }
+    const response = await axios.post('/api/v1/knowledge/upload', formData, config);
+    // 处理成功
+    onFinish(response);
+  } catch (error) {
+    if (error?.code === "ERR_CANCELED") {
+      console.log('用户取消了上传');
+    } else {
+      onFail(error);
+    }
+  } finally {
+    onAbort(null);
+  }
+}
