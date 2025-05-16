@@ -1,11 +1,12 @@
 import StepProgress from "@/components/bs-ui/step";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, FileText } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
+import { Button } from "@/components/bs-ui/button";
 
 const StepLabels = [
     '上传文件',
@@ -42,17 +43,19 @@ export default function FilesUpload() {
         const files = resultFiles || _files
         console.log(' todo resultFiles :>> ', files);
     }
-
+    const [showSecondDiv, setShowSecondDiv] = useState(false);
     return <div className="flex px-2 py-4 h-full gap-2">
         {/* 文件上传 */}
-        <div className="w-full min-w-[520px]">
-            {/* head back */}
+        <div className={showSecondDiv ? "w-1/2 min-w-[520px]" : "w-full"}>
             <div className="flex items-center">
-                <ShadTooltip content={t('back')} side="top">
+                {/* <ShadTooltip content={t('back')} side="top">
                     <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}  >
                         <ArrowLeft className="side-bar-button-size" />
                     </button>
-                </ShadTooltip>
+                </ShadTooltip> */}
+                <Button variant="outline" size="icon" className={ 'bg-[#fff] size-8'}
+                    onClick={() => navigate(-1)}
+                ><ChevronLeft /></Button>
                 <span className=" text-foreground text-sm font-black pl-4">{t('back')}</span>
             </div>
             <StepProgress currentStep={currentStep} align="center" labels={StepLabels} />
@@ -67,15 +70,30 @@ export default function FilesUpload() {
                         setResultFiles(files)
                         handleSave(files)
                     }} />
-                {stepEnd && (
+                {currentStep === 2 && (
                     <FileUploadStep2
-                        fileInfo={fileInfo}
-                        onPrev={() => setStepEnd(false)}
-                        onPreview={handlePreviewClick}
-                        onChange={() => setChange(true)}
+                    fileInfo={fileInfo}
+                    setShowSecondDiv={setShowSecondDiv}
+                    onPrev={() => setStepEnd(false)}
+                    onPreview={handlePreviewClick}
+                    onChange={() => setChange(true)}
                     />
                 )}
             </div>
         </div>
+         {/* 段落 */}
+         {/* 1.3.0版本点击预览分段结果触发这个 */}
+         {showSecondDiv && <div className="w-1/2 bg-muted h-full relative overflow-x-auto">
+            <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={(change) => {
+                setChange(change)
+                document.getElementById('preview-btn')?.click()
+            }} />
+            {!showView && (
+                <div className="flex justify-center items-center flex-col h-full text-gray-400">
+                    <FileText width={160} height={160} className="text-border" />
+                    {stepEnd ? t('previewHint') : t('uploadHint')}
+                </div>
+            )}
+        </div>} 
     </div>
 };

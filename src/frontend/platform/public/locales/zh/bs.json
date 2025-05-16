@@ -924,6 +924,7 @@
   "add": "添加",
   "back": "返回",
   "create": "创建",
+  "createImport": "创建并导入",
   "delete": "删除",
   "deleteSuccess": "删除成功",
   "createTime": "创建时间",

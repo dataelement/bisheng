@@ -5,6 +5,12 @@ import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
 import { TabsContent } from "@/components/bs-ui/tabs";
 import { Button } from "@/components/bs-ui/button";
 import { useEffect, useRef, useState } from "react";
+import { Checkbox } from "@/components/bs-ui/checkBox";
+import {Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger, } from "@/components/bs-ui/accordion";
+
 
 
 export default function SplitRules({
@@ -12,23 +18,27 @@ export default function SplitRules({
     setStrategies,
     handlePreview,
     onChange,
+    burst,
+    setBurst,
+    gauge,
+    setGauge,
+    rowend,
+    setRowend,
+    appendh,
+    setAppendh,
+    dataArray,
+    fileConfigs,
+    setFileConfigs,
+    updateConfig,
     t
 }) {
     
-const [dataArray, setDataArray] = useState([
-    { id: 1, name: 'Excel文件1.xlsx' },
-    { id: 2, name: '报表数据2.xlsx' },
-    { id: 3, name: '财务记录3.xlsx' },
-    { id: 4, name: '项目计划4.xlsx' }
-  ]);
+
     const [checked, setChecked] = useState(false)
-    // size
-    const [size, setSize] = useState('15')
-    // 符号
-    const [overlap, setOverlap] = useState('1')
+    const [selectedDropdown, setSelectedDropdown] = useState(0)
     useEffect(() => {
         onChange()
-    }, [strategies, size, overlap])
+    }, [strategies, burst, gauge,rowend])
     return (
         <TabsContent value="chunk">
             <div
@@ -36,14 +46,13 @@ const [dataArray, setDataArray] = useState([
                 style={{ gridTemplateColumns: '114px 1fr' }}
             >
                 <div className="flex justify-end items-center gap-2">
-                    <input
-                        type="checkbox"
-                        id="keepImages"
+                    <Checkbox
+                        id="setSeparately"
                         className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        onChange={(e) => setChecked(e.target.checked)}
+                        onCheckedChange={setChecked}
                     />
-                    <Label htmlFor="keepImages" className="text-sm text-gray-700">
-                        {t('keepImages')}
+                    <Label htmlFor="setSeparately" className="text-sm text-gray-700">
+                        {t('setSeparately')}
                     </Label>
                 </div>
 
@@ -61,13 +70,13 @@ const [dataArray, setDataArray] = useState([
                             <span className={`whitespace-nowrap ${checked ? 'text-gray-500' : ''}`}>每</span>
                             <div className="relative">
                                 <Input
-                                    id="splitLength"
+                                    id="split"
                                     type="number"
-                                    value={size}
+                                    value={burst}
                                     disabled={checked}
                                     className={`w-20 ${checked ? 'bg-gray-200' : ''}`}
                                 />
-                                <span className={`absolute right-2 top-1/2 -translate-y-1/2 ${checked ? 'text-gray-400' : 'text-gray-500'}`}>行</span>
+                                <span className={`absolute right-2  top-1/2 -translate-y-1/2 ${checked ? 'text-gray-400' : 'text-gray-500'}`}>行</span>
                             </div>
                             <span className={`whitespace-nowrap ${checked ? 'text-gray-500' : ''}`}>作为一个分段</span>
                         </div>
@@ -76,14 +85,14 @@ const [dataArray, setDataArray] = useState([
                             <span className={`whitespace-nowrap ${checked ? 'text-gray-500' : ''}`}>第</span>
                             <Input
                                 type="number"
-                                value={overlap}
+                                value={gauge}
                                 disabled={checked}
                                 className={`w-20 ${checked ? 'bg-gray-200' : ''}`}
                             />
                             <span className={`whitespace-nowrap ${checked ? 'text-gray-500' : ''}`}>到</span>
                             <Input
                                 type="number"
-                                value={overlap}
+                                value={rowend}
                                 disabled={checked}
                                 className={`w-20 ${checked ? 'bg-gray-200' : ''}`}
                             />
@@ -94,31 +103,100 @@ const [dataArray, setDataArray] = useState([
 
 <div className="space-y-4 mt-4 p-4 border rounded-lg bg-white shadow-sm">
   <h3 className="text-lg font-bold text-gray-800 text-left">
-    {t('splitSettings')}
+    {t('splitMethod')}
   </h3>
   
   <div className="relative mt-2">
-    <select
-      className="w-full p-2 pr-8 border border-gray-300 rounded-md shadow-sm
-                focus:ring-blue-500 focus:border-blue-500
-                hover:border-gray-400 transition-colors
-                appearance-none bg-white bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiAjdjJ2NHY2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+')]
-                bg-no-repeat bg-[position:right_0.5rem_center] bg-[length:1.5em_1.5em]"
-      size={Math.min(5, dataArray.length)}
-      multiple
-      onChange={(e) => console.log(Array.from(e.target.selectedOptions))}
-    >
-      {dataArray.map((item) => (
-        <option 
-          key={item.id}
-          value={item.id}
-          className="px-3 py-2 hover:bg-blue-50 focus:bg-white"
-        >
-          {item.name}
-        </option>
-      ))}
-    </select>
-  </div>
+  {dataArray.map((item) => (
+  <Accordion 
+    key={item.idi} 
+    type="single" 
+    collapsible 
+    className="w-full mb-4"
+    value={selectedDropdown === item.idi ? item.idi : undefined}
+    onValueChange={(value) => setSelectedDropdown(value === item.idi ? item.idi : null)}
+  >
+    <AccordionItem value={item.idi}>
+      {/* 下拉触发按钮 */}
+      <AccordionTrigger className="w-full mt-2 p-2 pr-8 border border-gray-300 rounded-md shadow-sm text-left hover:bg-gray-50">
+        <span className="px-3 py-2">{item.name}</span>
+      </AccordionTrigger>
+      
+      <AccordionContent className="flex flex-col gap-4 p-4 border rounded-md bg-gray-50">
+        {/* 第一行：第一个输入框独立显示 */}
+        <div className="flex items-center gap-3">
+          <label htmlFor={`split-${item.idi}`} className="whitespace-nowrap text-left text-sm min-w-[124px]">
+           {t('split')}
+          </label>
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="shrink-0"> {t('every')}</span>
+            <div className="relative">
+              <input
+                id={`split-${item.idi}`}
+                type="number"
+                value={fileConfigs[item.idi]?.burst}
+                onChange={(e) => updateConfig(item.idi, 'burst', e.target.value)}
+                placeholder="输入分段大小"
+                className="w-24 shrink-0"
+              />
+              <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500">
+              {t('row')}
+              </span>
+            </div>
+            <span className="shrink-0"> {t('segemnt')}</span>
+          </div>
+        </div>
+
+        {/* 第二行：第二个输入框与勾选框组合 */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id={`addHeader-${item.idi}`}
+              checked={fileConfigs[item.idi]?.appendh}
+              onCheckedChange={(checked) => updateConfig(item.idi, 'appendh', checked)}
+              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <label htmlFor={`addHeader-${item.idi}`} className="text-sm text-gray-700">
+              {t("addHeader")}
+            </label>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="shrink-0">{t('bonly')}</span>
+            <div className="relative">
+              <input
+                id={`chunkOverlapStart-${item.idi}`}
+                type="number"
+                value={fileConfigs[item.idi]?.gauge}
+                onChange={(e) => updateConfig(item.idi, 'gauge', e.target.value)}
+                placeholder="起始行"
+                className="w-24 shrink-0"
+              />
+              <span className="absolute top-1/2 right-4 transform -translate-y-1/2 text-gray-500">
+              {t('row')}
+              </span>
+            </div>
+            <span className="shrink-0">{t('arrive')}</span>
+            <div className="relative">
+              <input
+                id={`chunkOverlapEnd-${item.idi}`}
+                type="number"
+                value={fileConfigs[item.idi]?.rowend}
+                onChange={(e) => updateConfig(item.idi, 'rowend', e.target.value)}
+                placeholder="结束行"
+                className="w-24 shrink-0"
+              />
+              <span className="absolute left-16 top-1/2 transform -translate-y-1/2 text-gray-500">
+              {t('row')}
+              </span>
+              <span className="shrink-0">{t('gauge')}</span>
+            </div>
+          </div>
+        </div>
+      </AccordionContent>
+    </AccordionItem>
+  </Accordion>
+))}
+      </div>
 </div>
                 </div>
 
@@ -130,64 +208,71 @@ const [dataArray, setDataArray] = useState([
                     <div className="flex flex-col gap-4">
                         {/* 第一行：第一个输入框独立显示 */}
                         <div className="flex items-center gap-3">
-                            <Label htmlFor="splitLength" className="whitespace-nowrap text-sm min-w-[100px]">
-                                {t('splitLength')}
+                            <Label htmlFor="split" className="whitespace-nowrap text-sm min-w-[100px]">
+                                {t('split')}
                             </Label>
                             <div className="flex items-center gap-2 overflow-hidden">
-                                <span className="shrink-0">每</span>
+                                <span className="shrink-0">{t('every')}</span>
                                 <div className="relative">
                                     <Input
-                                        id="splitLength"
+                                        id="split"
                                         type="number"
-                                        value={size}
-                                        onChange={(e) => setSize(Number(e.target.value))}
+                                        value={burst}
+                                        onChange={(e) =>  setBurst(Number(e.target.value))}
                                         placeholder={t('splitSizePlaceholder')}
                                         className="w-24 shrink-0"
                                     />
                                     <span className="absolute top-1/2 transform -translate-y-1/2 text-gray-500">
-                                        行
+                                    {t('row')}
                                     </span>
                                 </div>
-                                <span className="shrink-0">作为一个分段</span>
+                                <span className="shrink-0">{t('segemnt')}</span>
                             </div>
                         </div>
 
                         {/* 第二行：第二个输入框与勾选框组合 */}
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="keepImages"
+                                <Checkbox
+                                    id="appendh"
+                                    checked={appendh}
+                                    onCheckedChange={(checked) => setAppendh(checked)}
                                     className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                 />
-                                <Label htmlFor="keepImages" className="text-sm text-gray-700">
-                                    {t('keepImages')}
+                                <Label htmlFor="addHeader" className="text-sm text-gray-700">
+                                    {t('addHeader')}
                                 </Label>
                             </div>
                             <div className="flex items-center gap-3">
-                                <span className="shrink-0">第</span>
+                                <span className="shrink-0">{t('bonly')}</span>
                                 <div className="relative">     <Input
                                     id="chunkOverlap"
                                     type="number"
-                                    value={overlap}
-                                    onChange={(e) => setOverlap(Number(e.target.value))}
+                                    value={gauge}
+                                    onChange={(e) => setGauge(Number(e.target.value))}
                                     placeholder={t('chunkOverlapPlaceholder')}
                                     className="w-24 shrink-0"
                                 />
                                     <span className="absolute top-1/2 transform -translate-y-1/2 text-gray-500">
-                                        行
+                                    {t('row')}
                                     </span>
                                 </div>
-                                <span className="shrink-0">到</span>
+                                <span className="shrink-0">{t('arrive')}</span>
+                                <div className="relative">
                                 <Input
                                     id="chunkOverlap"
                                     type="number"
-                                    value={overlap}
-                                    onChange={(e) => setOverlap(Number(e.target.value))}
+                                    value={rowend}
+                                    onChange={(e) => setRowend(Number(e.target.value))}
                                     placeholder={t('chunkOverlapPlaceholder')}
                                     className="w-24 shrink-0"
                                 />
-                                <span className="shrink-0">作为表头</span>
+                                  <span className="absolute top-1/2 transform -translate-y-1/2 text-gray-500">
+                                  {t('row')}
+                                    </span>
+                                </div>
+                              
+                                <span className="shrink-0">{t('gauge')}</span>
                             </div>
                         </div>
                     </div>

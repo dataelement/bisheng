@@ -191,6 +191,13 @@ export async function uploadLibFile(data, config, type: 'knowledge' | 'icon', ur
  * 确定上传文件
  * file_path knowledge_id chunck_size
  */
+
+type ExcelRule = {
+  slice_length: number;
+  append_header: boolean;
+  header_start_row: number;
+  header_end_row: number;
+};
 type UploadFileFc = {
   knowledge_id: number; // 必需
   separator: string[]; // 必需，切分相关参数，如果不传，使用默认值
@@ -198,11 +205,19 @@ type UploadFileFc = {
   chunk_size: number; // 必需
   chunk_overlap: number; // 必需
   file_list: { file_path: string }[]; // 必需
+  retain_images?:boolean; //保留文档图片
+  force_ocr?:boolean;//强制开启ocr
+  enable_formula?:boolean;//开启公式识别
+  filter_page_header_footer?:boolean;//过滤页眉页脚
+  excel_rules: { 
+    [uuid: string]: ExcelRule
+  };
 }
 type DefaultUploadFileFc = {
   knowledge_id: number; // 必需
   file_list: { file_path: string }[]; // 必需
 };
+///
 export async function subUploadLibFile(data: UploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {

@@ -4,6 +4,7 @@ import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
 import { TabsContent } from "@/components/bs-ui/tabs";
 import { Button } from "@/components/bs-ui/button";
+import { Checkbox } from "@/components/bs-ui/checkBox";
 
 
 
@@ -15,6 +16,14 @@ export default function SplitRules({
     overlap,
     setOverlap,
     handlePreview,
+    retain,
+    setRetain,
+    forocr,
+    setForocr,
+    formula,
+    setFormula,
+    filhf,
+    setFilhf,
     t
 }) {
     return (
@@ -63,9 +72,10 @@ export default function SplitRules({
                     </div>
                     {/* 新增的勾选框字段 - 左下方 */}
                     <div className="flex items-center gap-2 pt-2">
-                        <input
-                            type="checkbox"
-                            id="keepImages"
+                        <Checkbox
+                            id="retain"
+                            checked={retain}
+                            onCheckedChange={(retain) => setRetain(retain)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="keepImages" className="text-sm text-gray-700">
@@ -88,29 +98,32 @@ export default function SplitRules({
                     </h3>
                     {/* 新增的勾选框字段 - 左下方 */}
                     <div className="flex items-center gap-2 pt-2">
-                        <input
-                            type="checkbox"
-                            id="ocrForce"
+                        <Checkbox
+                            id="forocr"
+                            checked={forocr}
+                            onCheckedChange={(checked) => setForocr(checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="ocrForce" className="text-sm text-gray-700">
-                            {t('ocrForce')} {/* 请确保你的翻译函数中有这个键 */}
+                            {t('ocrForce')}
                         </Label>
-                        <input
-                            type="checkbox"
-                            id="enableRec"
+                        <Checkbox
+                            id="formula"
+                            checked={formula}
+                            onCheckedChange={(checked) => setFormula(checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="enableRec" className="text-sm text-gray-700">
-                            {t('enableRec')} {/* 请确保你的翻译函数中有这个键 */}
+                            {t('enableRec')}
                         </Label>
-                        <input
-                            type="checkbox"
-                            id="hfFilter"
+                        <Checkbox
+                            id="filhf"
+                            checked={filhf}
+                            onCheckedChange={(checked) => setFilhf(checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="hfFilter" className="text-sm text-gray-700">
-                            {t('hfFilter')} {/* 请确保你的翻译函数中有这个键 */}
+                            {t('hfFilter')}
                         </Label>
                     </div>
 

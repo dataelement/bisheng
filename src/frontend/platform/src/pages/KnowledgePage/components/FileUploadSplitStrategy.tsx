@@ -45,7 +45,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     <div className='flex gap-6'>
       {/* 左侧拖拽区域 */}
       <div className='flex-1'>
-        <div className='p-2 overflow-y-auto'> {/* 添加 overflow-y-auto */}
+        <div className='p-2 overflow-y-auto  max-h-[11.5rem]'> {/* 添加 overflow-y-auto */}
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="strategies">
               {(provided) => (
