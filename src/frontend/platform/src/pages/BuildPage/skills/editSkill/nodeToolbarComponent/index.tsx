@@ -158,7 +158,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
               </button>
             </ShadTooltip>
           }
-          {/* 编辑 */}
+          {/* 编辑1 */}
           {
             nodeLength > 0 && <ShadTooltip content="edit" side="top">
               <button
