@@ -149,7 +149,7 @@ def process_file_task(
     callback_url: str = None,
     extra_metadata: str = None,
     preview_cache_keys: List[str] = None,
-    header_rows: int = 1,
+    header_rows: List[int] = [0, 1],
     data_rows: int = 15,
     keep_images: int = 1,
 ):
@@ -301,7 +301,7 @@ def addEmbedding(
     callback: str = None,
     extra_meta: str = None,
     preview_cache_keys: List[str] = None,
-    header_rows=1,
+    header_rows: List[int]=[0, 1],
     data_rows=15,
     keep_images=1,
 ):
@@ -378,7 +378,7 @@ def add_file_embedding(
     extra_meta: str = None,
     preview_cache_key: str = None,
     knowledge_id: int = None,
-    header_rows=1,
+    header_rows: List[int] = [0, 1],
     data_rows=15,
     keep_images=1,
 ):
@@ -527,7 +527,7 @@ def read_chunk_text(
     chunk_size: int,
     chunk_overlap: int,
     knowledge_id: Optional[int] = None,
-    header_rows=1,
+    header_rows: List[int] = [0, 1],
     data_rows=15,
     keep_images = 1,
 ) -> (List[str], List[dict], str, Any):
@@ -597,6 +597,7 @@ def read_chunk_text(
             logger.error(f"failed to parse {file_name}")
     else:
         if etl_for_lm_url:
+            # 如何传输页眉页脚过滤？
             loader = ElemUnstructuredLoader(
                 file_name,
                 input_file,

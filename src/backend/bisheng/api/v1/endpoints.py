@@ -25,6 +25,8 @@ from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
+from bisheng.settings import settings as bisheng_settings
+ETL_4_LM_URL_NAME = "unstructured_api_url"
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -49,9 +51,14 @@ def get_all():
 def get_env():
     """获取环境变量参数"""
     uns_support = [
-        'png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md',
-        'html', 'pdf'
-    ]
+        'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf' ]
+   
+    etl_for_lm_url = bisheng_settings.get_knowledge().get(ETL_4_LM_URL_NAME)
+    if etl_for_lm_url:
+        uns_support = [
+            'png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md',
+            'html', 'pdf'
+        ]
     env = {}
     if isinstance(settings.settings.environment, str):
         env['env'] = settings.settings.environment

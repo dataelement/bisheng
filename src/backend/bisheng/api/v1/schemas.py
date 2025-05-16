@@ -473,7 +473,10 @@ class FileProcessBase(BaseModel):
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
-    header_rows: Optional[int] = Field(default=1, description='excel表头行数')
+    ocr: Optional[int] = Field(default=0, description='启用OCR')
+    latex: Optional[int] = Field(default=1, description='latex公式识别')
+    header_footer: Optional[int] = Field(default=0, description='页眉页脚')
+    header_rows: Optional[List[int]] = Field(default=[0, 1], description='excel表头行数')
     data_rows : Optional[int] = Field(default=15, description='excel数据行数')
     keep_images: Optional[int] = Field(default=15, description='保留文档图片')
 
@@ -489,7 +492,13 @@ class FileProcessBase(BaseModel):
         if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
         if values.get('header_rows') is None:
-            values['header_rows'] = 1
+            values['header_rows'] = [0, 1]
+        if values.get('ocr') is None:
+            values['ocr'] = 0
+        if values.get('latex') is None:
+            values['latex'] = 1
+        if values.get('header_footer') is None:
+            values['header_footer'] = 0
         if values.get('data_rows') is None:
             values['data_rows'] = 15
         if values.get("keep_images") is None:

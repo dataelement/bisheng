@@ -69,9 +69,9 @@ def process_dataframe_to_markdown_files(
 
     num_columns = df.shape[1]
 
-    if num_header_rows < 0:
+    if num_header_rows[0] < 0:
         logger.debug(
-            f"错误：源 '{source_name}' 的表头行数 ({num_header_rows}) 不能为负。跳过。"
+            f"错误：源 '{source_name}' 的表头行数 ({num_header_rows[0]}) 不能为负。跳过。"
         )
         return
     if rows_per_markdown <= 0:
@@ -80,9 +80,9 @@ def process_dataframe_to_markdown_files(
         )
         return
 
-    if num_header_rows > len(df):
+    if num_header_rows[1] > len(df):
         logger.debug(
-            f"警告：源 '{source_name}' 的总行数 ({len(df)}) 小于指定的表头行数 ({num_header_rows})。"
+            f"警告：源 '{source_name}' 的总行数 ({len(df)}) 小于指定的表头行数 ({num_header_rows[1]})。"
         )
         logger.debug(f"  将使用所有可用的行作为表头。")
         header_block_df = df.copy()
@@ -90,8 +90,8 @@ def process_dataframe_to_markdown_files(
             columns=df.columns
         )  # Ensure it has same columns for consistency
     else:
-        header_block_df = df.iloc[:num_header_rows]
-        data_block_df = df.iloc[num_header_rows:]
+        header_block_df = df.iloc[num_header_rows[0]:num_header_rows[1]]
+        data_block_df = df.iloc[num_header_rows[1]:]
 
     header_rows_as_lists = header_block_df.values.tolist()
 
