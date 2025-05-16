@@ -1,6 +1,7 @@
 import pandas as pd
 from loguru import logger
 import openpyxl
+from uuid import uuid4
 import os
 import math
 from pathlib import Path
@@ -103,7 +104,7 @@ def process_dataframe_to_markdown_files(
                 header_rows_as_lists, [], num_columns
             )
             file_name = f"{source_name}_header_only.md"
-            file_path = os.path.join(output_dir, file_name)
+            file_path = output_dir
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(markdown_content)
@@ -268,28 +269,24 @@ def convert_file_to_markdown(
         logger.debug(f"错误：输入文件 '{input_file_path}' 未找到。")
         return
 
-    file_name_no_ext = os.path.splitext(os.path.basename(input_file_path))[0]
-    # Create a subdirectory within base_output_dir for this specific file's output
-    # to keep things organized, especially if processing multiple input files.
-    specific_output_dir = os.path.join(base_output_dir, file_name_no_ext + "_md_output")
 
-    if not os.path.exists(specific_output_dir):
-        os.makedirs(specific_output_dir)
-        logger.debug(f"创建输出目录：'{specific_output_dir}'")
+    if not os.path.exists(base_output_dir):
+        os.makedirs(base_output_dir)
+        logger.debug(f"创建输出目录：'{base_output_dir}'")
 
     _, file_extension = os.path.splitext(input_file_path)
     file_extension = file_extension.lower()
 
     if file_extension in [".xlsx", ".xls"]:
         excel_file_to_markdown(
-            input_file_path, num_header_rows, rows_per_markdown, specific_output_dir
+            input_file_path, num_header_rows, rows_per_markdown, base_output_dir
         )
     elif file_extension == ".csv":
         csv_file_to_markdown(
             input_file_path,
             num_header_rows,
             rows_per_markdown,
-            specific_output_dir,
+            base_output_dir,
             csv_encoding,
             csv_delimiter,
         )
@@ -299,7 +296,7 @@ def convert_file_to_markdown(
         )
 
 
-def handler(cache_dir,  knowledge_id: int, file_name: str, header_rows: int, data_rows: int,):
+def handler(cache_dir, file_name: str, header_rows: int, data_rows: int,):
 
     """
     处理文件转换的主函数。
@@ -308,8 +305,8 @@ def handler(cache_dir,  knowledge_id: int, file_name: str, header_rows: int, dat
     file_name (str): 输入的 Word 文档路径。
     knowledge_id (str): 知识 ID，用于生成输出文件名。
     """
-    doc_id = file_name.split(".")[0].split("/")[-1]
-    md_file_name = f"{cache_dir}/{knowledge_id}/{Path(file_name).stem}.md"
+    doc_id = uuid4()
+    md_file_name = f"{cache_dir}/{doc_id}"
 
     convert_file_to_markdown(
         input_file_path=file_name,
@@ -317,8 +314,7 @@ def handler(cache_dir,  knowledge_id: int, file_name: str, header_rows: int, dat
         num_header_rows=header_rows,
         rows_per_markdown=data_rows,
     )
-    # 返回读取本地文件内容,删除本地文件
-    pass
+    return md_file_name, None, doc_id
 
 
 # --- Usage Example ---
@@ -326,5 +322,5 @@ if __name__ == "__main__":
     resources_dir = "/Users/tju/Resources/docs/excel"
     excel_file_path = f"{resources_dir}/test_excel_v2.xlsx"  # Use a different name or ensure old one is compatible
     csv_file_path = f"{resources_dir}/test_excel_v2.csv"  # Use a different name or ensure old one is compatible
-    handler(excel_file_path, 2, 5, "123456")
-    handler(csv_file_path, 2, 5, "123456")
+    # handler(resources_dir, excel_file_path, 2, 5,)
+    handler(resources_dir, csv_file_path, 1, 5,)

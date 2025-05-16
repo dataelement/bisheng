@@ -307,7 +307,10 @@ class KnowledgeService(KnowledgeUtils):
                                                                    req_data.separator,
                                                                    req_data.separator_rule,
                                                                    req_data.chunk_size,
-                                                                   req_data.chunk_overlap)
+                                                                   req_data.chunk_overlap, 
+                                                                   req_data.header_rows, 
+                                                                   req_data.data_rows, 
+                                                                   req_data.keep_images)
         res = []
         cache_map = {}
         for index, val in enumerate(texts):

@@ -49,7 +49,7 @@ from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
 
-from bisheng.api.services.patch_130 import handler
+from bisheng.api.services.patch_130 import convert_file_to_md, handle_xls_multiple_md_files
 
 filetype_load_map = {
     "txt": TextLoader,
@@ -66,6 +66,7 @@ split_handles = [
 ]
 
 ETL_4_LM_URL_NAME = "unstructured_api_url"
+
 
 class KnowledgeUtils:
     # 用来区分chunk和自动生产的总结内容  格式如：文件名\n文档总结\n--------\n chunk内容
@@ -148,6 +149,9 @@ def process_file_task(
     callback_url: str = None,
     extra_metadata: str = None,
     preview_cache_keys: List[str] = None,
+    header_rows: int = 1,
+    data_rows: int = 15,
+    keep_images: int = 1,
 ):
     """处理知识文件任务"""
     try:
@@ -165,6 +169,9 @@ def process_file_task(
             callback_url,
             extra_metadata,
             preview_cache_keys=preview_cache_keys,
+            header_rows=header_rows,
+            data_rows=data_rows,
+            keep_images=keep_images,
         )
     except Exception as e:
         logger.exception("process_file_task error")
@@ -294,6 +301,9 @@ def addEmbedding(
     callback: str = None,
     extra_meta: str = None,
     preview_cache_keys: List[str] = None,
+    header_rows=1,
+    data_rows=15,
+    keep_images=1,
 ):
     """将文件加入到向量和es库内"""
 
@@ -330,6 +340,9 @@ def addEmbedding(
                 extra_meta=extra_meta,
                 preview_cache_key=preview_cache_key,
                 knowledge_id=knowledge_id,
+                data_rows=data_rows,
+                header_rows=header_rows,
+                keep_images=keep_images,
             )
             db_file.status = KnowledgeFileStatus.SUCCESS.value
         except Exception as e:
@@ -365,6 +378,9 @@ def add_file_embedding(
     extra_meta: str = None,
     preview_cache_key: str = None,
     knowledge_id: int = None,
+    header_rows=1,
+    data_rows=15,
+    keep_images=1,
 ):
     # download original file
     logger.info(
@@ -400,8 +416,11 @@ def add_file_embedding(
         separator,
         separator_rule,
         chunk_size,
-        chunk_overlap, 
-        knowledge_id
+        chunk_overlap,
+        knowledge_id,
+        keep_images=keep_images,
+        header_rows=header_rows,
+        data_rows=data_rows,
     )
     if len(texts) == 0:
         raise ValueError("文件解析为空")
@@ -506,7 +525,11 @@ def read_chunk_text(
     separator: List[str],
     separator_rule: List[str],
     chunk_size: int,
-    chunk_overlap: int, knowledge_id: Optional[int] = None,
+    chunk_overlap: int,
+    knowledge_id: Optional[int] = None,
+    header_rows=1,
+    data_rows=15,
+    keep_images = 1,
 ) -> (List[str], List[dict], str, Any):
     """
     0：chunks text
@@ -537,13 +560,38 @@ def read_chunk_text(
     etl_for_lm_url = settings.get_knowledge().get(ETL_4_LM_URL_NAME)
     file_extesion_name = file_name.split(".")[-1]
 
-    if (file_extesion_name in ["xls", "xlsx", "csv", "doc", "docx", "html", "mhtml", "ppt","pptx"]):
-        md_file_name, local_image_dir, doc_id = handler(file_name=file_name, input_file_name= input_file)
+    if file_extesion_name in [
+        "xls",
+        "xlsx",
+        "csv",
+        "doc",
+        "docx",
+        "html",
+        "mhtml",
+        "ppt",
+        "pptx",
+    ]:
+        if file_extesion_name in ["xls", "xlsx"]:
+            #  md_file_name 为切分后，多md文件的目录
+            md_files_path, local_image_dir, doc_id = convert_file_to_md(
+                file_name=file_name,
+                input_file_name=input_file,
+                header_rows=header_rows,
+                data_rows=data_rows,
+            )
+            return handle_xls_multiple_md_files(llm, md_files_path, file_name)
+        else:
+            md_file_name, local_image_dir, doc_id = convert_file_to_md(
+                file_name=file_name, input_file_name=input_file
+            )
         if md_file_name:
-            loader = filetype_load_map['md'](file_path= md_file_name)
-            if knowledge_id and local_image_dir:
+            #  将图片存储到minio
+            if knowledge_id and local_image_dir and keep_images == 1:
                 from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
                 put_doc_images_to_minio(local_image_dir=local_image_dir, doc_id=doc_id)
+
+            # 沿用原来的方法处理md文件
+            loader = filetype_load_map["md"](file_path=md_file_name)
             documents = loader.load()
         else:
             logger.error(f"failed to parse {file_name}")
@@ -558,12 +606,12 @@ def read_chunk_text(
             parse_type = ParseType.UNS.value
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
-        else: 
+        else:
+            # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
             if file_extesion_name not in filetype_load_map:
                 raise Exception("类型不支持")
             loader = filetype_load_map[file_extesion_name](file_path=input_file)
             documents = loader.load()
-        
 
     logger.info(f"start_extract_title file_name={file_name}")
     if llm:
@@ -707,6 +755,9 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
                 fake_req.chunk_overlap,
                 extra_metadata=file.extra_meta,
                 preview_cache_keys=[file_preview_cache_key],
+                header_rows=fake_req.header_rows,
+                data_rows=fake_req.data_rows,
+                keep_images=fake_req.keep_images,
             )
         except Exception as e:
             logger.exception(f"retry_file_error file_id={file.id}")

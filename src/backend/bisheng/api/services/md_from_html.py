@@ -21,13 +21,9 @@ class HTML2MarkdownConverter:
     def __init__(
         self,
         output_dir="output",
-        image_dir_name_prefix="images",
-        video_dir_name_prefix="videos",
         media_download_timeout=60,
     ):
         self.output_dir = output_dir
-        self.image_dir_name_prefix = image_dir_name_prefix
-        self.video_dir_name_prefix = video_dir_name_prefix
         self.MEDIA_DOWNLOAD_TIMEOUT = media_download_timeout
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -766,11 +762,11 @@ class HTML2MarkdownConverter:
             logger.error(f"No HTML content to process from {source}.")
             return None
 
-        md_img_rel_folder = f"{output_filename_stem}_{self.image_dir_name_prefix}"
+        md_img_rel_folder = f"{output_filename_stem}"
         self.current_image_absolute_path = os.path.join(
             self.output_dir, md_img_rel_folder
         )
-        md_vid_rel_folder = f"{output_filename_stem}_{self.video_dir_name_prefix}"
+        md_vid_rel_folder = f"{output_filename_stem}"
         self.current_video_absolute_path = os.path.join(
             self.output_dir, md_vid_rel_folder
         )
@@ -900,22 +896,17 @@ def handler(cache_dir, file_or_url: str):
 
     converter = HTML2MarkdownConverter(
         output_dir=output_dir,
-        image_dir_name_prefix="images",
-        video_dir_name_prefix="videos",
         media_download_timeout=60,
     )
 
     doc_id = str(uuid4())
-
     # if file_or_url.startswith("http://") or file_or_url.startswith("https://"):
         # url_handler(file_or_url, converter)
     if file_or_url.endswith(".mhtml"):
         mhtml_handler(file_or_url, converter)
-    if file_or_url.endswith(".html"):
+    if file_or_url.endswith(".html") or file_or_url.endswith("htm"):
         html_handler(file_or_url, doc_id, converter)
-
-    # replace image url
-    # upload image and video to oss
+    return f"{cache_dir}/{doc_id}.md", f"{cache_dir}/{doc_id}", doc_id
 
 
 # Example Usage

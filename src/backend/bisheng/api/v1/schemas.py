@@ -473,6 +473,9 @@ class FileProcessBase(BaseModel):
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
+    header_rows: Optional[int] = Field(default=1, description='excel表头行数')
+    data_rows : Optional[int] = Field(default=15, description='excel数据行数')
+    keep_images: Optional[int] = Field(default=15, description='保留文档图片')
 
     @model_validator(mode='before')
     @classmethod
@@ -485,6 +488,12 @@ class FileProcessBase(BaseModel):
             values['chunk_size'] = 1000
         if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
+        if values.get('header_rows') is None:
+            values['header_rows'] = 1
+        if values.get('data_rows') is None:
+            values['data_rows'] = 15
+        if values.get("keep_images") is None:
+            values['keep_images'] = 1
         return values
 
 

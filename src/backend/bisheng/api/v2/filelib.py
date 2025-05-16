@@ -89,7 +89,11 @@ async def upload_file(request: Request,
                       callback_url: Optional[str] = Form(default=None, description='回调地址'),
                       file_url: Optional[str] = Form(default=None, description='文件地址'),
                       file: Optional[UploadFile] = File(default=None, description='上传文件'),
-                      background_tasks: BackgroundTasks = None):
+                      background_tasks: BackgroundTasks = None,
+                      header_rows: Optional[int] = Form(default=1, description='excep表头行数'),
+                      data_rows: Optional[int] = Form(default=15, description='excel数据行数'),
+                      keep_images: Optional[int] = Form(default=0, description='保留图片'),
+                      ):
     if file:
         file_name = file.filename
         if not file_name:
@@ -106,8 +110,12 @@ async def upload_file(request: Request,
                                     separator_rule=separator_rule,
                                     chunk_size=chunk_size,
                                     chunk_overlap=chunk_overlap,
+                                    data_rows= data_rows,
+                                    header_rows= header_rows,
+                                    keep_images= keep_images,
                                     callback_url=callback_url,
                                     file_list=[KnowledgeFileOne(file_path=file_path)])
+
     res = KnowledgeService.process_knowledge_file(request=request,
                                                   login_user=loging_user,
                                                   background_tasks=background_tasks,

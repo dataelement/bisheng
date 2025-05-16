@@ -19,7 +19,7 @@ from loguru import logger
 from pymilvus import Collection, Milvus, MilvusException
 from typing import BinaryIO
 from bisheng.utils.minio_client import MinioClient
-from bisheng.cache.utils import upload_file_to_minio
+
 
 
 MINIO_IMAGE_BUCKET_NAME = "images"
