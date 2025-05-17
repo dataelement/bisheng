@@ -464,6 +464,11 @@ class WorkstationConfig(BaseModel):
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
 
+class ExcelRule(BaseModel):
+    slice_length: Optional[int] = Field(default=10, description='数据行')
+    header_start_row: Optional[int] = Field(default=1, description='表头开始')
+    header_end_row : Optional[int] = Field(default=1, description='表头结束')
+    append_header: Optional[int] = Field(default=1, description='是否添加表头')
 
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
@@ -473,12 +478,11 @@ class FileProcessBase(BaseModel):
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
-    ocr: Optional[int] = Field(default=0, description='启用OCR')
-    latex: Optional[int] = Field(default=1, description='latex公式识别')
-    header_footer: Optional[int] = Field(default=0, description='页眉页脚')
-    header_rows: Optional[List[int]] = Field(default=[0, 1], description='excel表头行数')
-    data_rows : Optional[int] = Field(default=15, description='excel数据行数')
-    keep_images: Optional[int] = Field(default=15, description='保留文档图片')
+    retain_images: Optional[int] = Field(default=15, description='保留文档图片')
+    force_ocr: Optional[int] = Field(default=0, description='启用OCR')
+    enable_formula: Optional[int] = Field(default=1, description='latex公式识别')
+    filter_page_header_footer: Optional[int] = Field(default=0, description='页眉页脚')
+    excel_rules: Dict[str, ExcelRule] = Field(default={}, description="excel规则") 
 
     @model_validator(mode='before')
     @classmethod
@@ -491,18 +495,15 @@ class FileProcessBase(BaseModel):
             values['chunk_size'] = 1000
         if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
-        if values.get('header_rows') is None:
-            values['header_rows'] = [0, 1]
-        if values.get('ocr') is None:
-            values['ocr'] = 0
-        if values.get('latex') is None:
-            values['latex'] = 1
-        if values.get('header_footer') is None:
-            values['header_footer'] = 0
-        if values.get('data_rows') is None:
-            values['data_rows'] = 15
-        if values.get("keep_images") is None:
-            values['keep_images'] = 1
+        if values.get('filter_page_header_footer') is None:
+            values['filter_page_header_footer'] = 0
+        if values.get('force_ocr') is None:
+            values['force_ocr'] = 0
+        if values.get('enable_formula') is None:
+            values['enable_formula'] = 1
+        if values.get("retain_images") is None:
+            values['retain_images'] = 0
+        
         return values
 
 
@@ -544,5 +545,6 @@ class KnowledgeFileOne(BaseModel):
 # 知识库文件处理
 class KnowledgeFileProcess(FileProcessBase):
     file_list: List[KnowledgeFileOne] = Field(..., description='文件列表')
+    excel_rules: List
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[str] = Field(default=None, description='附加信息')

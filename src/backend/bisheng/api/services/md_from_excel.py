@@ -1,6 +1,7 @@
 import pandas as pd
 from loguru import logger
 import openpyxl
+from typing import List
 from uuid import uuid4
 import os
 import math
@@ -58,33 +59,33 @@ def generate_markdown_table_string(
 
 # --- Core DataFrame to Markdown Processing Logic (Refactored) ---
 def process_dataframe_to_markdown_files(
-    df, source_name, num_header_rows, rows_per_markdown, output_dir
+    df, source_name, num_header_rows, rows_per_markdown, output_dir, append_header = True
 ):
     """
     Processes a single DataFrame (from an Excel sheet or CSV) into paginated Markdown files.
     """
     if df.empty:
-        logger.debug(f"  源 '{source_name}' 的数据DataFrame为空，跳过Markdown生成。")
+        logger.warning(f"  源 '{source_name}' 的数据DataFrame为空，跳过Markdown生成。")
         return
 
     num_columns = df.shape[1]
 
     if num_header_rows[0] < 0:
-        logger.debug(
+        logger.error(
             f"错误：源 '{source_name}' 的表头行数 ({num_header_rows[0]}) 不能为负。跳过。"
         )
         return
     if rows_per_markdown <= 0:
-        logger.debug(
+        logger.warning(
             f"错误：源 '{source_name}' 的每个Markdown文件数据行数 ({rows_per_markdown}) 必须大于0。跳过。"
         )
         return
 
     if num_header_rows[1] > len(df):
-        logger.debug(
+        logger.warning(
             f"警告：源 '{source_name}' 的总行数 ({len(df)}) 小于指定的表头行数 ({num_header_rows[1]})。"
         )
-        logger.debug(f"  将使用所有可用的行作为表头。")
+        logger.debug(f"将使用所有可用的行作为表头。")
         header_block_df = df.copy()
         data_block_df = pd.DataFrame(
             columns=df.columns
@@ -96,10 +97,11 @@ def process_dataframe_to_markdown_files(
     header_rows_as_lists = header_block_df.values.tolist()
 
     if data_block_df.empty:
-        if not header_block_df.empty:
+        if not header_block_df.empty and append_header:
             logger.debug(
                 f"  源 '{source_name}' 只有表头数据（或表头行数覆盖了所有数据）。正在生成表头文件..."
             )
+
             markdown_content = generate_markdown_table_string(
                 header_rows_as_lists, [], num_columns
             )
@@ -167,7 +169,7 @@ def process_dataframe_to_markdown_files(
 
 
 # --- Excel Specific Processing ---
-def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, output_dir):
+def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, output_dir, append_header = True):
     logger.debug(f"\n开始处理Excel文件：'{excel_path}'")
     try:
         # Crucial fix: read_only must be False to access merged_cells
@@ -200,6 +202,7 @@ def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, outpu
             num_header_rows,
             rows_per_markdown,
             output_dir,
+            append_header = append_header
         )
     if workbook:
         workbook.close()
@@ -214,6 +217,7 @@ def csv_file_to_markdown(
     output_dir,
     csv_encoding="utf-8",
     csv_delimiter=",",
+    append_header = True
 ):
     logger.debug(f"\n开始处理CSV文件：'{csv_path}'")
     try:
@@ -248,7 +252,7 @@ def csv_file_to_markdown(
     csv_filename_base = os.path.splitext(os.path.basename(csv_path))[0]
 
     process_dataframe_to_markdown_files(
-        df, csv_filename_base, num_header_rows, rows_per_markdown, output_dir
+        df, csv_filename_base, num_header_rows, rows_per_markdown, output_dir, append_header
     )
     logger.debug(f"\nCSV文件 '{csv_path}' 处理完成。")
 
@@ -261,6 +265,7 @@ def convert_file_to_markdown(
     base_output_dir="output_markdown_files",
     csv_encoding="utf-8",
     csv_delimiter=",",
+    append_header = True
 ):
     """
     Converts an Excel or CSV file to multiple Markdown files.
@@ -279,7 +284,7 @@ def convert_file_to_markdown(
 
     if file_extension in [".xlsx", ".xls"]:
         excel_file_to_markdown(
-            input_file_path, num_header_rows, rows_per_markdown, base_output_dir
+            input_file_path, num_header_rows, rows_per_markdown, base_output_dir, append_header
         )
     elif file_extension == ".csv":
         csv_file_to_markdown(
@@ -289,6 +294,7 @@ def convert_file_to_markdown(
             base_output_dir,
             csv_encoding,
             csv_delimiter,
+            append_header
         )
     else:
         logger.debug(
@@ -296,7 +302,7 @@ def convert_file_to_markdown(
         )
 
 
-def handler(cache_dir, file_name: str, header_rows: int, data_rows: int,):
+def handler(cache_dir, file_name: str, header_rows: List[str] = [0, 1], data_rows: int = 12, append_header = True):
 
     """
     处理文件转换的主函数。

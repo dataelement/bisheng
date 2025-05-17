@@ -9,7 +9,7 @@ from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
 from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
-from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.api.v1.schemas import FileProcessBase, ExcelRule
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
@@ -49,7 +49,10 @@ from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
 
-from bisheng.api.services.patch_130 import convert_file_to_md, handle_xls_multiple_md_files
+from bisheng.api.services.patch_130 import (
+    convert_file_to_md,
+    handle_xls_multiple_md_files,
+)
 
 filetype_load_map = {
     "txt": TextLoader,
@@ -149,9 +152,11 @@ def process_file_task(
     callback_url: str = None,
     extra_metadata: str = None,
     preview_cache_keys: List[str] = None,
-    header_rows: List[int] = [0, 1],
-    data_rows: int = 15,
-    keep_images: int = 1,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
+    excel_rules: Dict[str, ExcelRule] = {},
 ):
     """处理知识文件任务"""
     try:
@@ -169,9 +174,11 @@ def process_file_task(
             callback_url,
             extra_metadata,
             preview_cache_keys=preview_cache_keys,
-            header_rows=header_rows,
-            data_rows=data_rows,
-            keep_images=keep_images,
+            excel_rules=excel_rules,
+            retain_images=retain_images,
+            enable_formula=enable_formula,
+            force_ocr=force_ocr,
+            filter_page_header_footer=filter_page_header_footer,
         )
     except Exception as e:
         logger.exception("process_file_task error")
@@ -301,9 +308,11 @@ def addEmbedding(
     callback: str = None,
     extra_meta: str = None,
     preview_cache_keys: List[str] = None,
-    header_rows: List[int]=[0, 1],
-    data_rows=15,
-    keep_images=1,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
+    excel_rules: Dict[str, ExcelRule] = {},
 ):
     """将文件加入到向量和es库内"""
 
@@ -328,6 +337,8 @@ def addEmbedding(
             logger.info(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
             )
+            # TODO:TJU: 多list里面取值
+            excel_rule = excel_rules[db_file.file_name]
             add_file_embedding(
                 vector_client,
                 es_client,
@@ -339,10 +350,14 @@ def addEmbedding(
                 chunk_overlap,
                 extra_meta=extra_meta,
                 preview_cache_key=preview_cache_key,
+                # 增加的参数
                 knowledge_id=knowledge_id,
-                data_rows=data_rows,
-                header_rows=header_rows,
-                keep_images=keep_images,
+                excel_rule=excel_rule,
+                retain_images=retain_images,
+                enable_formula=enable_formula,
+                force_ocr=force_ocr,
+                filter_page_header_footer=filter_page_header_footer,
+                # 另外三个ocr, latex, page_header_footer.
             )
             db_file.status = KnowledgeFileStatus.SUCCESS.value
         except Exception as e:
@@ -378,9 +393,11 @@ def add_file_embedding(
     extra_meta: str = None,
     preview_cache_key: str = None,
     knowledge_id: int = None,
-    header_rows: List[int] = [0, 1],
-    data_rows=15,
-    keep_images=1,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
+    excel_rule: ExcelRule = {},
 ):
     # download original file
     logger.info(
@@ -418,9 +435,12 @@ def add_file_embedding(
         chunk_size,
         chunk_overlap,
         knowledge_id,
-        keep_images=keep_images,
-        header_rows=header_rows,
-        data_rows=data_rows,
+        knowledge_id=knowledge_id,
+        excel_rule=excel_rule,
+        retain_images=retain_images,
+        enable_formula=enable_formula,
+        force_ocr=force_ocr,
+        filter_page_header_footer=filter_page_header_footer,
     )
     if len(texts) == 0:
         raise ValueError("文件解析为空")
@@ -527,10 +547,12 @@ def read_chunk_text(
     chunk_size: int,
     chunk_overlap: int,
     knowledge_id: Optional[int] = None,
-    header_rows: List[int] = [0, 1],
-    data_rows=15,
-    keep_images = 1,
-) -> (List[str], List[dict], str, Any):
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
+    excel_rule: ExcelRule = {},
+) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
     1：chunks metadata
@@ -572,22 +594,38 @@ def read_chunk_text(
         "pptx",
     ]:
         if file_extesion_name in ["xls", "xlsx"]:
+            # 如果没传值，取默认值
+            if (
+                not excel_rule
+                or not excel_rule.header_start_row
+                or not excel_rule.header_end_row
+            ):
+                excel_rule.header_end_row = 1
+                excel_rule.header_start_row = 1
+                excel_rule.slice_length = 12
+                excel_rule.append_header = 1
             #  md_file_name 为切分后，多md文件的目录
             md_files_path, local_image_dir, doc_id = convert_file_to_md(
                 file_name=file_name,
                 input_file_name=input_file,
-                header_rows=header_rows,
-                data_rows=data_rows,
+                header_rows=[
+                    excel_rule.header_start_row - 1,
+                    excel_rule.header_end_row,
+                ],
+                data_rows=excel_rule.slice_length,
+                append_header=excel_rule.append_header,
             )
             return handle_xls_multiple_md_files(llm, md_files_path, file_name)
         else:
             md_file_name, local_image_dir, doc_id = convert_file_to_md(
                 file_name=file_name, input_file_name=input_file
             )
+
         if md_file_name:
             #  将图片存储到minio
-            if knowledge_id and local_image_dir and keep_images == 1:
+            if knowledge_id and local_image_dir and retain_images == 1:
                 from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
+
                 put_doc_images_to_minio(local_image_dir=local_image_dir, doc_id=doc_id)
 
             # 沿用原来的方法处理md文件
@@ -596,23 +634,27 @@ def read_chunk_text(
         else:
             logger.error(f"failed to parse {file_name}")
     else:
-        if etl_for_lm_url:
-            # 如何传输页眉页脚过滤？
-            loader = ElemUnstructuredLoader(
-                file_name,
-                input_file,
-                unstructured_api_url=etl_for_lm_url,
-            )
-            documents = loader.load()
-            parse_type = ParseType.UNS.value
-            partitions = loader.partitions
-            partitions = parse_partitions(partitions)
-        else:
-            # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
-            if file_extesion_name not in filetype_load_map:
-                raise Exception("类型不支持")
+        if file_extesion_name in ["txt", "md"]:
             loader = filetype_load_map[file_extesion_name](file_path=input_file)
             documents = loader.load()
+        else:
+            if etl_for_lm_url:
+                # 如何传输页眉页脚过滤？
+                loader = ElemUnstructuredLoader(
+                    file_name,
+                    input_file,
+                    unstructured_api_url=etl_for_lm_url,
+                )
+                documents = loader.load()
+                parse_type = ParseType.UNS.value
+                partitions = loader.partitions
+                partitions = parse_partitions(partitions)
+            else:
+                # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
+                if file_extesion_name not in filetype_load_map:
+                    raise Exception("类型不支持")
+                loader = filetype_load_map[file_extesion_name](file_path=input_file)
+                documents = loader.load()
 
     logger.info(f"start_extract_title file_name={file_name}")
     if llm:

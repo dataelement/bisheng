@@ -40,7 +40,7 @@ def handle_xls_multiple_md_files(llm, md_file_directories,file_name):
    return raw_texts, metadata_list, 'local', []
 
 
-def convert_file_to_md(file_name, input_file_name, header_rows=1, data_rows=15):
+def convert_file_to_md(file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header = True):
     """
     处理文件转换的主函数。
     """
