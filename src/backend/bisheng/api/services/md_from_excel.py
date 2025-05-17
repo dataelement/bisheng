@@ -59,7 +59,7 @@ def generate_markdown_table_string(
 
 # --- Core DataFrame to Markdown Processing Logic (Refactored) ---
 def process_dataframe_to_markdown_files(
-    df, source_name, num_header_rows, rows_per_markdown, output_dir, append_header = True
+    df, source_name, num_header_rows, rows_per_markdown, output_dir, append_header=True
 ):
     """
     Processes a single DataFrame (from an Excel sheet or CSV) into paginated Markdown files.
@@ -169,7 +169,7 @@ def process_dataframe_to_markdown_files(
 
 
 # --- Excel Specific Processing ---
-def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, output_dir, append_header = True):
+def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True):
     logger.debug(f"\n开始处理Excel文件：'{excel_path}'")
     try:
         # Crucial fix: read_only must be False to access merged_cells
@@ -202,7 +202,7 @@ def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, outpu
             num_header_rows,
             rows_per_markdown,
             output_dir,
-            append_header = append_header
+            append_header=append_header
         )
     if workbook:
         workbook.close()
@@ -265,7 +265,7 @@ def convert_file_to_markdown(
     base_output_dir="output_markdown_files",
     csv_encoding="utf-8",
     csv_delimiter=",",
-    append_header = True
+    append_header=True
 ):
     """
     Converts an Excel or CSV file to multiple Markdown files.
@@ -302,7 +302,7 @@ def convert_file_to_markdown(
         )
 
 
-def handler(cache_dir, file_name: str, header_rows: List[str] = [0, 1], data_rows: int = 12, append_header = True):
+def handler(cache_dir, file_name: str, header_rows: List[int] = [0, 1], data_rows: int = 12, append_header=True):
 
     """
     处理文件转换的主函数。
@@ -319,6 +319,7 @@ def handler(cache_dir, file_name: str, header_rows: List[str] = [0, 1], data_row
         base_output_dir=md_file_name,
         num_header_rows=header_rows,
         rows_per_markdown=data_rows,
+        append_header=append_header,
     )
     return md_file_name, None, doc_id
 

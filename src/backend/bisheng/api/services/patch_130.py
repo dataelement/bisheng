@@ -40,7 +40,7 @@ def handle_xls_multiple_md_files(llm, md_file_directories,file_name):
    return raw_texts, metadata_list, 'local', []
 
 
-def convert_file_to_md(file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header = True):
+def convert_file_to_md(file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header=True):
     """
     处理文件转换的主函数。
     """
@@ -57,7 +57,7 @@ def convert_file_to_md(file_name, input_file_name, header_rows=[0, 1], data_rows
         or file_name.endswith(".csv")
     ):
         md_file_name, local_image_dir, doc_id = excel_handler(
-            CACHE_DIR, input_file_name, header_rows, data_rows
+            CACHE_DIR, input_file_name, header_rows, data_rows, append_header
         )
         local_image_dir = None
     elif (

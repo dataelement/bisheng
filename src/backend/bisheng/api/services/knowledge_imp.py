@@ -573,45 +573,35 @@ def read_chunk_text(
     # excel 文件的处理单独出来
     partitions = []
     etl_for_lm_url = settings.get_knowledge().get(ETL_4_LM_URL_NAME)
-    file_extesion_name = file_name.split(".")[-1]
+    file_extension_name = file_name.split(".")[-1]
 
-    if file_extesion_name in [
-        "xls",
-        "xlsx",
-        "csv",
-        "doc",
-        "docx",
-        "html",
-        "mhtml",
-        "ppt",
-        "pptx",
-    ]:
-        if file_extesion_name in ["xls", "xlsx"]:
-            # set default values.
-            if not excel_rule or len(excel_rule) == 0:
-                excel_rule = {}
-                excel_rule['header_start_row'] = 1
-                excel_rule['header_end_row'] = 1
-                excel_rule['slice_length'] = 10
-                excel_rule['append_header'] = 1
+    if file_extension_name in ["xls", "xlsx", "csv"]:
+        # set default values.
+        if not excel_rule or len(excel_rule) == 0:
+            excel_rule = {}
+            excel_rule['header_start_row'] = 1
+            excel_rule['header_end_row'] = 1
+            excel_rule['slice_length'] = 10
+            excel_rule['append_header'] = 1
 
-            # convert excel contents to markdown
-            md_files_path, local_image_dir, doc_id = convert_file_to_md(
-                file_name=file_name,
-                input_file_name=input_file,
-                header_rows=[
-                    excel_rule['header_start_row'] - 1,
-                    excel_rule['header_end_row'],
-                ],
-                data_rows=excel_rule['slice_length'],
-                append_header=excel_rule['append_header'],
-            )
-            # skip following processes and return splited values.
-            return handle_xls_multiple_md_files(llm, md_files_path, file_name)
-        else:
-            md_file_name, local_image_dir, doc_id = convert_file_to_md(
-                file_name=file_name, input_file_name=input_file
-            )
+        # convert excel contents to markdown
+        md_files_path, local_image_dir, doc_id = convert_file_to_md(
+            file_name=file_name,
+            input_file_name=input_file,
+            header_rows=[
+                excel_rule['header_start_row'] - 1,
+                excel_rule['header_end_row'],
+            ],
+            data_rows=excel_rule['slice_length'],
+            append_header=excel_rule['append_header'],
+        )
+        # skip following processes and return splited values.
+        return handle_xls_multiple_md_files(llm, md_files_path, file_name)
+
+    if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
+        md_file_name, local_image_dir, doc_id = convert_file_to_md(
+            file_name=file_name, input_file_name=input_file
+        )
 
         if md_file_name:
             # save images to minio
@@ -626,8 +616,8 @@ def read_chunk_text(
         else:
             logger.error(f"failed to parse {file_name}")
     else:
-        if file_extesion_name in ["txt", "md"]:
-            loader = filetype_load_map[file_extesion_name](file_path=input_file)
+        if file_extension_name in ["txt", "md"]:
+            loader = filetype_load_map[file_extension_name](file_path=input_file)
             documents = loader.load()
         else:
             if etl_for_lm_url:
@@ -635,9 +625,9 @@ def read_chunk_text(
                     file_name,
                     input_file,
                     unstructured_api_url=etl_for_lm_url,
-                    force_ocr= force_ocr,
-                    enable_formular= enable_formula,
-                    filter_page_header_footer= filter_page_header_footer
+                    force_ocr=bool(force_ocr),
+                    enable_formular=bool(enable_formula),
+                    filter_page_header_footer=bool(filter_page_header_footer)
                 )
                 documents = loader.load()
                 parse_type = ParseType.UNS.value
@@ -645,9 +635,9 @@ def read_chunk_text(
                 partitions = parse_partitions(partitions)
             else:
                 # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
-                if file_extesion_name not in filetype_load_map:
+                if file_extension_name not in filetype_load_map:
                     raise Exception("类型不支持")
-                loader = filetype_load_map[file_extesion_name](file_path=input_file)
+                loader = filetype_load_map[file_extension_name](file_path=input_file)
                 documents = loader.load()
 
     logger.info(f"start_extract_title file_name={file_name}")
