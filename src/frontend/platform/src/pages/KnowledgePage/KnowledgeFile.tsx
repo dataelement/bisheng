@@ -71,7 +71,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
-    const handleCreate = async () => {
+    const handleCreate = async (e, isImport = false) => {
         const name = nameRef.current.value
         const desc = descRef.current.value
         const errorlist = []
@@ -92,11 +92,14 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             name,
             description: desc,
             model: modal[1].value,
-            type: 0
+            type: isImport ? 1 : 0 
         }).then(res => {
             // @ts-ignore
             window.libname = [name, desc]
-            navigate("/filelib/" + res.id);
+            navigate(isImport 
+                ? `/filelib/upload/${res.id}`  // 导入模式
+                : `/filelib/${res.id}`         // 普通模式
+            );
             setOpen(false)
             setIsSubmitting(false)
         }))
@@ -118,6 +121,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
+                    <span className="text-red-500">*</span>
                     <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
@@ -141,13 +145,22 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                     <Button variant="outline" className="px-11">{t('cancel')}</Button>
                 </DialogClose>
                 <Button
-                    type="submit"
+                    variant="outline"
                     className="px-11 flex"
-                    onClick={handleCreate}
+                    onClick={(e) => handleCreate(e, false)}
                     disabled={isSubmitting}
                 >
                     {isSubmitting && <LoadIcon className="mr-1" />}
                     {t('create')}
+                </Button>
+                <Button
+                    type="submit"
+                    className="px-11 flex"
+                    onClick={(e) => handleCreate(e, true)} 
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting && <LoadIcon className="mr-1" />}
+                    {t('createImport')}
                 </Button>
             </DialogFooter>
         </DialogContent>

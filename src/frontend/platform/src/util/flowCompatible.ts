@@ -96,6 +96,17 @@ const comptibleInput = (node) => {
             help: "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
         })
 
+        // 兼容文件类型
+        const formInput = node.group_params[0].params.find(item => item.key === 'form_input')
+        formInput.value = formInput.value.map((item, index) => {
+            if (item.type === 'file') {
+                item.file_type = 'all'
+                item.file_content_size = 15000
+                item.image_file = 'image_file' + (index || '')
+                return item
+            }
+            return item
+        })
         node.v = 2
     }
 }

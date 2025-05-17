@@ -25,9 +25,9 @@ class EmailMessageTool(BaseModel):
 
     def send_email(
         self,
-        receiver,
-        subject,
-        content,
+        receiver: str = None,
+        subject: str = None,
+        content: str = None,
     ):
         """
         发送电子邮件函数

@@ -8,14 +8,14 @@ import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
+import Tip from "@/components/bs-ui/tooltip/tip";
 import { RefreshCw } from "lucide-react";
 import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
-import Tip from "@/components/bs-ui/tooltip/tip";
 
-const FileTypes = {
+export const FileTypes = {
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
@@ -182,14 +182,19 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 };
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
-                    console.log('result message data :>> ', data);
+                    // 过滤一些不需要的数据
+                    if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
+                        return
+                    }
 
                     if (data.type === 'begin') {
                         setStop({ show: true, disable: false })
-                    } else if (data.type === 'close' && !reRunStateRef.current) {
-                        // 重试时阻止关闭stop
+                    } else if (data.type === 'close' && data.category === 'processing') {
+                        if (!reRunStateRef.current) {
+                            // 重试时阻止关闭stop
+                            setStop({ show: false, disable: false })
+                        }
                         reRunStateRef.current = false
-                        setStop({ show: false, disable: false })
                     }
 
                     // const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
@@ -221,7 +226,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                         }
                         setInputLock({ locked: true, reason: '' })
                     }
-                    addNotification({
+                    event.reason && addNotification({
                         type: 'error',
                         title: '运行异常',
                         description: event.reason
@@ -303,11 +308,14 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
         } else if (data.category === 'stream_msg') {
             streamWsMsg(data)
-        } else if (data.category === 'end_cover') {
+        } else if (data.category === 'end_cover' && data.type === 'end_cover') {
+            setInputLock({ locked: true, reason: '' })
+            sendWsMsg({ "action": "stop" });
             return overWsMsg(data)
+            // return handleRestartClick()
         }
 
-        if (data.type === 'close') {
+        if (data.type === 'close' && data.category === 'processing') {
             insetSeparator(t('chat.chatEndMessage'))
             setInputLock({ locked: true, reason: '' })
             // 重启会话按钮,接收close确认后端处理结束后重启会话
@@ -344,9 +352,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         }
         const handleOutPutEvent = async (e) => {
             const { nodeId, data, message } = e.detail
+            const { flow_id, chat_id } = onBeforSend('flowInfo', {})
             await createWebSocket()
             sendWsMsg({
                 action: 'input',
+                flow_id,
+                chat_id,
                 data: {
                     [nodeId]: {
                         data,
@@ -365,8 +376,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             setInputForm(null)
             createSendMsg(msg)
             await createWebSocket()
+            const { flow_id, chat_id } = onBeforSend('flowInfo', {})
             sendWsMsg({
                 action: 'input',
+                flow_id,
+                chat_id,
                 data: {
                     [inputNodeIdRef.current]: {
                         data,
@@ -421,7 +435,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         restartCallBackRef.current[chatId] = () => {
             createWebSocket().then(() => {
                 setRestarted(false)
-                sendWsMsg(onBeforSend('init_data', {}))
+                onBeforSend('refresh_flow', {}).then((data) => {
+                    sendWsMsg(data)
+                })
             })
         }
         // wsRef.current?.close()
@@ -432,7 +448,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         //         sendWsMsg(onBeforSend('init_data', {}))
         //     })
         // }, 300);
-        reRunStateRef.current = true
+        if (stop.show) {
+            reRunStateRef.current = true
+        }
     }
 
     const placholder = useMemo(() => {
@@ -456,7 +474,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Tip content={"重新运行"}>
+                <Tip side='right' content={"重新运行"}>
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
@@ -481,9 +499,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 </div>
             </div>
             {/* stop & 重置 */}
-            <div className="absolute w-full flex justify-center bottom-20">
+            <div className="absolute w-full flex justify-center bottom-16">
                 {!stop.show && <Button
-                    className="rounded-full"
+                    className="rounded-full bg-[#fff] dark:bg-[#1B1B1B]"
                     variant="outline"
                     disabled={restarted}
                     onClick={handleRestartClick}>

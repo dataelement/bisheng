@@ -43,7 +43,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
     const {
         reactFlowWrapper, nodes, edges, keyBoardPanneRef,
         setNodes, onNodesChange, onSelectionChange, onEdgesChange,
-        onEdgeSelect, onConnect, onDragOver, onDrop
+        onEdgeSelect, onConnect, onDragOver, onDrop, setEdges, setViewport
     } = useFlow(reactFlowInstance, flow, takeSnapshot)
 
     /**
@@ -97,6 +97,11 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
             nodes={nodes}
             onTabChange={(type) => setShowApiPage('api' === type)}
             preFlow={preFlow}
+            onImportFlow={(nodes, edges, viewport) => {
+                setNodes(nodes)
+                setEdges(edges)
+                setViewport(viewport)
+            }}
             onPreFlowChange={() => {
                 // 返回上一步前, 更新flow数据再对比
                 const { nodes } = reactFlowInstance.toObject()
@@ -454,7 +459,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
 
     return {
         reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        onNodesChange, onEdgesChange, onConnect, onDragOver, onDrop, onSelectionChange, onEdgeSelect, setNodes
+        onNodesChange, onEdgesChange, onConnect, setViewport, onDragOver, onDrop, onSelectionChange, onEdgeSelect, setNodes, setEdges
     }
 }
 

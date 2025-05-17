@@ -99,7 +99,7 @@ def bisheng_model_limit_check(self: 'BishengLLM | BishengEmbedding'):
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         use_num = redis_client.incr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f'额度已用完')
+            raise Exception(f'{self.server_info.name}/{self.model_info.model_name} 额度已用完')
 
 
 def wrapper_bisheng_model_limit_check_async(func):

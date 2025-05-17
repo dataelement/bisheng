@@ -19,7 +19,8 @@ from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_b
 
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['base_url'] = server_config.get('base_url', '')
-    params['extract_reasoning'] = True
+    # some bugs
+    params['extract_reasoning'] = False
     params['stream'] = params.pop('streaming', True)
     if params.get('max_tokens'):
         params['num_ctx'] = params.pop('max_tokens', None)
@@ -27,23 +28,22 @@ def _get_ollama_params(params: dict, server_config: dict, model_config: dict) ->
 
 
 def _get_xinference_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['stream'] = params.pop('streaming', True)
-    new_params = {
-        'server_url': server_config.get('openai_api_base', '').replace('/v1', ''),  # replace old config
-        'model_uid': params.pop('model_name', ''),
-        'model_kwargs': params
-    }
-    return new_params
+    params = _get_openai_params(params, server_config, model_config)
+    if not params.get('api_key', None):
+        params['api_key'] = 'Empty'
+    return params
+
 
 def _get_bisheng_rt_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update(server_config)
     return params
 
+
 def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
     if server_config:
         params.update({
             'api_key': server_config.get('openai_api_key') or server_config.get('api_key'),
-            'base_url': server_config.get('openai_api_base')
+            'base_url': server_config.get('openai_api_base') or server_config.get('base_url'),
         })
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
@@ -82,6 +82,8 @@ def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -
 def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['minimax_api_key'] = server_config.get('openai_api_key')
     params['base_url'] = server_config.get('openai_api_base')
+    if 'max_tokens' not in params:
+        params['max_tokens'] = 2048
     if '/chat/completions' not in params['base_url']:
         params['base_url'] = f"{params['base_url']}/chat/completions"
     return params
@@ -95,7 +97,10 @@ def _get_anthropic_params(params: dict, server_config: dict, model_config: dict)
 def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['zhipuai_api_key'] = server_config.get('openai_api_key')
     params['zhipuai_api_base'] = server_config.get('openai_api_base')
+    if 'chat/completions' not in params['zhipuai_api_base']:
+        params['zhipuai_api_base'] = f"{params['zhipuai_api_base'].rstrip('/')}/chat/completions"
     return params
+
 
 def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update({
@@ -104,26 +109,13 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
     })
     return params
 
-def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params.update({
-        'hunyuan_secret_id': server_config.get('hunyuan_secret_id'),
-        'hunyuan_secret_key': server_config.get('hunyuan_secret_key'),
-    })
-    params['extra_body'] = {'enable_enhancement': model_config.get('enable_web_search', False)}
-    return params
-
-def _get_volcengine_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params.update({
-        'volc_engine_maas_ak': server_config.get('volc_engine_maas_ak'),
-        'volc_engine_maas_sk': server_config.get('volc_engine_maas_sk'),
-    })
-    return params
 
 _llm_node_type: Dict = {
     # 开源推理框架
     LLMServerType.OLLAMA.value: {'client': 'ChatOllama', 'params_handler': _get_ollama_params},
-    LLMServerType.XINFERENCE.value: {'client':' ChatXinference', 'params_handler': _get_xinference_params},
-    LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+    LLMServerType.XINFERENCE.value: {'client': 'ChatOpenAI', 'params_handler': _get_xinference_params},
+    LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
+    # 此组件是加载本地的模型文件，待确认是否有api服务提供
     LLMServerType.VLLM.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.BISHENG_RT.value: {'client': 'HostChatGLM', 'params_handler': _get_bisheng_rt_params},
 
@@ -137,11 +129,12 @@ _llm_node_type: Dict = {
     LLMServerType.ANTHROPIC.value: {'client': 'ChatAnthropic', 'params_handler': _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {'client': 'ChatDeepSeek', 'params_handler': _get_openai_params},
     LLMServerType.SPARK.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_spark_params},
-    LLMServerType.TENCENT.value: {'client': 'ChatHunyuan', 'params_handler': _get_tencent_params},
+    LLMServerType.TENCENT.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
     LLMServerType.MOONSHOT.value: {'client': 'MoonshotChat', 'params_handler': _get_openai_params},
-    LLMServerType.VOLCENGINE.value: {'client': 'VolcEngineMaasChat', 'params_handler': _get_volcengine_params},
-    LLMServerType.SILICON.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
+    LLMServerType.VOLCENGINE.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
+    LLMServerType.SILICON.value: {'client': 'ChatSparkOpenAI', 'params_handler': _get_openai_params},
 }
+
 
 class BishengLLM(BaseChatModel):
     """
@@ -156,7 +149,6 @@ class BishengLLM(BaseChatModel):
     cache: bool = Field(default=False, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
-
 
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None)

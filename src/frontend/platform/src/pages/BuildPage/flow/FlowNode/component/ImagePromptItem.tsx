@@ -10,7 +10,7 @@ import SelectVar from "./SelectVar"
 
 export default function ImagePromptItem({ nodeId, data, onChange, onVarEvent }) {
     // value ''或[] 则认为open为false
-    const [open, setOpen] = React.useState(data.value && data.value.length > 0)
+    const [open, setOpen] = React.useState(data.open || false)
     const [value, setValue] = React.useState(() => data.value || []);
     const [error, setError] = React.useState(false);
 
@@ -73,6 +73,7 @@ export default function ImagePromptItem({ nodeId, data, onChange, onVarEvent }) 
             </Label>
             <Switch checked={open} onCheckedChange={(bln) => {
                 setOpen(bln)
+                data.open = bln
                 !bln && updateValue([])
             }} />
         </div>

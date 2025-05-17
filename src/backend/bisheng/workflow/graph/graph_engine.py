@@ -20,7 +20,7 @@ from typing_extensions import TypedDict
 
 class TempState(TypedDict):
     # not use, only for langgraph state graph
-    flag: Annotated[bool, operator.add]
+    flag: Annotated[bool, operator.and_]
 
 
 class GraphEngine:

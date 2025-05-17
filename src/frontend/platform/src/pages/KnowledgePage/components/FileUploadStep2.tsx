@@ -2,18 +2,15 @@ import { LoadIcon } from "@/components/bs-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
-import { Label } from "@/components/bs-ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
-import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
-
+import SplitRules from "@/pages/KnowledgePage/components/splitRules"
+import ExcelList from "@/pages/KnowledgePage/components/ExcelList"
 const initialStrategies = [
     { id: '1', regex: '\\n\\n', position: 'after' },
     // { id: '2', regex: '\\n', position: 'after' }
@@ -21,12 +18,13 @@ const initialStrategies = [
 
 interface IProps {
     fileInfo: { fileCount: number, files: any, failFiles: any }
+    setShowSecondDiv: (show:boolean) => void
     onPrev: () => void
     onPreview: (data: any, files: any) => void
     onChange: () => void
 }
 
-export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange }: IProps) {
+export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange ,setShowSecondDiv}: IProps) {
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
 
@@ -37,6 +35,46 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
     const [size, setSize] = useState('1000')
     // 符号
     const [overlap, setOverlap] = useState('100')
+      // 分段行
+      const [burst, setBurst] = useState('15')
+      // 行
+      const [gauge, setGauge] = useState('1')
+      const [rowend, setRowend] = useState('2')
+      //为分段添加表头勾选框
+      const [appendh,setAppendh] = useState(false)
+      //保留文档图片
+      const [retain,setRetain] = useState(false)
+      //强制开启ocr
+      const [forocr,setForocr] = useState(false)
+      //开启公式识别
+      const [formula,setFormula] = useState(false)
+      //过滤页眉页脚
+      const [filhf,setFilhf] = useState(false)
+      const [dataArray, setDataArray] = useState([
+          { idi: 1, name: 'Excel文件1.xlsx' },
+          { idi: 2, name: '报表数据2.xlsx' },
+          { idi: 3, name: '财务记录3.xlsx' },
+          { idi: 4, name: '项目计划4.xlsx' },
+          { idi: 5, name: '项目计划4.xlsx' },
+          { idi: 6, name: '项目计划4.xlsx' }
+        ]);
+        const [fileConfigs, setFileConfigs] = useState(
+          dataArray.reduce((acc, item) => ({
+            ...acc,
+            [item.idi]: {
+              appendh:false,
+              burst: 5,
+              gauge: 1,
+              rowend: 2
+            }
+          }), {})
+        );
+        const updateConfig = (fileId, key, value) => {
+          setFileConfigs(prev => ({
+            ...prev,
+            [fileId]: { ...prev[fileId], [key]: value }
+          }));
+        };
     useEffect(() => {
         onChange()
     }, [strategies, size, overlap])
@@ -44,7 +82,7 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
     const [loading, setLoading] = useState(false)
     const { message } = useToast()
     const navaigate = useNavigate()
-
+//预览分段结果接口
     const getParams = (size, overlap) => {
         const [separator, separator_rule] = strategies.reduce((res, item) => {
             const { regex, position } = item
@@ -52,12 +90,30 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
             res[1].push(position)
             return res
         }, [[], []])
+        const generateExcelRules = () => 
+            Object.entries(fileConfigs).reduce((acc, [idi, config]) => ({
+              ...acc,
+              [`uuid${idi}`]: {
+                slice_length: config.burst,
+                append_header: config.appendh,
+                header_start_row: config.gauge,
+                header_end_row: config.rowend
+              }
+            }), {});
         const handleFileParams = chunkType.current === 'chunk' ? {
+            // excel_rules
+            excel_rules: generateExcelRules()
+            
+        } : {
             separator,
             separator_rule,
             chunk_size: size,
-            chunk_overlap: overlap
-        } : {}
+            chunk_overlap: overlap,
+            retain_images:retain,
+            enable_formula: formula,
+            force_ocr: forocr,
+            filter_page_header_footer: filhf,
+        }
         return {
             knowledge_id: Number(kid),
             ...handleFileParams
@@ -112,6 +168,8 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
     // 预览
     const handlePreview = () => {
         const params = getParams(size, overlap)
+        console.log(params)
+        setShowSecondDiv(true); 
         onPreview(params, fileInfo.files)
     }
 
@@ -127,30 +185,60 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
                 <TabsTrigger value="smart" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
                 <TabsTrigger value="chunk">{t('customStrategy')}</TabsTrigger>
             </TabsList>
-            <TabsContent value="smart">
-            </TabsContent>
-            <TabsContent value="chunk">
-                <div className="grid items-start gap-4 mt-8 max-w-[760px] mx-auto" style={{ gridTemplateColumns: '114px 1fr' }}>
-                    <Label htmlFor="name" className="mt-2.5 flex justify-end text-left">
-                        {t('splitMethod')}
-                        <QuestionTooltip content={t('splitMethodHint')} />
-                    </Label>
-                    <FileUploadSplitStrategy data={strategies} onChange={setStrategies} />
-                    <Label htmlFor="name" className="mt-2.5 text-right">{t('splitLength')}</Label>
-                    <Input id="name" type="number" value={size} onChange={(e) => setSize(e.target.value)} placeholder={t('splitSizePlaceholder')} />
-                    <Label htmlFor="name" className="mt-2.5 text-right">{t('chunkOverlap')}</Label>
-                    <Input id="name" value={overlap} onChange={(e) => setOverlap(e.target.value)} placeholder={t('chunkOverlapPlaceholder')} />
-                </div>
-            </TabsContent>
+            <ExcelList
+              strategies={strategies}
+              setStrategies={setStrategies}
+              burst={burst}
+              setBurst={setBurst}
+              gauge={gauge}
+              setGauge={setGauge}
+              rowend={rowend}
+              setRowend={setRowend}
+              appendh={appendh}
+              setAppendh={setAppendh}
+              t={t}
+              handlePreview={handlePreview}
+              onChange={onChange}
+              dataArray={dataArray}
+              fileConfigs={fileConfigs}
+              setFileConfigs={setFileConfigs}
+              updateConfig={updateConfig}
+            />
+            <SplitRules
+                strategies={strategies}
+                setStrategies={setStrategies}
+                size={size}
+                setSize={setSize}
+                overlap={overlap}
+                setOverlap={setOverlap}
+                t={t}
+                handlePreview={handlePreview}
+                retain={retain}
+                setRetain={setRetain}
+                forocr={forocr}
+                setForocr={setForocr}
+                formula={formula}
+                setFormula={setFormula}
+                filhf={filhf}
+                setFilhf={setFilhf}
+            />
+           
         </Tabs>
-
+        
         <div className="flex justify-end mt-8 gap-4">
+            <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
+            <Button disabled={loading} className="h-8" onClick={handleSubmit}>
+                {loading && <LoadIcon />} {t('nextStep')}
+            </Button>
+            
+        </div>
+          {/* <div className="flex justify-end mt-8 gap-4">
             <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
             <Button disabled={loading} className="h-8" onClick={handleSubmit}>
                 {loading && <LoadIcon />} {t('submit')}
             </Button>
             <Button className="h-8" id={'preview-btn'} onClick={handlePreview}>{t('previewResults')}</Button>
-        </div>
+        </div> */}
 
         {/* 重复文件提醒 */}
         <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>

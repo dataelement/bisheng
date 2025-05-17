@@ -1,3 +1,4 @@
+import { getFlowApi } from "@/controllers/API/flow";
 import { useEffect } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
@@ -10,6 +11,29 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
     }, [chatId])
 
     const getMessage = (action, { nodeId, msg, category, extra, files, source, message_id }) => {
+        if (action === 'refresh_flow') {
+            return getFlowApi(flow.id, 'v1').then(f => {
+                const { data, ...other } = f
+                const { edges, nodes, viewport } = data
+                return {
+                    action: 'init_data',
+                    chat_id: chatId.startsWith('test') ? undefined : chatId,
+                    flow_id: flow.id,
+                    data: {
+                        ...other,
+                        edges,
+                        nodes,
+                        viewport
+                    }
+                }
+            })
+        }
+        if (action === 'flowInfo') {
+            return {
+                flow_id: flow.id,
+                chat_id: chatId.startsWith('test') ? undefined : chatId,
+            }
+        }
         if (action === 'getInputForm') {
             const node = flow.nodes.find(node => node.id === nodeId)
             if (node.data.tab.value === 'input') return null

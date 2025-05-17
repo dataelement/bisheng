@@ -425,7 +425,7 @@ const workflowTemplate = [
                         "type": "agent_model",
                         "required": true,
                         "value": "",
-                        "placeholder": "请在模型管理-系统模型设置中配置助手推理模型"
+                        "placeholder": "请在系统模型设置中配置助手推理模型"
                     },
                     {
                         "key": "temperature",
