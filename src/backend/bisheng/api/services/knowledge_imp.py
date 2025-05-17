@@ -156,7 +156,6 @@ def process_file_task(
     enable_formula: int = 1,
     force_ocr: int = 0,
     filter_page_header_footer: int = 0,
-    excel_rules: Dict[str, ExcelRule] = {},
 ):
     """处理知识文件任务"""
     try:
@@ -174,7 +173,6 @@ def process_file_task(
             callback_url,
             extra_metadata,
             preview_cache_keys=preview_cache_keys,
-            excel_rules=excel_rules,
             retain_images=retain_images,
             enable_formula=enable_formula,
             force_ocr=force_ocr,
@@ -312,7 +310,6 @@ def addEmbedding(
     enable_formula: int = 1,
     force_ocr: int = 0,
     filter_page_header_footer: int = 0,
-    excel_rules: Dict[str, ExcelRule] = {},
 ):
     """将文件加入到向量和es库内"""
 
@@ -338,7 +335,6 @@ def addEmbedding(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
             )
             # TODO:TJU: 多list里面取值
-            excel_rule = excel_rules[db_file.file_name]
             add_file_embedding(
                 vector_client,
                 es_client,
@@ -352,12 +348,9 @@ def addEmbedding(
                 preview_cache_key=preview_cache_key,
                 # 增加的参数
                 knowledge_id=knowledge_id,
-                excel_rule=excel_rule,
-                retain_images=retain_images,
                 enable_formula=enable_formula,
                 force_ocr=force_ocr,
                 filter_page_header_footer=filter_page_header_footer,
-                # 另外三个ocr, latex, page_header_footer.
             )
             db_file.status = KnowledgeFileStatus.SUCCESS.value
         except Exception as e:
@@ -397,7 +390,6 @@ def add_file_embedding(
     enable_formula: int = 1,
     force_ocr: int = 0,
     filter_page_header_footer: int = 0,
-    excel_rule: ExcelRule = {},
 ):
     # download original file
     logger.info(
@@ -434,13 +426,12 @@ def add_file_embedding(
         separator_rule,
         chunk_size,
         chunk_overlap,
-        knowledge_id,
         knowledge_id=knowledge_id,
-        excel_rule=excel_rule,
         retain_images=retain_images,
         enable_formula=enable_formula,
         force_ocr=force_ocr,
         filter_page_header_footer=filter_page_header_footer,
+        split_rule = db_file.split_rule
     )
     if len(texts) == 0:
         raise ValueError("文件解析为空")
@@ -547,11 +538,12 @@ def read_chunk_text(
     chunk_size: int,
     chunk_overlap: int,
     knowledge_id: Optional[int] = None,
+
     retain_images: int = 1,
     enable_formula: int = 1,
     force_ocr: int = 0,
     filter_page_header_footer: int = 0,
-    excel_rule: ExcelRule = {},
+    split_rule: Dict = {},
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -594,26 +586,29 @@ def read_chunk_text(
         "pptx",
     ]:
         if file_extesion_name in ["xls", "xlsx"]:
+            # Convert split_rule string to dict if needed
+            if isinstance(split_rule, str):
+                split_rule = json.loads(split_rule)
+
+            excel_rule = {}
+            if "excel_rule" in split_rule:
+                excel_rule = split_rule["excel_rule"]
+                
+            if len(excel_rule) == 0:
+                excel_rule['header_start_row'] = 1
+                excel_rule['header_end_row'] = 1
+                excel_rule['slice_length'] = 10
+                excel_rule['append_header'] = 1
             # 如果没传值，取默认值
-            if (
-                not excel_rule
-                or not excel_rule.header_start_row
-                or not excel_rule.header_end_row
-            ):
-                excel_rule.header_end_row = 1
-                excel_rule.header_start_row = 1
-                excel_rule.slice_length = 12
-                excel_rule.append_header = 1
-            #  md_file_name 为切分后，多md文件的目录
             md_files_path, local_image_dir, doc_id = convert_file_to_md(
                 file_name=file_name,
                 input_file_name=input_file,
                 header_rows=[
-                    excel_rule.header_start_row - 1,
-                    excel_rule.header_end_row,
+                    excel_rule['header_start_row'] - 1,
+                    excel_rule['header_end_row'],
                 ],
-                data_rows=excel_rule.slice_length,
-                append_header=excel_rule.append_header,
+                data_rows=excel_rule['slice_length'],
+                append_header=excel_rule['append_header'],
             )
             return handle_xls_multiple_md_files(llm, md_files_path, file_name)
         else:
@@ -639,11 +634,13 @@ def read_chunk_text(
             documents = loader.load()
         else:
             if etl_for_lm_url:
-                # 如何传输页眉页脚过滤？
                 loader = ElemUnstructuredLoader(
                     file_name,
                     input_file,
                     unstructured_api_url=etl_for_lm_url,
+                    force_ocr= force_ocr,
+                    enable_formular= enable_formula,
+                    filter_page_header_footer= filter_page_header_footer
                 )
                 documents = loader.load()
                 parse_type = ParseType.UNS.value

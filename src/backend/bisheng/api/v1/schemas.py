@@ -482,7 +482,7 @@ class FileProcessBase(BaseModel):
     force_ocr: Optional[int] = Field(default=0, description='启用OCR')
     enable_formula: Optional[int] = Field(default=1, description='latex公式识别')
     filter_page_header_footer: Optional[int] = Field(default=0, description='页眉页脚')
-    excel_rules: Dict[str, ExcelRule] = Field(default={}, description="excel规则") 
+    excel_rule: Optional[ExcelRule] = Field(default = {}, description="excel rules")
 
     @model_validator(mode='before')
     @classmethod
@@ -503,6 +503,8 @@ class FileProcessBase(BaseModel):
             values['enable_formula'] = 1
         if values.get("retain_images") is None:
             values['retain_images'] = 0
+        if values.get("excel_rules") is None:
+            values['excel_rules'] = {}
         
         return values
 
@@ -540,11 +542,11 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description='文件路径')
+    excel_rule: Optional[ExcelRule] = Field(default={}, description="Excel rules" )
 
 
 # 知识库文件处理
 class KnowledgeFileProcess(FileProcessBase):
     file_list: List[KnowledgeFileOne] = Field(..., description='文件列表')
-    excel_rules: List
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[str] = Field(default=None, description='附加信息')

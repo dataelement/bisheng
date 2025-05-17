@@ -31,6 +31,7 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     PreviewFileChunk,
     UpdatePreviewFileChunk,
+    ExcelRule,
 )
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
@@ -536,7 +537,6 @@ class KnowledgeService(KnowledgeUtils):
                 callback_url=req_data.callback_url,
                 extra_metadata=None,
                 preview_cache_keys=preview_cache_keys,
-                excel_rules=req_data.excel_rules,
                 retain_images=req_data.retain_images,
                 enable_formula=req_data.enable_formula,
                 force_ocr=req_data.force_ocr,
@@ -674,14 +674,20 @@ class KnowledgeService(KnowledgeUtils):
             return db_file
 
         uuid_file_name = file_name.split(".")[0]
+        file_extenstion_name = file_name.split(".")[-1]
         original_file_name = redis_client.get(uuid_file_name)
 
+        if file_extenstion_name in ['xls', 'xlsx']:
+            if len(file_info.excel_rule) == 0:
+                file_info.excel_rule = {"slice_length":10, "header_end_row":1, "header_start_row":1, "append_header":1}
+        split_rule["excel_rule"] = file_info.excel_rule
+        str_split_rule = json.dumps(split_rule)
         # 插入新的数据，把原始文件上传到minio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
             file_name=original_file_name,
             md5=md5_,
-            split_rule=json.dumps(split_rule),
+            split_rule = str_split_rule,
             user_id=login_user.user_id,
         )
         db_file = KnowledgeFileDao.add_file(db_file)
