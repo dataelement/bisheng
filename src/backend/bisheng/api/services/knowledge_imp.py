@@ -418,7 +418,15 @@ def add_file_embedding(
     if not es_client:
         raise ValueError("es not found, please check your es config")
 
-    # extract text from file
+
+
+    # Convert split_rule string to dict if needed
+    excel_rule = {}
+    if db_file.split_rule and  isinstance(db_file.split_rule, str):
+        split_rule = json.loads(db_file.split_rule)
+        if "excel_rule" in split_rule:
+            excel_rule = split_rule["excel_rule"]
+    # # extract text from file
     texts, metadatas, parse_type, partitions = read_chunk_text(
         filepath,
         db_file.file_name,
@@ -431,7 +439,7 @@ def add_file_embedding(
         enable_formula=enable_formula,
         force_ocr=force_ocr,
         filter_page_header_footer=filter_page_header_footer,
-        split_rule = db_file.split_rule
+        excel_rule = excel_rule
     )
     if len(texts) == 0:
         raise ValueError("文件解析为空")
@@ -535,15 +543,14 @@ def read_chunk_text(
     file_name,
     separator: List[str],
     separator_rule: List[str],
-    chunk_size: int,
+    chunk_size: int, 
     chunk_overlap: int,
     knowledge_id: Optional[int] = None,
-
-    retain_images: int = 1,
-    enable_formula: int = 1,
-    force_ocr: int = 0,
-    filter_page_header_footer: int = 0,
-    split_rule: Dict = {},
+    retain_images: int = 1, 
+    enable_formula: int = 1, 
+    force_ocr: int = 0, 
+    filter_page_header_footer: int = 0, 
+    excel_rule: Dict = None, 
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -586,20 +593,15 @@ def read_chunk_text(
         "pptx",
     ]:
         if file_extesion_name in ["xls", "xlsx"]:
-            # Convert split_rule string to dict if needed
-            if isinstance(split_rule, str):
-                split_rule = json.loads(split_rule)
-
-            excel_rule = {}
-            if "excel_rule" in split_rule:
-                excel_rule = split_rule["excel_rule"]
-                
-            if len(excel_rule) == 0:
+            # set default values.
+            if not excel_rule or len(excel_rule) == 0:
+                excel_rule = {}
                 excel_rule['header_start_row'] = 1
                 excel_rule['header_end_row'] = 1
                 excel_rule['slice_length'] = 10
                 excel_rule['append_header'] = 1
-            # 如果没传值，取默认值
+
+            # convert excel contents to markdown
             md_files_path, local_image_dir, doc_id = convert_file_to_md(
                 file_name=file_name,
                 input_file_name=input_file,
@@ -610,6 +612,7 @@ def read_chunk_text(
                 data_rows=excel_rule['slice_length'],
                 append_header=excel_rule['append_header'],
             )
+            # skip following processes and return splited values.
             return handle_xls_multiple_md_files(llm, md_files_path, file_name)
         else:
             md_file_name, local_image_dir, doc_id = convert_file_to_md(
@@ -617,7 +620,7 @@ def read_chunk_text(
             )
 
         if md_file_name:
-            #  将图片存储到minio
+            # save images to minio
             if knowledge_id and local_image_dir and retain_images == 1:
                 from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
 

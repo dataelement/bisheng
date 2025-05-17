@@ -405,8 +405,6 @@ class KnowledgeService(KnowledgeUtils):
 
         filepath, file_name = file_download(req_data.file_path)
 
-        # TODO:TJU:从req_data中取值.
-        excel_rule = req_data.excel_rules[file_name]
         # 切分文本
         texts, metadatas, parse_type, partitions = read_chunk_text(
             filepath,
@@ -415,11 +413,11 @@ class KnowledgeService(KnowledgeUtils):
             req_data.separator_rule,
             req_data.chunk_size,
             req_data.chunk_overlap,
-            excel_rule=excel_rule,
             force_ocr=req_data.force_ocr,
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
             retain_images=req_data.retain_images,
+            excel_rule =req_data.excel_rule
         )
         res = []
         cache_map = {}

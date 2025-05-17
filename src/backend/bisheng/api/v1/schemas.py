@@ -530,6 +530,7 @@ class FileChunk(BaseModel):
 class PreviewFileChunk(FileProcessBase):
     file_path: str = Field(..., description='文件路径')
     cache: bool = Field(default=True, description='是否从缓存获取')
+    excel_rule: Optional[ExcelRule] = Field(default=None, description="excel rule")
 
 
 class UpdatePreviewFileChunk(BaseModel):
