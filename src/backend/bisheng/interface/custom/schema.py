@@ -15,9 +15,6 @@ class ClassCodeDetails(BaseModel):
     methods: list
     init: Optional[dict] = Field(default_factory=dict)
 
-    def model_dump(self):
-        return self.dict()
-
 
 class CallableCodeDetails(BaseModel):
     """
@@ -30,6 +27,3 @@ class CallableCodeDetails(BaseModel):
     body: list
     return_type: Optional[Any] = None
     has_return: bool = False
-
-    def model_dump(self):
-        return self.dict()

@@ -78,12 +78,13 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           officeUrl: res.office_url,
           dialogTips: res.dialog_tips,
           dialogQuickSearch: res.dialog_quick_search,
-          websocketHost: res.websocket_url || window.location.host,
+          websocketHost: res.websocket_url,
           isPro: !!res.pro,
           chatPrompt: !!res.application_usage_tips,
           noFace: !res.show_github_and_help,
           register: !!res.enable_registration,
           uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
+          enableEtl4lm: res.enable_etl4lm
         });
 
         // backend version

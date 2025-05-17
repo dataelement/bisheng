@@ -1,20 +1,19 @@
 import base64
 import datetime
 import functools
-import inspect
 import json
 import os
 import re
 from io import BytesIO
 
 import yaml
+from PIL.Image import Image
+from langchain.base_language import BaseLanguageModel
 
 from bisheng.cache.redis import redis_client
 from bisheng.chat.config import ChatConfig
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from langchain.base_language import BaseLanguageModel
-from PIL.Image import Image
 
 
 def load_file_into_dict(file_path: str) -> dict:
@@ -100,7 +99,7 @@ def bisheng_model_limit_check(self: 'BishengLLM | BishengEmbedding'):
         cache_key = f"model_limit:{now}:{self.server_info.id}"
         use_num = redis_client.incr(cache_key)
         if use_num > self.server_info.limit:
-            raise Exception(f'额度已用完')
+            raise Exception(f'{self.server_info.name}/{self.model_info.model_name} 额度已用完')
 
 
 def wrapper_bisheng_model_limit_check_async(func):
@@ -125,5 +124,33 @@ def wrapper_bisheng_model_limit_check(func):
     def wrapper(*args, **kwargs):
         bisheng_model_limit_check(args[0])
         return func(*args, **kwargs)
+
+    return wrapper
+
+
+def wrapper_bisheng_model_generator(func):
+    """
+    调用次数检查的装饰器  装饰同步生成器函数
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        bisheng_model_limit_check(args[0])
+        for item in func(*args, **kwargs):
+            yield item
+
+    return wrapper
+
+
+def wrapper_bisheng_model_generator_async(func):
+    """
+    调用次数检查的装饰器  装饰异步生成器函数
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        bisheng_model_limit_check(args[0])
+        async for item in func(*args, **kwargs):
+            yield item
 
     return wrapper

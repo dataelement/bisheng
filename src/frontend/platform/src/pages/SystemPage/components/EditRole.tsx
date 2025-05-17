@@ -34,6 +34,7 @@ const SearchPanne = ({ groupId, title, type, children }) => {
             case 'skill':
                 return getGroupResourcesApi({ ...param, resource_type: 2 });
             case 'tool':
+                // TODO 追加mcp工具
                 return getGroupResourcesApi({ ...param, resource_type: 4 });
             case 'assistant':
                 return getGroupResourcesApi({ ...param, resource_type: 3 });
@@ -85,7 +86,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         if (id !== -1) {
             // 获取详情，初始化选中数据
             getRolePermissionsApi(id).then(res => {
-                const useSkills = [], useLibs = [], manageLibs = [], useAssistant = [],useFlows=[], useTools = [],
+                const useSkills = [], useLibs = [], manageLibs = [], useAssistant = [], useFlows = [], useTools = [],
                     useMenu = []
                 res.data.forEach(item => {
                     switch (item.type) {

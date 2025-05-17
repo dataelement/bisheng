@@ -14,4 +14,6 @@ export type AppConfig = {
     enable_registration: boolean;
     /** 最大上传文件大小 mb */
     uploaded_files_maximum_size: number;
+    /** 是否部署 ETL4LM  */
+    enable_etl4lm: boolean;
 };

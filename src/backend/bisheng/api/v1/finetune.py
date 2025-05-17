@@ -23,7 +23,7 @@ router = APIRouter(prefix='/finetune', tags=['Finetune'], dependencies=[Depends(
 
 
 # create finetune job
-@router.post('/job', response_model=UnifiedResponseModel[Finetune])
+@router.post('/job')
 async def create_job(*, finetune: FinetuneCreateReq, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -36,7 +36,7 @@ async def create_job(*, finetune: FinetuneCreateReq, Authorize: AuthJWT = Depend
 
 
 # 删除训练任务
-@router.delete('/job', response_model=UnifiedResponseModel)
+@router.delete('/job')
 async def delete_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -45,7 +45,7 @@ async def delete_job(*, job_id: str, Authorize: AuthJWT = Depends()):
 
 
 # 中止训练任务
-@router.post('/job/cancel', response_model=UnifiedResponseModel)
+@router.post('/job/cancel')
 async def cancel_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -54,7 +54,7 @@ async def cancel_job(*, job_id: str, Authorize: AuthJWT = Depends()):
 
 
 # 发布训练任务
-@router.post('/job/publish', response_model=UnifiedResponseModel)
+@router.post('/job/publish')
 async def publish_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -62,7 +62,7 @@ async def publish_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     return FinetuneService.publish_job(job_id, current_user)
 
 
-@router.post('/job/publish/cancel', response_model=UnifiedResponseModel)
+@router.post('/job/publish/cancel')
 async def cancel_publish_job(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -71,7 +71,7 @@ async def cancel_publish_job(*, job_id: str, Authorize: AuthJWT = Depends()):
 
 
 # 获取训练任务列表，支持分页
-@router.get('/job', response_model=UnifiedResponseModel[List[Finetune]])
+@router.get('/job')
 async def get_job(*,
                   server: str = Query(default=None, description='关联的RT服务名字'),
                   status: str = Query(
@@ -96,14 +96,14 @@ async def get_job(*,
 
 
 # 获取任务最新详细信息，此接口会同步查询SFT-backend侧将任务状态更新到最新
-@router.get('/job/info', response_model=UnifiedResponseModel[Finetune])
+@router.get('/job/info')
 async def get_job_info(*, job_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
     return FinetuneService.get_job_info(job_id)
 
 
-@router.patch('/job/model', response_model=UnifiedResponseModel)
+@router.patch('/job/model')
 async def update_job(*, req_data: FinetuneChangeModelName, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -111,7 +111,7 @@ async def update_job(*, req_data: FinetuneChangeModelName, Authorize: AuthJWT = 
     return FinetuneService.change_job_model_name(req_data, current_user)
 
 
-@router.post('/job/file', response_model=UnifiedResponseModel[List[PresetTrain]])
+@router.post('/job/file')
 async def upload_file(*,
                       files: list[UploadFile] = File(description='训练文件列表'),
                       Authorize: AuthJWT = Depends()):
@@ -122,7 +122,7 @@ async def upload_file(*,
     return FinetuneFileService.upload_file(files, False, current_user)
 
 
-@router.post('/job/file/preset', response_model=UnifiedResponseModel[List[PresetTrain]])
+@router.post('/job/file/preset')
 async def upload_preset_file(*,
                              files: Optional[str] = Body(default=None, description='预置训练文件列表'),
                              name: Optional[str] = Body(description='数据集名字'),
@@ -154,7 +154,7 @@ async def upload_preset_file(*,
 
 
 # 获取预置训练文件列表
-@router.get('/job/file/preset', response_model=UnifiedResponseModel[List[PresetTrain]])
+@router.get('/job/file/preset')
 async def get_preset_file(*,
                           page_size: Optional[int] = None,
                           page_num: Optional[int] = None,
@@ -166,7 +166,7 @@ async def get_preset_file(*,
     return resp_200(ret)
 
 
-@router.delete('/job/file/preset', response_model=UnifiedResponseModel)
+@router.delete('/job/file/preset')
 async def delete_preset_file(*, file_id: str, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()
@@ -174,7 +174,7 @@ async def delete_preset_file(*, file_id: str, Authorize: AuthJWT = Depends()):
     return FinetuneFileService.delete_preset_file(file_id, current_user)
 
 
-@router.get('/job/file/download', response_model=UnifiedResponseModel)
+@router.get('/job/file/download')
 async def get_download_url(*, file_url: str, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     minio_client = MinioClient()
@@ -182,14 +182,14 @@ async def get_download_url(*, file_url: str, Authorize: AuthJWT = Depends()):
     return resp_200(data={'url': download_url})
 
 
-@router.get('/server/filters', response_model=UnifiedResponseModel)
+@router.get('/server/filters')
 async def get_server_filters(*, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
 
     return FinetuneService.get_server_filters()
 
 
-@router.get('/model/list', response_model=UnifiedResponseModel[List[ModelDeploy]])
+@router.get('/model/list')
 async def get_model_list(request: Request,
                          login_user: UserPayload = Depends(get_login_user),
                          server_id: int = Query(..., description='ft服务唯一ID')):
@@ -198,7 +198,7 @@ async def get_model_list(request: Request,
     return resp_200(data=ret)
 
 
-@router.get('/gpu', response_model=UnifiedResponseModel)
+@router.get('/gpu')
 async def get_gpu_info(*, Authorize: AuthJWT = Depends()):
     # get login user
     Authorize.jwt_required()

@@ -1,26 +1,24 @@
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
+from sqlmodel import Field, select
+
 from bisheng.database.base import session_getter
-from bisheng.database.constants import DefaultRole, AdminRole
+from bisheng.database.constants import AdminRole
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.role_access import RoleAccess
 from bisheng.database.models.user_role import UserRole
-from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
-from sqlmodel import Field, select
 
 
 class RoleBase(SQLModelSerializable):
     role_name: str = Field(index=False, description='前端展示名称')
-    group_id: Optional[int] = Field(index=True)
-    remark: Optional[str] = Field(index=False)
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    group_id: Optional[int] = Field(default=None, index=True)
+    remark: Optional[str] = Field(default=None, index=False)
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class Role(RoleBase, table=True):
@@ -29,12 +27,12 @@ class Role(RoleBase, table=True):
 
 
 class RoleRead(RoleBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class RoleUpdate(RoleBase):
-    role_name: Optional[str]
-    remark: Optional[str]
+    role_name: Optional[str] = None
+    remark: Optional[str] = None
 
 
 class RoleCreate(RoleBase):
@@ -115,6 +113,6 @@ class RoleDao(RoleBase):
                 Role, and_(UserRole.role_id == Role.id,
                            Role.group_id == group_id)).group_by(UserRole.id)
             all_user = session.exec(all_user).all()
-            session.exec(delete(UserRole).where(UserRole.id.in_([one.id for one in all_user])))
+            session.exec(delete(UserRole).where(UserRole.id.in_([one.UserRole.id for one in all_user])))
             session.exec(delete(Role).where(Role.group_id == group_id))
             session.commit()

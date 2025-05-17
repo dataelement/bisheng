@@ -258,8 +258,17 @@ class WorkFlowService(BaseService):
                     key=event_input_schema.get('key'),
                     type='text',
                     required=True,
+                    value=''
                 )
             ]
+            for one in event_input_schema.get('value', []):
+                tmp = WorkflowInputItem(**one)
+                if tmp.key == 'dialog_files_content':
+                    tmp.type = 'dialog_file'
+                    tmp.value = []
+                elif tmp.key == 'dialog_file_accept':
+                    tmp.type = 'dialog_file_accept'
+                input_schema.value.append(tmp)
         workflow_event.input_schema = input_schema
         return workflow_event
 

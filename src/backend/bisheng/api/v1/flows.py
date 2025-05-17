@@ -137,13 +137,13 @@ def read_flows(*,
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get('/{flow_id}', response_model=UnifiedResponseModel[FlowReadWithStyle], status_code=200)
+@router.get('/{flow_id}')
 def read_flow(*, flow_id: str, login_user: UserPayload = Depends(get_login_user)):
     """Read a flow."""
     return FlowService.get_one_flow(login_user, flow_id)
 
 
-@router.patch('/{flow_id}', response_model=UnifiedResponseModel[FlowRead], status_code=200)
+@router.patch('/{flow_id}')
 async def update_flow(*,
                       request: Request,
                       flow_id: str,
@@ -205,14 +205,14 @@ def delete_flow(*,
     return resp_200(message='删除成功')
 
 
-@router.get('/download/', response_model=UnifiedResponseModel[FlowListRead], status_code=200)
+@router.get('/download/')
 async def download_file():
     """Download all flows as a file."""
     flows = read_flows()
     return resp_200(FlowListRead(flows=flows))
 
 
-@router.post('/compare', response_model=UnifiedResponseModel, status_code=200)
+@router.post('/compare')
 async def compare_flow_node(*, item: FlowCompareReq, Authorize: AuthJWT = Depends()):
     """ 技能多版本对比 """
     Authorize.jwt_required()

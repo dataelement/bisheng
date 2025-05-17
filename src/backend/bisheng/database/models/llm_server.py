@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 # 服务提供方枚举
@@ -24,6 +25,10 @@ class LLMServerType(Enum):
     DEEPSEEK = 'deepseek'
     SPARK = 'spark'  # 讯飞星火大模型
     BISHENG_RT = 'bisheng_rt'
+    TENCENT = 'tencent'  # 腾讯云
+    MOONSHOT = 'moonshot'  # 月之暗面的kimi
+    VOLCENGINE = 'volcengine'  # 火山引擎的大模型
+    SILICON = 'silicon'  # 硅基流动
 
 
 # 模型类型枚举
@@ -39,46 +44,42 @@ class LLMServerBase(SQLModelSerializable):
     type: str = Field(sa_column=Column(CHAR(20)), description='服务提供方类型')
     limit_flag: bool = Field(default=False, description='是否开启每日调用次数限制')
     limit: int = Field(default=0, description='每日调用次数限制')
-    config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
+    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='服务提供方公共配置')
     user_id: int = Field(default=0, description='创建人ID')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class LLMModelBase(SQLModelSerializable):
-    server_id: Optional[int] = Field(nullable=False, index=True, description='服务ID')
+    server_id: Optional[int] = Field(default=None, nullable=False, index=True, description='服务ID')
     name: str = Field(default='', description='模型展示名')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='模型描述')
     model_name: str = Field(default='', description='模型名称，实例化组件时用的参数')
     model_type: str = Field(sa_column=Column(CHAR(20)), description='模型类型')
-    config: Optional[Dict] = Field(sa_column=Column(JSON), description='服务提供方公共配置')
+    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='服务提供方公共配置')
     status: int = Field(default=2, description='模型状态。0：正常，1：异常, 2: 未知')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='异常原因')
     online: bool = Field(default=True, description='是否在线')
     user_id: int = Field(default=0, description='创建人ID')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class LLMServer(LLMServerBase, table=True):
     __tablename__ = 'llm_server'
 
-    id: Optional[int] = Field(nullable=False, primary_key=True, description='服务唯一ID')
+    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='服务唯一ID')
 
 
 class LLMModel(LLMModelBase, table=True):
     __tablename__ = 'llm_model'
-    __table_args__ = (UniqueConstraint('server_id', 'model_name', name='server_model_uniq'), )
+    __table_args__ = (UniqueConstraint('server_id', 'model_name', name='server_model_uniq'),)
 
-    id: Optional[int] = Field(nullable=False, primary_key=True, description='模型唯一ID')
+    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='模型唯一ID')
 
 
 class LLMDao:

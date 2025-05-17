@@ -8,7 +8,7 @@ from langchain_core.language_models.base import LanguageModelLike
 from langchain_core.messages import FunctionMessage, SystemMessage, ToolMessage
 from langgraph.graph import END
 from langgraph.graph.message import MessageGraph
-from langgraph.prebuilt import ToolExecutor, ToolInvocation
+from langgraph.prebuilt import ToolNode
 from langgraph.utils.runnable import RunnableCallable
 
 
@@ -35,7 +35,7 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
         llm_with_tools = llm
 
     agent = _get_messages | llm_with_tools
-    tool_executor = ToolExecutor(tools)
+    tool_nodes = ToolNode(tools=tools)
 
     # Define the function that determines whether to continue or not
     def should_continue(messages):
@@ -55,63 +55,11 @@ def get_openai_functions_agent_executor(tools: list[BaseTool], llm: LanguageMode
 
     # Define the function to execute tools
     async def acall_tool(messages):
-        actions: list[ToolInvocation] = []
-        # Based on the continue condition
-        # we know the last message involves a function call
-        last_message = messages[-1]
-        for tool_call in last_message.additional_kwargs['tool_calls']:
-            function = tool_call['function']
-            function_name = function['name']
-            try:
-                _tool_input = json.loads(function['arguments'] or '{}')
-            except Exception as e:
-                raise Exception(f"Error parsing arguments for function: {function_name}. arguments: {function['arguments']}. error: {str(e)}")
-            # We construct an ToolInvocation from the function_call
-            actions.append(ToolInvocation(
-                tool=function_name,
-                tool_input=_tool_input,
-            ))
-        # We call the tool_executor and get back a response
-        responses = await tool_executor.abatch(actions, **kwargs)
-        # We use the response to create a ToolMessage
-        tool_messages = [
-            LiberalToolMessage(
-                tool_call_id=tool_call['id'],
-                content=response,
-                additional_kwargs={'name': tool_call['function']['name']},
-            )
-            for tool_call, response in zip(last_message.additional_kwargs['tool_calls'], responses)
-        ]
+        tool_messages = await tool_nodes.ainvoke(messages, None, store=None)
         return tool_messages
 
     def call_tool(messages):
-        actions: list[ToolInvocation] = []
-        # Based on the continue condition
-        # we know the last message involves a function call
-        last_message = messages[-1]
-        for tool_call in last_message.additional_kwargs['tool_calls']:
-            function = tool_call['function']
-            function_name = function['name']
-            try:
-                _tool_input = json.loads(function['arguments'] or '{}')
-            except Exception as e:
-                raise Exception(f"Error parsing arguments for function: {function_name}. arguments: {function['arguments']}. error: {str(e)}")
-            # We construct an ToolInvocation from the function_call
-            actions.append(ToolInvocation(
-                tool=function_name,
-                tool_input=_tool_input,
-            ))
-        # We call the tool_executor and get back a response
-        responses = tool_executor.batch(actions, **kwargs)
-        # We use the response to create a ToolMessage
-        tool_messages = [
-            LiberalToolMessage(
-                tool_call_id=tool_call['id'],
-                content=response,
-                additional_kwargs={'name': tool_call['function']['name']},
-            )
-            for tool_call, response in zip(last_message.additional_kwargs['tool_calls'], responses)
-        ]
+        tool_messages = tool_nodes.invoke(messages, config=None, store=None)
         return tool_messages
 
     workflow = MessageGraph()
@@ -185,7 +133,7 @@ def get_qwen_local_functions_agent_executor(
     else:
         llm_with_tools = llm
     agent = _get_messages | llm_with_tools
-    tool_executor = ToolExecutor(tools)
+    tool_nodes = ToolNode(tools=tools)
 
     # Define the function that determines whether to continue or not
     def should_continue(messages):
@@ -199,27 +147,7 @@ def get_qwen_local_functions_agent_executor(
 
     # Define the function to execute tools
     async def call_tool(messages):
-        actions: list[ToolInvocation] = []
-        # Based on the continue condition
-        # we know the last message involves a function call
-        last_message = messages[-1]
-        # only one function
-        function = last_message.additional_kwargs['function_call']
-        function_name = function['name']
-        try:
-            _tool_input = json.loads(function['arguments'] or '{}')
-        except Exception as e:
-            raise Exception(
-                f"Error parsing arguments for function: {function_name}. arguments: {function['arguments']}. error: {str(e)}")
-        # We construct an ToolInvocation from the function_call
-        actions.append(ToolInvocation(
-            tool=function_name,
-            tool_input=_tool_input,
-        ))
-        # We call the tool_executor and get back a response
-        responses = await tool_executor.abatch(actions, **kwargs)
-        # We use the response to create a ToolMessage
-        tool_messages = [LiberalFunctionMessage(content=responses[0], name=function_name)]
+        tool_messages = await tool_nodes.ainvoke(messages, config=None, store=None)
         return tool_messages
 
     workflow = MessageGraph()

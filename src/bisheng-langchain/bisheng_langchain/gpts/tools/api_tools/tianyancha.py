@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Type
 
+from pydantic import model_validator, BaseModel, Field
+
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 
 from .base import APIToolBase
 
@@ -19,7 +20,8 @@ class CompanyInfo(APIToolBase):
     api_key: str = None
     args_schema: Type[BaseModel] = InputArgs
 
-    @root_validator(pre=True)
+    @model_validator(mode='before')
+    @classmethod
     def build_header(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Build headers that were passed in."""
         if not values.get('api_key'):
@@ -30,7 +32,8 @@ class CompanyInfo(APIToolBase):
         values['headers'] = headers
         return values
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         timeout = values.get('request_timeout', 30)

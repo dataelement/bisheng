@@ -38,6 +38,8 @@ class AgentNode(BaseNode):
         self._user_prompt = PromptTemplateParser(template=self.node_params['user_prompt'])
         self._user_variables = self._user_prompt.extract()
 
+        self._image_prompt = self.node_params.get('image_prompt', [])
+
         self._batch_variable_list = []
         self._system_prompt_list = []
         self._user_prompt_list = []
@@ -74,12 +76,10 @@ class AgentNode(BaseNode):
             self._sql_address = f'mysql+pymysql://{self._sql_agent["db_username"]}:{self._sql_agent["db_password"]}@{self._sql_agent["db_address"]}/{self._sql_agent["db_name"]}?charset=utf8mb4'
 
         # agent
-        self._agent_executor_type = 'get_react_agent_executor'
+        self._agent_executor_type = 'React'
         self._agent = None
 
     def _init_agent(self, system_prompt: str):
-        if self._agent:
-            return
         # 获取配置的助手模型列表
         assistant_llm = LLMService.get_assistant_llm()
         if not assistant_llm.llm_list:
@@ -350,19 +350,23 @@ class AgentNode(BaseNode):
                                               tool_list=tool_invoke_list,
                                               cancel_llm_end=True)
         config = RunnableConfig(callbacks=[llm_callback])
-        logger.debug(f'user_prompt: {user}, history: {chat_history}')
+        human_message = HumanMessage(content=[{
+            'type': 'text',
+            'text': user
+        }])
+        human_message = self.contact_file_into_prompt(human_message, self._image_prompt)
+        chat_history.append(human_message)
+        logger.debug(f'agent invoke chat_history: {chat_history}')
 
         if self._agent_executor_type == 'ReAct':
             result = self._agent.invoke({
-                'input': user,
-                'chat_history': chat_history
-            },
-                config=config)
+                'input': chat_history[-1].content,
+                'chat_history': chat_history[:-1],
+            }, config=config)
             output = result['agent_outcome'].return_values['output']
             if isinstance(output, dict):
                 output = list(output.values())[0]
             return output, llm_callback.reasoning_content
         else:
-            chat_history.append(HumanMessage(content=user))
             result = self._agent.invoke(chat_history, config=config)
             return result[-1].content, llm_callback.reasoning_content

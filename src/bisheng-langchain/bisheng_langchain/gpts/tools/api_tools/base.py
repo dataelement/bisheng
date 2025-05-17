@@ -1,7 +1,8 @@
-from typing import Any, Dict, Tuple, Type, Union
+from typing import Any, Dict, Tuple, Type, Union, Optional
+
+from pydantic import ConfigDict, model_validator, BaseModel, Field
 
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
 from langchain_core.tools import BaseTool, Tool
 from loguru import logger
 
@@ -12,7 +13,7 @@ class ApiArg(BaseModel):
 
 class MultArgsSchemaTool(Tool):
 
-    def _to_args_and_kwargs(self, tool_input: Union[str, Dict]) -> Tuple[Tuple, Dict]:
+    def _to_args_and_kwargs(self, tool_input: Union[str, Dict], tool_call_id: Optional[str]) -> Tuple[Tuple, Dict]:
         # For backwards compatibility, if run_input is a string,
         # pass as a positional argument.
         if isinstance(tool_input, str):
@@ -32,13 +33,10 @@ class APIToolBase(BaseModel):
     params: Dict[str, Any] = {}
     input_key: str = 'keyword'
     args_schema: Type[BaseModel] = ApiArg
+    model_config = ConfigDict(extra="forbid")
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
-
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         timeout = values.get('request_timeout', 30)

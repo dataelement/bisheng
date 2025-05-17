@@ -17,7 +17,8 @@ import { copyReportTemplate, onlineWorkflow, onlineWorkflowApi, saveWorkflow } f
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
-import { findParallelNodes } from "@/util/flowUtils";
+import { flowVersionCompatible } from "@/util/flowCompatible";
+import { findParallelNodes, importFlow } from "@/util/flowUtils";
 import { cloneDeep, isEqual } from "lodash-es";
 import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -28,14 +29,13 @@ import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
 import Notification from "./Notification";
 
-const Header = ({ flow, onTabChange, preFlow, onChange }) => {
+const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFlow }) => {
     const { message } = useToast()
     const { dark } = useContext(darkContext);
     const testRef = useRef(null)
     const updateAppModalRef = useRef(null)
-    const { uploadFlow } = useFlowStore()
+    // const { uploadFlow } = useFlowStore()
     const { t, i18n } = useTranslation('flow')
-    const navigate = useNavigate()
     const [modelVersionId, setModelVersionId] = useState(0)
 
     // console.log('flow :>> ', flow);
@@ -132,7 +132,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
             variant: 'success',
             description: t('changesSaved')
         })
-        setFlow({ ...flow })
+
         return res
     }
 
@@ -160,10 +160,25 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         bsConfirm({
             desc: t('confirmImport'),
             onOk(next) {
-                uploadFlow()
+                _importFlow()
                 next()
             }
         })
+
+        const _importFlow = async () => {
+            const flow = await importFlow()
+            const newFlow = flowVersionCompatible(flow)
+            const { nodes, edges, viewport } = newFlow
+            onImportFlow(nodes, edges, viewport)
+            setFitView()
+        }
+    }
+
+    const forceUpdateFlow = (_flow) => {
+        setFlow(null)
+        setTimeout(() => {
+            setFlow(_flow)
+        }, 0);
     }
     // versions
     const [loading, setLoading] = useState(false)
@@ -178,10 +193,8 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
         const res = await getVersionDetails(versionId)
         // console.log('res :>> ', res)
         // 自动触发 page的 clone flow
-        setFlow(null)
-        setTimeout(() => {
-            setFlow({ ...f, ...res.data })
-        }, 0);
+        forceUpdateFlow({ ...f, ...res.data })
+
         message({
             variant: "success",
             title: t('switchToVersion', { versionName: res.name }),
@@ -222,7 +235,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
     const [tabType, setTabType] = useState('edit')
     const [open, setOpen] = useState(false)
 
-    const [blocker, hasChanged] = useBeforeUnload(flow, preFlow)
+    const {
+        returnPage,
+        blocker,
+        hasChanged
+    } = useBeforeUnload(flow, nodes, preFlow, onPreFlowChange)
     // 离开并保存
     const handleSaveAndClose = async () => {
         if (isOnlineVersion) {
@@ -245,9 +262,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
             {/* Left Section with Back Button and Title */}
             <div className="flex items-center">
                 <Button variant="outline" size="icon" className={`${!dark && 'bg-[#fff]'} size-8`}
-                    onClick={() => {
-                        window.history.length > 1 ? window.history.back() : navigate('/build/apps')
-                    }}
+                    onClick={returnPage}
                 ><ChevronLeft /></Button>
                 <div className="flex items-center ml-5">
                     <TitleLogo
@@ -294,7 +309,11 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                     <Play className="size-3.5 mr-1" />
                     {t('run')}
                 </Button>
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={handleSaveClick}>
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={async () => {
+                    window.flow_version = Number(version.id)
+                    await handleSaveClick()
+                    forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
+                }}>
                     {t('save')}
                 </Button>
                 {
@@ -420,7 +439,7 @@ const Header = ({ flow, onTabChange, preFlow, onChange }) => {
                 <DialogContent className="sm:max-w-[425px]" close={false}>
                     <DialogHeader>
                         <DialogTitle>{t('prompt')}</DialogTitle>
-                        {isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}
+                        <p className="bisheng-label pt-2">{isOnlineVersion ? t('onlineVersionMessage') : t('unsavedChangesMessage')}</p>
                     </DialogHeader>
                     <DialogFooter>
                         <Button className="leave h-8" onClick={handleSaveAndClose}>
@@ -693,12 +712,13 @@ const useVersion = (flow) => {
 
 
 // 离开页面保存提示
-const useBeforeUnload = (flow, preFlow) => {
+const useBeforeUnload = (flow, nodes, preFlow, onPreFlowChange) => {
     const { t } = useTranslation()
-
+    const navigate = useNavigate()
     // 离开提示保存
     useEffect(() => {
         const fun = (e) => {
+            // 系统 重新加载 提示
             var confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
             return confirmationMessage;
@@ -707,21 +727,55 @@ const useBeforeUnload = (flow, preFlow) => {
         return () => { window.removeEventListener('beforeunload', fun) }
     }, [])
 
+    // 检查流程变化（忽略节点位置，只对比数据和边）
     const hasChanged = useMemo(() => {
-        if (!flow) return false
-        const oldFlowData = JSON.parse(preFlow)
-        if (!oldFlowData) return true
-        // 比较新旧
-        const { edges, nodes } = flow
-        const { edges: oldEdges, nodes: oldNodes } = oldFlowData
-        const a = !(isEqual(edges, oldEdges) && isEqual(nodes, oldNodes))
-        // console.log('12313132123 :>> ', a, isEqual(edges, oldEdges), isEqual(nodes, oldNodes));
-        // console.log('nodes:>> ', nodes.find(el => el.id === "llm_214bb").data.group_params[2].params[1].value);
-        // console.log('oldNodes:>> ', oldNodes.find(el => el.id === "llm_214bb").data.group_params[2].params[1].value);
-        return a
-    }, [preFlow, flow.nodes, flow.edges])
+        // 无新数据时视为未修改
+        if (!flow) return false;
 
-    return [useBlocker(hasChanged), hasChanged] as const;
+        try {
+            const oldFlowData = JSON.parse(preFlow);
+            // 旧数据不存在时视为有修改
+            if (!oldFlowData) return true;
+
+            // 提取新旧节点数据（忽略位置信息）
+            const { edges, nodes } = flow
+            const { edges: oldEdges, nodes: oldNodes } = oldFlowData
+
+            // 比较边和节点数据
+            return !(isEqual(edges, oldEdges) && nodes.every((node, i) =>
+                isEqual(node.data, oldNodes[i].data)));
+        } catch {
+            return true; // 解析失败视为有修改
+        }
+    }, [preFlow, nodes, flow]);
+
+    /**
+     * 处理页面返回逻辑：
+     * 1. 触发父组件更新为原始流程数据(nodes)
+     * 2. 标记本次变更为返回操作(isReturningRef)
+     * 3. 在节点更新后执行历史回退(回退后,根据hasChanged触发blocker)
+     */
+    const isReturningRef = useRef(false);
+    const handleReturn = () => {
+        onPreFlowChange();
+        isReturningRef.current = true;
+    };
+
+    // 当节点更新且为返回操作时，执行导航
+    useEffect(() => {
+        if (!isReturningRef.current) return;
+
+        isReturningRef.current = false;
+        window.history.length > 1
+            ? window.history.back()
+            : navigate('/build/apps');
+    }, [nodes]);
+
+    return {
+        returnPage: handleReturn,
+        blocker: useBlocker(hasChanged),
+        hasChanged
+    }
 }
 
 export default Header;

@@ -6,18 +6,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from bisheng.api.services.assistant_base import AssistantUtils
-from bisheng.api.services.knowledge_imp import decide_vectorstores
-from bisheng.api.services.llm import LLMService
-from bisheng.api.services.openapi import OpenApiSchema
-from bisheng.api.utils import build_flow_no_yield
-from bisheng.api.v1.schemas import InputRequest
-from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
-from bisheng.database.models.flow import FlowDao, FlowStatus
-from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.settings import settings
-from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
                                                       generate_opening_dialog,
@@ -34,6 +22,23 @@ from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
 from langchain_core.vectorstores import VectorStoreRetriever
 from loguru import logger
+
+from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.api.services.knowledge_imp import decide_vectorstores
+from bisheng.api.services.llm import LLMService
+from bisheng.api.services.openapi import OpenApiSchema
+from bisheng.api.utils import build_flow_no_yield
+from bisheng.api.v1.schemas import InputRequest
+from bisheng.database.constants import ToolPresetType
+from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
+from bisheng.database.models.flow import FlowDao, FlowStatus
+from bisheng.database.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.mcp_manage.constant import McpClientType
+from bisheng.mcp_manage.langchain.tool import McpTool
+from bisheng.mcp_manage.manager import ClientManager
+from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
 
 
 class AssistantAgent(AssistantUtils):
@@ -185,12 +190,43 @@ class AssistantAgent(AssistantUtils):
             tool_langchain.append(openapi_tool)
         return tool_langchain
 
-    async def init_personal_tools(self, tool_list: List[GptsTools], callbacks: Callbacks = None):
+    @staticmethod
+    def sync_init_mcp_tools(tool_list: List[GptsTools], callbacks: Callbacks = None):
         """
-        初始化自定义工具列表
+        初始化mcp工具列表
         """
-        return asyncio.get_running_loop().run_in_executor(None, self.sync_init_personal_tools,
-                                                          tool_list, callbacks)
+        tool_type_ids = [one.type for one in tool_list]
+        all_tool_type = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        all_tool_type = {one.id: one for one in all_tool_type}
+        tool_langchain = []
+        for one in tool_list:
+            tool_type = all_tool_type.get(one.type)
+            input_schema = json.loads(one.extra)
+            mcp_client = ClientManager.sync_connect_mcp_from_json(tool_type.openapi_schema)
+            mcp_tool = McpTool.get_mcp_tool(name=one.tool_key, description=one.desc, mcp_client=mcp_client,
+                                            mcp_tool_name=one.name, arg_schema=input_schema['inputSchema'],
+                                            callbacks=callbacks)
+            tool_langchain.append(mcp_tool)
+        return tool_langchain
+
+    @staticmethod
+    async def async_init_mcp_tools(tool_list: List[GptsTools], callbacks: Callbacks = None):
+        """
+        初始化mcp工具列表
+        """
+        tool_type_ids = [one.type for one in tool_list]
+        all_tool_type = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        all_tool_type = {one.id: one for one in all_tool_type}
+        tool_langchain = []
+        for one in tool_list:
+            tool_type = all_tool_type.get(one.type)
+            input_schema = json.loads(one.extra)
+            mcp_client = await ClientManager.connect_mcp_from_json(tool_type.openapi_schema)
+            mcp_tool = McpTool.get_mcp_tool(name=one.tool_key, description=one.desc, mcp_client=mcp_client,
+                                            mcp_tool_name=one.name, arg_schema=input_schema['inputSchema'],
+                                            callbacks=callbacks)
+            tool_langchain.append(mcp_tool)
+        return tool_langchain
 
     @staticmethod
     def sync_init_knowledge_tool(knowledge: Knowledge,
@@ -232,21 +268,32 @@ class AssistantAgent(AssistantUtils):
                                              self.knowledge_retriever)
 
     @staticmethod
+    def parse_tools_type(tool_ids: List[int]) -> (list, list, list):
+        """
+        解析工具类型
+        """
+        tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
+        preset_tools = []
+        personal_tools = []
+        mcp_tools = []
+        for one in tools_model:
+            if one.is_preset == ToolPresetType.PRESET.value:
+                preset_tools.append(one)
+            elif one.is_preset == ToolPresetType.API.value:
+                personal_tools.append(one)
+            else:
+                mcp_tools.append(one)
+        return preset_tools, personal_tools, mcp_tools
+
+    @staticmethod
     def init_tools_by_toolid(
             tool_ids: List[int],
             llm: BaseLanguageModel,
             callbacks: Callbacks = None,
     ):
-        """通过id初始化tool"""
-        tools_model: List[GptsTools] = GptsToolsDao.get_list_by_ids(tool_ids)
-        preset_tools = []
-        personal_tools = []
-        tools: List[BaseTool] = []
-        for one in tools_model:
-            if one.is_preset:
-                preset_tools.append(one)
-            else:
-                personal_tools.append(one)
+        """ 通过id初始化tool ！！！ 只能在没有事件循环的线程中调用 """
+        tools = []
+        preset_tools, personal_tools, mcp_tools = AssistantAgent.parse_tools_type(tool_ids)
         if preset_tools:
             tool_langchain = AssistantAgent.sync_init_preset_tools(preset_tools, llm, callbacks)
             logger.info('act=build_preset_tools size={} return_tools={}', len(preset_tools),
@@ -257,6 +304,34 @@ class AssistantAgent(AssistantUtils):
             logger.info('act=build_personal_tools size={} return_tools={}', len(personal_tools),
                         len(tool_langchain))
             tools += tool_langchain
+        if mcp_tools:
+            tool_langchain = AssistantAgent.sync_init_mcp_tools(mcp_tools, callbacks)
+            logger.info('act=build_mcp_tools size={} return_tools={}', len(mcp_tools),
+                        len(tool_langchain))
+            tools += tool_langchain
+        return tools
+
+    @staticmethod
+    async def init_tools_by_tool_ids(tool_ids: List[int],
+                                     llm: BaseLanguageModel,
+                                     callbacks: Callbacks = None, ):
+        tools = []
+        preset_tools, personal_tools, mcp_tools = AssistantAgent.parse_tools_type(tool_ids)
+        if preset_tools:
+            tool_langchain = AssistantAgent.sync_init_preset_tools(preset_tools, llm, callbacks)
+            logger.info('act=build_preset_tools size={} return_tools={}', len(preset_tools),
+                        len(tool_langchain))
+            tools += tool_langchain
+        if personal_tools:
+            tool_langchain = AssistantAgent.sync_init_personal_tools(personal_tools, callbacks)
+            logger.info('act=build_personal_tools size={} return_tools={}', len(personal_tools),
+                        len(tool_langchain))
+            tools += tool_langchain
+        if mcp_tools:
+            tools_langchain = await AssistantAgent.async_init_mcp_tools(mcp_tools, callbacks)
+            logger.info('act=build_mcp_tools size={} return_tools={}', len(mcp_tools),
+                        len(tools_langchain))
+            tools += tools_langchain
         return tools
 
     async def init_tools(self, callbacks: Callbacks = None):
@@ -275,7 +350,7 @@ class AssistantAgent(AssistantUtils):
             else:
                 flow_links.append(link)
         if tool_ids:
-            tools = self.init_tools_by_toolid(tool_ids, self.llm, callbacks)
+            tools = await self.init_tools_by_tool_ids(tool_ids, self.llm, callbacks)
 
         # flow + knowledge
         flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])

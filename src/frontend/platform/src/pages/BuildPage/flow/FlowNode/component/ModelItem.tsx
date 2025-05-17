@@ -83,12 +83,13 @@ export default function ModelItem({ agent = false, data, onChange, onValidate })
             {data.required && <span className="text-red-500">*</span>}
             {data.label}
         </Label>
-        {!loading ? <Cascader
+        <Cascader
+            key={options[0]?.value}
             error={error}
             placholder={data.placeholder}
             defaultValue={defaultValue}
             options={options}
             onChange={(val) => onChange(val[1])}
-        /> : null}
+        />
     </div>
 };

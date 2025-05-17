@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from langchain_core.callbacks import CallbackManagerForChainRun
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.prompts import BasePromptTemplate, ChatPromptTemplate
-from langchain_core.pydantic_v1 import Field
+from pydantic import Field
 from langchain_text_splitters import RecursiveCharacterTextSplitter, TextSplitter
 
 from langchain.chains.base import Chain

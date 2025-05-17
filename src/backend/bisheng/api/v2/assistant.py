@@ -24,7 +24,7 @@ from bisheng.utils import generate_uuid
 router = APIRouter(prefix='/assistant', tags=['OpenAPI', 'Assistant'])
 
 
-@router.post('/chat/completions', response_model=OpenAIChatCompletionResp)
+@router.post('/chat/completions')
 async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompletionReq):
     """
     兼容openai接口格式，所有的错误必须返回非http200的状态码
@@ -105,7 +105,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         return ORJSONResponse(status_code=500, content=str(exc))
 
 
-@router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
+@router.get('/info/{assistant_id}')
 async def get_assistant_info(request: Request, assistant_id: UUID):
     """
     获取助手信息, 用系统配置里的default_operator.user的用户信息来做权限校验

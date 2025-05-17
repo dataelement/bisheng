@@ -1,12 +1,12 @@
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Extra
+from pydantic import ConfigDict, BaseModel
 
 
 class InputNode(BaseModel):
     """Input组件，用来控制输入"""
-    input: Optional[List[str]]
+    input: Optional[List[str]] = None
 
     def text(self):
         return self.input
@@ -15,14 +15,10 @@ class InputNode(BaseModel):
 class VariableNode(BaseModel):
     """用来设置变量"""
     # key
-    variables: Optional[List[str]]
+    variables: Optional[List[str]] = None
     # vaulues
     variable_value: Optional[List[str]] = []
-
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
+    model_config = ConfigDict(extra="forbid")
 
     def text(self):
         if self.variable_value:
@@ -36,9 +32,9 @@ class VariableNode(BaseModel):
 
 
 class InputFileNode(BaseModel):
-    file_path: Optional[str]
-    file_name: Optional[str]
-    file_type: Optional[str]  # tips for file
+    file_path: Optional[str] = None
+    file_name: Optional[str] = None
+    file_type: Optional[str] = None  # tips for file
     """Output组件，用来控制输出"""
 
     def text(self):

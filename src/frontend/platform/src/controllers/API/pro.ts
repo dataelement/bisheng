@@ -68,7 +68,7 @@ export const saveGroupApi = async (data: any): Promise<any> => {
         group_name,
         assistant,
         skill,
-        workFlows
+        work_flows: workFlows
     });
 };
 

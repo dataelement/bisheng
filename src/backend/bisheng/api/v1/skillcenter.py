@@ -17,9 +17,7 @@ router = APIRouter(prefix='/skill', tags=['Skills'], dependencies=[Depends(get_l
 ORDER_GAP = 65535
 
 
-@router.post('/template/create',
-             response_model=UnifiedResponseModel[TemplateRead],
-             status_code=201)
+@router.post('/template/create')
 def create_template(*, template: TemplateCreate):
     """Create a new flow."""
     db_template = Template.model_validate(template)
@@ -46,7 +44,7 @@ def create_template(*, template: TemplateCreate):
     return resp_200(db_template)
 
 
-@router.get('/template', response_model=UnifiedResponseModel[list[Template]], status_code=200)
+@router.get('/template')
 def read_template(page_size: Optional[int] = None,
                   page_name: Optional[int] = None,
                   flow_type: Optional[int] = None,
@@ -70,12 +68,16 @@ def read_template(page_size: Optional[int] = None,
         with session_getter() as session:
             template_session = session.exec(sql)
         templates = template_session.mappings().all()
+        res = []
+        for one in templates:
+            res.append(Template.model_validate(one))
+        return resp_200(res)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return resp_200(templates)
 
 
-@router.post('/template/{id}', response_model=UnifiedResponseModel[TemplateRead], status_code=200)
+@router.post('/template/{id}')
 def update_template(*, id: int, template: TemplateUpdate):
     """Update a flow."""
     with session_getter() as session:

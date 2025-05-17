@@ -48,7 +48,7 @@ export default function MarkLabel({ open, home, onClose }) {
 
     const handleConfirm = async () => {
         await captureAndAlertRequestErrorHoc(updateHomeLabelApi(selected.map(s => s.value)))
-        onClose(false)
+        onClose(true)
     }
 
     const handleSelect = (id) => {

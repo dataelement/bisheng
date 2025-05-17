@@ -1,20 +1,23 @@
 import inspect
 from typing import Any
 
+from langchain import llms, memory, text_splitter
+from langchain_anthropic import ChatAnthropic
+from langchain_community import agent_toolkits, document_loaders, embeddings
+from langchain_community.chat_models import ChatVertexAI, MiniMaxChat, ChatTongyi, QianfanChatEndpoint, ChatZhipuAI, \
+    ChatHunyuan, MoonshotChat
+from langchain_community.utilities import requests
+from langchain_deepseek import ChatDeepSeek
+from langchain_ollama import ChatOllama
+from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
+
+from bisheng_langchain import chat_models
+from bisheng_langchain import document_loaders as contribute_loader
+from bisheng_langchain import embeddings as contribute_embeddings
 from bisheng.interface.agents.custom import CUSTOM_AGENTS
 from bisheng.interface.chains.custom import CUSTOM_CHAINS
 from bisheng.interface.embeddings.custom import CUSTOM_EMBEDDING
 from bisheng.interface.importing.utils import import_class
-from bisheng_langchain import chat_models
-from bisheng_langchain import document_loaders as contribute_loader
-from bisheng_langchain import embeddings as contribute_embeddings
-from langchain import llms, memory, text_splitter
-from langchain_community.utilities import requests
-from langchain_anthropic import ChatAnthropic
-from langchain_community import agent_toolkits, document_loaders, embeddings
-from langchain_community.chat_models import ChatVertexAI, MiniMaxChat
-from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
-from langchain_ollama.chat_models import ChatOllama
 
 # LLMs
 llm_type_to_cls_dict = {}
@@ -29,7 +32,13 @@ llm_type_to_cls_dict['ChatOpenAI'] = ChatOpenAI  # type: ignore
 llm_type_to_cls_dict['ChatVertexAI'] = ChatVertexAI  # type: ignore
 llm_type_to_cls_dict['MiniMaxChat'] = MiniMaxChat
 llm_type_to_cls_dict['ChatOllama'] = ChatOllama
+llm_type_to_cls_dict['ChatTongyi'] = ChatTongyi
+llm_type_to_cls_dict['QianfanChatEndpoint'] = QianfanChatEndpoint
 llm_type_to_cls_dict["OpenAI"] = OpenAI
+llm_type_to_cls_dict['ChatZhipuAI'] = ChatZhipuAI
+llm_type_to_cls_dict['ChatDeepSeek'] = ChatDeepSeek
+llm_type_to_cls_dict['ChatHunyuan'] = ChatHunyuan
+llm_type_to_cls_dict['MoonshotChat'] = MoonshotChat
 
 # llm contribute
 llm_type_to_cls_dict.update({
@@ -58,12 +67,12 @@ for memory_name in memory.__all__:
     elif memory_name == "ConversationKGMemory":
         memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.memory.kg.{memory_name}")
     elif memory_name == "MotorheadMemory":
-        memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.memory.motorhead_memory.{memory_name}")
+        memory_type_to_cls_dict[memory_name] = import_class(
+            f"langchain_community.memory.motorhead_memory.{memory_name}")
     elif memory_name == "ZepMemory":
         memory_type_to_cls_dict[memory_name] = import_class(f"langchain_community.memory.zep_memory.{memory_name}")
     else:
         memory_type_to_cls_dict[memory_name] = import_class(f'langchain.memory.{memory_name}')
-
 
 # Wrappers
 wrapper_type_to_cls_dict: dict[str, Any] = {

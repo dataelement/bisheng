@@ -1,0 +1,109 @@
+{
+    "openai": [{
+            "name": "model 1",
+            "model_name": "gpt-4o",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "text-embedding-ada-002",
+            "model_type": "embedding"
+        }
+    ],
+    "azure_openai": [{
+            "name": "model 1",
+            "model_name": "gpt-4o",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "text-embedding-ada-002",
+            "model_type": "embedding"
+        }
+    ],
+    "qwen": [{
+            "name": "model 1",
+            "model_name": "qwen2.5-72b-instruct",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "qwen-max",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 3",
+            "model_name": "qwq-plus",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 4",
+            "model_name": "text-embedding-v3",
+            "model_type": "embedding"
+        }
+    ],
+    "deepseek": [{
+            "name": "model 1",
+            "model_name": "deepseek-chat",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "deepseek-reasoner",
+            "model_type": "llm"
+        }
+    ],
+    "qianfan": [{
+        "name": "model 1",
+        "model_name": "ernie-4.0-8k",
+        "model_type": "llm"
+    }],
+    "tencent": [{
+            "name": "model 1",
+            "model_name": "hunyuan-turbos-latest",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "hunyuan-t1-latest",
+            "model_type": "llm"
+        }
+    ],
+    "moonshot": [{
+        "name": "model 1",
+        "model_name": "moonshot-v1-32k",
+        "model_type": "llm"
+    }],
+    "zhipu": [{
+        "name": "model 1",
+        "model_name": "glm-4-plus",
+        "model_type": "llm"
+    }],
+    "minimax": [{
+        "name": "model 1",
+        "model_name": "MiniMax-Text-01",
+        "model_type": "llm"
+    }],
+    "volcengine": [{
+            "name": "model 1",
+            "model_name": "deepseek-v3",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "deepseek-r1",
+            "model_type": "llm"
+        }
+    ],
+    "silicon": [{
+            "name": "model 1",
+            "model_name": "deepseek-ai/DeepSeek-R1",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "deepseek-ai/DeepSeek-V3",
+            "model_type": "llm"
+        }
+    ]
+}

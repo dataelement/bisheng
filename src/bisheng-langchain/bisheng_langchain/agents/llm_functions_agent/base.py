@@ -3,6 +3,8 @@ import json
 from json import JSONDecodeError
 from typing import Any, List, Optional, Sequence, Tuple, Union
 
+from pydantic import model_validator
+
 from bisheng_langchain.chat_models.host_llm import HostQwenChat
 from bisheng_langchain.chat_models.proxy_llm import ProxyChatLLM
 from langchain.agents import BaseSingleActionAgent
@@ -16,7 +18,6 @@ from langchain.schema.messages import AIMessage, BaseMessage, FunctionMessage, S
 from langchain.tools import BaseTool
 from langchain.tools.convert_to_openai import format_tool_to_openai_function
 from langchain_core.agents import AgentActionMessageLog
-from langchain_core.pydantic_v1 import root_validator
 from langchain_openai import ChatOpenAI
 
 
@@ -135,7 +136,8 @@ class LLMFunctionsAgent(BaseSingleActionAgent):
         """Get allowed tools."""
         return list([t.name for t in self.tools])
 
-    @root_validator
+    @model_validator(mode='before')
+    @classmethod
     def validate_llm(cls, values: dict) -> dict:
         if ((not isinstance(values['llm'], ChatOpenAI))
                 and (not isinstance(values['llm'], HostQwenChat))
@@ -144,7 +146,8 @@ class LLMFunctionsAgent(BaseSingleActionAgent):
                 'Only supported with ChatOpenAI and HostQwenChat and ProxyChatLLM models.')
         return values
 
-    @root_validator
+    @model_validator(mode='before')
+    @classmethod
     def validate_prompt(cls, values: dict) -> dict:
         prompt: BasePromptTemplate = values['prompt']
         if 'agent_scratchpad' not in prompt.input_variables:

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, Any, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class WorkflowEventType(Enum):
@@ -32,11 +32,12 @@ class WorkflowOutputSchema(BaseModel):
 class WorkflowInputItem(BaseModel):
     key: str = Field(default=None, description='Unique key corresponding to user input')
     type: str = Field(default=None, description='The input type, select or dialog or file')
-    value: str = Field(default=None, description='The input default value')
+    value: Any = Field(default=None, description='The input default value')
     label: str = Field(default=None, description='The key label')
     multiple: bool = Field(default=False, description='The input is multi select')
     required: bool = Field(default=False, description='The input is required')
     options: Optional[Any] = Field(default=None, description='The select type options')
+    file_type: Optional[str] = Field(default=None, description='The allow upload file type')
 
 
 class WorkflowInputSchema(BaseModel):
@@ -52,6 +53,13 @@ class WorkflowEvent(BaseModel):
     node_execution_id: Optional[str] = Field(default=None, description='The node exec unique id')
     output_schema: Optional[WorkflowOutputSchema] = Field(default=None, description='The output schema')
     input_schema: Optional[WorkflowInputSchema] = Field(default=None, description='The input schema')
+
+    @field_validator('message_id', mode='before')
+    @classmethod
+    def validate_message_id(cls, v: Any) -> Optional[str]:
+        if isinstance(v, str) or v is None:
+            return v
+        return str(v)
 
 
 class WorkflowStream(BaseModel):

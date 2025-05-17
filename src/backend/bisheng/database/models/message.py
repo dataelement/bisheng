@@ -18,35 +18,32 @@ class LikedType(Enum):
 
 class MessageBase(SQLModelSerializable):
     is_bot: bool = Field(index=False, description='聊天角色')
-    source: Optional[int] = Field(index=False, description='是否支持溯源')
+    source: Optional[int] = Field(default=None, index=False, description='是否支持溯源')
     mark_status: Optional[int] = Field(index=False, default=1, description='标记状态')
-    mark_user: Optional[int] = Field(index=False, description='标记用户')
-    mark_user_name: Optional[str] = Field(index=False, description='标记用户')
-    message: Optional[str] = Field(sa_column=Column(Text), description='聊天消息')
-    extra: Optional[str] = Field(sa_column=Column(Text), description='连接信息等')
+    mark_user: Optional[int] = Field(default=None, index=False, description='标记用户')
+    mark_user_name: Optional[str] = Field(default=None, index=False, description='标记用户')
+    message: Optional[str] = Field(default=None, sa_column=Column(Text), description='聊天消息')
+    extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='连接信息等')
     type: str = Field(index=False, description='消息类型')
     category: str = Field(index=False, max_length=32, description='消息类别， question等')
     flow_id: str = Field(index=True, description='对应的技能id')
-    chat_id: Optional[str] = Field(index=True, description='chat_id, 前端生成')
-    user_id: Optional[str] = Field(index=True, description='用户id')
+    chat_id: Optional[str] = Field(default=None, index=True, description='chat_id, 前端生成')
+    user_id: Optional[int] = Field(default=None, index=True, description='用户id')
     liked: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 喜欢/2 不喜欢')
     solved: Optional[int] = Field(index=False, default=0, description='用户是否喜欢 0未评价/1 解决/2 未解决')
     copied: Optional[int] = Field(index=False, default=0, description='用户是否复制 0：未复制 1：已复制')
     sensitive_status: Optional[int] = Field(index=False, default=1, description='敏感词状态 1：通过 2：违规')
     sender: Optional[str] = Field(index=False, default='', description='autogen 的发送方')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen 的发送方')
-    intermediate_steps: Optional[str] = Field(sa_column=Column(Text), description='过程日志')
-    files: Optional[str] = Field(sa_column=Column(String(length=4096)), description='上传的文件等')
-    remark: Optional[str] = Field(sa_column=Column(String(length=4096)),
+    intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='过程日志')
+    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)), description='上传的文件等')
+    remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
                                   description='备注。break_answer: 中断的回复不作为history传给模型')
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         index=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP'),
+        onupdate=text('CURRENT_TIMESTAMP')))
 
 
 class ChatMessage(MessageBase, table=True):
@@ -55,11 +52,11 @@ class ChatMessage(MessageBase, table=True):
 
 
 class ChatMessageRead(MessageBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class ChatMessageQuery(BaseModel):
-    id: Optional[int]
+    id: Optional[int] = None
     flow_id: str
     chat_id: str
 
@@ -257,6 +254,11 @@ class ChatMessageDao(MessageBase):
         with session_getter() as session:
             session.add_all(messages)
             session.commit()
+            ret = []
+            for one in messages:
+                session.refresh(one)
+                ret.append(one)
+            return ret
 
     @classmethod
     def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:

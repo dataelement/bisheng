@@ -1,7 +1,8 @@
+import copy
 from enum import Enum
 from typing import Optional, Any, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class NodeType(Enum):
@@ -24,7 +25,7 @@ class NodeType(Enum):
 class NodeParams(BaseModel):
     key: str = Field(default="", description="变量的key")
     label: Optional[str] = Field("", description="变量描述文本")
-    value: Optional[Any] = Field(description="变量的值")
+    value: Optional[Any] = Field(None, description="变量的值")
 
     # 变量类型 -> 数据格式的详情参考 https://dataelem.feishu.cn/wiki/IfBvwwvfFiHjuQkjFJgcxzoGnxb
     type: Optional[str] = Field("", description="变量类型")
@@ -49,11 +50,20 @@ class BaseNodeData(BaseModel):
     group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
     tab: Optional[dict] = Field({}, description="tab config")
     tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
-    v: str = Field(default="", description="node version")
+    v: Optional[int] = Field(default=0, description="node version")
+
+    @field_validator('v', mode='before')
+    @classmethod
+    def convert_v_to_int(cls, v: str | int | None) -> int:
+        if isinstance(v, str):
+            return int(v)
+        elif v is None:
+            return 0
+        return v
 
     def get_variable_info(self, variable_key: str) -> NodeParams | None:
         for group_info in self.group_params:
             for one in group_info.params:
                 if one.key == variable_key:
-                    return one
-
+                    return copy.deepcopy(one)
+        return None

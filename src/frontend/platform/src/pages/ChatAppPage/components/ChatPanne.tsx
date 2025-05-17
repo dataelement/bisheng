@@ -3,8 +3,6 @@ import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import ChatComponent from "@/components/bs-comp/chatComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { AssistantIcon } from "@/components/bs-icons";
-import { LoadingIcon } from "@/components/bs-icons/loading";
-import { NewApplicationIcon } from "@/components/bs-icons/newApplication";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import ChatPane from "@/pages/BuildPage/flow/FlowChat/ChatPane";
@@ -47,8 +45,13 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         if (type === AppNumType.SKILL) {
             setAssistant(null)
             setWorkflow(null)
-            const _flow = await getFlowApi(id, version)
-            await build(_flow, chatId)
+            let _flow = { id, data: { nodes: [], edges: [], viewport: {} } } // await getFlowApi(id, version)
+            try {
+                _flow = await getFlowApi(id, version)
+                await build(_flow, chatId)
+            } catch (e) {
+                console.error('e :>> ', e);
+            }
             if (isV1) {
                 loadHistoryMsg(_flow.id, chatId, {
                     appendHistory,
@@ -66,7 +69,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             flowRef.current = null
             setFlow(null)
             setWorkflow(null)
-            const _assistant = await loadAssistantState(id, version)
+            let _assistant = { id }
+            try {
+                _assistant = await loadAssistantState(id, version)
+            } catch (e) {
+                console.error('e :>> ', e);
+            }
 
             if (isV1) {
                 loadHistoryMsg(_assistant.id, chatId, {
@@ -84,7 +92,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             setFlow(null)
             flowRef.current = null
             setWorkflow(null)
-            const _flow = await getFlowApi(id, version)
+            let _flow = { id, data: { nodes: [], edges: [], viewport: {} } } // await getFlowApi(id, version)
+            try {
+                _flow = await getFlowApi(id, version)
+            } catch (e) {
+                console.error('e :>> ', e);
+            }
 
             if (isV1) {
                 const res = await loadFlowHistoryMsg(_flow.id, chatId, {
@@ -162,7 +175,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // 应用链接
     const { appConfig } = useContext(locationContext)
     const token = localStorage.getItem("ws_token") || '';
-    const host = appConfig.websocketHost || ''
+    const host = appConfig.websocketHost || window.location.host;
     let wsUrl = type === AppNumType.SKILL ? `${host}${__APP_ENV__.BASE_URL}/api/v1/chat/${id}?type=L1&t=${token}` :
         type === AppNumType.ASSISTANT ? `${location.host}${__APP_ENV__.BASE_URL}/api/v1/assistant/chat/${id}?t=${token}` :
             `${host}${__APP_ENV__.BASE_URL}/api/v1/workflow/chat/${id}?t=${token}&chat_id=${chatId}`
