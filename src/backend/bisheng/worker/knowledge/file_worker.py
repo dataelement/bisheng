@@ -21,7 +21,6 @@ from typing import BinaryIO
 from bisheng.utils.minio_client import MinioClient
 
 
-
 MINIO_IMAGE_BUCKET_NAME = "images"
 
 
@@ -38,6 +37,7 @@ def put_doc_images_to_minio(local_image_dir, doc_id):
         minio_client.upload_minio_file(
             object_name=object_name, file=file_obj, bucket_name=MINIO_IMAGE_BUCKET_NAME
         )
+
 
 @celery_app.task(acks_late=True)
 def file_copy_celery(param: json) -> str:
