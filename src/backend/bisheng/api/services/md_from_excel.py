@@ -322,12 +322,3 @@ def handler(cache_dir, file_name: str, header_rows: List[int] = [0, 1], data_row
         append_header=append_header,
     )
     return md_file_name, None, doc_id
-
-
-# --- Usage Example ---
-if __name__ == "__main__":
-    resources_dir = "/Users/tju/Resources/docs/excel"
-    excel_file_path = f"{resources_dir}/test_excel_v2.xlsx"  # Use a different name or ensure old one is compatible
-    csv_file_path = f"{resources_dir}/test_excel_v2.csv"  # Use a different name or ensure old one is compatible
-    # handler(resources_dir, excel_file_path, 2, 5,)
-    handler(resources_dir, csv_file_path, 1, 5,)

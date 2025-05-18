@@ -412,11 +412,9 @@ def add_file_embedding(
     if not es_client:
         raise ValueError("es not found, please check your es config")
 
-
-
     # Convert split_rule string to dict if needed
     excel_rule = {}
-    if db_file.split_rule and  isinstance(db_file.split_rule, str):
+    if db_file.split_rule and isinstance(db_file.split_rule, str):
         split_rule = json.loads(db_file.split_rule)
         if "excel_rule" in split_rule:
             excel_rule = split_rule["excel_rule"]
@@ -433,7 +431,7 @@ def add_file_embedding(
         enable_formula=enable_formula,
         force_ocr=force_ocr,
         filter_page_header_footer=filter_page_header_footer,
-        excel_rule = excel_rule
+        excel_rule=excel_rule
     )
     if len(texts) == 0:
         raise ValueError("文件解析为空")

@@ -3,7 +3,6 @@ from loguru import logger
 from pathlib import Path
 from fastapi import UploadFile
 from uuid import uuid4
-# from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
 
 try:
     # 尝试检查 pandoc 版本，如果失败则尝试下载
@@ -77,7 +76,6 @@ def convert_doc_to_md_pandoc_high_quality(
         logger.debug(f"转换文件 {doc_path} 时发生未知错误: {e}")
 
 
-
 def handler(cache_dir, file_name):
     """
     处理文件转换的主函数。
@@ -97,8 +95,3 @@ def handler(cache_dir, file_name):
         image_dir_name=local_image_dir,
     )
     return md_file_name, f"{local_image_dir}/media", doc_id
-
-if __name__ == "__main__":
-    # 示例用法
-    doc_file = "/Users/tju/Resources/docs/docx/you-lian.docx"
-    handler(doc_file, "123456")

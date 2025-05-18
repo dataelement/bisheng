@@ -41,9 +41,3 @@ def handler(
     # 上传图片,可以用异步
     # 替换md文件中的图片路径
     return md_file_name, image_dir, doc_id
-
-
-if __name__ == "__main__":
-    # Example usage:
-    pptx_file = "/Users/tju/Resources/docs/ppt/you-lian.pptx"
-    handler(pptx_file, "123456")

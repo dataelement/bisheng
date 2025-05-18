@@ -907,15 +907,3 @@ def handler(cache_dir, file_or_url: str):
     if file_or_url.endswith(".html") or file_or_url.endswith("htm"):
         html_handler(file_or_url, doc_id, converter)
     return f"{cache_dir}/{doc_id}.md", f"{cache_dir}/{doc_id}", doc_id
-
-
-# Example Usage
-if __name__ == "__main__":
-    local_html_file_path = (
-        "/Users/tju/Resources/docs/html/f.html"  # <<-- UPDATE THIS PATH
-    )
-    # test_url = "https://www.zaobao.com/news/china/story20250510-6319065"  # Example BBC Chinese article
-    # mhtml_file_path = (
-    #     "/Users/tju/Resources/docs/html/a.mhtml"  # Replace with your MHTML file path
-    # )
-    handler("/Users/tju/Desktop/", local_html_file_path)
