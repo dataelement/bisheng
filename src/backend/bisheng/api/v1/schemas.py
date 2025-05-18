@@ -464,11 +464,13 @@ class WorkstationConfig(BaseModel):
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
 
+
 class ExcelRule(BaseModel):
     slice_length: Optional[int] = Field(default=10, description='数据行')
     header_start_row: Optional[int] = Field(default=1, description='表头开始')
-    header_end_row : Optional[int] = Field(default=1, description='表头结束')
+    header_end_row: Optional[int] = Field(default=1, description='表头结束')
     append_header: Optional[int] = Field(default=1, description='是否添加表头')
+
 
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
@@ -478,11 +480,11 @@ class FileProcessBase(BaseModel):
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
-    retain_images: Optional[int] = Field(default=15, description='保留文档图片')
+    retain_images: Optional[int] = Field(default=1, description='保留文档图片')
     force_ocr: Optional[int] = Field(default=0, description='启用OCR')
     enable_formula: Optional[int] = Field(default=1, description='latex公式识别')
-    filter_page_header_footer: Optional[int] = Field(default=0, description='页眉页脚')
-    excel_rule: Optional[ExcelRule] = Field(default = {}, description="excel rules")
+    filter_page_header_footer: Optional[int] = Field(default=0, description='过滤页眉页脚')
+    excel_rule: Optional[ExcelRule] = Field(default={}, description="excel rule")
 
     @model_validator(mode='before')
     @classmethod
@@ -543,7 +545,7 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description='文件路径')
-    excel_rule: Optional[ExcelRule] = Field(default={}, description="Excel rules" )
+    excel_rule: Optional[ExcelRule] = Field(default={}, description="Excel rules")
 
 
 # 知识库文件处理
