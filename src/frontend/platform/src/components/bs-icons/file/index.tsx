@@ -1,45 +1,47 @@
 import React, { forwardRef } from "react";
-import BmpIcon from "./bmp.svg?react";
-import ExcelIcon from "./excel.svg?react";
-import HtmlIcon from "./html.svg?react";
-import JpgIcon from "./jpg.svg?react";
-import MarkdownIcon from "./markdown.svg?react";
+import CsvIcon from "./csv.svg?react";
+import DocIcon from "./doc.svg?react";
+import DocxIcon from "./docx.svg?react";
+import ImageIcon from "./image.svg?react";
 import PdfIcon from "./pdf.svg?react";
-import PngIcon from "./png.svg?react";
 import PptIcon from "./ppt.svg?react";
+import PptxIcon from "./pptx.svg?react";
 import TxtIcon from "./txt.svg?react";
-import WordIcon from "./word.svg?react";
+import XlsIcon from "./xls.svg?react";
+import XlsxIcon from "./xlsx.svg?react";
 
 export type FileType =
     | 'pdf'
-    | 'txt'
-    | 'doc' | 'docx'
-    | 'ppt' | 'pptx'
-    | 'md'
-    | 'html'
-    | 'jpg' | 'jpeg'
+    | 'doc'
+    | 'docx'
+    | 'ppt'
+    | 'pptx'
+    | 'md' | 'html' | 'txt'
+    | 'jpg'
+    | 'jpeg'
     | 'png'
     | 'bmp'
     | 'csv'
-    | 'xls' | 'xlsx';
+    | 'xls'
+    | 'xlsx';
 
 // 文件扩展名到图标组件的映射
 const iconComponents: Record<FileType, React.ComponentType<any>> = {
     pdf: PdfIcon,
     txt: TxtIcon,
-    doc: WordIcon,
-    docx: WordIcon,
+    doc: DocIcon,
+    docx: DocxIcon,
     ppt: PptIcon,
-    pptx: PptIcon,
-    md: MarkdownIcon,
-    html: HtmlIcon,
-    jpg: JpgIcon,
-    jpeg: JpgIcon,
-    png: PngIcon,
-    bmp: BmpIcon,
-    csv: ExcelIcon,
-    xls: ExcelIcon,
-    xlsx: ExcelIcon
+    pptx: PptxIcon,
+    md: TxtIcon,
+    html: TxtIcon,
+    jpg: ImageIcon,
+    jpeg: ImageIcon,
+    png: ImageIcon,
+    bmp: ImageIcon,
+    csv: CsvIcon,
+    xls: XlsIcon,
+    xlsx: XlsxIcon
 };
 
 interface FileIconProps extends React.PropsWithChildren<{
