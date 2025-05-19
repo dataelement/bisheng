@@ -98,7 +98,7 @@ export default function RunTest({ nodeId }) {
             data.push(rowData)
         })
 
-        exportCsv([], "test_result.xlsx")
+        exportCsv(data, "test_result.xlsx")
     }
 
     const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])
@@ -122,11 +122,11 @@ export default function RunTest({ nodeId }) {
                 {
                     isForm ? <Dialog open={formShow} onOpenChange={setFormShow}>
                         <DialogTrigger asChild>
-                            <Button size="sm" disabled={runningType === 'all' || notDiffVersion}><Play />{t('test.testRun')}</Button>
+                            <Button size="sm" disabled={runningType === 'all' || notDiffVersion}><Play size={14} />{t('test.testRun')}</Button>
                         </DialogTrigger>
                         <RunForm show={formShow} flow={mulitVersionFlow[0]} onChangeShow={setFormShow} onSubmit={handleRunTest} />
                     </Dialog> :
-                        <Button size="sm" disabled={runningType === 'all' || notDiffVersion} onClick={() => handleRunTest()}><Play />{t('test.testRun')}</Button>
+                        <Button size="sm" disabled={runningType === 'all' || notDiffVersion} onClick={() => handleRunTest()}><Play size={14} />{t('test.testRun')}</Button>
                 }
             </div>
             {/* table */}
@@ -145,13 +145,13 @@ export default function RunTest({ nodeId }) {
                                             className="w-6 h-6"
                                             title={t('test.run')}
                                             onClick={() => handleColRunTest(version.id)}
-                                        ><Play /></Button>}
+                                        ><Play size={14} /></Button>}
                                     </div>
                                 </TableHead>
                             )
                         }
                         <TableHead className="text-right min-w-[135px]" style={{ width: 135 }}>
-                            <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><Download className="mr-1" />{t('test.downloadResults')}</Button>
+                            <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><Download className="mr-1" size={18} />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
                 </TableHeader>
@@ -173,7 +173,7 @@ export default function RunTest({ nodeId }) {
                                             className="min-w-6 h-6"
                                             title="运行"
                                             onClick={() => handleRowRunTest(index)}
-                                        ><Play /></Button>}
+                                        ><Play size={14}/></Button>}
                                     </div>
                                 </TableCell>
                                 {/* 版本 */}
