@@ -5,7 +5,7 @@ from typing import List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text
+from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select
 
 from bisheng.database.base import session_getter
@@ -97,7 +97,7 @@ class KnowledgeFile(KnowledgeFileBase, table=True):
 class QAKnowledge(QAKnowledgeBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
-    answers: Optional[str] = Field(default=None, sa_column=Column(String(length=2048)))
+    answers: Optional[str] = Field(default=None, sa_column=Column(Text))
 
 
 class KnowledgeFileRead(KnowledgeFileBase):
