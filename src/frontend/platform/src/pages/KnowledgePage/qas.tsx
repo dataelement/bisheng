@@ -239,6 +239,17 @@ export default function QasPage() {
         })
     )
 
+    // 轮询
+    useEffect(() => {
+        const runing = datalist.some(item=> item.status === 2)
+        if (runing) {
+            const timer = setTimeout(() => {
+                reload()
+            }, 5000)
+            return () => clearTimeout(timer)
+        }
+    }, [datalist])
+
     useEffect(() => {
         // @ts-ignore
         const libname = window.libname // 临时记忆
@@ -313,9 +324,9 @@ export default function QasPage() {
         }
     };
     return <div className="relative px-2 pt-4 size-full">
-        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        {/* {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
-        </div>}
+        </div>} */}
         <div className="h-full bg-background-login">
             <div className="flex justify-between">
                 <div className="flex justify-between items-center mb-4">
@@ -359,7 +370,7 @@ export default function QasPage() {
                             <TableHead>{t('creationTime')}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead className="w-20">{t('creator')}</TableHead>
-                            <TableHead>{t('status')}</TableHead>
+                            <TableHead className="w-[140px]">{t('status')}</TableHead>
                             <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -385,11 +396,10 @@ export default function QasPage() {
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>
                                     <div className="flex items-center">
-                                        <Switch
+                                        {el.status !== 2 && <Switch
                                             checked={el.status === 1}
-                                            disabled={el.status === 3}
                                             onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
-                                        />
+                                        />}
                                         {el.status === 2 && (
                                             <span className="ml-2 text-sm">处理中</span>
                                         )}

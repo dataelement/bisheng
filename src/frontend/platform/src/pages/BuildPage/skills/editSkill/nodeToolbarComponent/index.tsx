@@ -68,7 +68,7 @@ const NodeToolbarComponent = ({ data, deleteNode, openPopUp, position }) => {
         if (checkComponentsName(data.node.display_name)) {
           bsConfirm({
             title: '组件已存在',
-            desc: `组件 ${data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
+            desc: `组件 ${data.node.display_name} 已存在，覆盖原有组件还是继续创建新组件？`,
             showClose: true,
             okTxt: '覆盖',
             canelTxt: '创建新组件',

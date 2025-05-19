@@ -90,7 +90,7 @@ export default function ChatMessages({
     // 成对的qa msg
     const findQa = (msgs, index) => {
         const item = msgs[index]
-        if (['stream_msg', 'answer'].includes(item.category)) {
+        if (['stream_msg', 'answer', 'output_msg'].includes(item.category)) {
             const a = item.message.msg || item.message
             let q = ''
             while (index > -1) {
@@ -106,7 +106,7 @@ export default function ChatMessages({
             let a = ''
             while (msgs[++index]) {
                 const aItem = msgs[index]
-                if (['stream_msg', 'answer'].includes(aItem.category)) {
+                if (['stream_msg', 'answer', 'output_msg'].includes(aItem.category)) {
                     a = aItem.message.msg || aItem.message
                     break
                 }
