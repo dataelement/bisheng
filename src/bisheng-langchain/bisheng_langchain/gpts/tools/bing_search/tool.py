@@ -2,7 +2,7 @@
 
 from typing import Optional, Type
 
-from langchain.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_community.utilities.bing_search import BingSearchAPIWrapper
 from langchain_core.callbacks import CallbackManagerForToolRun
 from langchain_core.tools import BaseTool
@@ -43,7 +43,7 @@ class BingSearchResults(BaseTool):
         "Input should be a search query. Output is a JSON array of the query results"
     )
     num_results: int = 5
-    args_schema = BingSearchInput
+    args_schema: Type[BaseModel] = BingSearchInput
     api_wrapper: BingSearchAPIWrapper
 
     def _run(

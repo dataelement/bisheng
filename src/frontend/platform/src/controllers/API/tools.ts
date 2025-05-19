@@ -58,6 +58,25 @@ export const downloadToolSchema = async (data: { download_url: string } | { file
 };
 
 /**
+ * 解析mcp服务器配置接口
+ */
+export const getMcpServeByConfig = async (data: { file_content: string }): Promise<any> => {
+    return await axios.post(`/api/v1/assistant/mcp/tool_schema`, data);
+}
+
+/**
+ * mcp测试接口
+ */
+export const testMcpApi = async (data: { file_content: string }) => {
+    return await axios({
+        method: 'post',
+        url: '/api/v1/assistant/mcp/tool_test',
+        data
+    })
+}
+
+
+/**
  * 工具测试接口
  * @returns 
  */

@@ -2,6 +2,8 @@ import json
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
+from pydantic import model_validator, Field
+
 from bisheng_langchain.chat_models.host_llm import HostChatGLM
 from langchain.agents.agent import Agent, AgentOutputParser, BaseSingleActionAgent
 from langchain.agents.structured_chat.output_parser import StructuredChatOutputParserWithRetries
@@ -14,7 +16,6 @@ from langchain.schema import AgentAction, AgentFinish, BasePromptTemplate
 from langchain.schema.language_model import BaseLanguageModel
 from langchain.schema.messages import ChatMessage
 from langchain.tools import BaseTool, StructuredTool
-from langchain_core.pydantic_v1 import Field, root_validator
 
 HUMAN_MESSAGE_TEMPLATE = '{input}\n\n{agent_scratchpad}'
 
@@ -81,13 +82,15 @@ class ChatglmFunctionsAgent(BaseSingleActionAgent):
         """Get allowed tools."""
         return list([t.name for t in self.tools])
 
-    @root_validator
+    @model_validator(mode='before')
+    @classmethod
     def validate_llm(cls, values: dict) -> dict:
         if not isinstance(values['llm'], HostChatGLM):
             raise ValueError('Only supported with ChatGLM3 models.')
         return values
 
-    @root_validator
+    @model_validator(mode='before')
+    @classmethod
     def validate_prompt(cls, values: dict) -> dict:
         prompt: BasePromptTemplate = values['prompt']
         if 'agent_scratchpad' not in prompt.input_variables:

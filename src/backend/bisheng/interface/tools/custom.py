@@ -3,7 +3,7 @@ from typing import Callable, Optional
 from bisheng.interface.importing.utils import get_function
 from bisheng.utils import validate
 from langchain_community.tools import Tool
-from pydantic import BaseModel, validator
+from pydantic import field_validator, BaseModel
 
 
 class Function(BaseModel):
@@ -16,7 +16,8 @@ class Function(BaseModel):
         super().__init__(**data)
 
     # Validate the function
-    @validator('code')
+    @field_validator('code')
+    @classmethod
     def validate_func(cls, v):
         try:
             validate.eval_function(v)
@@ -32,7 +33,7 @@ class Function(BaseModel):
         return validate.create_function(self.code, function_name)
 
 
-class PythonFunctionTool(Function, Tool):
+class PythonFunctionTool(Tool):
     """Python function"""
 
     name: str = 'Custom Tool'

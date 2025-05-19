@@ -185,7 +185,8 @@ export interface WorkflowNodeParam {
   multi?: boolean;
   /** Array of options */
   options?: any[];
-  test?: string
+  test?: string,
+  hidden?: boolean;
 }
 
 /** 工作流消息结构 */

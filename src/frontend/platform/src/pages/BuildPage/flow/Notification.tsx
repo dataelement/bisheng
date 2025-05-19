@@ -19,11 +19,12 @@ export default function Notification() {
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button size="icon" variant="outline" className={`${!dark && 'bg-[#fff]'} size-8`}>
+                <Button size="icon" variant="outline" className={`${!dark && 'bg-[#fff]'} size-8 relative`}>
                     <Bell size={16} />
+                    {notifications.length > 0 && <div className="absolute top-1 right-1 rounded-full bg-status-red size-1.5"></div>}
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-2 cursor-pointer w-[400px] h-[500px]">
+            <PopoverContent className="p-2 cursor-pointer w-[400px] h-[500px] pb-10">
                 <div className="text-md flex flex-row justify-between pl-3 font-medium text-foreground">
                     {t("flow.notification")}
                     <div className="flex gap-3 pr-3">

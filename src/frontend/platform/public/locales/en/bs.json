@@ -238,7 +238,7 @@
     "searchLabels": "Search labels",
     "confirmed": "Confirmed",
     "confirm": "Confirm",
-    "runNewWorkflow": "Run New Workflow",
+    "runNewWorkflow": "Run New Chat",
     "chatEndMessage": "This chat has ended"
   },
   "model": {
@@ -904,8 +904,6 @@
     "10910": "Current knowledge base version does not support segment modification. Please create a new knowledge base to modify segments.",
     "10800": "Service provider name already exists, please modify",
     "10801": "Model cannot be duplicated",
-    "10802": "Failed to add service provider, all models failed to initialize",
-    "10803": "Failed to add service provider, some models failed to initialize",
     "10700": "Tag already exists",
     "10701": "Tag not found",
     "10600": "Incorrect username or password",
@@ -927,7 +925,7 @@
   "all": "All",
   "confirmButton": "Confirm",
   "add": "Add",
-  "back": "Back",
+  "back": "Return",
   "create": "Create",
   "delete": "Delete",
   "deleteSuccess": "Delete successful",

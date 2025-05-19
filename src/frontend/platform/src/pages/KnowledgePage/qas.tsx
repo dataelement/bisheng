@@ -1,9 +1,12 @@
+import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadIcon } from "@/components/bs-icons";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { downloadFile, formatDate } from "@/util/utils";
 import { ArrowLeft } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,10 +23,10 @@ import {
     TableHeader,
     TableRow
 } from "../../components/bs-ui/table";
-import { deleteQa, generateSimilarQa, getQaDetail, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
+import { deleteQa, generateSimilarQa, getQaDetail, getQaFile, getQaList, updateQa, updateQaStatus } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import { useTable } from "../../util/hook";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { ImportQa } from "./components/ImportQa";
 
 const defaultQa = {
     question: '',
@@ -127,7 +130,7 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
                 description: t('max100CharactersForSimilarQuestion')
             });
         }
-        if (form.answer.length > 1000) {
+        if (form.answer.length > 10000) {
             return message({
                 variant: 'warning',
                 description: t('max1000CharactersForAnswer')
@@ -224,6 +227,7 @@ export default function QasPage() {
     const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
     const [selectAll, setSelectAll] = useState(false); // 全选状态
     const editRef = useRef(null)
+    const importRef = useRef(null)
     const [hasPermission, setHasPermission] = useState(false)
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
@@ -234,6 +238,17 @@ export default function QasPage() {
             return res
         })
     )
+
+    // 轮询
+    useEffect(() => {
+        const runing = datalist.some(item => item.status === 2)
+        if (runing) {
+            const timer = setTimeout(() => {
+                reload()
+            }, 5000)
+            return () => clearTimeout(timer)
+        }
+    }, [datalist])
 
     useEffect(() => {
         // @ts-ignore
@@ -292,16 +307,32 @@ export default function QasPage() {
         });
     };
 
-    const handleStatusClick = async (id, checked) => {
-        const status = checked ? 1 : 0
-        await updateQaStatus(id, status)
-        refreshData((item) => item.id === id, { status })
-    }
+    const {toast} = useToast()
 
+    
+    const handleStatusClick = async (id: number, checked: boolean) => {
+        const targetStatus = checked ? 1 : 0;
+        const isOpening = checked;
+        try {
+            if (isOpening) {
+                refreshData(item => item.id === id, { status: 2 });
+            }
+            await updateQaStatus(id, targetStatus);
+            refreshData(item => item.id === id, { status: targetStatus });
+        } catch (error) {
+            toast({
+                variant: 'error',
+                description: error
+            })
+            refreshData(item => item.id === id, {
+                status: 3
+            });
+        }
+    };
     return <div className="relative px-2 pt-4 size-full">
-        {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        {/* {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
-        </div>}
+        </div>} */}
         <div className="h-full bg-background-login">
             <div className="flex justify-between">
                 <div className="flex justify-between items-center mb-4">
@@ -321,6 +352,13 @@ export default function QasPage() {
                     </div>
                     <div className="flex gap-4 items-center">
                         <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
+                        <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>导入</Button>
+                        <Button variant="outline" className="px-8" onClick={() => {
+                            getQaFile(id).then(res => {
+                                const fileUrl = res.file_list[0];
+                                downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                            })
+                        }}>导出</Button>
                         <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
                     </div>
                 </div>
@@ -338,7 +376,7 @@ export default function QasPage() {
                             <TableHead>{t('creationTime')}</TableHead>
                             <TableHead>{t('updateTime')}</TableHead>
                             <TableHead className="w-20">{t('creator')}</TableHead>
-                            <TableHead>{t('status')}</TableHead>
+                            <TableHead className="w-[140px]">{t('status')}</TableHead>
                             <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -358,12 +396,23 @@ export default function QasPage() {
                                         {el.answers}
                                     </div>
                                 </TableCell>
-                                <TableCell>{[t('unknown'), t('manualCreation'), t('auditTag')][el.source]}</TableCell>
+                                <TableCell>{['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]}</TableCell>
                                 <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{el.user_name}</TableCell>
                                 <TableCell>
-                                    <Switch checked={el.status === 1} onCheckedChange={(bln) => handleStatusClick(el.id, bln)} />
+                                    <div className="flex items-center">
+                                        {el.status !== 2 && <Switch
+                                            checked={el.status === 1}
+                                            onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                        />}
+                                        {el.status === 2 && (
+                                            <span className="ml-2 text-sm">处理中</span>
+                                        )}
+                                        {el.status === 3 && (
+                                            <span className="ml-2 text-sm">未启用，请重试</span>
+                                        )}
+                                    </div>
                                 </TableCell>
                                 {hasPermission ? <TableCell className="text-right">
                                     <Button variant="link" onClick={() => editRef.current.edit(el)} className="ml-4">{t('update')}</Button>
@@ -389,5 +438,6 @@ export default function QasPage() {
             </div>
         </div>
         <EditQa ref={editRef} knowlageId={id} onChange={reload} />
+        <ImportQa ref={importRef} knowlageId={id} onChange={reload} />
     </div >
 };

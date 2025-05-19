@@ -114,6 +114,13 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
         [data.message]
     )
 
+    const files = useMemo(() => {
+        return typeof data.files === 'string' ? [] : data.files
+    }, [data.files])
+
+    // hack
+    if (typeof data.files === 'string') return null 
+
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
             <div className="flex justify-between items-center mb-1">
@@ -135,7 +142,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                         <div>{mkdown}</div>
                         {/* files */}
                         <div>
-                            {data.files?.map((file) => <div
+                            {files.map((file) => <div
                                 className="flex gap-2 w-52 border border-gray-200 shadow-sm bg-gray-50 dark:bg-gray-600 px-4 py-2 rounded-sm cursor-pointer"
                                 onClick={() => handleDownloadFile(file)}
                             >
@@ -152,10 +159,10 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                             {type === 'input' ?
                                 <div>
                                     <Textarea
-                                        className="w-96"
+                                        className="w-full"
                                         ref={textRef}
                                         disabled={inputSended}
-                                        defaultValue={data.message.input_msg}
+                                        defaultValue={data.message.input_msg || data.message.hisValue}
                                     />
                                     <div className="flex justify-end mt-2">
                                         <Button
@@ -168,11 +175,11 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                 : <div>
                                     {data.message.options.map(opt => <div
                                         key={opt.id}
-                                        className="min-w-56 bg-[#fff] dark:bg-background rounded-xl p-4 mt-2 hover:bg-gray-200 cursor-pointer flex justify-between"
+                                        className="min-w-56 bg-[#fff] dark:bg-background rounded-xl p-4 mt-2 hover:bg-gray-200 cursor-pointer flex justify-between items-center break-all"
                                         onClick={() => handleSelect(opt)}
                                     >
                                         {opt.label}
-                                        {selected === opt.id && <CheckCircle size={20} />}
+                                        {selected === opt.id && <CheckCircle size={20} className="min-w-5" />}
                                     </div>)
                                     }
                                 </div>

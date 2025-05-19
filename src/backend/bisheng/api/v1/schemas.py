@@ -12,7 +12,7 @@ from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class CaptchaInput(BaseModel):
@@ -55,7 +55,7 @@ class InputRequest(BaseModel):
 
 
 class TweaksRequest(BaseModel):
-    tweaks: Optional[Dict[str, Dict[str, str]]] = Field(default_factory=dict)
+    tweaks: Optional[Dict[str, Dict[str, str]]] = Field(default_factory=dict, description='List of dictionaries')
 
 
 class UpdateTemplateRequest(BaseModel):
@@ -66,7 +66,7 @@ class UpdateTemplateRequest(BaseModel):
 DataT = TypeVar('DataT')
 
 
-class UnifiedResponseModel(Generic[DataT], BaseModel):
+class UnifiedResponseModel(BaseModel, Generic[DataT]):
     """统一响应模型"""
     status_code: int
     status_message: str
@@ -90,7 +90,7 @@ def resp_500(code: int = 500,
 class ProcessResponse(BaseModel):
     """Process response schema."""
 
-    result: Any
+    result: Any = None
     # task: Optional[TaskResponse] = None
     session_id: Optional[str] = None
     backend: Optional[str] = None
@@ -121,7 +121,7 @@ class ChatList(BaseModel):
     create_time: datetime = None
     update_time: datetime = None
     flow_type: int = None
-    latest_message: ChatMessageRead = None
+    latest_message: Optional[ChatMessageRead] = None
     logo: Optional[str] = None
 
 
@@ -143,34 +143,35 @@ class ChatMessage(BaseModel):
     message: Union[str, None, dict, list] = ''
     type: str = 'human'
     category: str = 'processing'  # system processing answer tool
-    intermediate_steps: str = None
+    intermediate_steps: Optional[str] = None
     files: Optional[list] = []
-    user_id: int = None
-    message_id: int | str = None
-    source: int = 0
-    sender: str = None
-    receiver: dict = None
+    user_id: Optional[int] = None
+    message_id: Optional[int | str] = None
+    source: Optional[int] = 0
+    sender: Optional[str] = None
+    receiver: Optional[dict] = None
     liked: int = 0
     extra: Optional[str | dict] = '{}'
-    flow_id: str = None
-    chat_id: str = None
+    flow_id: Optional[str] = None
+    chat_id: Optional[str] = None
 
 
 class ChatResponse(ChatMessage):
     """Chat response schema."""
 
     intermediate_steps: str = ''
-    is_bot: bool = True
+    is_bot: bool | int = True
     category: str = 'processing'
 
-    @validator('type')
+    @field_validator('type')
+    @classmethod
     def validate_message_type(cls, v):
         """
         end_cover: 结束并覆盖上一条message
         """
         if v not in [
-                'start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover',
-                'over'
+            'start', 'stream', 'end', 'error', 'info', 'file', 'begin', 'close', 'end_cover',
+            'over'
         ]:
             raise ValueError('type must be start, stream, end, error, info, or file')
         return v
@@ -179,12 +180,13 @@ class ChatResponse(ChatMessage):
 class FileResponse(ChatMessage):
     """File response schema."""
 
-    data: Any
+    data: Any = None
     data_type: str
     type: str = 'file'
     is_bot: bool = True
 
-    @validator('data_type')
+    @field_validator('data_type')
+    @classmethod
     def validate_data_type(cls, v):
         if v not in ['image', 'csv']:
             raise ValueError('data_type must be image or csv')
@@ -210,9 +212,9 @@ class BuiltResponse(BaseModel):
 class UploadFileResponse(BaseModel):
     """Upload file response schema."""
 
-    flowId: Optional[str]
+    flowId: Optional[str] = None
     file_path: str
-    relative_path: Optional[str]  # minio的相对路径，即object_name
+    relative_path: Optional[str] = None  # minio的相对路径，即object_name
 
 
 class StreamData(BaseModel):
@@ -270,6 +272,11 @@ class AssistantUpdateReq(BaseModel):
     flow_list: List[str] | None = Field(default=None, description='助手的技能ID列表，为None则不更新')
     knowledge_list: List[int] | None = Field(default=None, description='知识库ID列表，为None则不更新')
 
+    @field_validator('model_name', mode='before')
+    @classmethod
+    def convert_model_name(cls, v):
+        return str(v)
+
 
 class AssistantSimpleInfo(BaseModel):
     id: str
@@ -279,22 +286,22 @@ class AssistantSimpleInfo(BaseModel):
     user_id: int
     user_name: str
     status: int
-    flow_type: Optional[int]
+    flow_type: Optional[int] = None
     write: Optional[bool] = Field(default=False)
-    group_ids: Optional[List[int]]
-    tags: Optional[List[Tag]]
+    group_ids: Optional[List[int]] = None
+    tags: Optional[List[Tag]] = None
     create_time: datetime
     update_time: datetime
 
 
 class AssistantInfo(AssistantBase):
-    tool_list: List[GptsToolsRead] = Field(default=[], description='助手的工具ID列表')
-    flow_list: List[FlowRead] = Field(default=[], description='助手的技能ID列表')
-    knowledge_list: List[KnowledgeRead] = Field(default=[], description='知识库ID列表')
+    tool_list: List[GptsToolsRead] = Field(default_factory=list, description='助手的工具ID列表')
+    flow_list: List[FlowRead] = Field(default_factory=list, description='助手的技能ID列表')
+    knowledge_list: List[KnowledgeRead] = Field(default_factory=list, description='知识库ID列表')
 
 
 class FlowVersionCreate(BaseModel):
-    name: Optional[str] = Field(default=..., description='版本的名字')
+    name: Optional[str] = Field(default=None, description='版本的名字')
     description: Optional[str] = Field(default=None, description='版本的描述')
     data: Optional[Dict] = Field(default=None, description='技能版本的节点数据数据')
     original_version_id: Optional[int] = Field(default=None, description='版本的来源版本ID')
@@ -303,8 +310,8 @@ class FlowVersionCreate(BaseModel):
 
 class FlowCompareReq(BaseModel):
     inputs: Any = Field(default=None, description='技能运行所需要的输入')
-    question_list: List[str] = Field(default=[], description='测试case列表')
-    version_list: List[int] = Field(default=[], description='对比版本ID列表')
+    question_list: List[str] = Field(default_factory=list, description='测试case列表')
+    version_list: List[int] = Field(default_factory=list, description='对比版本ID列表')
     node_id: str = Field(default=None, description='需要对比的节点唯一ID')
     thread_num: Optional[int] = Field(default=1, description='对比线程数')
 
@@ -315,6 +322,7 @@ class DeleteToolTypeReq(BaseModel):
 
 class TestToolReq(BaseModel):
     server_host: str = Field(default='', description='服务的根地址')
+    openapi_schema: Optional[str] = Field(default='', description='openapi schema')
     extra: str = Field(default='', description='Api 对象解析后的extra字段')
     auth_method: int = Field(default=AuthMethod.NO.value, description='认证类型')
     auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description='Auth Type')
@@ -342,7 +350,7 @@ class OpenAIChatCompletionReq(BaseModel):
     n: int = Field(default=1, description='返回的答案个数, 助手侧默认为1，暂不支持多个回答')
     stream: bool = Field(default=False, description='是否开启流式回复')
     temperature: float = Field(default=0.0, description='模型温度, 传入0或者不传表示不覆盖')
-    tools: List[dict] = Field(default=[], description='工具列表, 助手暂不支持，使用助手的配置')
+    tools: List[dict] = Field(default_factory=list, description='工具列表, 助手暂不支持，使用助手的配置')
 
 
 class OpenAIChoice(BaseModel):
@@ -380,27 +388,27 @@ class LLMServerCreateReq(BaseModel):
     limit_flag: Optional[bool] = Field(default=False, description='是否开启每日调用次数限制')
     limit: Optional[int] = Field(default=0, description='每日调用次数限制')
     config: Optional[dict] = Field(default=None, description='服务提供方配置')
-    models: Optional[List[LLMModelCreateReq]] = Field(default=[], description='服务提供方下的模型列表')
+    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
 
 
 class LLMModelInfo(LLMModelBase):
-    id: Optional[int]
+    id: Optional[int] = None
 
 
 class LLMServerInfo(LLMServerBase):
-    id: Optional[int]
-    models: List[LLMModelInfo] = Field(default=[], description='模型列表')
+    id: Optional[int] = None
+    models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
 
 
 class KnowledgeLLMConfig(BaseModel):
-    embedding_model_id: Optional[int] = Field(description='知识库默认embedding模型的ID')
-    source_model_id: Optional[int] = Field(description='知识库溯源模型的ID')
-    extract_title_model_id: Optional[int] = Field(description='文档知识库提取标题模型的ID')
-    qa_similar_model_id: Optional[int] = Field(description='QA知识库相似问模型的ID')
+    embedding_model_id: Optional[int] = Field(None, description='知识库默认embedding模型的ID')
+    source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
+    extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
+    qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
 
 
 class AssistantLLMItem(BaseModel):
-    model_id: Optional[int] = Field(description='模型的ID')
+    model_id: Optional[int] = Field(None, description='模型的ID')
     agent_executor_type: Optional[str] = Field(default='ReAct',
                                                description='执行模式。function call 或者 ReAct')
     knowledge_max_content: Optional[int] = Field(default=15000, description='知识库检索最大字符串数')
@@ -410,69 +418,71 @@ class AssistantLLMItem(BaseModel):
 
 
 class AssistantLLMConfig(BaseModel):
-    llm_list: Optional[List[AssistantLLMItem]] = Field(default=[], description='助手可选的LLM列表')
-    auto_llm: Optional[AssistantLLMItem] = Field(description='助手画像自动优化模型的配置')
+    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list, description='助手可选的LLM列表')
+    auto_llm: Optional[AssistantLLMItem] = Field(None, description='助手画像自动优化模型的配置')
 
 
 class EvaluationLLMConfig(BaseModel):
-    model_id: Optional[int] = Field(description='评测功能默认模型的ID')
+    model_id: Optional[int] = Field(None, description='评测功能默认模型的ID')
 
 
 class Icon(BaseModel):
     enabled: bool
-    image: Optional[str]
+    image: Optional[str] = None
+    relative_path: Optional[str] = None
 
 
 class WSModel(BaseModel):
-    key: Optional[str]
+    key: Optional[str] = None
     id: str
-    name: Optional[str]
-    displayName: Optional[str]
+    name: Optional[str] = None
+    displayName: Optional[str] = None
 
 
 class WSPrompt(BaseModel):
     enabled: bool
-    prompt: Optional[str]
-    model: Optional[str]
-    tool: Optional[str]
-    bingKey: Optional[str]
-    bingUrl: Optional[str]
+    prompt: Optional[str] = None
+    model: Optional[str] = None
+    tool: Optional[str] = None
+    bingKey: Optional[str] = None
+    bingUrl: Optional[str] = None
 
 
 class WorkstationConfig(BaseModel):
     menuShow: bool = Field(default=True, description='是否显示左侧菜单栏')
     maxTokens: Optional[int] = Field(default=1500, description='最大token数')
-    sidebarIcon: Optional[Icon]
-    assistantIcon: Optional[Icon]
-    sidebarSlogan: Optional[str] = Field(description='侧边栏slogan')
-    welcomeMessage: Optional[str] = Field()
-    functionDescription: Optional[str] = Field()
-    inputPlaceholder: Optional[str]
-    models: Optional[Union[List[WSModel], str]]
-    voiceInput: Optional[WSPrompt]
-    webSearch: Optional[WSPrompt]
-    knowledgeBase: Optional[WSPrompt]
-    fileUpload: Optional[WSPrompt]
+    sidebarIcon: Optional[Icon] = None
+    assistantIcon: Optional[Icon] = None
+    sidebarSlogan: Optional[str] = Field(default='', description='侧边栏slogan')
+    welcomeMessage: Optional[str] = Field(default='')
+    functionDescription: Optional[str] = Field(default='')
+    inputPlaceholder: Optional[str] = ''
+    models: Optional[Union[List[WSModel], str]] = None
+    voiceInput: Optional[WSPrompt] = None
+    webSearch: Optional[WSPrompt] = None
+    knowledgeBase: Optional[WSPrompt] = None
+    fileUpload: Optional[WSPrompt] = None
 
 
 # 文件切分请求基础参数
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='知识库ID')
-    separator: Optional[List[str]] = Field(default=['\n\n', '\n'], description='切分文本规则, 不传则为默认')
-    separator_rule: Optional[List[str]] = Field(default=['after', 'after'],
+    separator: Optional[List[str]] = Field(default=None, description='切分文本规则, 不传则为默认')
+    separator_rule: Optional[List[str]] = Field(default=None,
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
 
-    @root_validator
-    def check_separator_rule(cls, values):
-        if values['separator'] is None:
+    @model_validator(mode='before')
+    @classmethod
+    def check_separator_rule(cls, values: Any):
+        if values.get('separator', None) is None:
             values['separator'] = ['\n\n', '\n']
-        if values['separator_rule'] is None:
+        if values.get('separator_rule', None) is None:
             values['separator_rule'] = ['after' for _ in values['separator']]
-        if values['chunk_size'] is None:
+        if values.get('chunk_size', None) is None:
             values['chunk_size'] = 1000
-        if values['chunk_overlap'] is None:
+        if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
         return values
 

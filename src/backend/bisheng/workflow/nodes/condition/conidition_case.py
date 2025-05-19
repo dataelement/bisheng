@@ -1,7 +1,7 @@
 import re
 from typing import List, Optional, Dict
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 from loguru import logger
 
 from bisheng.workflow.nodes.base import BaseNode
@@ -60,8 +60,7 @@ class ConditionOne(BaseModel):
 
 
 class ConditionCases(BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str = Field(..., description='Unique id for case')
     operator: Optional[str] = Field('and', description='Operator for case')

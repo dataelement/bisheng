@@ -8,8 +8,8 @@ from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileD
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-from pydantic import BaseModel
-from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
+from pydantic import BaseModel, field_validator
+from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update, CHAR
 from sqlmodel.sql.expression import Select, SelectOfScalar
 
 
@@ -20,21 +20,25 @@ class KnowledgeTypeEnum(Enum):
 
 
 class KnowledgeBase(SQLModelSerializable):
-    user_id: Optional[int] = Field(index=True)
+    user_id: Optional[int] = Field(default=None, index=True)
     name: str = Field(index=True, min_length=1, max_length=30, description='知识库名, 最少一个字符，最多30个字符')
     type: int = Field(index=False, default=0, description='0 为普通知识库，1 为QA知识库')
-    description: Optional[str] = Field(index=True)
-    model: Optional[str] = Field(index=False)
-    collection_name: Optional[str] = Field(index=False)
-    index_name: Optional[str] = Field(index=False)
+    description: Optional[str] = Field(default=None, index=True)
+    model: Optional[str] = Field(default=None, index=False)
+    collection_name: Optional[str] = Field(default=None, index=False)
+    index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=1, description='0 为未发布，1 为已发布, 2 为复制中')
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=True,
-                         server_default=text('CURRENT_TIMESTAMP'),
-                         onupdate=text('CURRENT_TIMESTAMP')))
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP'), onupdate=text('CURRENT_TIMESTAMP')))
+
+    @field_validator('model', mode='before')
+    @classmethod
+    def convert_model(cls, v: Any) -> str:
+        if isinstance(v, int):
+            v = str(v)
+        return v
 
 
 class Knowledge(KnowledgeBase, table=True):
@@ -43,14 +47,14 @@ class Knowledge(KnowledgeBase, table=True):
 
 class KnowledgeRead(KnowledgeBase):
     id: int
-    user_name: Optional[str]
-    copiable: Optional[bool]
+    user_name: Optional[str] = None
+    copiable: Optional[bool] = None
 
 
 class KnowledgeUpdate(BaseModel):
     knowledge_id: int
-    name: Optional[str]
-    description: Optional[str]
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class KnowledgeCreate(KnowledgeBase):

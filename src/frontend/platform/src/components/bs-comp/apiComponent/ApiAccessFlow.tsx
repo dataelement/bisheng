@@ -19,7 +19,7 @@ import { useParams } from 'react-router-dom';
 
 const ApiAccessFlow = () => {
     const { t } = useTranslation()
-    const {id} = useParams()
+    const { id } = useParams()
     // const { flow, getTweak, tabsState } = useContext(TabsContext);
     // const curl_code = getCurlCode(flow, getTweak, tabsState);
     // const pythonCode = getPythonApiCode(flow, getTweak, tabsState);
@@ -52,6 +52,8 @@ url = "${location.origin}/api/v2/workflow/invoke"
 
 payload = json.dumps({
    "workflow_id": "${id}",
+   "stream": False, # 为空或者不传，都会请求流式返回工作流事件。本示例为了直观展示返回结果，所以改
+为非流式请求，真实场景下为了用户体验建议请求流式。
 })
 
 headers = {
@@ -448,7 +450,7 @@ print(response.text)# 输出工作流的响应`
 
                     <h3 className='mt-8' id="guide-3">等待输入事件-对话框形式</h3>
                     <div className='border border-red-200 rounded-sm bg-orange-100 p-4 text-sm'>
-                        <p className='bisheng-label'>当工作流返回 <span className="bg-orange-50">event="input"</span> 且 <span className="bg-orange-50">input_type="dialog_input"</span>时，表示后端希望前端在对话框中接收用户输入。</p>
+                        <p className='bisheng-label'>当工作流返回 <span className="bg-orange-50">event="input"</span> 且 <span className="bg-orange-50">input_type="dialog_input"</span>时，表示后端希望前端在对话框中接收用户输入以及上传文件（非必须）。</p>
                         <p className='bisheng-label mt-2'>下一次请求 <span className="bg-orange-50">/invoke</span> 接口必带的关键字段是 <span className="bg-orange-50">node_id</span>,<span className="bg-orange-50">message_id</span>,<span className="bg-orange-50">session_id</span> 以及对话框输入。</p>
                     </div>
                     <p className='bisheng-label mt-2'>事件数据示例</p>
@@ -462,7 +464,7 @@ print(response.text)# 输出工作流的响应`
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src="/assets/api/chat3.png" className='size-full' alt="" /></div>
+                                    <div className='max-w-[300px]'><img src="/assets/api/output.png" className='size-full' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -480,6 +482,15 @@ print(response.text)# 输出工作流的响应`
             {
                 "key": "user_input",
                 "type": "text"
+            },
+            {
+                "key": "dialog_files_content", # 需要用户上传文件
+                "type": "dialog_file"
+            },
+            {
+                "key": "dialog_file_accept",  # 上传文件的格式限制
+                "type": "dialog_file_accept",
+                "value": "all"  # 允许的文件类型
             }
         ]
     }
@@ -493,7 +504,8 @@ print(response.text)# 输出工作流的响应`
                         <p className="bisheng-label py-2">处理逻辑：</p>
                         <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
                             <li className='mt-2 leading-6'>绘制对话框，接收用户输入内容</li>
-                            <li className='mt-2 leading-6'>携带 <code className="bg-gray-200 p-1 rounded">node_id</code>、<code className="bg-gray-200 p-1 rounded">session_id</code>、<code className="bg-gray-200 p-1 rounded">message_id</code> 再次请求 /workflow/invoke，示例如下：</li>
+                            <li className='mt-2 leading-6'>携带 <code className="bg-gray-200 p-1 rounded">node_id</code>、<code className="bg-gray-200 p-1 rounded">session_id</code>、<code className="bg-gray-200 p-1 rounded">message_id</code> 再次请求 /workflow/invoke</li>
+                            <li className='mt-2 leading-6'>如果用户没有在对话框内上传文件，请求示例如下</li>
                         </ul>
                     </div>
                     <SyntaxHighlighter
@@ -507,19 +519,69 @@ print(response.text)# 输出工作流的响应`
     "message_id": "385140",
     "input": {
         "input_2775b": {  # 这里对应返回事件里的 node_id
-            # input_schme.value中元素的 key 以及对应要传入的值
+            # input_schema.value中元素的 key 以及对应要传入的值
             "user_input": "你好"
         }
     }
 })`}
                     </SyntaxHighlighter>
 
+                    <div className="mb-6">
+                        <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
+                            <li className='mt-2 leading-6'>如果用户在对话框内上传了文件</li>
+                            <li className='mt-2 leading-6'>如果有文件类型，调用毕昇文件上传接口获取到文件url，示例如下：</li>
+                        </ul>
+                    </div>
+                    <SyntaxHighlighter
+                        className="w-full max-w-[80vw] overflow-auto custom-scroll"
+                        language={'json'}
+                        style={oneDark}
+                    >
+                        {`import requests
+def upload_file(local_path: str):
+    server = "http://ip:port"
+    url = server + '/api/v1/knowledge/upload'
+    headers = {}
+    files = {'file': open(local_path, 'rb')}
+    res = requests.post(url, headers=headers, files=files)
+    file_path = res.json()['data'].get('file_path', '')
+    return file_path
+    
+ financeA = upload_file("caibao.pdf")
+ financeB = upload_file("caibao2.pdf")`}
+                    </SyntaxHighlighter>
+
+                    <div className="mb-6">
+                        <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
+                            <li className='mt-2 leading-6'>成功获取用户的输入和上传文件的url后，拼接为如下格式的接口入参</li>
+                        </ul>
+                    </div>
+                    <SyntaxHighlighter
+                                        className="w-full overflow-auto custom-scroll"
+                                        language={'json'}
+                                        style={oneDark}
+                                    >
+                                        {`payload = json.dumps({
+    "workflow_id": "c90bb7f2-b7d1-49bf-9fb6-3ab60ff8e414",
+    "session_id": "d4347ab8e8cd48c48ac9920dbb5a9b35_async_task_id",  # 上次返回的 session_id
+    "message_id": "385140",
+    "input": {
+        "input_2775b": {  # 这里对应返回事件里的 node_id
+            # input_schema.value中元素的 key 以及对应要传入的值
+            "user_input": "你好",
+            # 上传文件后获取到的文件url列表
+            "dialog_files_content": ["minio://127.0.0.1:9000/xxxx"]
+        }
+    }
+})
+`}
+                    </SyntaxHighlighter>
 
 
                     <h3 className='mt-8' id="guide-5">等待输入事件-表单形式</h3>
                     <div className='border border-red-200 rounded-sm bg-orange-100 p-4 text-sm'>
-                        <p className='bisheng-label'>当工作流返回 <span className="bg-orange-50">event="input"</span> 且 <span className="bg-orange-50">input_type="form_input"</span>时，表示后端希望前端渲染一个表单，让用户填写内容。</p>
-                        <p className='bisheng-label mt-2'>下一次请求 <span className="bg-orange-50">/invoke</span> 接口必带的关键字段是 <span className="bg-orange-50">node_id</span>, <span className="bg-orange-50">message_id</span>, <span className="bg-orange-50">session_id</span> 以及用户填写的表单值。</p>
+                        <p className='bisheng-label'>当工作流返回 <span className="bg-orange-50">event="input"</span> 且 <span className="bg-orange-50">input_type="form_input"</span>时，后端希望前端渲染一个表单，让用户填写内容。</p>
+                        <p className='bisheng-label mt-2'>下一次请求 <span className="bg-orange-50">/invoke</span> 接口必带的字段是 <span className="bg-orange-50">node_id</span>, <span className="bg-orange-50">message_id</span>, <span className="bg-orange-50">session_id</span> 以及用户填写的表单值。</p>
                     </div>
                     <p className='bisheng-label mt-2'>事件数据示例</p>
                     <Table>
@@ -628,7 +690,7 @@ def upload_file(local_path: str):
     "message_id": "xxxxx",
     "input": {
         "input_xxx": {  # 事件里的 node_id
-            # key是input_schme.value中元素的 key 以及对应要传入的值
+            # key是input_schema.value中元素的 key 以及对应要传入的值
             "text_input": "用户输入的内容",
             "file": ["minio://127.0.0.1:9000/xxxx"] # 用户上传文件获取到的文件url, 允许多选就是多个url
             "category": "选项2" # 将选项内容赋值给变量。当允许多选时，多个选项内容通过逗号分隔。
@@ -769,7 +831,7 @@ def upload_file(local_path: str):
     "message_id": "消息的唯一ID",
     "input": {
         "output_123": {  # 事件里的节点ID
-            # key是input_schme.value中元素的key
+            # key是input_schema.value中元素的key
             "output_result": "用户输入的内容"
         }
     }
@@ -867,7 +929,7 @@ def upload_file(local_path: str):
     "message_id": "xxxxxx",
     "input": {
         "output_xxx": {  # 事件里的节点ID
-            # key是input_schme.value中元素的key
+            # key是input_schema.value中元素的key
             "output_result": "e2107f75"  # 用户选择选项对应的id
         }
     }

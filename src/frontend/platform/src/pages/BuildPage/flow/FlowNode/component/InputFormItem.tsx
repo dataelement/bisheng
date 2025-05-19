@@ -4,10 +4,16 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { isVarInFlow } from "@/util/flowUtils";
+import { cloneDeep } from "lodash-es";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next"; // 引入国际化
+import useFlowStore from "../../flowStore";
 import DragOptions from "./DragOptions";
+import FileTypeSelect from "./FileTypeSelect";
+import InputItem from "./InputItem";
+import VarInput from "./VarInput";
 
 const enum FormType {
     Text = "text",
@@ -21,7 +27,7 @@ const names = {
     [FormType.File]: "file",
 }
 
-function Form({ initialData, onSubmit, onCancel, existingOptions }) {
+function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptions }) {
     const { t } = useTranslation('flow');
     const namePlaceholders = {
         [FormType.Text]: t("nameExample"), // 例如“姓名”
@@ -35,6 +41,9 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         variableName: "",
         filecontent: '',
         filepath: '',
+        fileType: 'all',
+        fileContentSize: 15000,
+        imageFile: '',
         isMultiple: true, // default value for multiple file upload
         isRequired: true,
         allowMultiple: false,  // Allow multiple file uploads
@@ -43,10 +52,17 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
     const [errors, setErrors] = useState<any>({});
     const editRef = useRef(false); // 编辑状态
     const oldFormTypeRef = useRef('')
+    const displayNameRef = useRef({ // 记忆变量名
+        [FormType.Text]: '',
+        [FormType.Select]: '',
+        [FormType.File]: '',
+    });
+
 
     const oldVarNameRef = useRef("");
     const oldcontentNameRef = useRef("");
     const oldPathNameRef = useRef("");
+    const oldImageFileRef = useRef("");
     useEffect(() => {
         editRef.current = false
         if (initialData) {
@@ -57,7 +73,10 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 required: isRequired,
                 multiple: allowMultiple,
                 file_content: filecontent,
+                file_type: fileType,
                 file_path: filepath,
+                file_content_size: fileContentSize,
+                image_file: imageFile,
                 options = [] } = initialData;
             setFormData({
                 formType,
@@ -67,7 +86,10 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 allowMultiple,
                 options,
                 filecontent,
+                fileType,
                 filepath,
+                fileContentSize,
+                imageFile,
                 isMultiple: allowMultiple
             });
 
@@ -76,6 +98,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             oldVarNameRef.current = variableName;
             oldcontentNameRef.current = filecontent;
             oldPathNameRef.current = filepath;
+            oldImageFileRef.current = imageFile;
         }
     }, [initialData]);
 
@@ -86,14 +109,16 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         let initialVarName = names[formData.formType];
         let initialFileContent = 'file_content'
         let initialFilePath = 'file_path'
+        let initialFileImage = 'image_file'
         let counter = 1;
         let initialFileContentCounter = 1;
         let initialFilePathCounter = 1;
+        let initialFileImageCounter = 1
         while (existingOptions?.some(opt => opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
-        const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File && !opt.multiple)
+        const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File)
         while (fileOtions?.some(opt => opt.file_content === initialFileContent)) {
             initialFileContentCounter += 1;
             initialFileContent = `file_content${initialFileContentCounter}`;
@@ -102,13 +127,18 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             initialFilePathCounter += 1;
             initialFilePath = `file_path${initialFilePathCounter}`;
         }
+        while (fileOtions?.some(opt => opt.image_file === initialFileImage)) {
+            initialFileImageCounter += 1;
+            initialFileImage = `image_file${initialFileImageCounter}`;
+        }
         // 变量重命名
         // existingOptions.
         setFormData((prevData) => ({
             ...prevData,
             variableName: initialVarName,
             filecontent: initialFileContent,
-            filepath: initialFilePath
+            filepath: initialFilePath,
+            imageFile: initialFileImage
         }));
     }, [initialData, formData.formType])
 
@@ -139,7 +169,7 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         }
 
         // Validation for file upload variables (if multiple files are allowed)
-        if (formData.formType === FormType.File && !formData.isMultiple) {
+        if (formData.formType === FormType.File) {
             // Validate file content variable name
             if (!formData.filecontent.trim()) {
                 newErrors.filecontent = t("variableNameRequired");
@@ -148,8 +178,9 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filecontent.length > 50) {
                 newErrors.filecontent = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => !opt.multiple && opt.file_content === formData.filecontent) &&
-                formData.filecontent !== oldcontentNameRef.current
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_content === formData.filecontent)
+                && formData.filecontent !== oldcontentNameRef.current
             ) {
                 newErrors.filecontent = t("variableNameExists");
             }
@@ -162,15 +193,57 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             } else if (formData.filepath.length > 50) {
                 newErrors.filepath = t("variableNameTooLong");
             } else if (
-                existingOptions?.some(opt => !opt.multiple && opt.file_path === formData.filepath) &&
-                formData.filepath !== oldPathNameRef.current
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_path === formData.filepath)
+                && formData.filepath !== oldPathNameRef.current
             ) {
                 newErrors.filepath = t("variableNameExists");
             }
+
+            if (formData.fileType !== 'file') {
+                const _error = validateImageFileVariableName(formData.imageFile, existingOptions);
+                if (_error) {
+                    newErrors.imageFile = _error
+                }
+            }
         }
+
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    const validateImageFileVariableName = (varName, existingOptions) => {
+        const errors = [];
+
+        // 1. 非空检查
+        if (!varName || !varName.trim()) {
+            return '变量名称不可为空'
+        }
+
+        // 2. 不能以数字开头
+        if (/^\d/.test(varName)) {
+            return '变量名不能以数字开头';
+        }
+
+        // 3. 只能包含英文字符、数字和下划线
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(varName)) {
+            return '变量名称只能包含英文字符、数字和下划线';
+        }
+
+        // 4. 长度不超过50
+        if (varName.length > 50) {
+            return '变量名称不能超过50个字符';
+        }
+
+        // 5. 不能重复
+        if (existingOptions?.some(opt => opt.type === 'file'
+            && opt.image_file === formData.imageFile)
+            && formData.imageFile !== oldImageFileRef.current) {
+            return '变量名已存在';
+        }
+
+        return '';
     };
 
     const handleFormSubmit = (e) => {
@@ -189,10 +262,13 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
 
     // if the form type hasn't changed, it keeps the variable name as it was. Otherwise, it generates a new unique variable name.
     const handleChangeFormType = (formType) => {
-        setFormData({ ...formData, formType })
+        displayNameRef.current[formData.formType] = formData.displayName;
+        const displayName = displayNameRef.current[formType] || '';
+        setFormData({ ...formData, displayName, formType })
+        setErrors({});
         if (editRef.current) {
             if (oldFormTypeRef.current === formType) {
-                setFormData({ ...formData, formType, variableName: oldVarNameRef.current })
+                setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
             } else {
                 let counter = 1;
                 let initialVarName = names[formType];
@@ -200,10 +276,19 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                     counter += 1;
                     initialVarName = `${names[formType]}${counter}`;
                 }
-                setFormData({ ...formData, formType, variableName: initialVarName })
+                setFormData({ ...formData, formType, variableName: initialVarName, displayName })
             }
         }
     }
+
+    // var check
+    const checkVarFuncRef = useRef(null);
+    useEffect(() => {
+        if (initialData && checkVarFuncRef.current && formData.formType === FormType.Text) {
+            checkVarFuncRef.current();
+        }
+    }, [formData.formType, initialData])
+
     // text form
     const InputForm = <div className="space-y-4">
         <div>
@@ -211,13 +296,26 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 {t("displayName")}
                 <QuestionTooltip content={t("displayNameTooltip")} />
             </Label>
-            <Input
+            {/* <Input
                 className={`mt-2 ${errors.displayName ? "border-red-500" : ""}`}
                 id="displayName"
                 placeholder={namePlaceholders[formData.formType]}
                 value={formData.displayName}
                 onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-            />
+            /> */}
+            <VarInput
+                mini
+                key={formData.variableName}
+                label={''}
+                itemKey={''}
+                nodeId={nodeId}
+                flowNode={nodeData}
+                value={formData.displayName}
+                placeholder={namePlaceholders[formData.formType]}
+                onChange={(val) => setFormData({ ...formData, displayName: val })}
+                onVarEvent={(func) => checkVarFuncRef.current = func}
+            >
+            </VarInput>
             {errors.displayName && <p className="text-red-500 text-sm">{errors.displayName}</p>}
         </div>
         <div>
@@ -324,7 +422,10 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
                 onCheckedChange={(checked) => setFormData({ ...formData, isMultiple: checked })}
             />
         </div>
-
+        <FileTypeSelect data={{
+            label: "上传文件类型",
+            value: formData.fileType,
+        }} onChange={(fileType) => setFormData({ ...formData, fileType })} />
         <div>
             <Label className="flex items-center bisheng-label">
                 临时知识库名称
@@ -339,39 +440,62 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
             />
             {errors.variableName && <p className="text-red-500 text-sm">{errors.variableName}</p>}
         </div>
-        {!formData.isMultiple && (
-            <>
-                <div>
-                    <Label className="flex items-center bisheng-label">
-                        文件内容变量名称
-                        <QuestionTooltip content={'文件解析结果全文将会存储在此变量中，使用时请注意可能会超出模型上下文长度'} />
-                    </Label>
-                    <Input
-                        className={`mt-2 ${errors.filecontent ? "border-red-500" : ""}`}
-                        id="filecontent"
-                        placeholder={t("enterVariableName")}
-                        value={formData.filecontent}
-                        onChange={(e) => setFormData({ ...formData, filecontent: e.target.value })}
-                    />
-                    {errors.filecontent && <p className="text-red-500 text-sm">{errors.filecontent}</p>}
-                </div>
 
-                <div>
-                    <Label className="flex items-center bisheng-label">
-                        文件路径变量名称
-                        <QuestionTooltip content={'文件路径将会存储在此变量中，后续可在代码节点中使用'} />
-                    </Label>
-                    <Input
-                        className={`mt-2 ${errors.filepath ? "border-red-500" : ""}`}
-                        id="filepath"
-                        placeholder={t("enterVariableName")}
-                        value={formData.filepath}
-                        onChange={(e) => setFormData({ ...formData, filepath: e.target.value })}
-                    />
-                    {errors.filepath && <p className="text-red-500 text-sm">{errors.filepath}</p>}
-                </div>
-            </>
-        )}
+        <div>
+            <Label className="flex items-center bisheng-label">
+                文件内容变量名称
+                <QuestionTooltip content={'文件解析结果全文将会存储在此变量中，使用时请注意可能会超出模型上下文长度'} />
+            </Label>
+            <Input
+                className={`mt-2 ${errors.filecontent ? "border-red-500" : ""}`}
+                id="filecontent"
+                placeholder={t("enterVariableName")}
+                value={formData.filecontent}
+                onChange={(e) => setFormData({ ...formData, filecontent: e.target.value })}
+            />
+            {errors.filecontent && <p className="text-red-500 text-sm">{errors.filecontent}</p>}
+        </div>
+        <InputItem
+            type='number'
+            char
+            linefeed
+            data={
+                {
+                    min: 0,
+                    label: "文件内容长度上限",
+                    value: formData.fileContentSize,
+                }
+            }
+            onChange={(fileContentSize) => setFormData({ ...formData, fileContentSize })}
+        />
+        <div>
+            <Label className="flex items-center bisheng-label">
+                文件路径变量名称
+                <QuestionTooltip content={'文件路径将会存储在此变量中，后续可在代码节点中使用'} />
+            </Label>
+            <Input
+                className={`mt-2 ${errors.filepath ? "border-red-500" : ""}`}
+                id="filepath"
+                placeholder={t("enterVariableName")}
+                value={formData.filepath}
+                onChange={(e) => setFormData({ ...formData, filepath: e.target.value })}
+            />
+            {errors.filepath && <p className="text-red-500 text-sm">{errors.filepath}</p>}
+        </div>
+        {formData.fileType !== 'file' && <div>
+            <Label className="flex items-center bisheng-label">
+                上传图片文件
+                <QuestionTooltip content={'提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。'} />
+            </Label>
+            <Input
+                className={`mt-2 ${errors.imageFile ? "border-red-500" : ""}`}
+                id="imageFile"
+                placeholder={t("enterVariableName")}
+                value={formData.imageFile}
+                onChange={(e) => setFormData({ ...formData, imageFile: e.target.value })}
+            />
+            {errors.imageFile && <p className="text-red-500 text-sm">{errors.imageFile}</p>}
+        </div>}
     </div>;
 
     return (
@@ -424,7 +548,9 @@ function Form({ initialData, onSubmit, onCancel, existingOptions }) {
         </form>
     );
 }
-export default function InputFormItem({ data, onChange, onValidate }) {
+
+// node input form item
+export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent }) {
     const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(""); // 控制编辑模式
@@ -455,6 +581,9 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             variableName: key,
             filecontent: file_content,
             filepath: file_path,
+            fileType: file_type,
+            fileContentSize: file_content_size,
+            imageFile: image_file
         } = _data;
 
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
@@ -462,12 +591,24 @@ export default function InputFormItem({ data, onChange, onValidate }) {
             // 编辑模式，更新表单项
             data.value = data.value.map((opt) =>
                 opt.key === editKey
-                    ? { key, type, value, required, multiple, options, file_content, file_path }
+                    ? {
+                        key,
+                        type,
+                        value,
+                        required,
+                        multiple,
+                        options,
+                        file_content,
+                        file_path,
+                        file_type,
+                        file_content_size,
+                        image_file
+                    }
                     : opt
             );
         } else {
             // 新建模式，添加表单项
-            data.value.push({
+            data.value = [...data.value, {
                 key,
                 type,
                 value,
@@ -475,8 +616,11 @@ export default function InputFormItem({ data, onChange, onValidate }) {
                 multiple,
                 file_content,
                 file_path,
+                file_type,
                 options,
-            });
+                file_content_size,
+                image_file
+            }];
             setTimeout(() => {
                 scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
             }, 0);
@@ -515,17 +659,52 @@ export default function InputFormItem({ data, onChange, onValidate }) {
         return () => onValidate(() => { });
     }, [data.value]);
 
+    const options = useMemo(() => {
+        const _options = cloneDeep(data.value)
+        return _options.map((el) => {
+            // cn
+            if (el.type === 'text') {
+                el.value = el.value.replace(/{{#(.*?)#}}/g, (a, key) => {
+                    return data.varZh?.[key] || key;
+                })
+            }
+
+            return {
+                key: el.key,
+                text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
+                type: el.type,
+            }
+        });
+    }, [data.value])
+
+    const { flow } = useFlowStore();
+    // 校验变量是否可用
+    const validateVarAvailble = () => {
+        const errors = data.value.reduce((acc, value) => {
+            if (value.type === 'text') {
+                value.value.replace(/{{#(.*?)#}}/g, (a, part) => {
+                    console.log('a, part :>> ', a, part);
+                    const _error = isVarInFlow(nodeId, flow.nodes, part, data.varZh?.[part])
+                    _error && acc.push(_error)
+                })
+            }
+            return acc
+        }, [])
+        return Promise.resolve(errors);
+    };
+
+    useEffect(() => {
+        onVarEvent && onVarEvent(validateVarAvailble);
+        return () => onVarEvent && onVarEvent(() => { });
+    }, [data]);
+
     return (
         <div className="node-item mb-4 nodrag" data-key={data.key}>
             {data.value.length > 0 && (
                 <DragOptions
                     scroll
                     ref={scrollRef}
-                    options={data.value.map((el) => ({
-                        key: el.key,
-                        text: el.type === FormType.File && !el.multiple ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
-                        type: el.type,
-                    }))}
+                    options={options}
                     onEditClick={handleEditClick} // 点击编辑时执行的逻辑
                     onChange={handleOptionsChange} // 拖拽排序后的更新
                 />
@@ -547,7 +726,9 @@ export default function InputFormItem({ data, onChange, onValidate }) {
                         </DialogTitle>
                     </DialogHeader>
 
-                    <Form
+                    {isOpen && <Form
+                        nodeId={nodeId}
+                        nodeData={data}
                         initialData={
                             editKey
                                 ? data.value.find((el) => el.key === editKey)
@@ -557,6 +738,7 @@ export default function InputFormItem({ data, onChange, onValidate }) {
                         onCancel={handleClose} // 取消关闭弹窗
                         existingOptions={data.value} // 传递当前所有 options 以检查重复
                     />
+                    }
                 </DialogContent>
             </Dialog>
         </div>

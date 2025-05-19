@@ -3,7 +3,6 @@ import json
 from typing import Dict, List, Optional
 
 import yaml
-from bisheng.utils import generate_uuid
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 from fastapi import (APIRouter, Body, Depends, HTTPException, Query, Request, WebSocket,
                      WebSocketException)
@@ -13,23 +12,28 @@ from fastapi_jwt_auth import AuthJWT
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.openapi import OpenApiSchema
+from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
-from bisheng.api.utils import get_url_content
-from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantInfo, AssistantUpdateReq,
+from bisheng.api.utils import get_url_content, md5_hash
+from bisheng.api.v1.schemas import (AssistantCreateReq, AssistantUpdateReq,
                                     DeleteToolTypeReq, StreamData, TestToolReq,
-                                    UnifiedResponseModel, resp_200, resp_500)
+                                    resp_200, resp_500)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
 from bisheng.chat.types import WorkType
+from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.gpts_tools import GptsTools, GptsToolsTypeRead
+from bisheng.mcp_manage.constant import McpClientType
+from bisheng.mcp_manage.manager import ClientManager
+from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 
 router = APIRouter(prefix='/assistant', tags=['Assistant'])
 chat_manager = ChatManager()
 
 
-@router.get('', response_model=UnifiedResponseModel[List[AssistantInfo]])
+@router.get('')
 def get_assistant(*,
                   name: str = Query(default=None, description='助手名称，模糊匹配, 包含描述的模糊匹配'),
                   tag_id: int = Query(default=None, description='标签ID'),
@@ -41,13 +45,13 @@ def get_assistant(*,
 
 
 # 获取某个助手的详细信息
-@router.get('/info/{assistant_id}', response_model=UnifiedResponseModel[AssistantInfo])
+@router.get('/info/{assistant_id}')
 def get_assistant_info(*, assistant_id: str, login_user: UserPayload = Depends(get_login_user)):
     """获取助手信息"""
     return AssistantService.get_assistant_info(assistant_id, login_user)
 
 
-@router.post('/delete', response_model=UnifiedResponseModel)
+@router.post('/delete')
 def delete_assistant(*,
                      request: Request,
                      assistant_id: str,
@@ -56,7 +60,7 @@ def delete_assistant(*,
     return AssistantService.delete_assistant(request, login_user, assistant_id)
 
 
-@router.post('', response_model=UnifiedResponseModel[AssistantInfo])
+@router.post('')
 async def create_assistant(*,
                            request: Request,
                            req: AssistantCreateReq,
@@ -70,7 +74,7 @@ async def create_assistant(*,
         return resp_500(message=f'创建助手出错：{str(e)}')
 
 
-@router.put('', response_model=UnifiedResponseModel[AssistantInfo])
+@router.put('')
 async def update_assistant(*,
                            request: Request,
                            req: AssistantUpdateReq,
@@ -79,7 +83,7 @@ async def update_assistant(*,
     return await AssistantService.update_assistant(request, login_user, req)
 
 
-@router.post('/status', response_model=UnifiedResponseModel)
+@router.post('/status')
 async def update_status(*,
                         request: Request,
                         assistant_id: str = Body(description='助手唯一ID', alias='id'),
@@ -129,7 +133,7 @@ async def auto_update_assistant(*, task_id: str = Query(description='优化任�
 
 
 # 更新助手的提示词
-@router.post('/prompt', response_model=UnifiedResponseModel)
+@router.post('/prompt')
 async def update_prompt(*,
                         assistant_id: str = Body(description='助手唯一ID', alias='id'),
                         prompt: str = Body(description='用户使用的prompt'),
@@ -137,7 +141,7 @@ async def update_prompt(*,
     return AssistantService.update_prompt(assistant_id, prompt, login_user)
 
 
-@router.post('/flow', response_model=UnifiedResponseModel)
+@router.post('/flow')
 async def update_flow_list(*,
                            assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            flow_list: List[str] = Body(description='用户选择的技能列表'),
@@ -145,7 +149,7 @@ async def update_flow_list(*,
     return AssistantService.update_flow_list(assistant_id, flow_list, login_user)
 
 
-@router.post('/tool', response_model=UnifiedResponseModel)
+@router.post('/tool')
 async def update_tool_list(*,
                            assistant_id: str = Body(description='助手唯一ID', alias='id'),
                            tool_list: List[int] = Body(description='用户选择的工具列表'),
@@ -186,15 +190,17 @@ async def chat(*,
             await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=message)
 
 
-@router.get('/tool_list', response_model=UnifiedResponseModel)
+@router.get('/tool_list')
 def get_tool_list(*,
-                  is_preset: Optional[bool] = None,
+                  is_preset: Optional[int | bool] = None,
                   login_user: UserPayload = Depends(get_login_user)):
     """查询所有可见的tool 列表"""
+    if is_preset is not None and type(is_preset) == bool:
+        is_preset = ToolPresetType.PRESET.value if is_preset else ToolPresetType.API.value
     return resp_200(AssistantService.get_gpts_tools(login_user, is_preset))
 
 
-@router.post('/tool/config', response_model=UnifiedResponseModel)
+@router.post('/tool/config')
 async def update_tool_config(*,
                              login_user: UserPayload = Depends(get_admin_user),
                              tool_id: int = Body(description='工具类别唯一ID'),
@@ -204,94 +210,79 @@ async def update_tool_config(*,
     return resp_200(data=data)
 
 
-@router.post('/tool_schema', response_model=UnifiedResponseModel)
-async def get_tool_schema(*,
+@router.post('/tool_schema')
+async def get_tool_schema(request: Request, login_user: UserPayload = Depends(get_login_user),
                           download_url: Optional[str] = Body(default=None,
                                                              description='下载url不为空的话优先用下载url'),
-                          file_content: Optional[str] = Body(default=None, description='上传的文件'),
-                          login_user: UserPayload = Depends(get_login_user)):
+                          file_content: Optional[str] = Body(default=None, description='上传的文件')):
     """ 下载或者解析openapi schema的内容 转为助手自定义工具的格式 """
-    if download_url:
-        try:
-            file_content = await get_url_content(download_url)
-        except Exception as e:
-            logger.exception(f'file {download_url} download error')
-            return resp_500(message='url文件下载失败：' + str(e))
+    services = ToolServices(request=request, login_user=login_user)
+    tool_type = await services.parse_openapi_schema(download_url, file_content)
+    return resp_200(data=tool_type)
 
-    if not file_content:
-        return resp_500(message='schema内容不能为空')
-    # 根据文件内容是否以`{`开头判断用什么解析方式
+
+@router.post('/mcp/tool_schema')
+async def get_mcp_tool_schema(request: Request, login_user: UserPayload = Depends(get_login_user),
+                              file_content: Optional[str] = Body(default=None, embed=True,
+                                                                 description='mcp服务配置内容')):
+    """ 解析mcp的工具配置文件 """
+    services = ToolServices(request=request, login_user=login_user)
+    tool_type = await services.parse_mcp_schema(file_content)
+    return resp_200(data=tool_type)
+
+
+@router.post('/mcp/tool_test')
+async def mcp_tool_run(login_user: UserPayload = Depends(get_login_user),
+                       req: TestToolReq = None):
+    """ 测试mcp服务的工具 """
     try:
-        if file_content.startswith('{'):
-            res = json.loads(file_content)
-        else:
-            res = yaml.safe_load(file_content)
+        # 实例化mcp服务对象，获取工具列表
+        client = await ClientManager.connect_mcp_from_json(req.openapi_schema)
+        extra = json.loads(req.extra)
+        tool_name = extra.get('name')
+        resp = await client.call_tool(tool_name, req.request_params)
+        return resp_200(data=resp)
     except Exception as e:
-        logger.exception(f'openapi schema parse error {e}')
-        return resp_500(message=f'openapi schema解析报错，请检查内容是否符合json或者yaml格式: {str(e)}')
-
-    #  解析openapi schema转为助手工具的格式
-    try:
-        schema = OpenApiSchema(res)
-        schema.parse_server()
-        if not schema.default_server.startswith(('http', 'https')):
-            return resp_500(message=f'server中的url必须以http或者https开头: {schema.default_server}')
-        tool_type = GptsToolsTypeRead(name=schema.title,
-                                      description=schema.description,
-                                      is_preset=0,
-                                      is_delete=0,
-                                      server_host=schema.default_server,
-                                      openapi_schema=file_content,
-                                      api_location=schema.api_location,
-                                      parameter_name=schema.parameter_name,
-                                      auth_type=schema.auth_type,
-                                      auth_method=schema.auth_method,
-                                      children=[])
-        # 解析获取所有的api
-        schema.parse_paths()
-        for one in schema.apis:
-            tool_type.children.append(
-                GptsTools(
-                    name=one['operationId'],
-                    desc=one['description'],
-                    tool_key=hashlib.md5(one['operationId'].encode('utf-8')).hexdigest(),
-                    is_preset=0,
-                    is_delete=0,
-                    api_params=one['parameters'],
-                    extra=json.dumps(one, ensure_ascii=False),
-                ))
-        return resp_200(data=tool_type)
-    except Exception as e:
-        logger.exception(f'openapi schema parse error {e}')
-        return resp_500(message='openapi schema解析失败：' + str(e))
+        logger.exception('mcp_tool_run error')
+        return resp_500(message=f'测试请求出错：{str(e)}')
 
 
-@router.post('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
-def add_tool_type(*,
+@router.post('/mcp/refresh')
+async def refresh_all_mcp_tools(request: Request, login_user: UserPayload = Depends(get_login_user)):
+    """ 刷新用户当前所有的mcp工具列表 """
+    services = ToolServices(request=request, login_user=login_user)
+    error_msg = await services.refresh_all_mcp()
+    if error_msg:
+        return resp_500(message=error_msg)
+    return resp_200(message='刷新成功')
+
+
+@router.post('/tool_list')
+async def add_tool_type(*,
                   req: Dict = Body(default={}, description='openapi解析后的工具对象'),
                   login_user: UserPayload = Depends(get_login_user)):
     """ 新增自定义tool """
     req = GptsToolsTypeRead(**req)
-    return AssistantService.add_gpts_tools(login_user, req)
+    return await AssistantService.add_gpts_tools(login_user, req)
 
 
-@router.put('/tool_list', response_model=UnifiedResponseModel[GptsToolsTypeRead])
-def update_tool_type(*,
+@router.put('/tool_list')
+async def update_tool_type(*,
                      login_user: UserPayload = Depends(get_login_user),
                      req: Dict = Body(default={}, description='通过openapi 解析后的内容，包含类别的唯一ID')):
     """ 更新自定义tool """
     req = GptsToolsTypeRead(**req)
-    return AssistantService.update_gpts_tools(login_user, req)
+    return await AssistantService.update_gpts_tools(login_user, req)
 
 
-@router.delete('/tool_list', response_model=UnifiedResponseModel)
+@router.delete('/tool_list')
 def delete_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: DeleteToolTypeReq):
     """ 删除自定义工具 """
     return AssistantService.delete_gpts_tools(login_user, req.tool_type_id)
 
 
-@router.post('/tool_test', response_model=UnifiedResponseModel)
-async def test_tool_type(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
+@router.post('/tool_test')
+async def tool_run(*, login_user: UserPayload = Depends(get_login_user), req: TestToolReq):
     """ 测试自定义工具 """
     extra = json.loads(req.extra)
     extra.update({'api_location': req.api_location, 'parameter_name': req.parameter_name})

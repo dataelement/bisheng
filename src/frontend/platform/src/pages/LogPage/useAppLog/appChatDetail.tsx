@@ -54,7 +54,7 @@ export default function AppChatDetail() {
         <div className="bg-background-login px-4">
             <div className="flex justify-between items-center py-4">
                 <div className="flex items-center">
-                    <ShadTooltip content="back" side="top">
+                    <ShadTooltip content={t('back')} side="top">
                         <Button
                             className="w-[36px] px-2 rounded-full"
                             variant="outline"
@@ -66,7 +66,7 @@ export default function AppChatDetail() {
             </div>
             <div className="h-[calc(100vh-132px)]">
                 {type === AppNumType.FLOW
-                    ? <ChatMessages logo={''} disableBtn useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
+                    ? <ChatMessages logo={''} debug useName={''} guideWord={''} loadMore={() => loadMoreFlowHistoryMsg(fid, true)} onMarkClick={null}></ChatMessages>
                     : <MessagePanne logo='' useName='' guideWord=''
                         loadMore={() => loadMoreHistoryMsg(fid, true)}
                     ></MessagePanne>

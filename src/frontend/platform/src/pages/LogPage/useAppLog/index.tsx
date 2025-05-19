@@ -206,14 +206,14 @@ export default function AppUseLog() {
                 try {
                     msg = msg && msg[0] === '{' ? JSON.parse(msg) : msg || ''
                 } catch (error) {
-                    console.log('error :>> ', `${id} 消息转换失败`);
+                    console.error('error :>> ', `${id} 消息转换失败`);
                 }
                 // output
                 if ('output_with_input_msg' === category) return `${msg.msg} :${msg.hisValue}`
-                if ('output_with_choose_msg' === category) return `${msg.msg} :${msg.options.find(el => el.id === msg.hisValue).label}`
+                if ('output_with_choose_msg' === category) return `${msg.msg} :${msg.options.find(el => el.id === msg.hisValue)?.label}`
                 return typeof msg === 'string' ? msg : (msg.input || msg.msg)
             }
-            
+
             // 数据转换
             res.data.forEach(item => {
                 item.messages.forEach(msg => {
@@ -230,14 +230,13 @@ export default function AppUseLog() {
                         msg.liked === 1 ? '是' : '否',
                         msg.liked === 2 ? '是' : '否',
                         msg.copied ? '是' : '否',
-                        msg.sensitive_status ? '是' : '否'
+                        msg.sensitive_status === 1 ? '否' : '是'
                     ])
                 })
             })
-
             // 导出excle
             const fileName = generateFileName(start_date, end_date, user.user_name);
-            exportCsv(data, fileName)
+            exportCsv(data, fileName, true)
 
             // await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
             setAuditing(false);

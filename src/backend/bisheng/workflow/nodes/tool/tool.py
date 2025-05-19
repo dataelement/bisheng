@@ -1,6 +1,7 @@
 from typing import Any
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
@@ -14,10 +15,12 @@ class ToolNode(BaseNode):
         self._tool_info = GptsToolsDao.get_tool_by_tool_key(tool_key=self._tool_key)
         if not self._tool_info:
             raise Exception(f"工具{self._tool_key}不存在")
-        if self._tool_info.is_preset:
+        if self._tool_info.is_preset == ToolPresetType.PRESET.value:
             self._tool = AssistantAgent.sync_init_preset_tools(tool_list=[self._tool_info], llm=None)[0]
-        else:
+        elif self._tool_info.is_preset == ToolPresetType.API.value:
             self._tool = AssistantAgent.sync_init_personal_tools([self._tool_info])[0]
+        else:
+            self._tool = AssistantAgent.sync_init_mcp_tools([self._tool_info])[0]
 
     def _run(self, unique_id: str):
         tool_input = self.parse_tool_input()
@@ -47,7 +50,11 @@ class ToolNode(BaseNode):
         for key, val in self.node_params.items():
             if key == "output":
                 continue
-            ret[key] = self.parse_template_msg(val)
+            new_val = self.parse_template_msg(val)
+            if new_val == '' or new_val is None:
+                continue
+            ret[key] = new_val
+
         return ret
 
     def parse_template_msg(self, msg: str):

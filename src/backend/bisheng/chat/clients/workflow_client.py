@@ -160,7 +160,7 @@ class WorkflowClient(BaseClient):
             return True
 
         status_info = self.workflow.get_workflow_status()
-        if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+        if not status_info or status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
             self.workflow.clear_workflow_status()
             self.workflow = None

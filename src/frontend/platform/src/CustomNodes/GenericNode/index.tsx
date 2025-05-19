@@ -76,6 +76,8 @@ export default function GenericNode({ data, positionAbsoluteX, positionAbsoluteY
 
   return (
     <>
+
+    
       <NodeToolbar>
         <NodeToolbarComponent
           position={{ x: positionAbsoluteX, y: positionAbsoluteY }}
@@ -164,7 +166,7 @@ export default function GenericNode({ data, positionAbsoluteX, positionAbsoluteY
         </div >
 
         <div className="generic-node-desc nodrag">
-          <div className="generic-node-desc-text">{data.node.description}</div>
+          <div className="generic-node-desc-text ">{data.node.description}</div>
           <>
             {Object.keys(data.node.template)
               .filter((t) => t.charAt(0) !== "_")

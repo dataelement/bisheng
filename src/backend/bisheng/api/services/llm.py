@@ -1,6 +1,11 @@
 import json
 from typing import List, Optional
 
+from fastapi import Request
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseChatModel
+from loguru import logger
+
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
@@ -10,10 +15,6 @@ from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
-from fastapi import Request
-from langchain_core.embeddings import Embeddings
-from langchain_core.language_models import BaseChatModel
-from loguru import logger
 
 
 class LLMService:
@@ -33,7 +34,7 @@ class LLMService:
         for one in llm_models:
             if one.server_id not in server_dicts:
                 server_dicts[one.server_id] = []
-            server_dicts[one.server_id].append(one.model_dump(exclude={'config'}))
+            server_dicts[one.server_id].append(LLMModelInfo(**one.model_dump(exclude={'config'})))
 
         for one in ret:
             one.models = server_dicts.get(one.id, [])
@@ -115,6 +116,8 @@ class LLMService:
 
         handle_types = []
         for one in server.models:
+            # test model status
+            cls.test_model_status(one)
             if one.model_type in handle_types:
                 continue
             handle_types.append(one.model_type)
@@ -123,6 +126,19 @@ class LLMService:
             if model_info.id == one.id:
                 cls.set_default_model(request, login_user, model_info)
         return True
+
+    @classmethod
+    def test_model_status(cls, model: LLMModel | LLMModelInfo):
+        try:
+            if model.model_type == LLMModelType.LLM.value:
+                bisheng_model = cls.get_bisheng_llm(model_id=model.id, ignore_online=True, cache=False)
+                bisheng_model.invoke('hello')
+            elif model.model_type == LLMModelType.EMBEDDING.value:
+                bisheng_embed = cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, cache=False)
+                bisheng_embed.embed_query('hello')
+        except Exception as e:
+            LLMDao.update_model_status(model.id, 1, str(e))
+            logger.exception(f'test model status: {model.id} {model.model_name}')
 
     @classmethod
     def set_default_model(cls, request: Request, login_user: UserPayload, model: LLMModel):
@@ -176,6 +192,11 @@ class LLMService:
         exist_server = LLMDao.get_server_by_id(server.id)
         if not exist_server:
             raise NotFoundError.http_exception()
+
+        old_models = LLMDao.get_model_by_server_ids([exist_server.id])
+        old_model_dict = {
+            one.id: one for one in old_models
+        }
         if exist_server.name != server.name:
             # 改名的话判断下是否已经存在
             name_server = LLMDao.get_server_by_name(server.name)
@@ -185,7 +206,7 @@ class LLMService:
         model_dict = {}
         for one in server.models:
             if one.model_name not in model_dict:
-                model_dict[one.model_name] = LLMModel(**one.dict())
+                model_dict[one.model_name] = LLMModel(**one.model_dump())
                 # 说明是新增模型
                 if not one.id:
                     model_dict[one.model_name].user_id = login_user.user_id
@@ -201,8 +222,15 @@ class LLMService:
         exist_server.config = server.config
 
         db_server = LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
+        new_server_info = cls.get_one_llm(request, login_user, db_server.id)
 
-        return cls.get_one_llm(request, login_user, db_server.id)
+        # 判断是否需要重新判断模型状态
+        for one in new_server_info.models:
+            # 新增的模型，或者模型名字或者类型发生了变化
+            if (one.id not in old_model_dict or old_model_dict[one.id].model_name != one.model_name
+                    or old_model_dict[one.id].model_type != one.model_type):
+                cls.test_model_status(one)
+        return new_server_info
 
     @classmethod
     def update_model_online(cls, request: Request, login_user: UserPayload, model_id: int,

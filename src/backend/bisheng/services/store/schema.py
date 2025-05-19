@@ -1,17 +1,17 @@
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, validator
+from pydantic import field_validator, BaseModel
 
 
 class TagResponse(BaseModel):
     id: UUID
-    name: Optional[str]
+    name: Optional[str] = None
 
 
 class UsersLikesResponse(BaseModel):
-    likes_count: Optional[int]
-    liked_by_user: Optional[bool]
+    likes_count: Optional[int] = None
+    liked_by_user: Optional[bool] = None
 
 
 class CreateComponentResponse(BaseModel):
@@ -19,7 +19,7 @@ class CreateComponentResponse(BaseModel):
 
 
 class TagsIdResponse(BaseModel):
-    tags_id: Optional[TagResponse]
+    tags_id: Optional[TagResponse] = None
 
 
 class ListComponentResponse(BaseModel):
@@ -37,7 +37,8 @@ class ListComponentResponse(BaseModel):
     private: Optional[bool] = None
 
     # tags comes as a TagsIdResponse but we want to return a list of TagResponse
-    @validator('tags', pre=True)
+    @field_validator('tags', mode="before")
+    @classmethod
     def tags_to_list(cls, v):
         # Check if all values are have id and name
         # if so, return v else transform to TagResponse
@@ -52,24 +53,24 @@ class ListComponentResponse(BaseModel):
 class ListComponentResponseModel(BaseModel):
     count: Optional[int] = 0
     authorized: bool
-    results: Optional[List[ListComponentResponse]]
+    results: Optional[List[ListComponentResponse]] = None
 
 
 class DownloadComponentResponse(BaseModel):
     id: UUID
-    name: Optional[str]
-    description: Optional[str]
-    data: Optional[dict]
-    is_component: Optional[bool]
+    name: Optional[str] = None
+    description: Optional[str] = None
+    data: Optional[dict] = None
+    is_component: Optional[bool] = None
     metadata: Optional[dict] = {}
 
 
 class StoreComponentCreate(BaseModel):
     name: str
-    description: Optional[str]
+    description: Optional[str] = None
     data: dict
-    tags: Optional[List[str]]
+    tags: Optional[List[str]] = None
     parent: Optional[UUID] = None
-    is_component: Optional[bool]
+    is_component: Optional[bool] = None
     last_tested_version: Optional[str] = None
     private: Optional[bool] = True

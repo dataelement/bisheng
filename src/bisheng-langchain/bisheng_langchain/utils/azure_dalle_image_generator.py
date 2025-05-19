@@ -3,7 +3,7 @@ from typing import Callable, Dict, Optional, Union
 
 import openai
 from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
-from langchain_core.pydantic_v1 import Field, SecretStr, root_validator
+from pydantic import Field, SecretStr, model_validator
 from langchain_core.utils import convert_to_secret_str, get_from_dict_or_env
 
 
@@ -56,7 +56,8 @@ class AzureDallEWrapper(DallEAPIWrapper):
     chunk_size: int = 2048
     """Maximum number of texts to embed in each batch"""
 
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         # Check OPENAI_KEY for backwards compatibility.

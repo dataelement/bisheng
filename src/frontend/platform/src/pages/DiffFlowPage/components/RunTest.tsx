@@ -9,10 +9,10 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { postBuildInit } from "@/controllers/API";
 import { useDiffFlowStore } from "@/store/diffFlowStore";
 import { FlowStyleType, FlowType } from "@/types/flow";
+import { exportCsv } from "@/util/utils";
 import { CircleHelp, Download, Play } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import * as XLSX from 'xlsx';
 import CellWarp from "./Cell";
 import RunForm from "./RunForm";
 
@@ -87,40 +87,18 @@ export default function RunTest({ nodeId }) {
 
     // 导出结果（excle）
     const handleDownExcle = () => {
-        const data = [['测试用例', ...mulitVersionFlow.map(version => version.name)]];
+        const _mulitVersionFlow = mulitVersionFlow.filter(version => version)
+        const data = [['测试用例', ..._mulitVersionFlow.map(version => version.name)]];
 
         questions.forEach((_, index) => {
             const rowData = [_.q]
-            mulitVersionFlow.forEach(version => {
+            _mulitVersionFlow.forEach(version => {
                 rowData.push(cellRefs[`${index}-${version.id}`].current.getData())
             })
             data.push(rowData)
         })
 
-        // 创建Workbook对象
-        const wb = XLSX.utils.book_new();
-        // 添加Worksheet到Workbook中
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-
-        // 生成Excel文件
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-        // 创建下载链接
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "test_result.xlsx";
-
-        // 模拟点击下载链接
-        document.body.appendChild(a);
-        a.click();
-
-        // 清理URL对象
-        setTimeout(function () {
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        }, 0);
+        exportCsv(data, "test_result.xlsx")
     }
 
     const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])
@@ -144,11 +122,11 @@ export default function RunTest({ nodeId }) {
                 {
                     isForm ? <Dialog open={formShow} onOpenChange={setFormShow}>
                         <DialogTrigger asChild>
-                            <Button size="sm" disabled={runningType === 'all' || notDiffVersion}><Play />{t('test.testRun')}</Button>
+                            <Button size="sm" disabled={runningType === 'all' || notDiffVersion}><Play size={14} />{t('test.testRun')}</Button>
                         </DialogTrigger>
                         <RunForm show={formShow} flow={mulitVersionFlow[0]} onChangeShow={setFormShow} onSubmit={handleRunTest} />
                     </Dialog> :
-                        <Button size="sm" disabled={runningType === 'all' || notDiffVersion} onClick={() => handleRunTest()}><Play />{t('test.testRun')}</Button>
+                        <Button size="sm" disabled={runningType === 'all' || notDiffVersion} onClick={() => handleRunTest()}><Play size={14} />{t('test.testRun')}</Button>
                 }
             </div>
             {/* table */}
@@ -167,13 +145,13 @@ export default function RunTest({ nodeId }) {
                                             className="w-6 h-6"
                                             title={t('test.run')}
                                             onClick={() => handleColRunTest(version.id)}
-                                        ><Play /></Button>}
+                                        ><Play size={14} /></Button>}
                                     </div>
                                 </TableHead>
                             )
                         }
                         <TableHead className="text-right min-w-[135px]" style={{ width: 135 }}>
-                            <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><Download className="mr-1" />{t('test.downloadResults')}</Button>
+                            <Button variant="link" disabled={runningType !== '' || !running} onClick={handleDownExcle}><Download className="mr-1" size={18} />{t('test.downloadResults')}</Button>
                         </TableHead>
                     </TableRow>
                 </TableHeader>
@@ -195,7 +173,7 @@ export default function RunTest({ nodeId }) {
                                             className="min-w-6 h-6"
                                             title="运行"
                                             onClick={() => handleRowRunTest(index)}
-                                        ><Play /></Button>}
+                                        ><Play size={14}/></Button>}
                                     </div>
                                 </TableCell>
                                 {/* 版本 */}

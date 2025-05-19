@@ -5,7 +5,8 @@ import Image from './Image';
 
 const Files = ({ message }: { message?: TMessage }) => {
   const imageFiles = useMemo(() => {
-    return message?.files?.filter((file) => file.type?.startsWith('image/')) || [];
+    const images = message?.files?.filter((file) => file.type?.startsWith('image/')) || [];
+    return images.map(file => ({ ...file, filepath: file.filepath?.replace(/^https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL) }))
   }, [message?.files]);
 
   const otherFiles = useMemo(() => {
@@ -28,8 +29,8 @@ const Files = ({ message }: { message?: TMessage }) => {
               height: `${file.height ?? 1920}px`,
               width: `${file.height ?? 1080}px`,
             }}
-            // n={imageFiles.length}
-            // i={i}
+          // n={imageFiles.length}
+          // i={i}
           />
         ))}
     </>

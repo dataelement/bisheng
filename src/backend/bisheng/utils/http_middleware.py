@@ -12,7 +12,10 @@ class CustomMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
         # You can modify the request before passing it to the next middleware or endpoint
-        trace_id = str(uuid4().hex)
+        if request.headers.get('x-trace-id'):
+            trace_id = request.headers.get('x-trace-id')
+        else:
+            trace_id = str(uuid4().hex)
         start_time = time()
         with logger.contextualize(trace_id=trace_id):
             logger.info(f'{request.method} {request.url.path}')

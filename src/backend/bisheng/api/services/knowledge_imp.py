@@ -16,7 +16,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
                                                     KnowledgeFileStatus, ParseType, QAKnoweldgeDao,
-                                                    QAKnowledge, QAKnowledgeUpsert)
+                                                    QAKnowledge, QAKnowledgeUpsert, QAStatus)
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -86,8 +86,9 @@ class KnowledgeUtils:
         if not chunk.startswith('{<file_title>'):
             return chunk.split(cls.chunk_split)[-1]
 
-        return chunk.split('</file_abstract>\n<paragraph_content>')[-1].rstrip(
-            '</paragraph_content>}')
+        chunk = chunk.split('<paragraph_content>')[-1]
+        chunk = chunk.split('</paragraph_content>')[0]
+        return chunk
 
     @classmethod
     def save_preview_cache(cls,
@@ -258,7 +259,7 @@ def decide_knowledge_llm() -> Any:
         return None
 
     # 获取llm对象
-    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id)
+    return LLMService.get_bisheng_llm(model_id=knowledge_llm.extract_title_model_id, cache=False)
 
 
 def addEmbedding(collection_name: str,
@@ -370,7 +371,7 @@ def add_file_embedding(vector_client,
                 metadatas.append(val['metadata'])
     for index, one in enumerate(texts):
         if len(one) > 10000:
-            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \n）进行切分')
+            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分')
         # 入库时 拼接文件名和文档摘要
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index])
 
@@ -483,6 +484,8 @@ def read_chunk_text(input_file, file_name, separator: List[str], separator_rule:
         for one in documents:
             # 配置了相关llm的话，就对文档做总结
             title = extract_title(llm, one.page_content)
+            # remove <think>.*</think> tag content
+            title = re.sub('<think>.*</think>', '', title, flags=re.S).strip()
             one.metadata['title'] = title
         logger.info('file_extract_title=success timecost={}', time.time() - t)
 
@@ -669,14 +672,14 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         for vectore_client in vectore_client_list:
             vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
 
-        QA.status = 1
+        QA.status = QAStatus.ENABLED.value
         with session_getter() as session:
             session.add(QA)
             session.commit()
             session.refresh(QA)
     except Exception as e:
         logger.error(e)
-        setattr(QA, 'status', 0)
+        setattr(QA, 'status', QAStatus.FAILED.value)
         setattr(QA, 'remark', str(e)[:500])
         with session_getter() as session:
             session.add(QA)
@@ -721,12 +724,12 @@ def qa_status_change(qa_id: int, target_status: int):
         return
 
     db_knowledge = KnowledgeDao.query_by_id(qa_db.knowledge_id)
-    if target_status == 0:
+    if target_status == QAStatus.DISABLED.value:
         delete_vector_data(db_knowledge, [qa_id])
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)
     else:
-        qa_db.status = target_status
+        qa_db.status = QAStatus.PROCESSING.value
         QAKnoweldgeDao.update(qa_db)
         QA_save_knowledge(db_knowledge, qa_db)
     return qa_db

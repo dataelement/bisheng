@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 # import numpy as np
 from langchain.embeddings.base import Embeddings
 from langchain.utils import get_from_dict_or_env
-from langchain_core.pydantic_v1 import BaseModel, Extra, Field, root_validator
+from pydantic import ConfigDict, model_validator, BaseModel, Field
 from requests.exceptions import HTTPError
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)
@@ -55,7 +55,7 @@ class WenxinEmbeddings(BaseModel, Embeddings):
 
     """
 
-    client: Optional[Any]  #: :meta private:
+    client: Optional[Any] = None  #: :meta private:
     model: str = 'embedding-v1'
 
     deployment: Optional[str] = 'default'
@@ -72,13 +72,10 @@ class WenxinEmbeddings(BaseModel, Embeddings):
 
     model_kwargs: Optional[Dict[str, Any]] = Field(default_factory=dict)
     """Holds any model parameters valid for `create` call not explicitly specified."""
+    model_config = ConfigDict(extra='forbid')
 
-    class Config:
-        """Configuration for this pydantic object."""
-
-        extra = Extra.forbid
-
-    @root_validator()
+    @model_validator(mode='before')
+    @classmethod
     def validate_environment(cls, values: Dict) -> Dict:
         """Validate that api key and python package exists in environment."""
         values['wenxin_api_key'] = get_from_dict_or_env(values, 'wenxin_api_key', 'WENXIN_API_KEY')

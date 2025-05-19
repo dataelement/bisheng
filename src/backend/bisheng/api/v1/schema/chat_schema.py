@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class AppChatList(BaseModel):
@@ -13,15 +13,22 @@ class AppChatList(BaseModel):
     flow_id: str
     flow_type: int
     create_time: datetime
-    like_count: Optional[int]
-    dislike_count: Optional[int]
-    copied_count: Optional[int]
-    sensitive_status: Optional[int]  # 敏感词审查状态
-    user_groups: Optional[List[Any]]  # 用户所属的分组
-    mark_user: Optional[str]
-    mark_status: Optional[int]
-    mark_id: Optional[int]
-    messages: Optional[List[dict]]  # 会话的所有消息列表数据
+    like_count: Optional[int] = None
+    dislike_count: Optional[int] = None
+    copied_count: Optional[int] = None
+    sensitive_status: Optional[int] = None  # 敏感词审查状态
+    user_groups: Optional[List[Any]] = None # 用户所属的分组
+    mark_user: Optional[str] = None
+    mark_status: Optional[int] = None
+    mark_id: Optional[int] = None
+    messages: Optional[List[dict]] = None # 会话的所有消息列表数据
+
+    @field_validator('user_name', mode='before')
+    @classmethod
+    def convert_user_name(cls, v: Any):
+        if not isinstance(v, str):
+            return str(v)
+        return v
 
 
 class APIAddQAParam(BaseModel):

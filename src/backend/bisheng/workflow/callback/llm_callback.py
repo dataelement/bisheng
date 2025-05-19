@@ -52,12 +52,13 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
     async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
+        result = output if isinstance(output, str) else getattr(output, 'content', output)
         if self.tool_list is not None:
             self.tool_list.append({
                 'type': 'end',
                 'run_id': kwargs.get('run_id').hex,
                 'name': kwargs['name'],
-                'output': output,
+                'output': result,
             })
         if kwargs['name'] == 'sql_agent':
             self.output = True
@@ -97,7 +98,12 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
             return
         if not self.output:
             return
-        msg = response.generations[0][0].text
+        msg = response.generations[0][0].message
+        # ChatTongYi vl model special text
+        if isinstance(msg.content, list):
+            msg = ''.join([one.get('text', '') for one in msg.content])
+        else:
+            msg = msg.content
         if not msg:
             logger.warning('LLM output is empty')
             return

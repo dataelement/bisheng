@@ -16,7 +16,7 @@ from bisheng.utils.minio_client import MinioClient
 router = APIRouter(prefix='/qa', tags=['QA'])
 
 
-@router.get('/keyword', response_model=UnifiedResponseModel[List[str]], status_code=200)
+@router.get('/keyword')
 async def get_answer_keyword(message_id: int):
     # 获取命中的key
     conter = 3

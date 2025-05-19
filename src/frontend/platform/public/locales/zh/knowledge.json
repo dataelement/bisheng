@@ -1,7 +1,7 @@
 {
     "fileManagement": "文件管理",
     "chunkManagement": "分段管理",
-    "back": "退出",
+    "back": "返回",
     "previewHint": "左侧点击按钮预览结果",
     "uploadHint": "请先完成文件上传",
     "nameRequired": "知识库名称不可为空",
@@ -88,11 +88,13 @@
     "pleaseEnterQuestion": "请先输入问题",
     "questionAndAnswerCannotBeEmpty": "问题、答案不能为空",
     "max100CharactersForSimilarQuestion": "相似问最多100个字",
-    "max1000CharactersForAnswer": "答案最多1000个字",
+    "max1000CharactersForAnswer": "答案最多10000个字",
     "updateQa": "更新 QA",
     "createQa": "创建 QA",
     "similarQuestions": "相似问题",
     "aiGenerate": "AI生成",
+    "errorMsg": "文件解析成功，其中{{value}}条问题上传失败，请检查文件后再试",
+    "successMsg": "文件上传成功",
     "cancel2": "取消",
     "confirm": "确认"
 }

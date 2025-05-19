@@ -1,11 +1,12 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
+from sqlalchemy import func
+from sqlmodel import Column, DateTime, Field, select, text
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import generate_uuid
-from sqlalchemy import func
-from sqlmodel import Column, DateTime, Field, select, text
 
 
 # Finetune任务的预置训练集
@@ -16,12 +17,10 @@ class PresetTrainBase(SQLModelSerializable):
     user_id: str = Field(default='', index=True, description='创建人ID')
     user_name: str = Field(default='', index=True, description='创建人姓名')
     type: int = Field(default=0, index=True, description='0 文件 1 QA')
-    create_time: Optional[datetime] = Field(sa_column=Column(
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime,
-                         nullable=False,
-                         server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class PresetTrain(PresetTrainBase, table=True):

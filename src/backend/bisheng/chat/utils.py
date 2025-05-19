@@ -1,4 +1,6 @@
 import json
+import re
+import ast
 from enum import Enum
 from typing import Dict, List
 from urllib.parse import unquote, urlparse
@@ -81,7 +83,8 @@ def extract_answer_keys(answer, llm):
         llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt_template))
     try:
         keywords_str = llm_chain.run(answer)
-        keywords = eval(keywords_str[9:])
+        keywords_str = re.sub('<think>.*</think>', '', keywords_str, flags=re.S).strip()
+        keywords = ast.literal_eval(keywords_str[9:])
     except Exception:
         import jieba.analyse
         logger.warning(f'llm {llm} extract_not_support, change to jieba')

@@ -15,7 +15,7 @@ from uuid import uuid4
 
 import matplotlib
 from langchain_community.tools import Tool
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from loguru import logger
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
@@ -239,7 +239,7 @@ class CodeInterpreterToolArguments(BaseModel):
 
     python_code: str = Field(
         ...,
-        example="print('Hello World')",
+        examples=["print('Hello World')"],
         description=(
             'The pure python script to be evaluated. '
             'The contents will be in main.py. '

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import numpy as np
 from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, LLMServer,
@@ -6,9 +6,8 @@ from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, 
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
 from langchain.embeddings.base import Embeddings
-from langchain_core.pydantic_v1 import BaseModel
 from loguru import logger
-from pydantic import Field
+from pydantic import ConfigDict, Field, BaseModel
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -57,7 +56,7 @@ class BishengEmbedding(BaseModel, Embeddings):
     model_kwargs: dict = Field(default={}, description='embedding模型调用参数')
 
     embeddings: Optional[Embeddings] = Field(default=None)
-    llm_node_type = {
+    llm_node_type: Dict = {
         # 开源推理框架
         LLMServerType.OLLAMA.value: 'OllamaEmbeddings',
         LLMServerType.XINFERENCE.value: 'OpenAIEmbeddings',
@@ -72,16 +71,15 @@ class BishengEmbedding(BaseModel, Embeddings):
         LLMServerType.QIAN_FAN.value: 'QianfanEmbeddingsEndpoint',
         LLMServerType.MINIMAX.value: 'OpenAIEmbeddings',
         LLMServerType.ZHIPU.value: 'OpenAIEmbeddings',
+        LLMServerType.TENCENT.value: 'OpenAIEmbeddings',
+        LLMServerType.VOLCENGINE.value: 'OpenAIEmbeddings',
+        LLMServerType.SILICON.value: 'OpenAIEmbeddings',
     }
 
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None)
     server_info: Optional[LLMServer] = Field(default=None)
-
-    class Config:
-        """Configuration for this pydantic object."""
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(validate_by_name=True, arbitrary_types_allowed=True)
 
     def __init__(self, **kwargs):
         from bisheng.interface.initialize.loading import instantiate_embedding
@@ -187,7 +185,10 @@ class BishengEmbedding(BaseModel, Embeddings):
 
     def _update_model_status(self, status: int, remark: str = ''):
         """更新模型状态"""
-        LLMDao.update_model_status(self.model_id, status, remark)
+        # todo 接入到异步任务模块 累计5分钟更新一次
+        if self.model_info.status != status:
+            self.model_info.status =  status
+            LLMDao.update_model_status(self.model_id, status, remark)
 
 
 CUSTOM_EMBEDDING = {

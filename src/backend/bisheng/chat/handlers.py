@@ -10,6 +10,7 @@ from bisheng.chat.manager import ChatManager
 from bisheng.chat.utils import judge_source, process_graph, process_source_document
 from bisheng.database.base import session_getter
 from bisheng.database.models.report import Report
+from bisheng.database.models.message import ChatMessage as ChatMessageDB, ChatMessageDao
 from bisheng.interface.importing.utils import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.settings import settings
@@ -67,6 +68,38 @@ class Handler:
             else:
                 logger.error(f'act=auto_gen act={action}')
         else:
+            # 将流式输出的内容写到数据库内
+            answer = ''
+            reasoning_answer = ''
+            while not self.stream_queue.empty():
+                msg = self.stream_queue.get()
+                if msg.get('type') == 'answer':
+                    answer += msg.get('content', '')
+                elif msg.get('type') == 'reasoning':
+                    reasoning_answer += msg.get('content', '')
+            if reasoning_answer.strip():
+                chat_message = ChatMessageDB(flow_id=client_id, chat_id=chat_id,
+                                             message=reasoning_answer,
+                                             category='answer',
+                                             type='end',
+                                             user_id=user_id,
+                                             remark='break_answer',
+                                             is_bot=True)
+                if chat_id:
+                    db_message = ChatMessageDao.insert_one(chat_message)
+                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
+
+            if answer.strip():
+                chat_message = ChatMessageDB(flow_id=client_id, chat_id=chat_id,
+                                             message=answer,
+                                             category='answer',
+                                             type='end',
+                                             user_id=user_id,
+                                             remark='break_answer',
+                                             is_bot=True)
+                if chat_id:
+                    db_message = ChatMessageDao.insert_one(chat_message)
+                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
             # 普通技能的stop
             res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
             if res[0]:
@@ -75,18 +108,7 @@ class Handler:
                 close = ChatResponse(type='close')
                 await session.send_json(client_id, chat_id, res, add=False)
                 await session.send_json(client_id, chat_id, close, add=False)
-        answer = ''
-        # 记录中止后产生的流式输出内容
-        while not self.stream_queue.empty():
-            answer += self.stream_queue.get()
-        if answer.strip():
-            chat_message = ChatMessage(message=answer,
-                                       category='answer',
-                                       type='end',
-                                       user_id=user_id,
-                                       remark='break_answer',
-                                       is_bot=True)
-            session.chat_history.add_message(client_id, chat_id, chat_message)
+
         logger.info('process_stop done')
 
     async def process_report(self,

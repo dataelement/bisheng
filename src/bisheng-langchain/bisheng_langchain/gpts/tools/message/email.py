@@ -1,11 +1,9 @@
-import os
 import smtplib
-from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Optional
+from typing import Any
 
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field
 
 from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
                                                          MultArgsSchemaTool)
@@ -17,7 +15,7 @@ class InputArgs(BaseModel):
     content: str = Field(description="邮件正文内容")
 
 
-class EmailMessageTool(APIToolBase):
+class EmailMessageTool(BaseModel):
 
     email_account: str = Field(description="发件人邮箱")
     email_password: str = Field(description="邮箱授权码/密码")
@@ -27,9 +25,9 @@ class EmailMessageTool(APIToolBase):
 
     def send_email(
         self,
-        receiver,
-        subject,
-        content,
+        receiver: str = None,
+        subject: str = None,
+        content: str = None,
     ):
         """
         发送电子邮件函数

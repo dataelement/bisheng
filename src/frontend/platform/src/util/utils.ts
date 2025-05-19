@@ -1,9 +1,9 @@
 import axios from "axios";
 import clsx, { ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import * as XLSX from 'xlsx';
 import { APITemplateType } from "../types/api";
 import { checkUpperWords } from "../utils";
-import * as XLSX from 'xlsx';
 
 export function classNames(...classes: Array<string>): string {
     return classes.filter(Boolean).join(" ");
@@ -142,29 +142,103 @@ export function getFieldTitle(
             : toTitleCase(templateField);
 }
 
+/**
+ * 修复字符串中的不完整 Unicode 代理对（如单独的 \ud83d、\ud83c）
+ * @param {string} text - 原始字符串
+ * @returns {string} - 修复后的字符串
+ */
+function fixBrokenEmojis(text) {
+    return text.replace(
+        // 匹配单独的高位代理（\ud800-\udbff）且后面不跟低位代理（\udc00-\udfff）
+        /([\ud800-\udbff])(?![\udc00-\udfff])/g,
+        // 替换为完整的“问号”表情（或其他默认字符）
+        (highSurrogate) => highSurrogate + '\udfff' // 组合成合法但无意义的字符
+    );
+}
 
-// 导出excle
-export function exportCsv(data: any[], fileName: string = 'test_result.csv') {
-    // 创建Worksheet
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    // 将Worksheet转换为CSV字符串
+export function exportCsv(
+    data: any[],
+    fileName: string = 'test_result.csv',
+    useBase64: boolean = false // 默认使用 Blob 方式
+) {
+    // 处理数据
+    const newData = data.map(row =>
+        row.map(cell => typeof cell === 'string' ? fixBrokenEmojis(cell) : cell)
+    );
+
+    // 创建 Worksheet
+    const ws = XLSX.utils.aoa_to_sheet(newData);
     const csv = XLSX.utils.sheet_to_csv(ws);
 
-    // 生成CSV文件
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    // 创建下载链接
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
+    if (useBase64) {
+        // 处理Unicode字符并转换为Base64
+        const base64String = btoa(unescape(encodeURIComponent(csv)));
+        // 创建Data URL（使用base64编码避免URL编码问题）
+        const csvContent = `data:text/csv;charset=utf-8;base64,${base64String}`;
 
-    // 模拟点击下载链接
-    document.body.appendChild(a);
-    a.click();
+        const a = document.createElement("a");
+        a.href = csvContent;
+        // a.href = url;
+        a.download = fileName;
 
-    // 清理URL对象
-    setTimeout(function () {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }, 0);
+        // 模拟点击下载链接
+        document.body.appendChild(a);
+        a.click();
+
+        // 清理URL对象
+        setTimeout(function () {
+            document.body.removeChild(a);
+            // window.URL.revokeObjectURL(url);
+        }, 0);
+    } else {
+        // 创建Workbook对象
+        const wb = XLSX.utils.book_new();
+        // 添加Worksheet到Workbook中
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        // 生成Excel文件
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "test_result.xlsx";
+
+        // 模拟点击下载链接
+        document.body.appendChild(a);
+        a.click();
+
+        // 清理URL对象
+        setTimeout(function () {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 0);
+    }
+}
+
+// 校验合法json
+export function isValidJSON(str) {
+    if (typeof str !== 'string') return false;
+
+    // 简单的前置检查
+    str = str.trim();
+    if (!(str.startsWith('{') && str.endsWith('}')) &&
+        !(str.startsWith('[') && str.endsWith(']'))) {
+        return false;
+    }
+
+    // 完整解析验证
+    try {
+        JSON.parse(str);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// 取后缀名
+export function getFileExtension(filename) {
+    const basename = filename.split(/[\\/]/).pop(); // 去除路径
+    const match = basename.match(/\.([^.]+)$/);
+    return (match ? match[1] : '').toUpperCase();
 }

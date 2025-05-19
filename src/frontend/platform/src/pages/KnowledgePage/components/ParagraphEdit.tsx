@@ -47,6 +47,10 @@ const ParagraphEdit = ({
         //     arrData.splice(arrData.indexOf(prioritizedItem), 1);
         //     arrData.unshift(prioritizedItem);
         // }
+        // 当前chunk优先排前面
+        // const newArrData = arrData.slice();
+        // const [element] = newArrData.splice(newArrData.findIndex(item => item.metadata.chunk_index === chunkId), 1);
+        // newArrData.unshift(element);
 
         const seenIds = new Set()
         arrData.forEach(chunk => {
@@ -56,7 +60,16 @@ const ParagraphEdit = ({
             const active = chunk_index === chunkId
             const resData = labels.reduce((acc, label) => {
                 const id = [label.page, ...label.bbox].join('-');
-                if (!seenIds.has(id)) {
+                if (seenIds.has(id) && active) {
+                    // 优先使用高亮的label
+                    labelsData[labelsData.findIndex(item => item.id === id)] = {
+                        id: id,
+                        page: label.page,
+                        label: label.bbox,
+                        active: active,
+                        txt: chunk.text
+                    }
+                } else if (!seenIds.has(id)) {
                     seenIds.add(id);
                     acc.push({
                         id: id,

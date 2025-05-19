@@ -183,10 +183,14 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
         let currentMessageIndex = 0
         for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].isSend) break;
             if (isRunLog && messages[i].extra === wsdata.extra) {
                 currentMessageIndex = i;
                 break;
             } else if (!isRunLog && !runLogsTypes.includes(messages[i].category)) {
+                currentMessageIndex = i;
+                break;
+            } else if (wsdata.type === 'end_cover' && messages[i].category === 'tool') {
                 currentMessageIndex = i;
                 break;
             }
@@ -202,6 +206,14 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             reasoning_log += (wsdata.message.reasoning_content || '')
         } else {
             message = currentMessage.message + (wsdata.message || '')
+        }
+
+        // 敏感词特殊处理
+        if (wsdata.type === 'end_cover' && currentMessage.category === 'tool') {
+            messages.forEach((msg) => {
+                msg.end = true // 闭合所有会话
+            })
+            cover = false
         }
         const newCurrentMessage = {
             ...currentMessage,
@@ -233,14 +245,20 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             // }
             // 删除重复消息
             const prevMessage = messages[currentMessageIndex - 1];
+
+            // hack 
+            if (wsdata.type === 'end_cover' && !prevMessage.isSend) {
+                cover = true
+            }
+
             // 有思考不覆盖 只覆盖message,保留思考
             if (prevMessage?.reasoning_log) {
                 if ((prevMessage
                     && prevMessage.message === newCurrentMessage.message
                     && prevMessage.thought === newCurrentMessage.thought)
                     || cover) {
-                        const removedMsg = messages.pop()
-                        prevMessage.message = removedMsg.message
+                    const removedMsg = messages.pop()
+                    prevMessage.message = removedMsg.message
                 }
             } else {
                 if ((prevMessage

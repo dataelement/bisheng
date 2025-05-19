@@ -190,17 +190,20 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
 
     if action == "prev":
         record = MarkRecordDao.get_prev_task(login_user.user_id, task_id)
+        top_queue = deque()
+        bottom_queue = deque()
         if record:
-            queue = deque()
+            queue = top_queue
             for r in record:
                 if r.session_id == chat_id:
+                    queue = bottom_queue
                     continue
                 queue.append(r)
 
-            if len(queue) == 0:
+            logger.info("top_queue={} bottom_queue={}", top_queue, bottom_queue)
+            if len(top_queue) == 0 and len(bottom_queue) == 0:
                 return resp_200()
-            record = queue.pop()
-            logger.info("queue={} record={}", queue, record)
+            record = bottom_queue.popleft() if len(bottom_queue) else top_queue.popleft()
             chat = MessageSessionDao.get_one(record.session_id)
             result["chat_id"] = chat.chat_id
             result["flow_type"] = chat.flow_type
@@ -219,6 +222,8 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
             linked.append(m.chat_id)
 
         cur = linked.find(chat_id)
+        if not k_list:
+            return resp_200()
 
         logger.info("k_list={} cur={}", k_list, cur)
 

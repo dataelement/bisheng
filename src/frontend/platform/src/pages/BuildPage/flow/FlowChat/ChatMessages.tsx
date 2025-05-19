@@ -9,21 +9,30 @@ import { useTranslation } from "react-i18next";
 // import RunLog from "./RunLog";
 // import Separator from "./Separator";
 import Separator from "@/components/bs-comp/chatComponent/Separator";
+import InputForm from "./InputForm";
 import MessageBs from "./MessageBs";
 import MessageBsChoose from "./MessageBsChoose";
 import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
 import MessageUser from "./MessageUser";
 
-export default function ChatMessages({ mark = false, logo, useName, disableBtn = false, guideWord, loadMore, onMarkClick }) {
+export default function ChatMessages({
+    debug,
+    mark = false,
+    logo,
+    useName,
+    guideWord,
+    loadMore,
+    onMarkClick = undefined
+}) {
     const { t } = useTranslation()
-    const { chatId, messages, hisMessages } = useMessageStore()
+    const { chatId, messages, inputForm } = useMessageStore()
 
     // 反馈
     const thumbRef = useRef(null)
     // 溯
     const sourceRef = useRef(null
-)
+    )
     // 自动滚动
     const messagesRef = useRef(null)
     const scrollLockRef = useRef(false)
@@ -81,7 +90,7 @@ export default function ChatMessages({ mark = false, logo, useName, disableBtn =
     // 成对的qa msg
     const findQa = (msgs, index) => {
         const item = msgs[index]
-        if (['stream_msg', 'answer'].includes(item.category)) {
+        if (['stream_msg', 'answer', 'output_msg'].includes(item.category)) {
             const a = item.message.msg || item.message
             let q = ''
             while (index > -1) {
@@ -97,7 +106,7 @@ export default function ChatMessages({ mark = false, logo, useName, disableBtn =
             let a = ''
             while (msgs[++index]) {
                 const aItem = msgs[index]
-                if (['stream_msg', 'answer'].includes(aItem.category)) {
+                if (['stream_msg', 'answer', 'output_msg'].includes(aItem.category)) {
                     a = aItem.message.msg || aItem.message
                     break
                 }
@@ -114,19 +123,26 @@ export default function ChatMessages({ mark = false, logo, useName, disableBtn =
                     case 'input':
                         return null
                     case 'question':
-                        return <MessageUser mark={mark} key={msg.message_id} useName={useName} data={msg} onMarkClick={() => { onMarkClick('question', msg.id, findQa(messagesList, index)) }} />;
+                        return <MessageUser
+                            mark={mark}
+                            key={msg.message_id}
+                            useName={useName}
+                            data={msg}
+                            onMarkClick={() => { onMarkClick?.('question', msg.id, findQa(messagesList, index)) }}
+                        />;
                     case 'guide_word':
                     case 'output_msg':
                     case 'stream_msg':
+                    case "answer":
                         return <MessageBs
+                            debug={debug}
                             mark={mark}
                             logo={logo}
-                            disableBtn={disableBtn}
                             key={msg.message_id}
                             data={msg}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
                             onSource={(data) => { sourceRef.current?.openModal(data) }}
-                            onMarkClick={() => onMarkClick('answer', msg.message_id, findQa(messagesList, index))}
+                            onMarkClick={() => onMarkClick?.('answer', msg.message_id, findQa(messagesList, index))}
                         />;
                     case 'separator':
                         return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
@@ -141,6 +157,7 @@ export default function ChatMessages({ mark = false, logo, useName, disableBtn =
                 }
             })
         }
+        {inputForm && <InputForm data={inputForm} />}
         <ThumbsMessage ref={thumbRef}></ThumbsMessage>
         <ResouceModal ref={sourceRef}></ResouceModal>
     </div>

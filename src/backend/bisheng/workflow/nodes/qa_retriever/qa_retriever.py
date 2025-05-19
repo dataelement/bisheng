@@ -50,6 +50,7 @@ class QARetrieverNode(BaseNode):
             result_str = json.loads(result['result'][0].metadata['extra'])['answer']
         else:
             result_str = ''
+            self.graph_state.set_variable(self.id, '$retrieved_result$', None)
 
         return {
             'retrieved_result': result_str

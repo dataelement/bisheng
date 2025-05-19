@@ -37,9 +37,10 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
     const [loading, setLoading] = useState(false);
     const { t } = useTranslation('flow');
     const { appConfig } = useContext(locationContext)
+    const securityRef = useRef<any>(null);
 
     // 应用id (edit)
-    const appidRef = useRef<string>('');
+    const [appId, setAppId] = useState<string>('');
     // State for errors
     const [errors, setErrors] = useState<any>({});
 
@@ -64,7 +65,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setErrors({})
             setOpen(true);
             tempDataRef.current = null;
-            appidRef.current = '';
+            setAppId('');
         },
         // edit
         edit(type: AppType, flow: any) {
@@ -74,7 +75,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setErrors({})
             setOpen(true);
             tempDataRef.current = null;
-            appidRef.current = flow.flow_id;
+            setAppId(flow.id);
         },
     }));
 
@@ -180,9 +181,18 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     navigate('/assistant/' + res.id)
                 }
             } else {
-                // 工作流
-                const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url))
-                if (res) navigate('/flow/' + res.id)
+                if (appId) return navigate('/flow/' + appId) // 避免重复创建
+                // 创建工作流
+                const workflow = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url))
+                if (workflow) {
+                    const navigateToFlow = (id) => navigate(`/flow/${id}`);
+                    // 非Pro版本直接跳转
+                    if (!appConfig.isPro) return navigateToFlow(workflow.id)
+
+                    setAppId(workflow.id)
+                    const securityCreated = await securityRef.current.create(workflow.id)
+                    if (securityCreated) navigateToFlow(workflow.id)
+                }
             }
         }
         setLoading(false);
@@ -244,7 +254,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 </div>
                 {/* 工作流安全审查 */}
                 {appConfig.isPro && <Accordion type="multiple" className="w-full">
-                    <AssistantSetting id={'xxx'} type={3} />
+                    <AssistantSetting ref={securityRef} id={appId} type={5} />
                 </Accordion>}
                 <DialogFooter>
                     <DialogClose>

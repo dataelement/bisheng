@@ -10,7 +10,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 router = APIRouter(prefix='/audit', tags=['AuditLog'])
 
 
-@router.get('', response_model=UnifiedResponseModel)
+@router.get('')
 def get_audit_logs(*,
                    group_ids: Optional[List[str]] = Query(default=[], description='分组id列表'),
                    operator_ids: Optional[List[int]] = Query(default=[], description='操作人id列表'),
@@ -27,7 +27,7 @@ def get_audit_logs(*,
                                          start_time, end_time, system_id, event_type, page, limit)
 
 
-@router.get('/operators', response_model=UnifiedResponseModel)
+@router.get('/operators')
 def get_all_operators(*, login_user: UserPayload = Depends(get_login_user)):
     """
     获取操作过组下资源的所有用户
@@ -35,7 +35,7 @@ def get_all_operators(*, login_user: UserPayload = Depends(get_login_user)):
     return AuditLogService.get_all_operators(login_user)
 
 
-@router.get('/session', response_model=UnifiedResponseModel)
+@router.get('/session')
 def get_session_list(login_user: UserPayload = Depends(get_login_user),
                      flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
                      user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
@@ -55,7 +55,7 @@ def get_session_list(login_user: UserPayload = Depends(get_login_user),
     })
 
 
-@router.get('/session/export', response_model=UnifiedResponseModel)
+@router.get('/session/export')
 def export_session_messages(login_user: UserPayload = Depends(get_login_user),
                             flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
                             user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),
@@ -73,7 +73,7 @@ def export_session_messages(login_user: UserPayload = Depends(get_login_user),
     })
 
 
-@router.get('/session/export/data', response_model=UnifiedResponseModel)
+@router.get('/session/export/data')
 def get_session_messages(login_user: UserPayload = Depends(get_login_user),
                          flow_ids: Optional[List[str]] = Query(default=[], description='应用id列表'),
                          user_ids: Optional[List[int]] = Query(default=[], description='用户id列表'),

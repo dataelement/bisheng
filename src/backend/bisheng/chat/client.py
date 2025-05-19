@@ -233,12 +233,18 @@ class ChatClient:
 
         # 将流式输出的内容写到数据库内
         answer = ''
+        reasoning_answer = ''
         while not self.stream_queue.empty():
             msg = self.stream_queue.get()
             if msg.get('type') == 'answer':
                 answer += msg.get('content', '')
+            elif msg.get('type') == 'reasoning':
+                reasoning_answer += msg.get('content', '')
 
         # 有流式输出内容的话，记录流式输出内容到数据库
+        if reasoning_answer.split():
+            res = await self.add_message('bot', answer, 'reasoning_answer', 'break_answer')
+            await self.send_response('reasoning_answer', 'end', '', message_id=res.id if res else None)
         if answer.strip():
             res = await self.add_message('bot', answer, 'answer', 'break_answer')
             await self.send_response('answer', 'end', '', message_id=res.id if res else None)

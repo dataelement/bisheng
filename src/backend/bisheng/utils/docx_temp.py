@@ -220,7 +220,14 @@ class DocxTemplateRender(object):
                 for i, row in enumerate(table.rows):
                     for j, cell in enumerate(row.cells):
                         if k1 in cell.text:
-                            table.rows[i].cells[j].text = cell.text.replace(k1, v1)
+                            for one in cell.paragraphs:
+                                if k1 in one.text:
+                                    new_text = one.text.replace(k1, v1)
+                                    one.runs[0].text = new_text
+                                    for r_index, r in enumerate(one.runs):
+                                        if r_index == 0:
+                                            continue
+                                        r.text = ''
 
             for p in doc.paragraphs:
                 # p.text = p.text.replace(k1, v1)

@@ -104,7 +104,7 @@ export default function Cascader({ error = false, selectClass = '', close = fals
     const [cols, setCols] = useState(() => resetCols(defaultValue, options))
 
 
-    const selectOptionsRef = useRef(defaultValue)
+    const selectOptionsRef = useRef([...defaultValue])
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)
         // // setValues([]) // 从新选择清空值
@@ -167,20 +167,23 @@ export default function Cascader({ error = false, selectClass = '', close = fals
             {/* <SelectValue placeholder={selectPlaceholder} >123</SelectValue> */}
         </SelectTrigger>
         <SelectContent auto>
-            <div className="flex ">
-                {
-                    cols.map((_options, index) => {
-                        return <Col
-                            isAsync={loadData}
-                            value={isHover ? '' : values[index]?.value || ''}
-                            options={_options}
-                            onHover={(op, isLeaf) => handleHover(op, isLeaf, index)}
-                            onClick={handleClick}
-                            key={index}
-                        />
-                    })
-                }
-            </div>
+            {cols.length
+                ? <div className="flex ">
+                    {
+                        cols.map((_options, index) => {
+                            return <Col
+                                isAsync={loadData}
+                                value={isHover ? '' : values[index]?.value || ''}
+                                options={_options}
+                                onHover={(op, isLeaf) => handleHover(op, isLeaf, index)}
+                                onClick={handleClick}
+                                key={index}
+                            />
+                        })
+                    }
+                </div>
+                : <div className="w-full flex justify-center items-center bisheng-label">空</div>
+            }
         </SelectContent>
     </Select>
 };

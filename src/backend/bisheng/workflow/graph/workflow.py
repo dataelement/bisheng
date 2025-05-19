@@ -53,7 +53,6 @@ class Workflow:
         """
         # 执行workflow
         if input_data is not None:
-            self.save_user_input_history(input_data)
             self.graph_engine.continue_run(input_data)
         else:
             # 首次运行时间

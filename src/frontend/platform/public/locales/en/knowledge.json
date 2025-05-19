@@ -1,7 +1,7 @@
 {
     "fileManagement": "File Management",
     "chunkManagement": "Chunk Management",
-    "back": "Exit",
+    "back": "Return",
     "previewHint": "Click the button on the left to preview the results",
     "uploadHint": "Please complete file upload first",
     "nameRequired": "Knowledge Base Name Cannot Be Empty",
@@ -88,7 +88,7 @@
     "pleaseEnterQuestion": "Please enter a question",
     "questionAndAnswerCannotBeEmpty": "Question and answer cannot be empty",
     "max100CharactersForSimilarQuestion": "Max 100 characters for similar question",
-    "max1000CharactersForAnswer": "Max 1000 characters for answer",
+    "max1000CharactersForAnswer": "Max 10000 characters for answer",
     "updateQa": "Update QA",
     "createQa": "Create QA",
     "similarQuestions": "Similar Questions",
