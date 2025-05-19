@@ -729,7 +729,7 @@ def qa_status_change(qa_id: int, target_status: int):
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)
     else:
-        qa_db.status = target_status
+        qa_db.status = QAStatus.PROCESSING.value
         QAKnoweldgeDao.update(qa_db)
         QA_save_knowledge(db_knowledge, qa_db)
     return qa_db
