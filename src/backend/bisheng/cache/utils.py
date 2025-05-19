@@ -23,7 +23,6 @@ CACHE: Dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
 
-
 def create_cache_folder(func):
     def wrapper(*args, **kwargs):
         # Get the destination folder

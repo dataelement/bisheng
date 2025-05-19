@@ -7,7 +7,6 @@
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
-    <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
     <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
@@ -57,11 +56,11 @@ BISHENG is an open LLM application devops platform, focusing on enterprise scena
 ## Quick start 
 
 Please ensure the following conditions are met before installing BISHENG:
-- CPU >= 8 Core
-- RAM >= 32 GB
+- CPU >= 4 Virtual Cores
+- RAM >= 16 GB
 - Docker 19.03.9+
 - Docker Compose 1.25.1+
-> In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
+> Recommended hardware condition: 18 virtual cores, 48G. In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
 
 Download BISHENG
 ```bash

@@ -25,6 +25,8 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
+from bisheng.cache.redis import redis_client
+from uuid import uuid4
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -35,10 +37,14 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        file_path = save_uploaded_file(file.file, 'bisheng', file_name)
+        file_ext = file_name.split(".")[-1]
+        uuid = str(uuid4())
+        uuid_file_name = f"{uuid}.{file_ext}"
+        redis_client.set(uuid, file_name)
+        file_path = save_uploaded_file(file.file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
-        return resp_200(UploadFileResponse(file_path=file_path))
+        return resp_200(UploadFileResponse(file_path=file_path, file_name=uuid))
     except Exception as exc:
         logger.exception(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
