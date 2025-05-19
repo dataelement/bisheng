@@ -371,7 +371,7 @@ def add_file_embedding(vector_client,
                 metadatas.append(val['metadata'])
     for index, one in enumerate(texts):
         if len(one) > 10000:
-            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \n）进行切分策略')
+            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、.）进行切分')
         # 入库时 拼接文件名和文档摘要
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index])
 
