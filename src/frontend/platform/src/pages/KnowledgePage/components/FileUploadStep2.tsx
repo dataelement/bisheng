@@ -121,6 +121,8 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
     }
     const handleSubmit = async () => {
         const { fileCount, failFiles } = fileInfo
+        console.log(fileInfo);
+        
         const params = {
             ...getParams(size, overlap),
             file_list: fileInfo.files.map(file => ({ file_path: file.path }))
@@ -168,18 +170,12 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
     // 预览
     const handlePreview = () => {
         const params = getParams(size, overlap)
-        console.log(params)
+        console.log('1233',fileInfo)
         setShowSecondDiv(true); 
-        onPreview(params, fileInfo.files)
+        onPreview(params, fileInfo)
     }
 
-    return <div className="flex flex-col">
-        <div className="flex items-center gap-2 my-6 px-12 text-sm font-bold max-w-96">
-            <span>①{t('uploadFile')}</span>
-            <div className="h-[1px] flex-grow bg-gray-300"></div>
-            <span className="text-primary">②{t('docProcessingStrategy')}</span>
-        </div>
-
+    return <div className="flex flex-col min-h-screen">
         <Tabs defaultValue="smart" className="w-full mt-4 text-center" onValueChange={(val) => chunkType.current = val}>
             <TabsList className="a mx-auto">
                 <TabsTrigger value="smart" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
@@ -225,13 +221,14 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
            
         </Tabs>
         
-        <div className="flex justify-end mt-8 gap-4">
-            <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
-            <Button disabled={loading} className="h-8" onClick={handleSubmit}>
-                {loading && <LoadIcon />} {t('nextStep')}
-            </Button>
-            
-        </div>
+        <div className="flex justify-end p-4 gap-4">
+      <Button className="h-8" variant="outline" onClick={onPrev}>
+        {t('previousStep')}
+      </Button>
+      <Button disabled={loading} className="h-8" onClick={handleSubmit}>
+        {loading && <LoadIcon />} {t('nextStep')}
+      </Button>
+    </div>
           {/* <div className="flex justify-end mt-8 gap-4">
             <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
             <Button disabled={loading} className="h-8" onClick={handleSubmit}>
