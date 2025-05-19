@@ -115,6 +115,8 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
         onPreview(params, fileInfo.files)
     }
 
+    const [tab, setTab] = useState('smart')
+
     return <div className="flex flex-col">
         <div className="flex items-center gap-2 my-6 px-12 text-sm font-bold max-w-96">
             <span>①{t('uploadFile')}</span>
@@ -122,7 +124,10 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
             <span className="text-primary">②{t('docProcessingStrategy')}</span>
         </div>
 
-        <Tabs defaultValue="smart" className="w-full mt-4 text-center" onValueChange={(val) => chunkType.current = val}>
+        <Tabs defaultValue="smart" className="w-full mt-4 text-center" onValueChange={(val) => {
+            chunkType.current = val
+            setTab(val)
+        }}>
             <TabsList className="a mx-auto">
                 <TabsTrigger value="smart" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
                 <TabsTrigger value="chunk">{t('customStrategy')}</TabsTrigger>
@@ -146,10 +151,14 @@ export default function FileUploadStep2({ fileInfo, onPrev, onPreview, onChange 
 
         <div className="flex justify-end mt-8 gap-4">
             <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
-            <Button disabled={loading} className="h-8" onClick={handleSubmit}>
+            <Button disabled={loading || (tab === 'chunk' && strategies.length === 0)} className="h-8" onClick={handleSubmit}>
                 {loading && <LoadIcon />} {t('submit')}
             </Button>
-            <Button className="h-8" id={'preview-btn'} onClick={handlePreview}>{t('previewResults')}</Button>
+            <Button
+                disabled={tab === 'chunk' && strategies.length === 0}
+                className="h-8"
+                id={'preview-btn'}
+                onClick={handlePreview}>{t('previewResults')}</Button>
         </div>
 
         {/* 重复文件提醒 */}
