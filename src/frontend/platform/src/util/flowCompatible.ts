@@ -148,6 +148,10 @@ const comptibleOutput = (node) => {
 
 
 const comptibleLLM = (node) => {
+    if (!node.v) {
+        node.v = 1
+    }
+    
     if (node.v == 1) {
 
         node.group_params[2].params.push({
