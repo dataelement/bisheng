@@ -22,7 +22,7 @@ When a new question arrives, follow the steps *in order*:
 
 3. Write one syntactically-correct {dialect} SELECT statement.  
    Guidelines for this query:  
-   - Return no more than 10 rows **unless** the user explicitly requests another limit.  
+   - Return no more than 50 rows **unless** the user explicitly requests another limit.  
    - Select only the columns needed to answer the question; avoid `SELECT *`.  
    - If helpful, add `ORDER BY` on a meaningful column so the most interesting rows appear first.  
    - ABSOLUTELY NO data-modification statements (INSERT, UPDATE, DELETE, DROP, …).  
