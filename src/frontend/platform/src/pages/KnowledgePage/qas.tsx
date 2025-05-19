@@ -241,7 +241,7 @@ export default function QasPage() {
 
     // 轮询
     useEffect(() => {
-        const runing = datalist.some(item=> item.status === 2)
+        const runing = datalist.some(item => item.status === 2)
         if (runing) {
             const timer = setTimeout(() => {
                 reload()
@@ -307,7 +307,9 @@ export default function QasPage() {
         });
     };
 
+    const {toast} = useToast()
 
+    
     const handleStatusClick = async (id: number, checked: boolean) => {
         const targetStatus = checked ? 1 : 0;
         const isOpening = checked;
@@ -318,6 +320,10 @@ export default function QasPage() {
             await updateQaStatus(id, targetStatus);
             refreshData(item => item.id === id, { status: targetStatus });
         } catch (error) {
+            toast({
+                variant: 'error',
+                description: error
+            })
             refreshData(item => item.id === id, {
                 status: 3
             });
