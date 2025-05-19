@@ -153,7 +153,7 @@ class RedisCallback(BaseCallback):
                         break
                     yield chat_response
                 break
-            elif status_info['status'] == WorkflowStatus.WAITING.value and time.time() - status_info['time'] > 10:
+            elif status_info['status'] in [WorkflowStatus.WAITING.value, WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
