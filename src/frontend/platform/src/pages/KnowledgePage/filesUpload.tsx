@@ -67,6 +67,7 @@ export default function FilesUpload() {
                 <FileUploadStep1 hidden={currentStep !== 1}
                     onNext={(files) => {
                         setFileInfo(files)
+                        setResultFiles(files)
                         setCurrentStep(2)
                     }}
                     onSave={(files) => {

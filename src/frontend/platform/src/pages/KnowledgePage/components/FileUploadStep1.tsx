@@ -14,7 +14,10 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
     const failFilesRef = useRef<any>([])
 
     const handleFileChange = (files, failFiles) => {
-        filesRef.current = files
+        filesRef.current = files.map(file => ({
+            ...file,
+            fileType: ['xlsx', 'xls', 'csv'].includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file'
+        }))
         // TODO 提示 failFiles
         failFilesRef.current = failFiles
 
