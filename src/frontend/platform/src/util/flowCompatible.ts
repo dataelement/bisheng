@@ -113,8 +113,10 @@ const comptibleInput = (node) => {
 
 
 const comptibleAgent = (node) => {
-    if (!node.v && node.group_params[1].params[0].type === 'bisheng_model') {
-        node.group_params[1].params[0].type = 'agent_model'
+    if (!node.v) {
+        if (node.group_params[1].params[0].type === 'bisheng_model') {
+            node.group_params[1].params[0].type = 'agent_model'
+        }
         node.v = 1
     }
 
@@ -133,6 +135,9 @@ const comptibleAgent = (node) => {
 
 
 const comptibleOutput = (node) => {
+    if (!node.v) {
+        node.v = 1
+    }
     if (node.v == 1) {
         node.group_params[0].params[0].key = 'message'
         node.group_params[0].params[0].global = 'key'

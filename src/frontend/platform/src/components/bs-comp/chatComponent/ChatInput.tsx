@@ -239,7 +239,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 noAccess: false,
                 liked: 0,
                 create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
-            }, data.type === 'end_cover')
+            }, data.type === 'end_cover' && data.category === 'anwser')
 
             if (!msgClosedRef.current) msgClosedRef.current = true
         } else if (data.type === "close") {

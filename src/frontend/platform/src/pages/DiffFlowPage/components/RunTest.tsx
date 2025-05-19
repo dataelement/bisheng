@@ -9,10 +9,10 @@ import { generateUUID } from "@/components/bs-ui/utils";
 import { postBuildInit } from "@/controllers/API";
 import { useDiffFlowStore } from "@/store/diffFlowStore";
 import { FlowStyleType, FlowType } from "@/types/flow";
+import { exportCsv } from "@/util/utils";
 import { CircleHelp, Download, Play } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import * as XLSX from 'xlsx';
 import CellWarp from "./Cell";
 import RunForm from "./RunForm";
 
@@ -87,40 +87,18 @@ export default function RunTest({ nodeId }) {
 
     // 导出结果（excle）
     const handleDownExcle = () => {
-        const data = [['测试用例', ...mulitVersionFlow.map(version => version.name)]];
+        const _mulitVersionFlow = mulitVersionFlow.filter(version => version)
+        const data = [['测试用例', ..._mulitVersionFlow.map(version => version.name)]];
 
         questions.forEach((_, index) => {
             const rowData = [_.q]
-            mulitVersionFlow.forEach(version => {
+            _mulitVersionFlow.forEach(version => {
                 rowData.push(cellRefs[`${index}-${version.id}`].current.getData())
             })
             data.push(rowData)
         })
 
-        // 创建Workbook对象
-        const wb = XLSX.utils.book_new();
-        // 添加Worksheet到Workbook中
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-
-        // 生成Excel文件
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([wbout], { type: 'application/octet-stream' });
-        // 创建下载链接
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "test_result.xlsx";
-
-        // 模拟点击下载链接
-        document.body.appendChild(a);
-        a.click();
-
-        // 清理URL对象
-        setTimeout(function () {
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        }, 0);
+        exportCsv([], "test_result.xlsx")
     }
 
     const notDiffVersion = useMemo(() => !mulitVersionFlow.some((version) => version), [mulitVersionFlow])

@@ -127,6 +127,13 @@ export const getModelListApi = async (): Promise<any> => {
 
 // 添加模型
 export const addLLmServer = async (data: any) => {
+    // 删除前端生成的id (id: string )
+    data.models = data.models.map((item) => {
+        const { id, ...other } = item
+        return typeof id === 'string' ? {
+            ...other
+        } : item
+    })
     return await axios.post(`/api/v1/llm`, data)
 };
 
