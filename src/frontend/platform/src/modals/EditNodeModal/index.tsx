@@ -154,7 +154,10 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
           </DialogTitle>
           <DialogDescription asChild>
             <div>
-              {data.node?.description}
+              <p className="sm:max-w-[700px] lg:max-w-[700px] break-words">
+                {data.node?.description}
+              </p>
+              
               <div className="flex pt-3">
                 {/* <Variable className="edit-node-modal-variable "></Variable> */}
                 <span className="edit-node-modal-span">List</span>
