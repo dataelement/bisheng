@@ -9,14 +9,14 @@ export default function Tip({
     delayDuration = 200,
 }: {
     content: string;
-    side: "top" | "right" | "bottom" | "left";
+    side: "top" | "right" | "bottom" | "left"|"top-right";
     asChild?: boolean;
     children: React.ReactNode;
     styleClasses?: string;
     delayDuration?: number
 }): JSX.Element {
     return (
-        <Tooltip delayDuration={delayDuration}>
+        <Tooltip open delayDuration={delayDuration}>
             <TooltipTrigger asChild={asChild}>{children}</TooltipTrigger>
 
             <TooltipContent
@@ -25,7 +25,7 @@ export default function Tip({
                 avoidCollisions={false}
                 sticky="always"
             >
-                <div className="max-w-96 text-left break-all whitespace-normal">{content}</div>
+                <div className=" max-w-96 text-left break-all whitespace-normal">{content}</div>
             </TooltipContent>
         </Tooltip>
     );
