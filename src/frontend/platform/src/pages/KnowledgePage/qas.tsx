@@ -398,7 +398,6 @@ export default function QasPage() {
                                     <div className="flex items-center">
                                         {el.status !== 2 && <Switch
                                             checked={el.status === 1}
-                                            disabled={el.status === 3}
                                             onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
                                         />}
                                         {el.status === 2 && (
