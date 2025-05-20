@@ -1,3 +1,4 @@
+import { getAssistantModelConfig, getLlmDefaultModel } from "@/controllers/API/finetune";
 import { copyReportTemplate } from "@/controllers/API/workflow";
 import { Node } from "@xyflow/react";
 import i18next from "i18next";
@@ -270,6 +271,32 @@ export function importFlow() {
                     await Promise.all(flow.nodes.map(async (node) => {
                         await copyReportTemplate(node.data);
                     }));
+
+                    // 夸环境模型自动更新为默认模型, 并清空知识库和工具
+                    if (flow.source !== location.host) {
+                        const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
+                        const workflowModelId = workflow.model_id
+                        const assistantModelId = assistant.llm_list.find(item => item.default).model_id
+                        delete flow.source
+
+                        flow.nodes.forEach(node => {
+                            if (['rag', 'llm', 'agent'].includes(node.data.type)) {
+                                node.data.group_params.forEach(group =>
+                                    group.params.forEach(param => {
+                                        if (param.type === 'bisheng_model') {
+                                            param.value = workflowModelId
+                                        } else if (param.type === 'agent_model') {
+                                            param.value = assistantModelId
+                                        } else if (param.type === 'knowledge_select_multi' && param.value.type === 'knowledge') {
+                                            param.value.value = []
+                                        } else if (param.type === 'add_tool') {
+                                            param.value = []
+                                        }
+                                    })
+                                )
+                            }
+                        })
+                    }
 
                     resolve(flow)
                 });

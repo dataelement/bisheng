@@ -72,14 +72,14 @@ export default function ProgressItem({ item, onResulte, onDelete }: {
 
     return (
         <div className={cn(
-            "border border-primary/30 rounded-lg cursor-pointer hover:border-primary hover:shadow-lg relative overflow-hidden",
-            { "border-red-500": item.error && !retrying }
+            "border border-primary/80 rounded-xl cursor-pointer hover:border-primary hover:shadow-lg relative overflow-hidden",
+            { "border-[#A8A8A8]": item.error && !retrying }
         )}>
             <div className={cn(
                 "absolute h-full",
                 {
-                    "bg-red-500/10": item.error && !retrying,
-                    "bg-primary/10": !item.error || retrying,
+                    "bg-[#A8A8A8]/10": item.error && !retrying,
+                    "bg-primary/20": (!item.error || retrying) && progress !== 100,
                     "animate-pulse": progress !== 100 && !item.error
                 }
             )} style={{ width: `${progress}%` }}></div>
