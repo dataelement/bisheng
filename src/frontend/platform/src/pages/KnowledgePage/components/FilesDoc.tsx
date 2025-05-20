@@ -1,6 +1,5 @@
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
 import { TabsContent } from "@/components/bs-ui/tabs";
 import { Button } from "@/components/bs-ui/button";
@@ -8,22 +7,12 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 
 
 
-export default function SplitRules({
+export default function FilesDoc({
     strategies,
     setStrategies,
-    size,
-    setSize,
-    overlap,
-    setOverlap,
     handlePreview,
-    retain,
-    setRetain,
-    forocr,
-    setForocr,
-    formula,
-    setFormula,
-    filhf,
-    setFilhf,
+    settings,
+    onSettingChange,
     t
 }) {
     return (
@@ -48,8 +37,8 @@ export default function SplitRules({
                             <Input
                                 id="splitLength"
                                 type="number"
-                                value={size}
-                                onChange={(e) => setSize(Number(e.target.value))}
+                                value={settings.size}
+                                onChange={(e) => onSettingChange('size', e.target.value)}
                                 placeholder={t('splitSizePlaceholder')}
                                 className="flex-1 min-w-[150px]"
                             />
@@ -63,8 +52,8 @@ export default function SplitRules({
                             <Input
                                 id="chunkOverlap"
                                 type="number"
-                                value={overlap}
-                                onChange={(e) => setOverlap(Number(e.target.value))}
+                                value={settings.overlap}
+                                onChange={(e) => onSettingChange('overlap', e.target.value)}
                                 placeholder={t('chunkOverlapPlaceholder')}
                                 className="flex-1 min-w-[150px]"
                             />
@@ -74,8 +63,8 @@ export default function SplitRules({
                     <div className="flex items-center gap-2 pt-2">
                         <Checkbox
                             id="retain"
-                            checked={retain}
-                            onCheckedChange={(retain) => setRetain(retain)}
+                            checked={settings.retain}
+                            onCheckedChange={(checked) => onSettingChange('retain', checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="keepImages" className="text-sm text-gray-700">
@@ -100,8 +89,8 @@ export default function SplitRules({
                     <div className="flex items-center gap-2 pt-2">
                         <Checkbox
                             id="forocr"
-                            checked={forocr}
-                            onCheckedChange={(checked) => setForocr(checked)}
+                            checked={settings.forocr}
+                            onCheckedChange={(checked) => onSettingChange('forocr', checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="ocrForce" className="text-sm text-gray-700">
@@ -109,8 +98,8 @@ export default function SplitRules({
                         </Label>
                         <Checkbox
                             id="formula"
-                            checked={formula}
-                            onCheckedChange={(checked) => setFormula(checked)}
+                            checked={settings.formula}
+                            onCheckedChange={(checked) => onSettingChange('formula', checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="enableRec" className="text-sm text-gray-700">
@@ -118,8 +107,8 @@ export default function SplitRules({
                         </Label>
                         <Checkbox
                             id="filhf"
-                            checked={filhf}
-                            onCheckedChange={(checked) => setFilhf(checked)}
+                            checked={settings.filhf}
+                            onCheckedChange={(checked) => onSettingChange('filhf', checked)}
                             className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                         <Label htmlFor="hfFilter" className="text-sm text-gray-700">

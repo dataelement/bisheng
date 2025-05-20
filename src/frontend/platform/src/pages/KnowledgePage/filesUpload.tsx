@@ -7,7 +7,6 @@ import { useNavigate } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
 import { Button } from "@/components/bs-ui/button";
-import FileUploadParagraphs from "./components/FileUploadParagraphs";
 
 const StepLabels = [
     '上传文件',
@@ -28,8 +27,8 @@ export default function FilesUpload() {
     const handlePreviewClick = (data, files) => {
         setChange(false)
         setShowView(true)
-        console.log('5678',files);
-        
+        console.log('5678', files);
+
         viewRef.current.load(data, files)
     }
 
@@ -47,57 +46,78 @@ export default function FilesUpload() {
         console.log(' todo resultFiles :>> ', files);
     }
     const [showSecondDiv, setShowSecondDiv] = useState(false);
-    return <div className="flex px-2 py-4 h-full gap-2 w-full">
-        {/* 文件上传 */}
-        <div className={showSecondDiv ? "w-1/2 min-w-[520px]" : "w-full"}>
+    return <div className="relative h-full flex flex-col">
+        {/* 固定在上方的进度条 */}
+        <div className="pt-4 px-4">
             <div className="flex items-center">
-                {/* <ShadTooltip content={t('back')} side="top">
-                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => navigate(-1)}  >
-                        <ArrowLeft className="side-bar-button-size" />
-                    </button>
-                </ShadTooltip> */}
-                <Button variant="outline" size="icon" className={ 'bg-[#fff] size-8'}
+                <Button
+                    variant="outline"
+                    size="icon"
+                    className="bg-[#fff] size-8"
                     onClick={() => navigate(-1)}
-                ><ChevronLeft /></Button>
-                <span className=" text-foreground text-sm font-black pl-4">{t('back')}</span>
+                >
+                    <ChevronLeft />
+                </Button>
+                <span className="text-foreground text-sm font-black pl-4">{t('back')}</span>
             </div>
-            <StepProgress currentStep={currentStep} align="center" labels={StepLabels} />
-            {/* step component */}
-            <div className="h-[calc(100vh-190px)] relative">
-                <FileUploadStep1 hidden={currentStep !== 1}
-                    onNext={(files) => {
-                        setFileInfo(files)
-                        setResultFiles(files)
-                        setCurrentStep(2)
-                    }}
-                    onSave={(files) => {
-                        setResultFiles(files)
-                        handleSave(files)
-                    }} />
-                {currentStep === 2 && (
-                    <FileUploadStep2
-                    fileInfo={fileInfo}
-                    setShowSecondDiv={setShowSecondDiv}
-                    onPrev={() => setStepEnd(false)}
-                    onPreview={handlePreviewClick}
-                    onChange={() => setChange(true)}
+            <StepProgress
+                currentStep={currentStep}
+                align="center"
+                labels={StepLabels}
+                className="mt-4"
+            />
+        </div>
+
+        {/* 主要内容区域 - 使用flex布局分成两部分 */}
+        <div className="flex flex-1 overflow-hidden px-4 pb-16"> {/* pb-16为底部按钮留空间 */}
+            {/* 左侧文件上传区域 */}
+            <div className="w-full overflow-y-auto">
+                <div className="h-full">
+
+                    <FileUploadStep1 hidden={currentStep !== 1}
+                        onNext={(files) => {
+                            setFileInfo(files);
+                            setResultFiles(files);
+                            setCurrentStep(2);
+                        }}
+                        onSave={(files) => {
+                            setResultFiles(files);
+                            handleSave(files);
+                        }}
                     />
-                )}
+
+                    {currentStep === 2 && (
+                        <FileUploadStep2
+                            resultFiles={resultFiles}
+                            fileInfo={fileInfo}
+                            setShowSecondDiv={setShowSecondDiv}
+                            onPrev={() => setStepEnd(false)}
+                            onPreview={handlePreviewClick}
+                            onChange={() => setChange(true)}
+                        />
+                    )}
+                    {currentStep === 3 && <div>1111</div>}
+                </div>
             </div>
         </div>
-         {/* 段落 */}
-         {/* 1.3.0版本点击预览分段结果触发这个 */}
-         {showSecondDiv && <div className="w-1/2 h-full relative">
-            <FileUploadParagraphs open={showView} ref={viewRef} change={change} onChange={(change) => {
-                setChange(change)
-                document.getElementById('preview-btn')?.click()
-            }} />
-            {/* {!showView && (
-                <div className="flex justify-center items-center flex-col h-full text-gray-400">
-                    <FileText width={160} height={160} className="text-border" />
-                    {stepEnd ? t('previewHint') : t('uploadHint')}
-                </div>
-            )} */}
-        </div>} 
+
+        {/* 固定在右下角的按钮 */}
+        {currentStep === 2 && (
+            <div className="fixed bottom-4 right-8 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
+                <Button
+                    className="h-8"
+                    variant="outline"
+                    onClick={() => setCurrentStep(currentStep - 1)}
+                >
+                    {t('previousStep')}
+                </Button>
+                <Button
+                    className="h-8"
+                    onClick={() => setCurrentStep(currentStep + 1)}
+                >
+                    {t('nextStep')}
+                </Button>
+            </div>
+        )}
     </div>
 };

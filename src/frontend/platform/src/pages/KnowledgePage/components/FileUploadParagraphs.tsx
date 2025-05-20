@@ -37,8 +37,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     useImperativeHandle(ref, () => ({
         load(data, files) {
-            console.log(111,data,files);
-            
+            console.log(111, data, files);
+
             paramsRef.current = data
             fileCachesRef.current = {}
 
@@ -47,8 +47,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 value: el.file_path
             }))
             setFiles([...allFilesRef.current])
-            console.log(files[0].file_path,fileValueRef.current);
-            
+            console.log(files[0].file_path, fileValueRef.current);
+
             loadchunks(fileValueRef.current || files[0].file_path) // default first 
         }
     }))
@@ -57,16 +57,13 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const [previewFileUrl, setFileUrl] = useState('')
     const [isUns, setIsUns] = useState(false)
     const [partitions, setPartitions] = useState<any>([])
-    const [abc, setAbc] = useState<any>([
-        "这是第一段文本内容。React 是一个用于构建用户界面的构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J构建用户界面的 J JavaScript 库，它可以帮助你轻松创建交互式 UI。",
-        "第二段文本示例。组件化是 React 的核心思想之一，允许你将 UI 拆分为独立可复用的代码片段。",
-        "接下来是第三段。在 React 中，props 是父组件向子组件传递数据的方式，而 state 用于管理组件内部状态。",
-        "最后一段内容。React Hooks 是 React 16.8 引入的新特性，它让你在不编写 class 的情况下使用 state 和其他 React 特性。"
-      ])
+
+
+
     // 加载文件分段结果
     const loadchunks = async (fileValue) => {
-        console.log(fileValue,'5555');
-        
+        console.log(fileValue, '5555');
+
         if (!fileValue) return
         setLoading(true)
         setFileValue(fileValue)
@@ -117,24 +114,10 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
             <LoadingIcon />
         </div>
     )
-    
 
-    return <div className="overflow-y-auto p-2">
-         <div className="p-4 mx-auto">
-      <div className="space-y-6"> {/* 使用 space-y-6 控制段落间距 */}
-        {abc.map((text, index) => (
-          <div 
-            key={index} 
-            className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start">
-              <p className="text-gray-700 leading-relaxed">{text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-        {/* <div className="flex gap-2">
+
+    return {/* 原预览页面，暂时无用
+        <div className="flex gap-2">
             <SelectSearch value={fileValue} options={files}
                 selectPlaceholder=''
                 inputPlaceholder=''
@@ -185,7 +168,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                 />
             </DialogContent>
         </Dialog> */}
-    </div>
+
 });
 
 export default FileUploadParagraphs
