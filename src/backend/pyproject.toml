@@ -97,9 +97,9 @@ mcp = "^1.6.0"
 numpy = "^1.26.2"
 pyjwt = "^1.7.1"
 tencentcloud-sdk-python = "^3.0.1373"
-fastapi-jwt-auth = {path = "../python-github-libs/fastapi-jwt-auth"}
+fastapi-jwt-auth = "^0.5.0"
 langchain-openai = "^0.3.16"
-pptx2md = {path = "../python-github-libs/pptx2md"}
+pptx2md = "^2.0.6"
 markdownify = "^1.1.0"
 readability = "^0.3.2"
 readability-lxml = "^0.8.4.1"
