@@ -58,8 +58,8 @@ jobs:
         with:
           installer-parallel: true
 
-      - name: Build backend and push
-        id: docker_build_backend
+      - name: Build backend amd64 and push
+        id: docker_build_backend_amd
         uses: docker/build-push-action@v2
         with:
           # backend 的context目录
@@ -68,14 +68,33 @@ jobs:
           # 是否 docker push
           push: true
           # docker build arg, 注入 APP_NAME/APP_VERSION
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           build-args: |
             APP_NAME="bisheng-backend"
             APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+            PANDOC_ARCH=amd64
           # 生成两个 docker tag: ${APP_VERSION} 和 latest
           tags: |
             ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
-      # 构建 Docker frontend 并推送到 Docker hub
+      - name: Build backend arm64 and push
+        id: docker_build_backend_arm
+        uses: docker/build-push-action@v2
+        with:
+          # backend 的context目录
+          context: "./src/backend/"
+          file: ./src/backend/base.Dockerfile
+          # 是否 docker push
+          push: true
+          # docker build arg, 注入 APP_NAME/APP_VERSION
+          platforms: linux/arm64
+          build-args: |
+            APP_NAME="bisheng-backend"
+            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
+            PANDOC_ARCH=arm64
+          # 生成两个 docker tag: ${APP_VERSION} 和 latest
+          tags: |
+            ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+      # 获取提交信息
       - name: Process git message
         id: process_message
         run: |
@@ -83,7 +102,7 @@ jobs:
           value=$(echo "${value}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\r/%0A/g')
           echo "message=${value}" >> $GITHUB_ENV
         shell: bash
-
+      # 飞书通知
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
         with:
