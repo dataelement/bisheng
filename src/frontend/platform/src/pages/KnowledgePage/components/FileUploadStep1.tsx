@@ -27,7 +27,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
     return <div className={`max-w-[1200px] mx-auto flex flex-col px-10 pt-4 ${hidden ? 'hidden' : ''}`}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
-            progressClassName='h-[calc(100vh-400px)]'
+            progressClassName='h-[calc(100vh-500px)]'
             onSelectFile={(count) => {
                 setFileCount(count)
                 setFinish(false)

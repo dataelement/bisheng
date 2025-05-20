@@ -124,7 +124,7 @@ const KnowledgeUploadComponent = ({
 
     return <div className="">
         <DropZone onDrop={handleDrop} />
-        <div className={cname(' overflow-y-auto no-scrollbar mt-4 space-y-2', progressClassName)}>
+        <div className={cname('overflow-y-auto mt-4 space-y-2', progressClassName)}>
             {progressList.map((pros) =>
                 <ProgressItem
                     key={pros.id}

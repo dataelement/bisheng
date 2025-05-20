@@ -22,7 +22,7 @@ export default function DropZone({ onDrop }) {
         ? 'pdf、txt、docx、pptx、md、html、png、jpg、jpeg、bmp'
         : 'pdf、txt、docx、doc、pptx、md、html'
 
-    return <div {...getRootProps()} className="group h-32 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">
+    return <div {...getRootProps()} className="group h-48 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">
         <input {...getInputProps()} />
         <UploadIcon className="group-hover:text-primary size-5" />
         <p className="text-sm">{t('code.clickOrDragHere')}</p>
