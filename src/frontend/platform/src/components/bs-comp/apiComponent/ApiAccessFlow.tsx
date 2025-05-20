@@ -529,7 +529,9 @@ print(response.text)# 输出工作流的响应`
                     <div className="mb-6">
                         <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
                             <li className='mt-2 leading-6'>如果用户在对话框内上传了文件</li>
-                            <li className='mt-2 leading-6'>如果有文件类型，调用毕昇文件上传接口获取到文件url，示例如下：</li>
+                            <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
+                                <li className='mt-2 leading-6'>如果有文件类型，调用毕昇文件上传接口获取到文件url，示例如下：</li>
+                            </ul>
                         </ul>
                     </div>
                     <SyntaxHighlighter
@@ -553,15 +555,17 @@ def upload_file(local_path: str):
 
                     <div className="mb-6">
                         <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
-                            <li className='mt-2 leading-6'>成功获取用户的输入和上传文件的url后，拼接为如下格式的接口入参</li>
+                            <ul className="list-disc list-inside pl-4 mt-2 bisheng-label pb-2">
+                                <li className='mt-2 leading-6'>成功获取用户的输入和上传文件的url后，拼接为如下格式的接口入参</li>
+                            </ul>
                         </ul>
                     </div>
                     <SyntaxHighlighter
-                                        className="w-full overflow-auto custom-scroll"
-                                        language={'json'}
-                                        style={oneDark}
-                                    >
-                                        {`payload = json.dumps({
+                        className="w-full overflow-auto custom-scroll"
+                        language={'json'}
+                        style={oneDark}
+                    >
+                        {`payload = json.dumps({
     "workflow_id": "c90bb7f2-b7d1-49bf-9fb6-3ab60ff8e414",
     "session_id": "d4347ab8e8cd48c48ac9920dbb5a9b35_async_task_id",  # 上次返回的 session_id
     "message_id": "385140",
