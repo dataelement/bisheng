@@ -236,7 +236,7 @@ export default function AppUseLog() {
             })
             // 导出excle
             const fileName = generateFileName(start_date, end_date, user.user_name);
-            exportCsv(data, fileName)
+            exportCsv(data, fileName, true)
 
             // await downloadFile(__APP_ENV__.BASE_URL + res.url, fileName);
             setAuditing(false);

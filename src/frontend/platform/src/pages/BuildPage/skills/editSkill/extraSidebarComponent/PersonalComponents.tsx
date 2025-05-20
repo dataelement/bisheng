@@ -18,7 +18,7 @@ export default function PersonalComponents({ onDragStart }) {
                 desc: `组件 ${data.node.display_name} 已存在，覆盖原有组件还是继续创新建组件？`,
                 showClose: true,
                 okTxt: '覆盖',
-                canelTxt: '创建新组建',
+                canelTxt: '创建新组件',
                 onOk(next) {
                     addSavedComponent(cloneDeep(data), true)
                     next()

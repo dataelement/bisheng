@@ -448,9 +448,7 @@ def add_file_embedding(
                 metadatas.append(val["metadata"])
     for index, one in enumerate(texts):
         if len(one) > 10000:
-            raise ValueError(
-                "分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \n）进行切分"
-            )
+            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分')
         # 入库时 拼接文件名和文档摘要
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index])
 
@@ -929,7 +927,7 @@ def qa_status_change(qa_id: int, target_status: int):
         qa_db.status = target_status
         QAKnoweldgeDao.update(qa_db)
     else:
-        qa_db.status = target_status
+        qa_db.status = QAStatus.PROCESSING.value
         QAKnoweldgeDao.update(qa_db)
         QA_save_knowledge(db_knowledge, qa_db)
     return qa_db

@@ -147,7 +147,7 @@ class ChatMessage(BaseModel):
     files: Optional[list] = []
     user_id: Optional[int] = None
     message_id: Optional[int | str] = None
-    source: int = 0
+    source: Optional[int] = 0
     sender: Optional[str] = None
     receiver: Optional[dict] = None
     liked: int = 0

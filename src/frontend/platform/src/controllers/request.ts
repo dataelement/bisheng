@@ -29,7 +29,10 @@ customAxios.interceptors.response.use(function (response) {
 
     // 无权访问
     if (response.data.status_code === 403) {
-        location.href = __APP_ENV__.BASE_URL + '/403'
+        // 修改不跳转
+        if (response.config.method === 'get') {
+            location.href = __APP_ENV__.BASE_URL + '/403'
+        }
         return Promise.reject(errorMessage);
     }
     // 异地登录

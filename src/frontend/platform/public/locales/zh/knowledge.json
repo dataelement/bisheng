@@ -105,7 +105,7 @@
     "pleaseEnterQuestion": "请先输入问题",
     "questionAndAnswerCannotBeEmpty": "问题、答案不能为空",
     "max100CharactersForSimilarQuestion": "相似问最多100个字",
-    "max1000CharactersForAnswer": "答案最多1000个字",
+    "max1000CharactersForAnswer": "答案最多10000个字",
     "updateQa": "更新 QA",
     "createQa": "创建 QA",
     "similarQuestions": "相似问题",

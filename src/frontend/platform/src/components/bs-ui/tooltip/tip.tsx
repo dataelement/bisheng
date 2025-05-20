@@ -16,7 +16,7 @@ export default function Tip({
     delayDuration?: number
 }): JSX.Element {
     return (
-        <Tooltip open delayDuration={delayDuration}>
+        <Tooltip delayDuration={delayDuration}>
             <TooltipTrigger asChild={asChild}>{children}</TooltipTrigger>
 
             <TooltipContent

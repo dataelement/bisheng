@@ -55,7 +55,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const continueRef = useRef(false)
     // 停止状态
     const [stop, setStop] = useState({
-        show: false,
+        show: true,
         disable: false
     })
     /**
@@ -430,6 +430,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const [restarted, setRestarted] = useState(false)
     const handleRestartClick = () => {
         sendWsMsg({ "action": "stop" });
+        setInputForm(null)
         setRestarted(true)
         const chatId = currentChatIdRef.current.startsWith('test') ? '' : currentChatIdRef.current
         restartCallBackRef.current[chatId] = () => {

@@ -51,6 +51,7 @@ class ChatHistory(Subject):
         from bisheng.database.models.message import ChatMessage
         message.flow_id = client_id
         message.chat_id = chat_id
+        db_message = None
         if chat_id and (message.message or message.intermediate_steps
                         or message.files) and message.type != 'stream':
             msg = message.copy()
@@ -67,6 +68,7 @@ class ChatHistory(Subject):
 
         if not isinstance(message, FileResponse):
             self.notify()
+        return db_message
 
     def empty_history(self, client_id: str, chat_id: str):
         """Empty the chat history for a client."""

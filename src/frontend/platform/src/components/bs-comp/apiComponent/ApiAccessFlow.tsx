@@ -519,7 +519,7 @@ print(response.text)# 输出工作流的响应`
     "message_id": "385140",
     "input": {
         "input_2775b": {  # 这里对应返回事件里的 node_id
-            # input_schme.value中元素的 key 以及对应要传入的值
+            # input_schema.value中元素的 key 以及对应要传入的值
             "user_input": "你好"
         }
     }
@@ -567,9 +567,9 @@ def upload_file(local_path: str):
     "message_id": "385140",
     "input": {
         "input_2775b": {  # 这里对应返回事件里的 node_id
-            # input_schme.value中元素的 key 以及对应要传入的值
+            # input_schema.value中元素的 key 以及对应要传入的值
             "user_input": "你好",
-            # 上传文件后获取到的处理任务ID列表
+            # 上传文件后获取到的文件url列表
             "dialog_files_content": ["minio://127.0.0.1:9000/xxxx"]
         }
     }
@@ -690,7 +690,7 @@ def upload_file(local_path: str):
     "message_id": "xxxxx",
     "input": {
         "input_xxx": {  # 事件里的 node_id
-            # key是input_schme.value中元素的 key 以及对应要传入的值
+            # key是input_schema.value中元素的 key 以及对应要传入的值
             "text_input": "用户输入的内容",
             "file": ["minio://127.0.0.1:9000/xxxx"] # 用户上传文件获取到的文件url, 允许多选就是多个url
             "category": "选项2" # 将选项内容赋值给变量。当允许多选时，多个选项内容通过逗号分隔。
@@ -831,7 +831,7 @@ def upload_file(local_path: str):
     "message_id": "消息的唯一ID",
     "input": {
         "output_123": {  # 事件里的节点ID
-            # key是input_schme.value中元素的key
+            # key是input_schema.value中元素的key
             "output_result": "用户输入的内容"
         }
     }
@@ -929,7 +929,7 @@ def upload_file(local_path: str):
     "message_id": "xxxxxx",
     "input": {
         "output_xxx": {  # 事件里的节点ID
-            # key是input_schme.value中元素的key
+            # key是input_schema.value中元素的key
             "output_result": "e2107f75"  # 用户选择选项对应的id
         }
     }
