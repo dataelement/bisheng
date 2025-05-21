@@ -303,6 +303,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             }
             // 待用户输入
             input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
+            setTimeout(() => {
+                inputRef.current.focus()
+            }, 60);
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
