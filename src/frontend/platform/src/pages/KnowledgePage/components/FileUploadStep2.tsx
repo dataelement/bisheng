@@ -23,15 +23,12 @@ interface FileItem {
     fileType: 'table' | 'file';
 }
 interface IProps {
-    fileInfo: { fileCount: number, files: any, failFiles: any }
-    setShowSecondDiv: (show: boolean) => void
-    onPrev: () => void
-    onPreview: (data: any, files: any) => void
-    onChange: () => void
+    step: number
     resultFiles: FileItem[]
+    onNext: (config: any) => void
 }
 
-export default function FileUploadStep2({ fileInfo, onPrev, resultFiles, onPreview, onChange }: IProps) {
+export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
 
@@ -217,7 +214,6 @@ export default function FileUploadStep2({ fileInfo, onPrev, resultFiles, onPrevi
         console.log('Preview params:', params)
 
         setShowSecondDiv(true)
-        onPreview(params, fileInfo)
     }
     return <div className="flex flex-row">
         <div className={showSecondDiv ? "w-1/2 pr-2 overflow-y-auto" : "w-full overflow-y-auto"}>

@@ -197,7 +197,7 @@ export default function index() {
                                 }}
                             />
                             <FormInput
-                                label={<Label className="bisheng-label block pt-2">最大字符数</Label>}
+                                label={<Label className="bisheng-label block pt-2">知识库、联网检索结果最大字符数</Label>}
                                 type="number"
                                 value={formData.maxTokens}
                                 error={''}

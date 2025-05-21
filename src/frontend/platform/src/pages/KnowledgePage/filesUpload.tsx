@@ -1,12 +1,11 @@
+import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
-import ShadTooltip from "@/components/ShadTooltipComponent";
-import { ArrowLeft, ChevronLeft, FileText } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronLeft } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
-import { Button } from "@/components/bs-ui/button";
 
 const StepLabels = [
     '上传文件',
@@ -18,36 +17,21 @@ const StepLabels = [
 export default function FilesUpload() {
     const { t } = useTranslation('knowledge')
     const navigate = useNavigate();
-    const [stepEnd, setStepEnd] = useState(false)
 
-    const [change, setChange] = useState(false)
-
-    const [showView, setShowView] = useState(false)
-    const viewRef = useRef(null)
-    const handlePreviewClick = (data, files) => {
-        setChange(false)
-        setShowView(true)
-        console.log('5678', files);
-
-        viewRef.current.load(data, files)
-    }
-
-    const [fileInfo, setFileInfo] = useState(null)
-
-    ///// new
     const [currentStep, setCurrentStep] = useState(1)
     const [resultFiles, setResultFiles] = useState([])
     console.log('resultFiles :>> ', resultFiles);
     // 策略配置
     const [config, setConfig] = useState(null)
 
-    const handleSave = (_files) => {
+    // 直接保存
+    const handleFinishUpload = (_files) => {
         const files = resultFiles || _files
         console.log(' todo resultFiles :>> ', files);
+        // TODO: 保存后返回上一页
     }
-    const [showSecondDiv, setShowSecondDiv] = useState(false);
+
     return <div className="relative h-full flex flex-col">
-        {/* 固定在上方的进度条 */}
         <div className="pt-4 px-4">
             <div className="flex items-center">
                 <Button
@@ -60,43 +44,40 @@ export default function FilesUpload() {
                 </Button>
                 <span className="text-foreground text-sm font-black pl-4">{t('back')}</span>
             </div>
+            {/* 固定在上方的步进条 */}
             <StepProgress
-                currentStep={currentStep}
                 align="center"
+                currentStep={currentStep}
                 labels={StepLabels}
-                className="mt-4"
             />
         </div>
 
-        {/* 主要内容区域 - 使用flex布局分成两部分 */}
+        {/* 主要内容区域*/}
         <div className="flex flex-1 overflow-hidden px-4 pb-16"> {/* pb-16为底部按钮留空间 */}
-            {/* 左侧文件上传区域 */}
             <div className="w-full overflow-y-auto">
                 <div className="h-full">
 
-                    <FileUploadStep1 hidden={currentStep !== 1}
+                    <FileUploadStep1
+                        hidden={currentStep !== 1}
                         onNext={(files) => {
-                            setFileInfo(files);
                             setResultFiles(files);
                             setCurrentStep(2);
                         }}
                         onSave={(files) => {
                             setResultFiles(files);
-                            handleSave(files);
+                            handleFinishUpload(files);
                         }}
                     />
 
-                    {currentStep === 2 && (
-                        <FileUploadStep2
-                            resultFiles={resultFiles}
-                            fileInfo={fileInfo}
-                            setShowSecondDiv={setShowSecondDiv}
-                            onPrev={() => setStepEnd(false)}
-                            onPreview={handlePreviewClick}
-                            onChange={() => setChange(true)}
-                        />
-                    )}
-                    {currentStep === 3 && <div>1111</div>}
+                    <FileUploadStep2
+                        step={currentStep}
+                        resultFiles={resultFiles}
+                        onNext={(_config) => {
+                            setConfig(_config);
+                            setCurrentStep(4);
+                        }}
+                    />
+                    {currentStep === 4 && <div>数据处理</div>}
                 </div>
             </div>
         </div>
