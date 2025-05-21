@@ -23,7 +23,6 @@ export default function FilesUpload() {
     console.log('resultFiles :>> ', resultFiles);
     // 策略配置
     const [config, setConfig] = useState(null)
-
     // 直接保存
     const handleFinishUpload = (_files) => {
         const files = resultFiles || _files
@@ -69,36 +68,18 @@ export default function FilesUpload() {
                         }}
                     />
 
-                    <FileUploadStep2
+                    {[2, 3].includes(currentStep) && <FileUploadStep2
+                        setCurrentStep={setCurrentStep}
                         step={currentStep}
                         resultFiles={resultFiles}
                         onNext={(_config) => {
                             setConfig(_config);
                             setCurrentStep(4);
                         }}
-                    />
+                    />}
                     {currentStep === 4 && <div>数据处理</div>}
                 </div>
             </div>
         </div>
-
-        {/* 固定在右下角的按钮 */}
-        {currentStep === 2 && (
-            <div className="fixed bottom-4 right-8 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
-                <Button
-                    className="h-8"
-                    variant="outline"
-                    onClick={() => setCurrentStep(currentStep - 1)}
-                >
-                    {t('previousStep')}
-                </Button>
-                <Button
-                    className="h-8"
-                    onClick={() => setCurrentStep(currentStep + 1)}
-                >
-                    {t('nextStep')}
-                </Button>
-            </div>
-        )}
     </div>
 };

@@ -12,7 +12,7 @@ import {
 interface YuLanProps {
     fileNames: string[];
 }
-export default function YuLan({ fileNames }: YuLanProps) {
+export default function PreviewSegment({ fileNames }: YuLanProps) {
     console.log(fileNames, '----------');
 
     const [abc, setAbc] = useState([
@@ -63,7 +63,7 @@ export default function YuLan({ fileNames }: YuLanProps) {
             <div className="absolute -top-8 right-4 z-10">
                 <Select defaultValue={fileNames[0]}>
                     <SelectTrigger className="w-[300px] h-[28px]">
-                        <SelectValue placeholder="Select a file"/>
+                        <SelectValue placeholder="Select a file" />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>

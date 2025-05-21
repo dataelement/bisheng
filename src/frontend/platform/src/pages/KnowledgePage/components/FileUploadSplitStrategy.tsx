@@ -9,6 +9,8 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
+  console.log(strategies, '0000');
+
   const { t } = useTranslation('knowledge')
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
@@ -33,10 +35,10 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
     }
   };
 
-  const handleRegexClick = (reg: string, position: string) => {
+  const handleRegexClick = (reg: string, position: string, rule: string) => {
     setStrategies([
       ...strategies,
-      { id: generateUUID(4), regex: reg, position }
+      { id: generateUUID(4), regex: reg, position, rule }
     ]);
   }
 
@@ -62,9 +64,15 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                         >
                           <div className='relative group h-full py-1 px-2'>
                             {strategy.position === 'before' ? (
-                              <span>✂️{strategy.regex}</span>
+                              <>
+                                <span>✂️{strategy.regex}</span>
+                                <span className='ml-4 text-xs text-gray-500'>{strategy.rule}</span>
+                              </>
                             ) : (
-                              <span>{strategy.regex}✂️</span>
+                              <>
+                                <span>{strategy.regex}✂️</span>
+                                <span className='ml-4 text-xs text-gray-500'>{strategy.rule}</span>
+                              </>
                             )}
                             <DelIcon
                               onClick={() => setStrategies(strategies.filter((_, i) => i !== index))}
@@ -101,14 +109,14 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
       <div className="flex-1 flex flex-col gap-4">
         <h3 className="text-sm text-left font-medium text-gray-700">{t('splitRules')}:</h3>
         <div className="flex flex-wrap gap-2">
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after')}>\n✂️</Button>
-          <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after')}>\n\n✂️</Button>
+          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
+          <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>
           {i18next.language === 'zh' && <>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before')}>{'✂️第.{1, 3}章'}</Button>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before')}>{'✂️第.{1, 3}条'}</Button>
+            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '“第X章”前切分,切分章节等')}>{'✂️第.{1, 3}章'}</Button>
+            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '“第X条”前切分,切分条目等')}>{'✂️第.{1, 3}条'}</Button>
           </>}
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after')}>。✂️</Button>
-          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after')}>\.✂️</Button>
+          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after', '中文句号后切分，中文断句')}>。✂️</Button>
+          <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after', '英文句号后切分，英文断句')}>\.✂️</Button>
         </div>
         <h3 className="text-sm text-left font-medium text-gray-700"> {t('addCustomRule')}:</h3>
         <div className="text-sm flex flex-wrap items-center gap-2">

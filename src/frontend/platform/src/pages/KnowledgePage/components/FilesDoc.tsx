@@ -18,7 +18,7 @@ export default function FilesDoc({
     return (
         <TabsContent value="smart">
             <div
-                className="flex flex-col gap-4 mt-8 max-w-[760px] mx-auto"
+                className="flex flex-col gap-4 mt-8"
                 style={{ gridTemplateColumns: '114px 1fr' }}
             >
                 <div className="space-y-4 p-4 border rounded-lg">
@@ -37,6 +37,7 @@ export default function FilesDoc({
                             <Input
                                 id="splitLength"
                                 type="number"
+                                step="100"
                                 value={settings.size}
                                 onChange={(e) => onSettingChange('size', e.target.value)}
                                 placeholder={t('splitSizePlaceholder')}
@@ -52,6 +53,7 @@ export default function FilesDoc({
                             <Input
                                 id="chunkOverlap"
                                 type="number"
+                                step="10"
                                 value={settings.overlap}
                                 onChange={(e) => onSettingChange('overlap', e.target.value)}
                                 placeholder={t('chunkOverlapPlaceholder')}
@@ -105,7 +107,7 @@ export default function FilesDoc({
                         <Label htmlFor="enableRec" className="text-sm text-gray-700">
                             {t('enableRec')}
                         </Label>
-                        <Checkbox
+                        {/* <Checkbox
                             id="filhf"
                             checked={settings.filhf}
                             onCheckedChange={(checked) => onSettingChange('filhf', checked)}
@@ -113,15 +115,15 @@ export default function FilesDoc({
                         />
                         <Label htmlFor="hfFilter" className="text-sm text-gray-700">
                             {t('hfFilter')}
-                        </Label>
+                        </Label> */}
                     </div>
 
                 </div>
-                <div className="flex justify-between items-end ">
+                {/* <div className="flex justify-between items-end ">
                     <Button className="h-8" id={'preview-btn'} onClick={handlePreview}>
                         {t('previewResults')}
                     </Button>
-                </div>
+                </div> */}
             </div>
 
         </TabsContent>

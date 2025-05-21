@@ -11,10 +11,10 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import FilesDoc from "@/pages/KnowledgePage/components/FilesDoc"
 import TabularDoc from "@/pages/KnowledgePage/components/TabularDoc"
-import YuLan from "./YuLan";
+import PreviewSegment from "./PreviewSegment";
 const initialStrategies = [
-    { id: '1', regex: '\\n\\n', position: 'after' },
-    // { id: '2', regex: '\\n', position: 'after' }
+    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分,用于分隔段落' },
+    { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 interface FileItem {
     id: string;
@@ -26,12 +26,15 @@ interface IProps {
     step: number
     resultFiles: FileItem[]
     onNext: (config: any) => void
+    setCurrentStep
 }
 
-export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
+export default function FileUploadStep2({ step, resultFiles, setCurrentStep, onNext }: IProps) {
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
 
+    // const [change, setChange] = useState(false)
+    // const onChange  = () => setChange(true)
     // 初始化时根据文件类型设置 chunkType
     const chunkType = useRef(
         resultFiles.some(file => file.fileType === 'table') ? 'chunk' : 'smart'
@@ -70,19 +73,20 @@ export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
         gauge: '1',          // 起始行
         rowend: '2',         // 结束行
         appendh: false,      // 添加表头
-        retain: false,       // 保留图片
-        forocr: false,       // 强制OCR
-        formula: false,      // 公式识别
+        retain: true,       // 保留图片
+        forocr: true,       // 强制OCR
+        formula: true,      // 公式识别
         filhf: false         // 过滤页眉页脚
     });
     const [showSecondDiv, setShowSecondDiv] = useState(false);
+    const [showPreview, setShowPreview] = useState(true)
     // 统一处理设置变更
     const handleSettingChange = (key, value) => {
         setDocumentSettings(prev => ({
             ...prev,
             [key]: value
         }));
-        onChange(); // 通知父组件有变更
+        // onChange(); // 通知父组件有变更
     };
     const [dataArray, setDataArray] = useState([
         { idi: 1, name: 'Excel文件1.xlsx' },
@@ -109,21 +113,22 @@ export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
             [fileId]: { ...prev[fileId], [key]: value }
         }));
     };
-    useEffect(() => {
-        onChange()
-    }, [strategies])
+    // useEffect(() => {
+    //     onChange()
+    // }, [strategies])
 
     const [loading, setLoading] = useState(false)
     const { message } = useToast()
     const navaigate = useNavigate()
     //预览分段结果接口
-    const getParams = (size, overlap) => {
+    const getParams = () => {
         const [separator, separator_rule] = strategies.reduce((res, item) => {
-            const { regex, position } = item
+            const { regex, position, rule } = item
             res[0].push(regex)
             res[1].push(position)
+            res[2].push(rule)
             return res
-        }, [[], []])
+        }, [[], [], []])
 
         // 判断是否是表格文件（根据 resultFiles 中的 fileType）
         const isTableFile = resultFiles.some(file => file.fileType === 'table')
@@ -166,7 +171,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
         console.log(fileInfo);
 
         const params = {
-            ...getParams(documentSettings.size, documentSettings.overlap),
+            ...getParams(),
             file_list: fileInfo.files.map(file => ({ file_path: file.path }))
         }
 
@@ -199,7 +204,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
     const [retryLoad, setRetryLoad] = useState(false)
     const handleRetry = (objs) => {
         setRetryLoad(true)
-        const params = { ...getParams(documentSettings.size, documentSettings.overlap), file_objs: objs }
+        const params = { ...getParams(), file_objs: objs }
         captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
             setRepeatFiles([])
             setRetryLoad(false)
@@ -210,63 +215,106 @@ export default function FileUploadStep2({ step, resultFiles, onNext }: IProps) {
     }
     const handlePreview = () => {
         // 预览参数
-        const params = getParams(documentSettings.size, documentSettings.overlap)
+        const params = getParams()
         console.log('Preview params:', params)
-
         setShowSecondDiv(true)
     }
+    const handleNextWithPreview = async () => {
+        await handlePreview();      // 先执行预览
+        setShowPreview(false)
+        setCurrentStep(step + 1);  // 再跳转步骤
+    };
     return <div className="flex flex-row">
-        <div className={showSecondDiv ? "w-1/2 pr-2 overflow-y-auto" : "w-full overflow-y-auto"}>
-            <Tabs defaultValue={displayMode === 'only-tables' ? 'chunk' : 'smart'} className="w-full mt-4 text-center" onValueChange={(val) => chunkType.current = val}>
-                {displayMode === 'mixed' && <TabsList className="a mx-auto">
-                    <TabsTrigger value="smart" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
-                    <TabsTrigger value="chunk">{t('customStrategy')}</TabsTrigger>
-                </TabsList>
-                }
-                {/* 表格文档设置 */}
-                {displayMode !== 'only-documents' && <TabularDoc
-                    strategies={strategies}
-                    settings={documentSettings}
-                    onSettingChange={handleSettingChange}
-                    t={t}
-                    onChange={onChange}
-                    handlePreview={handlePreview}
-                    dataArray={dataArray}
-                    fileConfigs={fileConfigs}
-                    setFileConfigs={setFileConfigs}
-                    updateConfig={updateConfig}
-                />
-                }
-                {/* 文件文档设置 */}
-                {displayMode !== 'only-tables' && <FilesDoc
-                    onChange={onChange}
-                    strategies={strategies}
-                    setStrategies={setStrategies}
-                    settings={documentSettings}
-                    onSettingChange={handleSettingChange}
-                    t={t}
-                    handlePreview={handlePreview}
-                />
-                }
-            </Tabs>
+        <div className={showSecondDiv ? "w-1/2 pr-2 h-full flex flex-col" : "w-full h-full flex flex-col"}>
+            {showPreview ? (
+                <Tabs
+                    defaultValue={displayMode === 'only-tables' ? 'chunk' : 'smart'}
+                    className="flex flex-col h-full"
+                    onValueChange={(val) => chunkType.current = val}
+                >
+                    {/* 标签页头部 */}
+                    <div className="text-center mt-4">
+                        {displayMode === 'mixed' && (
+                            <TabsList className="a mx-auto">
+                                <TabsTrigger value="smart" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
+                                <TabsTrigger value="chunk">{t('customStrategy')}</TabsTrigger>
+                            </TabsList>
+                        )}
+                    </div>
+
+                    <div className="flex-1 flex flex-col relative max-w-[760px] mx-auto">
+
+                        <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-16">
+                            {/* 表格文档设置 */}
+                            {displayMode !== 'only-documents' && (
+                                <TabularDoc
+                                    strategies={strategies}
+                                    settings={documentSettings}
+                                    onSettingChange={handleSettingChange}
+                                    t={t}
+                                    handlePreview={handlePreview}
+                                    dataArray={dataArray}
+                                    fileConfigs={fileConfigs}
+                                    setFileConfigs={setFileConfigs}
+                                    updateConfig={updateConfig}
+                                />
+                            )}
+
+                            {/* 文件文档设置 */}
+                            {displayMode !== 'only-tables' && (
+                                <FilesDoc
+                                    strategies={strategies}
+                                    setStrategies={setStrategies}
+                                    settings={documentSettings}
+                                    onSettingChange={handleSettingChange}
+                                    t={t}
+                                    handlePreview={handlePreview}
+                                />
+                            )}
+                        </div>
+
+                        {/* 固定在内容区左下角的按钮 */}
+                        <div className="absolute bottom-0 left-0 right-0 px-4 py-3 bg-white">
+                            <Button
+                                className="h-8"
+                                id="preview-btn"
+                                onClick={handlePreview}
+                                disabled={strategies.length === 0}
+                            >
+                                {t('previewResults')}
+                            </Button>
+                        </div>
+                    </div>
+                </Tabs>
+            ) : (
+                <div className="h-full">原文对比</div>
+            )}
         </div>
+
         {/* 右侧预览区域 */}
         {showSecondDiv && (
             <div className="w-1/2 pl-2 overflow-y-auto">
-                <YuLan fileNames={fileNames}
+                <PreviewSegment fileNames={fileNames}
                 />
             </div>
         )}
 
-
-        {/* <div className="flex justify-end mt-8 gap-4">
-    <Button className="h-8" variant="outline" onClick={onPrev}>{t('previousStep')}</Button>
-    <Button disabled={loading} className="h-8" onClick={handleSubmit}>
-        {loading && <LoadIcon />} {t('submit')}
-    </Button>
-    <Button className="h-8" id={'preview-btn'} onClick={handlePreview}>{t('previewResults')}</Button>
-</div> */}
-
+        <div className="fixed bottom-2 right-8 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
+            <Button
+                className="h-8"
+                variant="outline"
+                onClick={() => setCurrentStep(step - 1)}
+            >
+                {t('previousStep')}
+            </Button>
+            <Button
+                className="h-8"
+                disabled={strategies.length === 0}
+                onClick={() => handleNextWithPreview()}
+            >
+                {t('nextStep')}
+            </Button>
+        </div>
         {/* 重复文件提醒 */}
         <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
             <DialogContent className="sm:max-w-[425px]">
