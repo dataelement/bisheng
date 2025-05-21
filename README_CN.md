@@ -76,7 +76,7 @@ unzip main.zip && cd bisheng-main/docker
 启动BISHENG
 ```bash
 # 进入bisheng/docker或bisheng-main/docker目录，执行
-docker-compose up -d
+docker compose -f docker-compose.yml -p bisheng up -d
 ```
 启动后，在浏览器中访问 http://IP:3001 ，出现登录页，进行用户注册。默认第一个注册的用户会成为系统admin。
 

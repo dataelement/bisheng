@@ -75,7 +75,7 @@ unzip main.zip && cd bisheng-main/docker
 ```
 Start BISHENG
 ```bash
-docker-compose up -d
+docker compose -f docker-compose.yml -p bisheng up -d
 ```
 After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
 
