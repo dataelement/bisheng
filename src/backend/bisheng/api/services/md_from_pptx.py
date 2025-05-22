@@ -1,4 +1,4 @@
-from pptx2md import convert, ConversionConfig
+from bisheng.pptx2md import convert, ConversionConfig
 from pathlib import Path
 from uuid import uuid4
 
