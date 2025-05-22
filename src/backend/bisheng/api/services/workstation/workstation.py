@@ -48,9 +48,9 @@ class WorkStationService(BaseService):
                 ret.sidebarIcon.image = cls.get_logo_share_link(ret.sidebarIcon.relative_path)
 
             # 兼容旧的websearch配置
-            if ret.webSearch and not ret.webSearch.tool_params:
+            if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
-                ret.webSearch.tool_params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
+                ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
             return ret
         return None
 

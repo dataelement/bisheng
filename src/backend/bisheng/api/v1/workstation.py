@@ -239,8 +239,8 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     联网搜索
     """
-    if web_search_config.tool_params:
-        tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.tool_params)
+    if web_search_config.params:
+        tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.params)
     else:
         # 兼容旧版的配置
         tool = SearchTool.init_search_tool('bing', api_key=web_search_config.bingKey, base_url=web_search_config.bingUrl)
