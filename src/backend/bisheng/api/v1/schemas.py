@@ -444,7 +444,8 @@ class WSPrompt(BaseModel):
     enabled: bool
     prompt: Optional[str] = None
     model: Optional[str] = None
-    tool: Optional[str] = None
+    tool: Optional[str] = None  # 工具的枚举
+    tool_params: Optional[dict] = None  # 工具的入参
     bingKey: Optional[str] = None
     bingUrl: Optional[str] = None
 

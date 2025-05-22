@@ -8,10 +8,10 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
-                                              WorkstationMessage, WorkStationService)
+                                              WorkstationMessage, WorkStationService, SearchTool)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
-from bisheng.api.v1.schemas import UnifiedResponseModel, WorkstationConfig, resp_200, resp_500
+from bisheng.api.v1.schemas import UnifiedResponseModel, WorkstationConfig, resp_200, resp_500, WSPrompt
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
@@ -235,28 +235,12 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
         MessageSessionDao.insert_one(session)
 
 
-async def webSearch(query: str, bingKey: str, bingUrl: str):
+async def webSearch(query: str, web_search_config: WSPrompt):
     """
     联网搜索
     """
-    bingtool = BingSearchResults(api_wrapper=BingSearchAPIWrapper(bing_subscription_key=bingKey,
-                                                                  bing_search_url=bingUrl),
-                                 num_results=10)
-    res = await bingtool.ainvoke({'query': query})
-    if isinstance(res, str):
-        res = eval(res)
-    search_res = ''
-    web_list = []
-    for index, result in enumerate(res):
-        # 处理搜索结果
-        snippet = result.get('snippet')
-        search_res += f'[webpage ${index} begin]\n${snippet}\n[webpage ${index} end]\n\n'
-        web_list.append({
-            'title': result.get('title'),
-            'url': result.get('link'),
-            'snippet': snippet
-        })
-    return search_res, web_list
+    tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.tool_params)
+    return tool.invoke(query)
 
 
 def getFileContent(filepath):
