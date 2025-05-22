@@ -239,7 +239,11 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     联网搜索
     """
-    tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.tool_params)
+    if web_search_config.tool_params:
+        tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.tool_params)
+    else:
+        # 兼容旧版的配置
+        tool = SearchTool.init_search_tool('bing', api_key=web_search_config.bingKey, base_url=web_search_config.bingUrl)
     return tool.invoke(query)
 
 
@@ -341,8 +345,7 @@ async def chat_completions(
                 if searchRes.content == '1':
                     logger.info(f'需要联网搜索, prompt={data.text}')
                     # 如果需要联网搜索，则调用搜索接口
-                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch.bingKey,
-                                                           wsConfig.webSearch.bingUrl)
+                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch)
                     content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
                     yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()
