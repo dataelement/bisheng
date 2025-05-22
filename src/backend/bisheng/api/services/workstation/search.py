@@ -96,7 +96,7 @@ class BoChaSearch(SearchTool):
         result = self._requests(self.base_url, method='POST', json={'query': query, 'summary': True}, headers=self.headers)
         if result.get('code') != 200:
             raise Exception(f"BoCha Error: {result}")
-        web_pages = result.get('data', {}).get('web_pages', {}).get('value', [])
+        web_pages = result.get('data', {}).get('webPages', {}).get('value', [])
         # parse result
         search_res = ''
         web_list = []
@@ -126,11 +126,11 @@ class JinaDeepSearch(SearchTool):
             "messages": [
                 {
                     "role": "user",
-                    "content": "中国"
+                    "content": query
                 },
             ],
             "stream": False,
-            "reasoning_effort": "medium",
+            "reasoning_effort": "low",
             "max_attempts": 1,
             "no_direct_answer": False
         }
@@ -177,7 +177,7 @@ class TavilySearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')
-        self.base_url = 'https://api.tavily.com/v1/web-search'
+        self.base_url = 'https://api.tavily.com/search'
         self.headers = {'Authorization': f'Bearer {self.api_key}'}
 
     def invoke(self, query: str, **kwargs) -> (str, list):
