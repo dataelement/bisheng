@@ -464,6 +464,7 @@ class WorkstationConfig(BaseModel):
     webSearch: Optional[WSPrompt] = None
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
+    systemPrompt: Optional[str] = None
 
 
 class ExcelRule(BaseModel):

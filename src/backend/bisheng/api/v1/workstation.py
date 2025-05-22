@@ -22,7 +22,7 @@ from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_community.utilities.bing_search import BingSearchAPIWrapper
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
@@ -378,6 +378,8 @@ async def chat_completions(
         if not error:
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
+            if wsConfig.systemPrompt:
+                inputs.insert(0, SystemMessage(content=wsConfig.systemPrompt))
             task = asyncio.create_task(
                 bishengllm.ainvoke(
                     inputs,
