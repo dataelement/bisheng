@@ -50,11 +50,16 @@ class SystemLoginMethod(BaseModel):
 
 
 class MilvusConf(BaseModel):
-    connection_args: Optional[str] = Field(
-        default='{"host":"127.0.0.1","port":19530,"user":"","password":"","secure":false}',
-        description='milvus 配置')
-    is_partition: Optional[bool] = Field(default=False, description='是否是partition模式')
+    connection_args: Optional[dict] = Field(default=None, description='milvus 配置')
+    is_partition: Optional[bool] = Field(default=True, description='是否是partition模式')
     partition_suffix: Optional[str] = Field(default='1', description='partition后缀')
+
+    @field_validator('connection_args', mode='before')
+    @classmethod
+    def convert_connection_args(cls, value):
+        if isinstance(value, str):
+            return json.loads(value)
+        return value
 
 
 class ElasticsearchConf(BaseModel):
@@ -68,17 +73,19 @@ class VectorStores(BaseModel):
 
 
 class MinioConf(BaseModel):
-    minio_schema: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
+    schema: Optional[bool] = Field(default=False, description="是否使用https", alias="schema")
     cert_check: Optional[bool] = Field(default=False, description="是否校验证书")
     endpoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 地址")
     sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")
     access_key: Optional[str] = Field(default="minioadmin", description="minio 用户名")
     secret_key: Optional[str] = Field(default="minioadmin", description="minio 密码")
+    public_bucket: Optional[str] = Field(default="bisheng", description="默认存储永久文件的bucket。文件可被匿名用户永久访问")
+    tmp_bucket: Optional[str] = Field(default="tmp-dir", description="临时bucket，存储的文件会设置有效期")
 
 
 class ObjectStore(BaseModel):
     type: str = Field(default='minio', description="对象存储类型")
-    minio: MinioConf = Field(default_factory=MinioConf, description="minio 配置")
+    minio: Optional[MinioConf] = Field(default_factory=MinioConf, description="minio 配置")
 
 
 class WorkflowConf(BaseModel):
@@ -204,30 +211,13 @@ class Settings(BaseModel):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
         all_config = self.get_all_config()
         ret = all_config.get('knowledges', {})
-        # milvus、 es、minio配置从环境变量获取
-        ret.update({
-            "vectorstores": {
-                "Milvus": {
-                    "connection_args": json.loads(self.vector_stores.milvus.connection_args),
-                    "is_partition": self.vector_stores.milvus.is_partition,
-                    "partition_suffix": self.vector_stores.milvus.partition_suffix,
-                },
-                "ElasticKeywordsSearch": {
-                    "elasticsearch_url": self.vector_stores.elasticsearch.url,
-                    "ssl_verify": self.vector_stores.elasticsearch.ssl_verify,
-                }
-            },
-            "minio": {
-                "SCHEMA": self.object_storage.minio.minio_schema,
-                "CERT_CHECK": self.object_storage.minio.cert_check,
-                "MINIO_ENDPOINT": self.object_storage.minio.endpoint,
-                "MINIO_SHAREPOIN": self.object_storage.minio.sharepoint,  # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
-                "MINIO_ACCESS_KEY": self.object_storage.minio.access_key,
-                "MINIO_SECRET_KEY": self.object_storage.minio.secret_key,
-            }
-        })
-
         return ret
+
+    def get_minio_conf(self) -> MinioConf:
+        return self.object_storage.minio
+
+    def get_vectors_conf(self) -> VectorStores:
+        return self.object_storage.vectors
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取

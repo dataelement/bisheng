@@ -249,24 +249,27 @@ def decide_vectorstores(
     collection_name: str, vector_store: str, embedding: Embeddings
 ) -> VectorStore:
     """vector db"""
-    vector_config = settings.get_knowledge().get("vectorstores").get(vector_store)
-    if not vector_config:
-        # 无相关配置
-        return None
+    param: dict = {"embedding": embedding}
 
-    param = {"embedding": embedding}
     if vector_store == "ElasticKeywordsSearch":
+        vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
+        if not vector_config:
+            # 无相关配置
+            raise RuntimeError('vector_stores.elasticsearch not find in config.yaml')
         param["index_name"] = collection_name
         if isinstance(vector_config["ssl_verify"], str):
             vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
+
     elif vector_store == "Milvus":
+        vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
+        if not vector_config:
+            # 无相关配置
+            raise RuntimeError('vector_stores.milvus not find in config.yaml')
         param["collection_name"] = collection_name
         vector_config.pop("partition_suffix", "")
         vector_config.pop("is_partition", "")
     else:
-        # 适配其他的vector
-        collection_name = vector_config.pop("collection_or_index_name", "")
-        vector_config[collection_name] = collection_name
+        raise RuntimeError('unknown vector store type')
 
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
@@ -825,30 +828,9 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
         embeddings = decide_embeddings(db_knowledge.model)
-        vectore_config_dict: dict = settings.get_knowledge().get("vectorstores")
-        if not vectore_config_dict:
-            raise Exception("向量数据库必须配置")
-        vectore_client_list = [
-            (
-                decide_vectorstores(
-                    db_knowledge.index_name or db_knowledge.collection_name,
-                    db,
-                    embeddings,
-                )
-                if db == "ElasticKeywordsSearch"
-                else decide_vectorstores(db_knowledge.collection_name, db, embeddings)
-            )
-            for db in vectore_config_dict.keys()
-        ]
-        logger.info(
-            "vector_init_conn_done col={} dbs={}",
-            db_knowledge.collection_name,
-            vectore_config_dict.keys(),
-        )
-    except Exception as e:
-        logger.exception(e)
-
-    try:
+        vector_client = decide_vectorstores(db_knowledge.collection_name, "Milvus", embeddings)
+        es_client = decide_vectorstores(db_knowledge.index_name, "ElasticKeywordsSearch", embeddings)
+        logger.info(f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}")
         # 统一document
         metadata = [
             {
@@ -863,26 +845,18 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             }
             for index, doc in enumerate(docs)
         ]
-
-        # 向量存储
-        for vectore_client in vectore_client_list:
-            vectore_client.add_texts(
-                texts=[t.page_content for t in docs], metadatas=metadata
-            )
+        vector_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        logger.info(f"qa_save_knowledge add vector over")
+        es_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        logger.info(f"qa_save_knowledge add es over")
 
         QA.status = QAStatus.ENABLED.value
-        with session_getter() as session:
-            session.add(QA)
-            session.commit()
-            session.refresh(QA)
+        KnowledgeFileDao.update(QA)
     except Exception as e:
         logger.error(e)
         setattr(QA, 'status', QAStatus.FAILED.value)
         setattr(QA, 'remark', str(e)[:500])
-        with session_getter() as session:
-            session.add(QA)
-            session.commit()
-            session.refresh(QA)
+        KnowledgeFileDao.update(QA)
 
     return QA
 

@@ -163,10 +163,7 @@ class KnowledgeService(KnowledgeUtils):
         knowledge.is_partition = (
             knowledge.is_partition
             if knowledge.is_partition is not None
-            else settings.get_knowledge()
-            .get("vectorstores", {})
-            .get("Milvus", {})
-            .get("is_partition", True)
+            else settings.get_vectors_conf().milvus.is_partition
         )
 
         # 判断知识库是否重名
@@ -191,12 +188,7 @@ class KnowledgeService(KnowledgeUtils):
         if not db_knowledge.collection_name:
             if knowledge.is_partition:
                 embedding = knowledge.model
-                suffix_id = (
-                    settings.get_knowledge()
-                    .get("vectorstores")
-                    .get("Milvus", {})
-                    .get("partition_suffix", 1)
-                )
+                suffix_id = settings.get_vectors_conf().milvus.partition_suffix
                 db_knowledge.collection_name = (
                     f"partition_{embedding}_knowledge_{suffix_id}"
                 )
