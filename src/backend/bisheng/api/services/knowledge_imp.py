@@ -46,6 +46,7 @@ from sqlmodel import select
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     handle_xls_multiple_md_files,
+    extract_images_from_md_converted_by_etl4lm
 )
 
 filetype_load_map = {
@@ -603,7 +604,6 @@ def read_chunk_text(
             # save images to minio
             if knowledge_id and local_image_dir and retain_images == 1:
                 from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
-
                 put_doc_images_to_minio(local_image_dir=local_image_dir, doc_id=doc_id)
 
             # 沿用原来的方法处理md文件
@@ -626,6 +626,9 @@ def read_chunk_text(
                     filter_page_header_footer=bool(filter_page_header_footer)
                 )
                 documents = loader.load()
+                # replace the origin image links with new url. 
+                # meanwhile save all images to minio.
+                documents = extract_images_from_md_converted_by_etl4lm(documents)
                 parse_type = ParseType.UNS.value
                 partitions = loader.partitions
                 partitions = parse_partitions(partitions)
