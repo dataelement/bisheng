@@ -1322,3 +1322,4 @@ INFO:     Finished server process [1176]
 [2025-05-24 10:42:11.977462] [2025-05-24 10:42:11.977388] [INFO process-1179-8689917696 bisheng.utils.threadpool:115] - trace=1 clean_pending_task key=276a75dfb9e0420fa4b5299a2d6ca578 task=<Future at 0x329a64be0 state=finished returned Future> res=False                                               
 INFO:     Application shutdown complete.
 INFO:     Finished server process [1179]
+nohup: uvicorn: No such file or directory

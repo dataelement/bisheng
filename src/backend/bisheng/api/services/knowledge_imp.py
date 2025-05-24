@@ -45,7 +45,7 @@ from sqlmodel import select
 
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
-    handle_xls_multiple_md_files,
+    combine_multiple_md_files_to_raw_texts,
     extract_images_from_md_converted_by_etl4lm
 )
 
@@ -593,18 +593,19 @@ def read_chunk_text(
             append_header=excel_rule['append_header'],
         )
         # skip following processes and return splited values.
-        return handle_xls_multiple_md_files(llm, md_files_path, file_name)
+        return combine_multiple_md_files_to_raw_texts(llm, md_files_path)
 
     if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
         md_file_name, local_image_dir, doc_id = convert_file_to_md(
-            file_name=file_name, input_file_name=input_file
+            file_name=file_name, input_file_name=input_file, knowledge_id=knowledge_id
         )
 
         if md_file_name:
             # save images to minio
             if knowledge_id and local_image_dir and retain_images == 1:
-                from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
-                put_doc_images_to_minio(local_image_dir=local_image_dir, doc_id=doc_id)
+                from bisheng.worker.knowledge.file_worker import put_images_to_minio, convert_file_for_preview
+                put_images_to_minio(local_image_dir=local_image_dir, knowledge_id=knowledge_id, doc_id=doc_id)
+                convert_file_for_preview(file_name=input_file, knowledge_id=knowledge_id)
 
             # 沿用原来的方法处理md文件
             loader = filetype_load_map["md"](file_path=md_file_name)

@@ -1,6 +1,7 @@
 import os
 import requests
 import re
+import pypandoc
 from uuid import uuid4
 import json
 from bisheng.api.services.md_from_docx import handler as docx_handler
@@ -11,31 +12,21 @@ from bisheng_langchain.rag.extract_info import extract_title
 from bisheng.utils.minio_client import bucket as BUCKET_NAME
 from bisheng.cache.utils import CACHE_DIR
 
-def convert_doc_to_docx(file_name):
-    """
-        convert doc to docx and upload to minio server.
-    """
-    pass
-
-def convert_pptx_to_pdf(file_name):
-    """
-        convet pptx and ppt to pdf and upload to minio.
-    """
-    pass
 
 def extract_images_from_md_converted_by_etl4lm(documents: str):
     """
-        1. extract image links from md file which converted by etl4lm.
-        2. put all images into minio
-        3. reset image links
-        4. return new documents
+    1. extract image links from md file which converted by etl4lm.
+    2. put all images into minio
+    3. reset image links
+    4. return new documents
     """
     regex = r"!\[[^\]]*?\]\((.+?)(?:\s+(?:\"[^\"]*\"|'[^\']*'))?\)"
-    urls =  re.findall(regex, documents)
+    urls = re.findall(regex, documents)
     if len(urls) == 0:
         return
 
-    from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
+    from bisheng.worker.knowledge.file_worker import put_images_to_minio
+
     uuid = str(uuid4())
     temp_folder = f"{CACHE_DIR}/{uuid}"
     os.makedirs(temp_folder, exist_ok=True)
@@ -48,7 +39,7 @@ def extract_images_from_md_converted_by_etl4lm(documents: str):
             response = requests.get(url)
             if response.status_code == 200:
                 image_path = os.path.join(temp_folder, os.path.basename(url))
-                with open(image_path, 'wb') as f:
+                with open(image_path, "wb") as f:
                     f.write(response.content)
                 downloaded_urls.append(url)
                 # get origin image url prefix.
@@ -61,27 +52,35 @@ def extract_images_from_md_converted_by_etl4lm(documents: str):
     if len(downloaded_urls) == 0:
         return
 
-    put_doc_images_to_minio(temp_folder, uuid)
+    put_images_to_minio(temp_folder, uuid)
     curr_url_prefix = f"{BUCKET_NAME}/{uuid}"
     result = documents.replace(origin_url_prefix, curr_url_prefix)
     return result
 
 
-def handle_xls_multiple_md_files(llm, md_file_directories,file_name): 
-   files = [f for f in os.listdir(md_file_directories)]
-   raw_texts = []
-   metadata_list = []
-   title = ""
-   index = 0
-   for file_name in files:
-      full_file_name = f"{md_file_directories}/{file_name}"
-      with open(full_file_name, "r", encoding="utf-8") as f:
-         content = f.read()
-         if index == 0:
-            title = extract_title(llm=llm, text=content)
-            title = re.sub("<think>.*</think>", "", title)
-         raw_texts.append(content)
-         metedata = {
+def combine_multiple_md_files_to_raw_texts(llm, path):
+
+    """
+    combine multiple md file to raw texts including meta-data list.
+    Args:
+        llm: for extracting digest title
+        path: the directory containing the md files.
+    """
+
+    files = [f for f in os.listdir(path)]
+    raw_texts = []
+    metadata_list = []
+    title = ""
+    index = 0
+    for file_name in files:
+        full_file_name = f"{path}/{file_name}"
+        with open(full_file_name, "r", encoding="utf-8") as f:
+            content = f.read()
+            if index == 0:
+                title = extract_title(llm=llm, text=content)
+                title = re.sub("<think>.*</think>", "", title)
+            raw_texts.append(content)
+            metedata = {
                 "bbox": json.dumps({"chunk_bboxes": ""}),
                 "page": 0,
                 "source": file_name,
@@ -89,14 +88,23 @@ def handle_xls_multiple_md_files(llm, md_file_directories,file_name):
                 "chunk_index": index,
                 "extra": "",
             }
-         metadata_list.append(metedata)
-         index += 1
-   return raw_texts, metadata_list, 'local', []
+            metadata_list.append(metedata)
+            index += 1
+    return raw_texts, metadata_list, "local", []
 
 
-def convert_file_to_md(file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header=True):
+def convert_file_to_md(
+    file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header=True, knowledge_id : int = None
+):
     """
     处理文件转换的主函数。
+    Args:
+        file_name:
+        input_file_name:
+        header_rows:
+        data_rows: 
+        append_header:
+        knowledge_id: 
     """
     md_file_name = None
     local_image_dir = None
@@ -126,14 +134,24 @@ def convert_file_to_md(file_name, input_file_name, header_rows=[0, 1], data_rows
         ) = html_handler(CACHE_DIR, input_file_name)
         if not file_name.endswith("mhtml"):
             local_image_dir = None
-    return replace_image_url(md_file_name, local_image_dir, doc_id)
+    return replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id=knowledge_id)
 
-
-def replace_image_url(md_file_name, local_image_dir, doc_id):
+def replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id: int = None):
     """
+    Usage:
         user the same bucket as origin file located.
+    Args:
+        md_file_name:
+        local_image_dir:
+        doc_id: 
+        knowledge_id: 
+            if the knowledge_id is None, this process will be interrupted, 
+            because the image files wouldn't be put into minio
     """
-    minio_image_path = f"/{BUCKET_NAME}/{doc_id}"
+    if knowledge_id is None:
+        return
+
+    minio_image_path = f"/{BUCKET_NAME}/{knowledge_id}/{doc_id}"
     if md_file_name and local_image_dir and doc_id:
         with open(md_file_name, "r", encoding="utf-8") as f:
             content = f.read()
