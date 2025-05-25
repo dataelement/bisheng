@@ -98,7 +98,7 @@ class ElemUnstructuredLoader(BasePDFLoader):
                        mode='partition',
                        force_ocr=self.force_ocr,
                        enable_formula=self.enable_formular,
-                       ocr_sdk_url = self.ocr_sdk_url,
+                       ocr_sdk_url=self.ocr_sdk_url,
                        parameters=parameters)
 
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload)

@@ -63,8 +63,6 @@ split_handles = [
     XlsSplitHandle(),
 ]
 
-ETL_4_LM_URL_NAME = "unstructured_api_url"
-
 
 class KnowledgeUtils:
     # 用来区分chunk和自动生产的总结内容  格式如：文件名\n文档总结\n--------\n chunk内容
@@ -572,7 +570,7 @@ def read_chunk_text(
     parse_type = ParseType.LOCAL.value
     # excel 文件的处理单独出来
     partitions = []
-    etl_for_lm_url = settings.get_knowledge().get(ETL_4_LM_URL_NAME)
+    etl_for_lm_url = settings.get_knowledge().get('etl4lm', {}).get('url', None)
     file_extension_name = file_name.split(".")[-1]
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
@@ -621,12 +619,12 @@ def read_chunk_text(
             documents = loader.load()
         else:
             if etl_for_lm_url:
-                etl4lm_settings = settings.get_knowledge()['etl4lm']
+                etl4lm_settings = settings.get_knowledge().get('etl4lm', {})
                 loader = ElemUnstructuredLoader(
                     file_name,
                     input_file,
-                    unstructured_api_url=etl4lm_settings['url'],
-                    ocr_sdk_url=etl4lm_settings['ocr_sdk_url'],
+                    unstructured_api_url=etl4lm_settings.get('url', ''),
+                    ocr_sdk_url=etl4lm_settings.get('ocr_sdk_url', ''),
                     force_ocr=bool(force_ocr),
                     enable_formular=bool(enable_formula),
                     filter_page_header_footer=bool(filter_page_header_footer)
