@@ -49,9 +49,10 @@ def crop_image(image_file, item, cropped_imag_base_dir):
     cv2.imwrite(os.path.join(cropped_imag_base_dir,file_name, cropped_img))
     return file_name
 
+
 def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
     from bisheng.cache.utils import CACHE_DIR
-    from bisheng.utils.minio_client import MinioClient, bucket as BUCKET_NAME
+    from bisheng.utils.minio_client import bucket as BUCKET_NAME
     result = {}
     base_dir = f"{CACHE_DIR}/{doc_id}"
     pdf_document = fitz.open(file_name)
@@ -59,27 +60,27 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
     for page_number, items in page_dict.items():
         page  = pdf_document[page_number]
         pix = page.get_pixmap()
-        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         pdf_image_file_name = f"{base_dir}/pdf/{page_number}.png"
         image.save(pdf_image_file_name)
         for item in items:
-           cropped_image_file = crop_image(pdf_image_file_name, item, cropped_image_file)
-           result[item["element_id"]] = f"{BUCKET_NAME}/{knowledge_id}/{doc_id}/{cropped_image_file}"
+            cropped_image_file = crop_image(pdf_image_file_name, item, cropped_image_base_dir)
+            result[item["element_id"]] = f"{BUCKET_NAME}/{knowledge_id}/{doc_id}/{cropped_image_file}"
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
 
 
-def prehandle(partitions, file_name, knowledge_id):
+def pre_handle(partitions, file_name, knowledge_id):
     doc_id = str(uuid4())
     image_parts = get_image_parts(partitions=partitions)
-    if (len(image_parts) == 0):
+    if len(image_parts) == 0:
         return []
     return extract_pdf_images(file_name, image_parts, doc_id, knowledge_id)
     
 
-def merge_partitions(file_name, partitions, knowledge_id = None):
-    # 预处理pdf, 
-    prehandle_results = prehandle(partisions=partitions, file_name = file_name, knowledge_id=knowledge_id) 
+def merge_partitions(file_name, partitions, knowledge_id=None):
+    # 预处理pdf，提取图片
+    pre_handle_results = pre_handle(partitions=partitions, file_name=file_name, knowledge_id=knowledge_id)
     text_elem_sep = '\n'
     doc_content = []
     is_first_elem = True
@@ -91,7 +92,7 @@ def merge_partitions(file_name, partitions, knowledge_id = None):
         label, text = part['type'], part['text']
         extra_data = part['metadata']['extra_data']
         if label == 'Image' and knowledge_id:
-            part['text'] = get_image_tag(prehandle_results, part)
+            part['text'] = get_image_tag(pre_handle_results, part)
 
         if is_first_elem:
             f_text = text + '\n' if label == 'Title' else text
@@ -281,5 +282,5 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
             raise Exception(
                 f'file partition empty {os.path.basename(self.file_name)} resp={resp.text}')
         # 拼接结果为文本
-        content, _ = merge_partitions(partitions)
+        content, _ = merge_partitions(self.file_path, partitions)
         return content, {'source': self.file_name}
