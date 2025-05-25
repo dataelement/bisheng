@@ -21,6 +21,7 @@ def extract_images_from_md_converted_by_etl4lm(documents: str):
     4. return new documents
     """
     regex = r"!\[[^\]]*?\]\((.+?)(?:\s+(?:\"[^\"]*\"|'[^\']*'))?\)"
+
     urls = re.findall(regex, documents)
     if len(urls) == 0:
         return
