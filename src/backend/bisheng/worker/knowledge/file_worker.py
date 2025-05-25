@@ -35,11 +35,11 @@ def convert_file_for_preview(file_name, knowledge_id):
     if extension_name == 'doc':
         success = convert_doc_to_docx(input_doc_path=file_name, output_dir=CACHE_DIR)
         if success:
-            target_file_name = f"{origin_file_name.split(".")[0]}.docx"
+            target_file_name = f"{origin_file_name.split('.')[0]}.docx"
     else:
         success =convert_ppt_to_pdf(input_path=file_name, output_dir=CACHE_DIR)
         if success:
-            target_file_name = f"{origin_file_name.split(".")[0]}.pdf"
+            target_file_name = f"{origin_file_name.split('.')[0]}.pdf"
 
     if not success:
         logger.error(f"convert doc to docx failed: {file_name}")

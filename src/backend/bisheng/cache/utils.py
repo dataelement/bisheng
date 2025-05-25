@@ -18,9 +18,9 @@ from fastapi import UploadFile
 
 from bisheng.settings import settings
 from bisheng.utils.minio_client import MinioClient, tmp_bucket
-from bisheng.cache.utils import CACHE_DIR
 
 CACHE: Dict[str, Any] = {}
+CACHE_DIR = user_cache_dir("bisheng", "bisheng")
 
 def create_cache_folder(func):
     def wrapper(*args, **kwargs):
