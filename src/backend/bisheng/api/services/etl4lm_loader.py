@@ -12,7 +12,7 @@ import requests
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
-from bisheng.worker.knowledge.file_worker import put_images_to_minio
+
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ def crop_image(image_file, item, cropped_imag_base_dir):
 
 
 def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
+    from bisheng.worker.knowledge.file_worker import put_images_to_minio
     from bisheng.cache.utils import CACHE_DIR
     from bisheng.utils.minio_client import bucket as BUCKET_NAME
     result = {}
