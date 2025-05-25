@@ -13,52 +13,6 @@ from bisheng.utils.minio_client import bucket as BUCKET_NAME
 from bisheng.cache.utils import CACHE_DIR
 
 
-def extract_images_from_md_converted_by_etl4lm(documents: str):
-    """
-    1. extract image links from md file which converted by etl4lm.
-    2. put all images into minio
-    3. reset image links
-    4. return new documents
-    """
-    regex = r"!\[[^\]]*?\]\((.+?)(?:\s+(?:\"[^\"]*\"|'[^\']*'))?\)"
-
-    urls = re.findall(regex, documents)
-    if len(urls) == 0:
-        return
-
-    from bisheng.worker.knowledge.file_worker import put_images_to_minio
-
-    uuid = str(uuid4())
-    temp_folder = f"{CACHE_DIR}/{uuid}"
-    os.makedirs(temp_folder, exist_ok=True)
-    # image urls downloaded successfully.
-    downloaded_urls = []
-    origin_url_prefix = None
-    idx = 0
-    for url in urls:
-        try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                image_path = os.path.join(temp_folder, os.path.basename(url))
-                with open(image_path, "wb") as f:
-                    f.write(response.content)
-                downloaded_urls.append(url)
-                # get origin image url prefix.
-                if idx == 0:
-                    origin_url_prefix = url.split(".")[-1]
-                idx += 1
-        except Exception as e:
-            print(f"Failed to download image from {url}: {str(e)}")
-
-    if len(downloaded_urls) == 0:
-        return
-
-    put_images_to_minio(temp_folder, uuid)
-    curr_url_prefix = f"{BUCKET_NAME}/{uuid}"
-    result = documents.replace(origin_url_prefix, curr_url_prefix)
-    return result
-
-
 def combine_multiple_md_files_to_raw_texts(llm, path):
 
     """
@@ -92,7 +46,6 @@ def combine_multiple_md_files_to_raw_texts(llm, path):
             metadata_list.append(metedata)
             index += 1
     return raw_texts, metadata_list, "local", []
-
 
 def convert_file_to_md(
     file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header=True, knowledge_id : int = None

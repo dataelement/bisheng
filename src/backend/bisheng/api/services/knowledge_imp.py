@@ -42,6 +42,7 @@ from loguru import logger
 from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
+from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
@@ -620,7 +621,7 @@ def read_chunk_text(
         else:
             if etl_for_lm_url:
                 etl4lm_settings = settings.get_knowledge().get('etl4lm', {})
-                loader = ElemUnstructuredLoader(
+                loader = Etl4lmLoader(
                     file_name,
                     input_file,
                     unstructured_api_url=etl4lm_settings.get('url', ''),
