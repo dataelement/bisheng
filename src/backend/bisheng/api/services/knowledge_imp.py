@@ -47,7 +47,6 @@ from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
-    extract_images_from_md_converted_by_etl4lm
 )
 
 filetype_load_map = {
