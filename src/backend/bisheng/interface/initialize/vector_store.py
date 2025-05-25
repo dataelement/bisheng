@@ -209,10 +209,8 @@ def initialize_qdrant(class_object: Type[Qdrant], params: dict, search: dict):
 
 
 def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict):
-    if not params.get('connection_args') and settings.get_knowledge().get('vectorstores').get(
-            'Milvus'):
-        params['connection_args'] = settings.get_knowledge().get('vectorstores').get('Milvus').get(
-            'connection_args')
+    if not params.get('connection_args') and settings.get_vectors_conf().milvus.connection_args:
+        params['connection_args'] = settings.get_vectors_conf().milvus.connection_args
     elif isinstance(params.get('connection_args'), str):
         print(f"milvus before params={params} type={type(params['connection_args'])}")
         params['connection_args'] = json.loads(params.pop('connection_args'))
@@ -240,15 +238,11 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
 
 
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
-    if not params.get('elasticsearch_url') and settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch'):
-        params['elasticsearch_url'] = settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch').get('elasticsearch_url')
+    if not params.get('elasticsearch_url') and settings.get_vectors_conf().elasticsearch.url:
+        params['elasticsearch_url'] = settings.get_vectors_conf().elasticsearch.url
 
-    if not params.get('ssl_verify') and settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch'):
-        params['ssl_verify'] = ast.literal_eval(settings.get_knowledge().get('vectorstores').get(
-            'ElasticKeywordsSearch').get('ssl_verify'))
+    if not params.get('ssl_verify') and settings.get_vectors_conf().elasticsearch.url.ssl_verify:
+        params['ssl_verify'] = settings.get_vectors_conf().elasticsearch.url.ssl_verify
     elif isinstance(params.get('ssl_verify'), str):
         params['ssl_verify'] = json.loads(params['ssl_verify'])
 
@@ -263,10 +257,6 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
 
 
 def initial_elastic_vector(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
-    if not params.get('connect_kwargs') and settings.get_knowledge().get('vectorstores').get(
-            'ElasticsearchStore'):
-        params['connect_kwargs'] = settings.get_knowledge().get('vectorstores').get(
-            'ElasticsearchStore')
     params.update(params.pop('connect_kwargs'))
     collection_id = params.pop('collection_id', '')
     if collection_id:

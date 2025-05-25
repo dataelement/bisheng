@@ -44,6 +44,8 @@ object_storage:
     sharepoint: !env ${BS_MINIO_SHAREPOIN}
     access_key: !env ${BS_MINIO_ACCESS_KEY}
     secret_key: !env ${BS_MINIO_SECRET_KEY}
+    public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
+    tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
 
 environment:
   env: dev
