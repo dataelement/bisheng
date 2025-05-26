@@ -263,5 +263,5 @@ sftp-config.json
 
 # Docker local files
 docker/data/*
-docker/mysql/*
-docker/office/*
+docker/mysql/data/*
+docker/office/bisheng/*.gz
