@@ -42,10 +42,11 @@ from loguru import logger
 from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
+from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
-    handle_xls_multiple_md_files,
+    combine_multiple_md_files_to_raw_texts,
 )
 
 filetype_load_map = {
@@ -61,8 +62,6 @@ split_handles = [
     XlsxSplitHandle(),
     XlsSplitHandle(),
 ]
-
-ETL_4_LM_URL_NAME = "unstructured_api_url"
 
 
 class KnowledgeUtils:
@@ -571,7 +570,7 @@ def read_chunk_text(
     parse_type = ParseType.LOCAL.value
     # excel 文件的处理单独出来
     partitions = []
-    etl_for_lm_url = settings.get_knowledge().get(ETL_4_LM_URL_NAME)
+    etl_for_lm_url = settings.get_knowledge().get('etl4lm', {}).get('url', None)
     file_extension_name = file_name.split(".")[-1]
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
@@ -595,19 +594,19 @@ def read_chunk_text(
             append_header=excel_rule['append_header'],
         )
         # skip following processes and return splited values.
-        return handle_xls_multiple_md_files(llm, md_files_path, file_name)
+        return combine_multiple_md_files_to_raw_texts(llm, md_files_path)
 
     if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
         md_file_name, local_image_dir, doc_id = convert_file_to_md(
-            file_name=file_name, input_file_name=input_file
+            file_name=file_name, input_file_name=input_file, knowledge_id=knowledge_id
         )
 
         if md_file_name:
             # save images to minio
             if knowledge_id and local_image_dir and retain_images == 1:
-                from bisheng.worker.knowledge.file_worker import put_doc_images_to_minio
-
-                put_doc_images_to_minio(local_image_dir=local_image_dir, doc_id=doc_id)
+                from bisheng.worker.knowledge.file_worker import put_images_to_minio, convert_file_for_preview
+                put_images_to_minio(local_image_dir=local_image_dir, knowledge_id=knowledge_id, doc_id=doc_id)
+                convert_file_for_preview(file_name=input_file, knowledge_id=knowledge_id)
 
             # 沿用原来的方法处理md文件
             loader = filetype_load_map["md"](file_path=md_file_name)
@@ -620,15 +619,20 @@ def read_chunk_text(
             documents = loader.load()
         else:
             if etl_for_lm_url:
-                loader = ElemUnstructuredLoader(
+                etl4lm_settings = settings.get_knowledge().get('etl4lm', {})
+                loader = Etl4lmLoader(
                     file_name,
                     input_file,
-                    unstructured_api_url=etl_for_lm_url,
+                    unstructured_api_url=etl4lm_settings.get('url', ''),
+                    ocr_sdk_url=etl4lm_settings.get('ocr_sdk_url', ''),
                     force_ocr=bool(force_ocr),
                     enable_formular=bool(enable_formula),
                     filter_page_header_footer=bool(filter_page_header_footer)
                 )
                 documents = loader.load()
+                # replace the origin image links with new url. 
+                # meanwhile save all images to minio.
+                # documents = extract_images_from_md_converted_by_etl4lm(documents)
                 parse_type = ParseType.UNS.value
                 partitions = loader.partitions
                 partitions = parse_partitions(partitions)
