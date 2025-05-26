@@ -55,8 +55,6 @@ def get_env():
 
     etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
     etl_for_lm_url = etl4lm_settings.get("url", None)
-    if len(etl_for_lm_url) == 0:
-        etl_for_lm_url = None
 
     if etl_for_lm_url:
         uns_support = [
