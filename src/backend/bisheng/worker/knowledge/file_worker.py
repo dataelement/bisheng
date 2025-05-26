@@ -14,9 +14,9 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from loguru import logger
-from pymilvus import Collection, Milvus, MilvusException
+from pymilvus import Collection, MilvusException
 from typing import BinaryIO
 from bisheng.utils.minio_client import MinioClient, bucket as BUCKET_NAME
 from bisheng.api.services.libreoffice_converter import convert_doc_to_docx, convert_ppt_to_pdf
