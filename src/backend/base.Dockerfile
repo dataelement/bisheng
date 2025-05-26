@@ -19,7 +19,7 @@ RUN echo \
 
 
 # Install lib
-RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all wget -y
+RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all wget libreoffice -y
 RUN apt-get update && apt-get install procps -y
 
 # Install pandoc
