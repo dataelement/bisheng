@@ -21,6 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, Tool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
 from langchain_core.vectorstores import VectorStoreRetriever
+from langgraph.prebuilt import create_react_agent
 from loguru import logger
 
 from bisheng.api.services.assistant_base import AssistantUtils
@@ -414,12 +415,14 @@ class AssistantAgent(AssistantUtils):
         prompt = self.assistant.prompt
         if getattr(self.llm, 'model_name', '').startswith('command-r'):
             prompt = self.ASSISTANT_PROMPT_COHERE.format(preamble=prompt)
-
-        # 初始化agent
-        self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
-                                           tools=self.tools,
-                                           llm=self.llm,
-                                           assistant_message=prompt)
+        if self.current_agent_executor == 'ReAct':
+            # 初始化agent
+            self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,
+                                               tools=self.tools,
+                                               llm=self.llm,
+                                               assistant_message=prompt)
+        else:
+            self.agent = create_react_agent(self.llm, self.tools, prompt=prompt, checkpointer=False)
 
     async def optimize_assistant_prompt(self):
         """ 自动优化生成prompt """
@@ -517,18 +520,6 @@ class AssistantAgent(AssistantUtils):
 
         return get_finally_message(messages)
 
-    async def arun(self, query: str, chat_history: List = None, callback: Callbacks = None):
-        await self.fake_callback(callback)
-
-        if chat_history:
-            chat_history.append(HumanMessage(content=query))
-            inputs = chat_history
-        else:
-            inputs = [HumanMessage(content=query)]
-
-        async for one in self.agent.astream(inputs, config=RunnableConfig(callbacks=callback)):
-            yield one
-
     async def run(self, query: str, chat_history: List = None, callback: Callbacks = None) -> List[BaseMessage]:
         """
         运行智能体对话
@@ -547,7 +538,8 @@ class AssistantAgent(AssistantUtils):
         if self.current_agent_executor == 'ReAct':
             result = await self.react_run(inputs, callback)
         else:
-            result = await self.agent.ainvoke(inputs, config=RunnableConfig(callbacks=callback))
+            result = await self.agent.ainvoke({'messages': inputs}, config=RunnableConfig(callbacks=callback))
+            result = result['messages']
 
         # 记录聊天历史
         await self.record_chat_history([one.to_json() for one in result])
