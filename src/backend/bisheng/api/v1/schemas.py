@@ -487,6 +487,7 @@ class FileProcessBase(BaseModel):
     enable_formula: Optional[int] = Field(default=1, description='latex公式识别')
     filter_page_header_footer: Optional[int] = Field(default=0, description='过滤页眉页脚')
     excel_rule: Optional[ExcelRule] = Field(default={}, description="excel rule")
+    cache: Optional[bool] = Field(default=True, description='预览文档时，是否从缓存获取数据')
 
     @model_validator(mode='before')
     @classmethod

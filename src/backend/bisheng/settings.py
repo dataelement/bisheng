@@ -217,7 +217,7 @@ class Settings(BaseModel):
         return self.object_storage.minio
 
     def get_vectors_conf(self) -> VectorStores:
-        return self.object_storage.vectors
+        return self.vector_stores.vectors
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取

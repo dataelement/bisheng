@@ -368,7 +368,7 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def get_preview_file_chunk(
-        cls, request: Request, login_user: UserPayload, req_data: PreviewFileChunk
+        cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
         """
         0：解析模式，uns 或者 local
@@ -382,7 +382,9 @@ class KnowledgeService(KnowledgeUtils):
         ):
             raise UnAuthorizedError.http_exception()
 
-        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        file_path = req_data.file_list[0].file_path
+        excel_rule = req_data.file_list[0].excel_rule
+        cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path)
 
         # 尝试从缓存获取
         if req_data.cache:
@@ -395,7 +397,7 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        filepath, file_name = file_download(req_data.file_path)
+        filepath, file_name = file_download(file_path)
 
         # 切分文本
         texts, metadatas, parse_type, partitions = read_chunk_text(
@@ -409,7 +411,7 @@ class KnowledgeService(KnowledgeUtils):
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
             retain_images=req_data.retain_images,
-            excel_rule =req_data.excel_rule
+            excel_rule =excel_rule
         )
         res = []
         cache_map = {}

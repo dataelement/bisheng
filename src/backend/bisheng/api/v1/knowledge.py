@@ -54,7 +54,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def preview_file_chunk(*,
                              request: Request,
                              login_user: UserPayload = Depends(get_login_user),
-                             req_data: PreviewFileChunk):
+                             req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
     try:
         parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(
