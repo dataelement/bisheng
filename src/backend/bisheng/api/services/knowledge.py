@@ -33,7 +33,7 @@ from bisheng.api.v1.schemas import (
     FileProcessBase,
     KnowledgeFileOne,
     KnowledgeFileProcess,
-    UpdatePreviewFileChunk,
+    UpdatePreviewFileChunk, ExcelRule,
 )
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
@@ -497,7 +497,7 @@ class KnowledgeService(KnowledgeUtils):
         # 处理每个文件
         process_files = []
         preview_cache_keys = []
-        split_rule_dict = req_data.dict(include=FileProcessBase.__fields__.keys())
+        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
         for one in req_data.file_list:
             # 上传源文件，创建数据记录
             db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
@@ -656,12 +656,15 @@ class KnowledgeService(KnowledgeUtils):
         filepath, file_name = file_download(file_info.file_path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
 
+        uuid_file_name = file_name.split(".")[0]
+        file_extension_name = file_name.split(".")[-1]
+        original_file_name = redis_client.get(uuid_file_name)
         # 是否包含重复文件
         content_repeat = KnowledgeFileDao.get_file_by_condition(
             md5_=md5_, knowledge_id=knowledge.id
         )
         name_repeat = KnowledgeFileDao.get_file_by_condition(
-            file_name=file_name, knowledge_id=knowledge.id
+            file_name=original_file_name, knowledge_id=knowledge.id
         )
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
@@ -676,17 +679,8 @@ class KnowledgeService(KnowledgeUtils):
             db_file.status = KnowledgeFileStatus.FAILED.value
             return db_file
 
-        uuid_file_name = file_name.split(".")[0]
-        file_extension_name = file_name.split(".")[-1]
-        original_file_name = redis_client.get(uuid_file_name)
-
         if file_extension_name in ['xls', 'xlsx', 'csv'] and not file_info.excel_rule:
-            file_info.excel_rule = {
-                "slice_length": 10,
-                "header_end_row": 1,
-                "header_start_row": 1,
-                "append_header": 1
-            }
+            file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule
         str_split_rule = json.dumps(split_rule)
         # 插入新的数据，把原始文件上传到minio
