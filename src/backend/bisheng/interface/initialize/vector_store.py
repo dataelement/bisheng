@@ -1,17 +1,17 @@
-import ast
 import json
 import os
 from typing import Any, Callable, Dict, Type
 
-from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.settings import settings
-from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
 from langchain_community.vectorstores import (FAISS, Chroma, Milvus, MongoDBAtlasVectorSearch,
                                               Pinecone, Qdrant, SupabaseVectorStore, Weaviate)
 from loguru import logger
 from sqlmodel import select
+
+from bisheng.database.base import session_getter
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
 
 
 def docs_in_params(params: dict) -> bool:
@@ -241,9 +241,9 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
     if not params.get('elasticsearch_url') and settings.get_vectors_conf().elasticsearch.url:
         params['elasticsearch_url'] = settings.get_vectors_conf().elasticsearch.url
 
-    if not params.get('ssl_verify') and settings.get_vectors_conf().elasticsearch.url.ssl_verify:
-        params['ssl_verify'] = settings.get_vectors_conf().elasticsearch.url.ssl_verify
-    elif isinstance(params.get('ssl_verify'), str):
+    if not params.get('ssl_verify') and settings.get_vectors_conf().elasticsearch.ssl_verify:
+        params['ssl_verify'] = settings.get_vectors_conf().elasticsearch.ssl_verify
+    if isinstance(params.get('ssl_verify'), str):
         params['ssl_verify'] = json.loads(params['ssl_verify'])
 
     collection_id = params.pop('collection_id', '')

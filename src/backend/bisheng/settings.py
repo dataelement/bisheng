@@ -63,7 +63,8 @@ class MilvusConf(BaseModel):
 
 
 class ElasticsearchConf(BaseModel):
-    url: Optional[str] = Field(default='http://127.0.0.1:9200', description='elasticsearch访问地址')
+    elasticsearch_url: Optional[str] = Field(default='http://127.0.0.1:9200', alias='url',
+                                             description='elasticsearch访问地址')
     ssl_verify: Optional[str] = Field(default='{"basic_auth": ("elastic", "elastic")}', description='额外的参数')
 
 
@@ -79,7 +80,8 @@ class MinioConf(BaseModel):
     sharepoint: Optional[str] = Field(default="127.0.0.1:9000", description="minio 公开访问地址")
     access_key: Optional[str] = Field(default="minioadmin", description="minio 用户名")
     secret_key: Optional[str] = Field(default="minioadmin", description="minio 密码")
-    public_bucket: Optional[str] = Field(default="bisheng", description="默认存储永久文件的bucket。文件可被匿名用户永久访问")
+    public_bucket: Optional[str] = Field(default="bisheng",
+                                         description="默认存储永久文件的bucket。文件可被匿名用户永久访问")
     tmp_bucket: Optional[str] = Field(default="tmp-dir", description="临时bucket，存储的文件会设置有效期")
 
 
@@ -217,7 +219,7 @@ class Settings(BaseModel):
         return self.object_storage.minio
 
     def get_vectors_conf(self) -> VectorStores:
-        return self.vector_stores.vectors
+        return self.vector_stores
 
     def get_default_llm(self):
         # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取

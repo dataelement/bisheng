@@ -5,6 +5,8 @@ import time
 from typing import Any, Dict, List, Optional, BinaryIO
 
 import requests
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
@@ -23,12 +25,19 @@ from sqlalchemy import func, or_
 from sqlmodel import select
 
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError
+from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
 from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
+from bisheng.api.services.libreoffice_converter import convert_doc_to_docx, convert_ppt_to_pdf
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.patch_130 import (
+    convert_file_to_md,
+    combine_multiple_md_files_to_raw_texts,
+)
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.redis import redis_client
+from bisheng.cache.utils import CACHE_DIR
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
@@ -40,17 +49,7 @@ from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
-from bisheng.api.services.libreoffice_converter import convert_doc_to_docx, convert_ppt_to_pdf
-from bisheng.cache.utils import CACHE_DIR
-from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.utils.minio_client import MinioClient, bucket as BUCKET_NAME
-
-from bisheng.api.services.patch_130 import (
-    convert_file_to_md,
-    combine_multiple_md_files_to_raw_texts,
-)
 
 filetype_load_map = {
     "txt": TextLoader,
@@ -105,7 +104,7 @@ class KnowledgeUtils:
 
     @classmethod
     def save_preview_cache(
-        cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
+            cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
     ):
         if mapping:
             for key, val in mapping.items():
@@ -137,6 +136,7 @@ class KnowledgeUtils:
                 chunk_info = json.loads(chunk_info)
             return chunk_info
 
+
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
     if not os.path.exists(local_image_dir):
         return
@@ -150,20 +150,21 @@ def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
             object_name=object_name, file=file_obj, bucket_name=BUCKET_NAME
         )
 
+
 def process_file_task(
-    knowledge: Knowledge,
-    db_files: List[KnowledgeFile],
-    separator: List[str],
-    separator_rule: List[str],
-    chunk_size: int,
-    chunk_overlap: int,
-    callback_url: str = None,
-    extra_metadata: str = None,
-    preview_cache_keys: List[str] = None,
-    retain_images: int = 1,
-    enable_formula: int = 1,
-    force_ocr: int = 0,
-    filter_page_header_footer: int = 0,
+        knowledge: Knowledge,
+        db_files: List[KnowledgeFile],
+        separator: List[str],
+        separator_rule: List[str],
+        chunk_size: int,
+        chunk_overlap: int,
+        callback_url: str = None,
+        extra_metadata: str = None,
+        preview_cache_keys: List[str] = None,
+        retain_images: int = 1,
+        enable_formula: int = 1,
+        force_ocr: int = 0,
+        filter_page_header_footer: int = 0,
 ):
     """处理知识文件任务"""
     try:
@@ -260,7 +261,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 
 def decide_vectorstores(
-    collection_name: str, vector_store: str, embedding: Embeddings
+        collection_name: str, vector_store: str, embedding: Embeddings
 ) -> VectorStore:
     """vector db"""
     param: dict = {"embedding": embedding}
@@ -275,7 +276,7 @@ def decide_vectorstores(
             vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
 
     elif vector_store == "Milvus":
-        vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
+        vector_config = settings.get_vectors_conf().milvus.model_dump()
         if not vector_config:
             # 无相关配置
             raise RuntimeError('vector_stores.milvus not find in config.yaml')
@@ -305,22 +306,22 @@ def decide_knowledge_llm() -> Any:
 
 
 def addEmbedding(
-    collection_name: str,
-    index_name: str,
-    knowledge_id: int,
-    model: str,
-    separator: List[str],
-    separator_rule: List[str],
-    chunk_size: int,
-    chunk_overlap: int,
-    knowledge_files: List[KnowledgeFile],
-    callback: str = None,
-    extra_meta: str = None,
-    preview_cache_keys: List[str] = None,
-    retain_images: int = 1,
-    enable_formula: int = 1,
-    force_ocr: int = 0,
-    filter_page_header_footer: int = 0,
+        collection_name: str,
+        index_name: str,
+        knowledge_id: int,
+        model: str,
+        separator: List[str],
+        separator_rule: List[str],
+        chunk_size: int,
+        chunk_overlap: int,
+        knowledge_files: List[KnowledgeFile],
+        callback: str = None,
+        extra_meta: str = None,
+        preview_cache_keys: List[str] = None,
+        retain_images: int = 1,
+        enable_formula: int = 1,
+        force_ocr: int = 0,
+        filter_page_header_footer: int = 0,
 ):
     """将文件加入到向量和es库内"""
 
@@ -386,21 +387,21 @@ def addEmbedding(
 
 
 def add_file_embedding(
-    vector_client,
-    es_client,
-    minio_client,
-    db_file: KnowledgeFile,
-    separator: List[str],
-    separator_rule: List[str],
-    chunk_size: int,
-    chunk_overlap: int,
-    extra_meta: str = None,
-    preview_cache_key: str = None,
-    knowledge_id: int = None,
-    retain_images: int = 1,
-    enable_formula: int = 1,
-    force_ocr: int = 0,
-    filter_page_header_footer: int = 0,
+        vector_client,
+        es_client,
+        minio_client,
+        db_file: KnowledgeFile,
+        separator: List[str],
+        separator_rule: List[str],
+        chunk_size: int,
+        chunk_overlap: int,
+        extra_meta: str = None,
+        preview_cache_key: str = None,
+        knowledge_id: int = None,
+        retain_images: int = 1,
+        enable_formula: int = 1,
+        force_ocr: int = 0,
+        filter_page_header_footer: int = 0,
 ):
     # download original file
     logger.info(
@@ -510,11 +511,11 @@ def add_file_embedding(
 
 
 def add_text_into_vector(
-    vector_client,
-    es_client,
-    db_file: KnowledgeFile,
-    texts: List[str],
-    metadatas: List[dict],
+        vector_client,
+        es_client,
+        db_file: KnowledgeFile,
+        texts: List[str],
+        metadatas: List[dict],
 ):
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
     # 存入milvus
@@ -538,9 +539,9 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         for index, bbox in enumerate(bboxes):
             key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
             if index == len(bboxes) - 1:
-                val = text[indexes[index][0] :]
+                val = text[indexes[index][0]:]
             else:
-                val = text[indexes[index][0] : indexes[index][1] + 1]
+                val = text[indexes[index][0]: indexes[index][1] + 1]
             res[key] = {"text": val, "type": part["type"], "part_id": part_index}
     return res
 
@@ -574,19 +575,20 @@ def convert_file_for_preview(file_name, knowledge_id):
         object_name=object_name, file=file_obj, bucket_name=BUCKET_NAME
     )
 
+
 def read_chunk_text(
-    input_file,
-    file_name,
-    separator: List[str],
-    separator_rule: List[str],
-    chunk_size: int,
-    chunk_overlap: int,
-    knowledge_id: Optional[int] = None,
-    retain_images: int = 1,
-    enable_formula: int = 1,
-    force_ocr: int = 0,
-    filter_page_header_footer: int = 0,
-    excel_rule: Dict = None,
+        input_file,
+        file_name,
+        separator: List[str],
+        separator_rule: List[str],
+        chunk_size: int,
+        chunk_overlap: int,
+        knowledge_id: Optional[int] = None,
+        retain_images: int = 1,
+        enable_formula: int = 1,
+        force_ocr: int = 0,
+        filter_page_header_footer: int = 0,
+        excel_rule: Dict = None,
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -721,7 +723,7 @@ def read_chunk_text(
 
 
 def text_knowledge(
-    db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
+        db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """使用text 导入knowledge"""
     embeddings = decide_embeddings(db_knowledge.model)
@@ -955,13 +957,13 @@ def qa_status_change(qa_id: int, target_status: int):
 
 
 def list_qa_by_knowledge_id(
-    knowledge_id: int,
-    page_size: int = 10,
-    page_num: int = 1,
-    question: Optional[str] = None,
-    answer: Optional[str] = None,
-    keyword: Optional[str] = None,
-    status: Optional[int] = None,
+        knowledge_id: int,
+        page_size: int = 10,
+        page_num: int = 1,
+        question: Optional[str] = None,
+        answer: Optional[str] = None,
+        keyword: Optional[str] = None,
+        status: Optional[int] = None,
 ) -> List[QAKnowledge]:
     """获取知识库下的所有qa"""
     if not knowledge_id:
