@@ -7,3 +7,7 @@ result_serializer = 'json'
 accept_content = ['json']
 timezone = 'Asia/Shanghai'
 enable_utc = False
+task_routes = {
+    'bisheng.worker.workflow.*': {'queue': 'celery_workflow'},
+    'bisheng.worker.knowledge.*': {'queue': 'celery_knowledge'},
+}
