@@ -1,6 +1,8 @@
 import json
-import os
 from typing import List
+
+from loguru import logger
+from pymilvus import Collection, MilvusException
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.core.celery_app import celery_app
@@ -14,58 +16,8 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
+from bisheng.utils.minio_client import minio_client, MinioClient
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
-from loguru import logger
-from pymilvus import Collection, MilvusException
-from typing import BinaryIO
-from bisheng.utils.minio_client import MinioClient, bucket as BUCKET_NAME
-from bisheng.api.services.libreoffice_converter import convert_doc_to_docx, convert_ppt_to_pdf
-from bisheng.cache.utils import CACHE_DIR
-
-@celery_app.task()
-def convert_file_for_preview(file_name, knowledge_id):
-    extension_name = file_name.split(".")[-1]
-    if extension_name not in ['doc', "pptx", "ppt"]:
-        return
-
-    origin_file_name = os.path.basename(file_name)
-    target_file_name = None
-    success = False
-    
-    if extension_name == 'doc':
-        success = convert_doc_to_docx(input_doc_path=file_name, output_dir=CACHE_DIR)
-        if success:
-            target_file_name = f"{origin_file_name.split('.')[0]}.docx"
-    else:
-        success =convert_ppt_to_pdf(input_path=file_name, output_dir=CACHE_DIR)
-        if success:
-            target_file_name = f"{origin_file_name.split('.')[0]}.pdf"
-
-    if not success:
-        logger.error(f"convert doc to docx failed: {file_name}")
-        return
-    
-    minio_client = MinioClient()
-    object_name = f"{knowledge_id}/{target_file_name}"
-    file_obj: BinaryIO = open(f"{CACHE_DIR}/{target_file_name}", "rb") 
-    minio_client.upload_minio_file(
-        object_name=object_name, file=file_obj, bucket_name=BUCKET_NAME
-    )
-
-
-@celery_app.task()
-def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
-    if not os.path.exists(local_image_dir):
-        return
-    minio_client = MinioClient()
-    files = [f for f in os.listdir(local_image_dir)]
-    for file_name in files:
-        local_file_name = f"{local_image_dir}/{file_name}"
-        object_name = f"{knowledge_id}/{doc_id}/{file_name}"
-        file_obj: BinaryIO = open(local_file_name, "rb")
-        minio_client.upload_minio_file(
-            object_name=object_name, file=file_obj, bucket_name=BUCKET_NAME
-        )
 
 
 @celery_app.task(acks_late=True)
@@ -84,7 +36,6 @@ def file_copy_celery(param: json) -> str:
         source_knowledge_id,
         target_id,
     )
-    minio_client = MinioClient()
     page_size = 20
     page_num = 1
     source_knowledge = KnowledgeDao.query_by_id(source_knowledge_id)
@@ -106,7 +57,6 @@ def file_copy_celery(param: json) -> str:
                     continue
                 try:
                     copy_normal(
-                        minio_client,
                         one,
                         source_knowledge,
                         target_knowledge,
@@ -134,7 +84,6 @@ def file_copy_celery(param: json) -> str:
 
 
 def copy_normal(
-    minio_client: MinioClient,
     one: KnowledgeFile,
     source_knowledge: Knowledge,
     target_knowledge: Knowledge,

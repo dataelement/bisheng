@@ -1,31 +1,10 @@
 import json
+import os
 import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, BinaryIO
 
 import requests
-from bisheng.api.errcode.knowledge import KnowledgeSimilarError
-from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
-from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
-from bisheng.api.services.llm import LLMService
-from bisheng.api.utils import md5_hash
-from bisheng.api.v1.schemas import FileProcessBase, ExcelRule
-from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download
-from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileStatus, ParseType, QAKnoweldgeDao,
-                                                    QAKnowledge, QAKnowledgeUpsert, QAStatus)
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.settings import settings
-from bisheng.utils.embedding import decide_embeddings
-from bisheng.utils.minio_client import MinioClient
-from bisheng_langchain.document_loaders import ElemUnstructuredLoader
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
@@ -42,7 +21,31 @@ from loguru import logger
 from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
+
+from bisheng.api.errcode.knowledge import KnowledgeSimilarError
+from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
+from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
+from bisheng.api.services.llm import LLMService
+from bisheng.api.utils import md5_hash
+from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.cache.redis import redis_client
+from bisheng.cache.utils import file_download
+from bisheng.database.base import session_getter
+from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
+                                                    KnowledgeFileStatus, ParseType, QAKnoweldgeDao,
+                                                    QAKnowledge, QAKnowledgeUpsert, QAStatus)
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.interface.importing.utils import import_vectorstore
+from bisheng.interface.initialize.loading import instantiate_vectorstore
+from bisheng.settings import settings
+from bisheng.utils.embedding import decide_embeddings
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
+from bisheng.api.services.libreoffice_converter import convert_doc_to_docx, convert_ppt_to_pdf
+from bisheng.cache.utils import CACHE_DIR
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
+from bisheng.utils.minio_client import MinioClient, bucket as BUCKET_NAME
 
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
@@ -134,6 +137,18 @@ class KnowledgeUtils:
                 chunk_info = json.loads(chunk_info)
             return chunk_info
 
+def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
+    if not os.path.exists(local_image_dir):
+        return
+    minio_client = MinioClient()
+    files = [f for f in os.listdir(local_image_dir)]
+    for file_name in files:
+        local_file_name = f"{local_image_dir}/{file_name}"
+        object_name = f"{knowledge_id}/{doc_id}/{file_name}"
+        file_obj: BinaryIO = open(local_file_name, "rb")
+        minio_client.upload_minio_file(
+            object_name=object_name, file=file_obj, bucket_name=BUCKET_NAME
+        )
 
 def process_file_task(
     knowledge: Knowledge,
@@ -530,6 +545,35 @@ def parse_partitions(partitions: List[Any]) -> Dict:
     return res
 
 
+def convert_file_for_preview(file_name, knowledge_id):
+    extension_name = file_name.split(".")[-1]
+    if extension_name not in ['doc', "pptx", "ppt"]:
+        return
+
+    origin_file_name = os.path.basename(file_name)
+    target_file_name = None
+    success = False
+
+    if extension_name == 'doc':
+        success = convert_doc_to_docx(input_doc_path=file_name, output_dir=CACHE_DIR)
+        if success:
+            target_file_name = f"{origin_file_name.split('.')[0]}.docx"
+    else:
+        success = convert_ppt_to_pdf(input_path=file_name, output_dir=CACHE_DIR)
+        if success:
+            target_file_name = f"{origin_file_name.split('.')[0]}.pdf"
+
+    if not success:
+        logger.error(f"convert doc to docx failed: {file_name}")
+        return
+
+    minio_client = MinioClient()
+    object_name = f"{knowledge_id}/{target_file_name}"
+    file_obj: BinaryIO = open(f"{CACHE_DIR}/{target_file_name}", "rb")
+    minio_client.upload_minio_file(
+        object_name=object_name, file=file_obj, bucket_name=BUCKET_NAME
+    )
+
 def read_chunk_text(
     input_file,
     file_name,
@@ -604,7 +648,6 @@ def read_chunk_text(
         if md_file_name:
             # save images to minio
             if knowledge_id and local_image_dir and retain_images == 1:
-                from bisheng.worker.knowledge.file_worker import put_images_to_minio, convert_file_for_preview
                 put_images_to_minio(local_image_dir=local_image_dir, knowledge_id=knowledge_id, doc_id=doc_id)
                 convert_file_for_preview(file_name=input_file, knowledge_id=knowledge_id)
 
