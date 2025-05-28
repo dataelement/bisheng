@@ -617,7 +617,7 @@ def read_chunk_text(
     # excel 文件的处理单独出来
     partitions = []
     etl_for_lm_url = settings.get_knowledge().get('etl4lm', {}).get('url', None)
-    file_extension_name = file_name.split(".")[-1]
+    file_extension_name = file_name.split(".")[-1].lower()
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
         # set default values.
