@@ -681,7 +681,7 @@ class KnowledgeService(KnowledgeUtils):
 
         if file_extension_name in ['xls', 'xlsx', 'csv'] and not file_info.excel_rule:
             file_info.excel_rule = ExcelRule()
-        split_rule["excel_rule"] = file_info.excel_rule
+        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
         str_split_rule = json.dumps(split_rule)
         # 插入新的数据，把原始文件上传到minio
         db_file = KnowledgeFile(
