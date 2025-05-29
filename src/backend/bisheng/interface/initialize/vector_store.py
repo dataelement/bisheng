@@ -238,8 +238,8 @@ def initial_milvus(class_object: Type[Milvus], params: dict, search_kwargs: dict
 
 
 def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, search: dict):
-    if not params.get('elasticsearch_url') and settings.get_vectors_conf().elasticsearch.url:
-        params['elasticsearch_url'] = settings.get_vectors_conf().elasticsearch.url
+    if not params.get('elasticsearch_url') and settings.get_vectors_conf().elasticsearch.elasticsearch_url:
+        params['elasticsearch_url'] = settings.get_vectors_conf().elasticsearch.elasticsearch_url
 
     if not params.get('ssl_verify') and settings.get_vectors_conf().elasticsearch.ssl_verify:
         params['ssl_verify'] = settings.get_vectors_conf().elasticsearch.ssl_verify
