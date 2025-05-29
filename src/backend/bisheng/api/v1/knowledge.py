@@ -3,21 +3,22 @@ import urllib.parse
 from datetime import datetime
 from io import BytesIO
 from typing import List, Optional, Any
+from uuid import uuid4
 
-import numpy as np
 import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 
-from bisheng.api.errcode.base import UnAuthorizedError, ServerError
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa, QA_save_knowledge
 from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk, UploadFileResponse,
+from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
+from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -25,8 +26,6 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
-from bisheng.cache.redis import redis_client
-from uuid import uuid4
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -187,6 +186,7 @@ def get_filelist(*,
                  request: Request,
                  login_user: UserPayload = Depends(get_login_user),
                  file_name: str = None,
+                 file_ids: list[int] = None,
                  knowledge_id: int = 0,
                  page_size: int = 10,
                  page_num: int = 1,
@@ -509,6 +509,7 @@ def convert_excel_value(value: Any):
     if str(value) == 'nan' or str(value) == 'null':
         return ''
     return str(value)
+
 
 @router.post('/qa/preview/{qa_knowledge_id}', status_code=200)
 def post_import_file(*,

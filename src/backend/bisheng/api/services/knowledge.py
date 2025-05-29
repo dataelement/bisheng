@@ -710,6 +710,7 @@ class KnowledgeService(KnowledgeUtils):
             status: int = None,
             page: int = 1,
             page_size: int = 10,
+            file_ids: List[int] = None,
     ) -> (List[KnowledgeFileResp], int, bool):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
@@ -721,7 +722,7 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
 
         res = KnowledgeFileDao.get_file_by_filters(
-            knowledge_id, file_name, status, page, page_size
+            knowledge_id, file_name, status, page, page_size, file_ids
         )
         total = KnowledgeFileDao.count_file_by_filters(knowledge_id, file_name, status)
 

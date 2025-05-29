@@ -187,12 +187,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
                             file_name: str = None,
                             status: int = None,
                             page: int = 0,
-                            page_size: int = 0) -> List[KnowledgeFile]:
+                            page_size: int = 0,
+                            file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status is not None:
             statement = statement.where(KnowledgeFile.status == status)
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         statement = statement.order_by(KnowledgeFile.update_time.desc())
@@ -203,13 +206,16 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def count_file_by_filters(cls,
                               knowledge_id: int,
                               file_name: str = None,
-                              status: int = None) -> int:
+                              status: int = None,
+                              file_ids: List[int] = None) -> int:
         statement = select(func.count(
             KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status is not None:
             statement = statement.where(KnowledgeFile.status == status)
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
         with session_getter() as session:
             return session.scalar(statement)
 
