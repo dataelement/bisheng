@@ -48,7 +48,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                 serverItem.children = server.models.reduce((res, model) => {
                     if (model.model_type !== 'embedding' || !model.online) return res
                     const modelItem = { value: model.id, label: model.model_name }
-                    models[model.id] = model.model_name
+                    models[model.id] = server.name + '/' + model.model_name
                     // 找到默认值
                     if (model.id === embedding_model_id) {
                         _model = [serverItem, modelItem]
@@ -92,11 +92,11 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             name,
             description: desc,
             model: modal[1].value,
-            type: isImport ? 1 : 0 
+            type: 0
         }).then(res => {
             // @ts-ignore
             window.libname = [name, desc]
-            navigate(isImport 
+            navigate(isImport
                 ? `/filelib/upload/${res.id}`  // 导入模式
                 : `/filelib/${res.id}`         // 普通模式
             );
@@ -126,7 +126,13 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                 </div>
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.description')}</label>
-                    <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
+                    <Textarea
+                        id="desc"
+                        ref={descRef}
+                        placeholder={t('lib.description')}
+                        rows={8}
+                        className={`col-span-3 ${error.desc && 'border-red-400'}`}
+                    />
                 </div>
                 <div className="">
                     <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
@@ -142,11 +148,11 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11">{t('cancel')}</Button>
+                    <Button variant="outline" className="px-8 h-8">{t('cancel')}</Button>
                 </DialogClose>
                 <Button
                     variant="outline"
-                    className="px-11 flex"
+                    className="px-8 h-8 flex"
                     onClick={(e) => handleCreate(e, false)}
                     disabled={isSubmitting}
                 >
@@ -155,8 +161,8 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                 </Button>
                 <Button
                     type="submit"
-                    className="px-11 flex"
-                    onClick={(e) => handleCreate(e, true)} 
+                    className="px-8 h-8 flex"
+                    onClick={(e) => handleCreate(e, true)}
                     disabled={isSubmitting}
                 >
                     {isSubmitting && <LoadIcon className="mr-1" />}

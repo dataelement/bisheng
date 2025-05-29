@@ -523,7 +523,7 @@ const useChatConfig = () => {
                     }
                     break;
 
-                case 'searp':
+                case 'serp':
                     if (!formData.webSearch.params.api_key?.trim()) {
                         webSearchErrors.params = {
                             ...webSearchErrors.params,

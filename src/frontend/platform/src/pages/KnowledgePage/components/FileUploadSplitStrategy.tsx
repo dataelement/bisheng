@@ -9,8 +9,6 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 
 const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) => {
-  console.log(strategies, '0000');
-
   const { t } = useTranslation('knowledge')
   const [customRegex, setCustomRegex] = useState('');
   const [position, setPosition] = useState('after');
@@ -43,11 +41,10 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
   }
 
   return (
-
     <div className='flex gap-6'>
       {/* 左侧拖拽区域 */}
       <div className='flex-1'>
-        <div className='p-2 overflow-y-auto  max-h-[11.5rem]'> {/* 添加 overflow-y-auto */}
+        <div className='py-2 px-0 pr-1 overflow-y-auto  max-h-[11.5rem] select-none'> {/* 添加 overflow-y-auto */}
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="strategies">
               {(provided) => (
@@ -62,16 +59,16 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                           {...provided.dragHandleProps}
                           className="my-1 border rounded bg-accent text-sm h-8"
                         >
-                          <div className='relative group h-full py-1 px-2'>
+                          <div className='relative group h-full py-1 px-2 whitespace-nowrap'>
                             {strategy.position === 'before' ? (
                               <>
                                 <span>✂️{strategy.regex}</span>
-                                <span className='ml-4 text-xs text-gray-500'>{strategy.rule}</span>
+                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
                               </>
                             ) : (
                               <>
                                 <span>{strategy.regex}✂️</span>
-                                <span className='ml-4 text-xs text-gray-500'>{strategy.rule}</span>
+                                <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
                               </>
                             )}
                             <DelIcon
@@ -92,21 +89,21 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                         className="my-1 border rounded bg-gray-100 text-sm opacity-50 h-8"
                       >
                         <div className='relative group h-full py-1 px-2'>
-                          <span className="text-gray-400">点击右侧添加规则</span>
+                          <span className="text-gray-400"> </span>
                         </div>
                       </div>
                     ))
                   )}
-
+                  {/* 拖拽占位符 */}
                   {provided.placeholder}
                 </div>
               )}
             </Droppable>
           </DragDropContext>
         </div>
-        <p className='text-xs text-gray-500'>{t('splitPriorityInfo')}</p>
+        <p className='text-xs text-gray-500 pt-1'>{t('splitPriorityInfo')}</p>
       </div>
-      <div className="flex-1 flex flex-col gap-4">
+      <div className="relative flex-1 flex flex-col gap-4">
         <h3 className="text-sm text-left font-medium text-gray-700">{t('splitRules')}:</h3>
         <div className="flex flex-wrap gap-2">
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
@@ -128,24 +125,19 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
               placeholder={t('enterRegex')}
               className='w-full py-0 h-6'
             />
-
           </div>
-
         </div>
-        <RadioGroup value={position} onValueChange={setPosition} className="flex items-center">
+        <RadioGroup value={position} onValueChange={setPosition} className="flex items-center text-sm">
           <RadioGroupItem className="" value="before" />{t('before')}
           <RadioGroupItem className="" value="after" />{t('after')}
           <span>✂️</span>
         </RadioGroup>
-        <div className="flex justify-end">
+        <div className="flex justify-end absolute right-0 bottom-0">
           <Button onClick={handleAddCustomStrategy} className="h-6">
             {t('add')}
           </Button>
         </div>
       </div>
-
-
-
     </div>
   );
 };

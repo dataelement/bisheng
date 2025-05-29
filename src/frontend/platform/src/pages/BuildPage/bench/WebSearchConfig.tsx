@@ -66,7 +66,7 @@ export const WebSearchConfig = ({
                         </div>
                     </div>
                 );
-            case 'searp':
+            case 'serp':
                 return (
                     <>
                         <Label className="bisheng-label text-sky-900 mt-4 block">API Key <span className="text-red-500">*</span></Label>
@@ -113,7 +113,7 @@ export const WebSearchConfig = ({
                                 <SelectItem value="bing">Bing 搜索</SelectItem>
                                 <SelectItem value="bocha">博查websearch</SelectItem>
                                 <SelectItem value="jina">Jina 深度搜索</SelectItem>
-                                <SelectItem value="searp">Searp Api</SelectItem>
+                                <SelectItem value="serp">Serp Api</SelectItem>
                                 <SelectItem value="tavily">Tavily</SelectItem>
                             </SelectGroup>
                         </SelectContent>

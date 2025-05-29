@@ -162,9 +162,19 @@ export async function copyLibDatabase(knowledge_id) {
 /**
  * 获取知识库下文件列表
  */
-export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status }) {
-  const statusStr = status === 999 ? '' : `&status=${status}`;
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
+export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status, file_ids }) {
+
+  const params = {
+    page_num: page,
+    page_size: pageSize,
+    file_name: name,
+    status: status === 999 ? undefined : status,
+    file_ids,
+  }
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}`, {
+    params, paramsSerializer
+  });
+
   return response
   // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
@@ -205,11 +215,11 @@ type UploadFileFc = {
   chunk_size: number; // 必需
   chunk_overlap: number; // 必需
   file_list: { file_path: string }[]; // 必需
-  retain_images?:boolean; //保留文档图片
-  force_ocr?:boolean;//强制开启ocr
-  enable_formula?:boolean;//开启公式识别
-  filter_page_header_footer?:boolean;//过滤页眉页脚
-  excel_rules: { 
+  retain_images?: boolean; //保留文档图片
+  force_ocr?: boolean;//强制开启ocr
+  enable_formula?: boolean;//开启公式识别
+  filter_page_header_footer?: boolean;//过滤页眉页脚
+  excel_rules: {
     [uuid: string]: ExcelRule
   };
 }
@@ -228,7 +238,9 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
  * 查看文件切片
  */
 export async function previewFileSplitApi(data) {
-  return await axios.post(`/api/v1/knowledge/preview`, data);
+  return await axios.post(`/api/v1/knowledge/preview`, data).then(res => {
+    return res
+  });
 }
 
 /**
@@ -259,7 +271,7 @@ export async function delChunkInPreviewApi(data) {
 }
 
 /**
- * 删除知识库分块内容
+ * 跟新知识库分块内容
  */
 export async function updatePreviewChunkApi(data) {
   return await axios.put(`/api/v1/knowledge/preview`, data);

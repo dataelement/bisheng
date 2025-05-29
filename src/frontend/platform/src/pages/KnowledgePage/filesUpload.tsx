@@ -1,11 +1,16 @@
 import { Button } from "@/components/bs-ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import StepProgress from "@/components/bs-ui/step";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronLeft } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
+import FileUploadStep4 from "./components/FileUploadStep4";
 
 const StepLabels = [
     '上传文件',
@@ -17,21 +22,84 @@ const StepLabels = [
 export default function FilesUpload() {
     const { t } = useTranslation('knowledge')
     const navigate = useNavigate();
+    const { message } = useToast()
 
     const [currentStep, setCurrentStep] = useState(1)
+    // 文件列表
     const [resultFiles, setResultFiles] = useState([])
-    console.log('resultFiles :>> ', resultFiles);
-    // 策略配置
-    const [config, setConfig] = useState(null)
-    // 直接保存
-    const handleFinishUpload = (_files) => {
-        const files = resultFiles || _files
-        console.log(' todo resultFiles :>> ', files);
-        // TODO: 保存后返回上一页
+
+    const _tempConfigRef = useRef({})
+    // 保存知识库
+    const handleSave = (_config) => {
+        captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+            const _repeatFiles = res.filter(e => e.status === 3)
+           
+            if (_repeatFiles.length) {
+                setRepeatFiles(_repeatFiles)
+                // TODO 移动到第一步?
+                // } else if (failFiles.length) {
+                //     bsConfirm({
+                //         desc: <div>
+                //             <p>{t('fileUploadResult', { total: fileCount, failed: failFiles.length })}</p>
+                //             <div className="max-h-[160px] overflow-y-auto no-scrollbar">
+                //                 {failFiles.map(el => <p className=" text-red-400" key={el.id}>{el.name}</p>)}
+                //             </div>
+                //         </div>,
+                //         onOk(next) {
+                //             next()
+                //             setCurrentStep(4)
+                //         }
+                //     })
+            } else {
+                message({ variant: 'success', description: t('addSuccess') })
+                setCurrentStep(4)
+            }
+
+            // 设置fileId
+            setResultFiles(files => files.map((file, index) => ({
+                ...file,
+                fileId: res[index].id
+            })
+            ))
+        }))
+
+        _tempConfigRef.current = _config
+    }
+
+    // 默认配置保存
+    const handleSaveByDefaultConfig = (_config) => {
+        captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+            message({ variant: 'success', description: "添加成功" })
+            navigate(-1)
+        }))
+    }
+
+    // 重复文件列表
+    const [repeatFiles, setRepeatFiles] = useState([])
+    // // 重试解析
+    const [retryLoad, setRetryLoad] = useState(false)
+    const handleRetry = (objs) => {
+        setRetryLoad(true)
+        const params = {
+            knowledge_id: Number(_tempConfigRef.current.knoledge_id),
+            separator: _tempConfigRef.current.separator,
+            separator_rule: _tempConfigRef.current.separator_rule,
+            chunk_size: _tempConfigRef.current.chunk_size,
+            chunk_overlap: _tempConfigRef.current.chunk_overlap,
+            file_objs: objs
+        }
+        captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
+            setRepeatFiles([])
+            setRetryLoad(false)
+            // onNext()
+            message({ variant: 'success', description: t('addSuccess') });
+            setCurrentStep(4)
+        }))
     }
 
     return <div className="relative h-full flex flex-col">
         <div className="pt-4 px-4">
+            {/* back */}
             <div className="flex items-center">
                 <Button
                     variant="outline"
@@ -43,7 +111,7 @@ export default function FilesUpload() {
                 </Button>
                 <span className="text-foreground text-sm font-black pl-4">{t('back')}</span>
             </div>
-            {/* 固定在上方的步进条 */}
+            {/* 上方步进条 */}
             <StepProgress
                 align="center"
                 currentStep={currentStep}
@@ -52,7 +120,7 @@ export default function FilesUpload() {
         </div>
 
         {/* 主要内容区域*/}
-        <div className="flex flex-1 overflow-hidden px-4 pb-16"> {/* pb-16为底部按钮留空间 */}
+        <div className="flex flex-1 overflow-hidden px-4"> {/* pb-16为底部按钮留空间 */}
             <div className="w-full overflow-y-auto">
                 <div className="h-full">
 
@@ -62,24 +130,41 @@ export default function FilesUpload() {
                             setResultFiles(files);
                             setCurrentStep(2);
                         }}
-                        onSave={(files) => {
-                            setResultFiles(files);
-                            handleFinishUpload(files);
-                        }}
+                        onSave={handleSaveByDefaultConfig}
                     />
 
-                    {[2, 3].includes(currentStep) && <FileUploadStep2
-                        setCurrentStep={setCurrentStep}
+                    <FileUploadStep2
                         step={currentStep}
                         resultFiles={resultFiles}
-                        onNext={(_config) => {
-                            setConfig(_config);
-                            setCurrentStep(4);
+                        onNext={(step, _config) => {
+                            step === 3 ? setCurrentStep(step) : handleSave(_config)
                         }}
-                    />}
-                    {currentStep === 4 && <div>数据处理</div>}
+                        onPrev={() => setCurrentStep(currentStep - 1)}
+                    />
+                    {currentStep === 4 && <FileUploadStep4 data={resultFiles} />}
                 </div>
             </div>
         </div>
+
+        {/* 重复文件提醒 */}
+        <Dialog open={!!repeatFiles.length} onOpenChange={b => !b && setRepeatFiles([])}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>{t('modalTitle')}</DialogTitle>
+                    <DialogDescription>{t('modalMessage')}</DialogDescription>
+                </DialogHeader>
+                <ul className="overflow-y-auto max-h-[400px]">
+                    {repeatFiles.map(el => (
+                        <li key={el.id} className="py-2 text-red-500">{el.remark}</li>
+                    ))}
+                </ul>
+                <DialogFooter>
+                    <Button className="h-8" variant="outline" onClick={() => { setRepeatFiles([]); setCurrentStep(4) }}>{t('keepOriginal')}</Button>
+                    <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
+                        {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('override')}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 };

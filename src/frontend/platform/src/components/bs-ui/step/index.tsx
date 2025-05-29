@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import React from "react";
 /**
  * 
@@ -42,7 +43,7 @@ export default function StepProgress({
     };
 
     return (
-        <div className={`flex items-center gap-2 my-6 px-12 text-sm font-bold ${alignmentClasses[align]}`}>
+        <div className={`flex items-center gap-6 my-6 px-12 text-md font-bold ${alignmentClasses[align]}`}>
             {Array.from({ length: steps }).map((_, index) => {
                 const isCompleted = index < validatedStep - 1;
                 const isCurrent = index === validatedStep - 1;
@@ -52,10 +53,10 @@ export default function StepProgress({
                         <div className="flex items-center gap-2">
                             {/* 圆形指示器 */}
                             <div
-                                className={`w-6 h-6 rounded-full flex items-center justify-center text-[#fff] transition-colors
+                                className={`size-[26px] rounded-full flex items-center justify-center text-[#fff] transition-colors
                     ${isCompleted || isCurrent ? "bg-primary " : "bg-primary/30"}`}
                             >
-                                {index + 1}
+                                {isCompleted ? <Check size={16} /> : <span>{index + 1}</span>}
                             </div>
                             {/* 步骤文字 */}
                             <span
@@ -67,7 +68,7 @@ export default function StepProgress({
                         {/* 步骤连接线 */}
                         {index !== steps - 1 && (
                             <div
-                                className={`h-[1px] flex-grow transition-colors max-w-32 ${isCompleted ? "bg-primary" : "bg-gray-300"}`}
+                                className={`h-[1px] flex-grow transition-colors max-w-10 ${isCompleted ? "bg-primary" : "bg-gray-300"}`}
                             />
                         )}
                     </React.Fragment>

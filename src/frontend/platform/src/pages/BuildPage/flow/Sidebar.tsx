@@ -153,7 +153,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
             {/* tab */}
             <Tabs defaultValue="base" className="h-full" onValueChange={handleLoadTools}>
                 <div className="flex gap-1">
-                    <TabsList className="grid flex-1 grid-cols-2">
+                    <TabsList className="">
                         <TabsTrigger value="base">{t('basicNodes')}</TabsTrigger>
                         <TabsTrigger value="tool">{t('toolNodes')}</TabsTrigger>
                     </TabsList>

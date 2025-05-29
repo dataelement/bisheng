@@ -108,18 +108,18 @@ const KnowledgeUploadComponent = ({
             pros.id === id ? {
                 ...pros,
                 progress: ProgressStatus.End,
-                error: !result.id
+                error: !result.file_path
             } : pros
         )))
-        result.id
+        result.file_path
             ? successFilesRef.current.push(result)
             : failFilesRef.current.push(result)
     }
 
     const handleDelete = (id: string) => {
-        setProgressList((list) => list.filter((pros) => pros.id !== id))
         successFilesRef.current = successFilesRef.current.filter((pros) => pros.id !== id)
         failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
+        setProgressList((list) => list.filter((pros) => pros.id !== id))
     }
 
     return <div className="">
