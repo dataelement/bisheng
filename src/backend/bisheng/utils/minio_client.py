@@ -4,9 +4,9 @@ from datetime import timedelta
 from typing import BinaryIO
 
 import minio
-from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
-from minio.commonconfig import Filter, CopySource
 from loguru import logger
+from minio.commonconfig import Filter, CopySource
+from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
 
 from bisheng.settings import settings
 
@@ -78,6 +78,13 @@ class MinioClient:
             if str(e).find('NoSuchBucketPolicy') == -1:
                 raise e
             self.minio_client.set_bucket_policy(self.bucket, json.dumps(anonymous_read_policy))
+
+        try:
+            policy = self.minio_client.get_bucket_policy(self.tmp_bucket)
+        except Exception as e:
+            if str(e).find('NoSuchBucketPolicy') == -1:
+                raise e
+            self.minio_client.set_bucket_policy(self.tmp_bucket, json.dumps(anonymous_read_policy))
 
         # set tmp bucket lifecycle
         if not self.minio_client.get_bucket_lifecycle(self.tmp_bucket):
@@ -192,13 +199,14 @@ class MinioClient:
                 response.release_conn()
 
     def copy_object(
-        self,
-        source_object_name,
-        target_object_name,
-        bucket_name=bucket,
+            self,
+            source_object_name,
+            target_object_name,
+            bucket_name=bucket,
     ):
         copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
         response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
         return response
+
 
 minio_client = MinioClient()
