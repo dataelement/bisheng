@@ -194,7 +194,7 @@ def get_filelist(*,
     """ 获取知识库文件信息. """
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
                                                              file_name, status, page_num,
-                                                             page_size)
+                                                             page_size, file_ids)
 
     return resp_200({
         'data': data,
