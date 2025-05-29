@@ -935,7 +935,7 @@ class KnowledgeService(KnowledgeUtils):
         )
         # search metadata
         output_fields = ["pk"]
-        output_fields.extend(list(FileChunkMetadata.__fields__.keys()))
+        output_fields.extend(list(FileChunkMetadata.model_fields.keys()))
         res = vector_client.col.query(
             expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
             output_fields=output_fields,
@@ -1091,7 +1091,7 @@ class KnowledgeService(KnowledgeUtils):
         }
         # file_worker.file_copy_celery.delay()
         cls.create_knowledge_hook(request, login_user, target_knowlege)
-        background_tasks.add_task(file_worker.file_copy_celery, params)
+        file_worker.file_copy_celery.delay(params)
         return target_knowlege
 
     @classmethod

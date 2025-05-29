@@ -1,11 +1,12 @@
 import json
 from typing import List
 
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores
-from bisheng.core.celery_app import celery_app
+from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task
+from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
@@ -16,11 +17,11 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
-from bisheng.utils.minio_client import minio_client, MinioClient
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from bisheng.utils.minio_client import minio_client
+from bisheng.worker import bisheng_celery
 
 
-@celery_app.task(acks_late=True)
+@bisheng_celery.task(acks_late=True)
 def file_copy_celery(param: json) -> str:
     """将某个知识库的文件复制到另外一个知识库
     1. mysql的复制
@@ -84,10 +85,10 @@ def file_copy_celery(param: json) -> str:
 
 
 def copy_normal(
-    one: KnowledgeFile,
-    source_knowledge: Knowledge,
-    target_knowledge: Knowledge,
-    op_user_id: int,
+        one: KnowledgeFile,
+        source_knowledge: Knowledge,
+        target_knowledge: Knowledge,
+        op_user_id: int,
 ):
     one_dict = one.model_dump()
     one_dict.pop("id")
@@ -142,10 +143,10 @@ def copy_normal(
 
 
 def copy_qa(
-    qa: QAKnowledge,
-    source_knowledge: Knowledge,
-    target_knowledge: Knowledge,
-    op_user_id: int,
+        qa: QAKnowledge,
+        source_knowledge: Knowledge,
+        target_knowledge: Knowledge,
+        op_user_id: int,
 ):
     one_dict = qa.model_dump()
     one_dict.pop("id")
@@ -168,10 +169,10 @@ def copy_qa(
 
 
 def copy_vector(
-    source_konwledge: Knowledge,
-    target_knowledge: Knowledge,
-    source_file_id: int,
-    target_file_id: int,
+        source_konwledge: Knowledge,
+        target_knowledge: Knowledge,
+        source_file_id: int,
+        target_file_id: int,
 ):
     # 迁移 vectordb
     embedding = FakeEmbedding()
@@ -243,3 +244,51 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
 
     target.client.indices.refresh(index=target.index_name)
     logger.info("copy_es_done pk_size={}", len(res_list))
+
+
+@bisheng_celery.task
+def parse_knowledge_file_celery(file_id: int, callback_url: str = None):
+    """ 异步解析一个入库成功的文件 """
+    with logger.contextualize(trace_id=f'parse_file_{file_id}'):
+        logger.info("parse_knowledge_file_celery start file_id={}", file_id)
+        try:
+            _parse_knowledge_file(file_id, callback_url)
+        except Exception as e:
+            logger.error("parse_knowledge_file_celery error: {}", str(e))
+
+
+def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):
+    db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+    if not db_file:
+        logger.error("file_id={} not found in db", file_id)
+        return
+    db_file = db_file[0]
+    if db_file.status != KnowledgeFileStatus.PROCESSING.value:
+        logger.error(
+            "file_id={} status={} not processing, skip parse",
+            file_id,
+            db_file.status,
+        )
+        return
+    db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
+    if not db_knowledge:
+        logger.error("knowledge_id={} not found", db_file.knowledge_id)
+        return
+
+    # 获取切分规则
+    file_rule = FileProcessBase(**json.loads(db_file.split_rule))
+    logger.debug("parse_knowledge_file_celery_start", file_id)
+    process_file_task(db_knowledge,
+                      db_files=[db_file],
+                      separator=file_rule.separator,
+                      separator_rule=file_rule.separator_rule,
+                      chunk_size=file_rule.chunk_size,
+                      chunk_overlap=file_rule.chunk_overlap,
+                      callback_url=callback_url,
+                      extra_metadata=db_file.extra_metadata,
+                      preview_cache_keys=preview_cache_key,
+                      retain_images=file_rule.retain_images,
+                      enable_formula=file_rule.enable_formula,
+                      force_ocr=file_rule.force_ocr,
+                      filter_page_header_footer=file_rule.filter_page_header_footer)
+    logger.debug("parse_knowledge_file_celery_over", file_id)
