@@ -29,6 +29,10 @@ class ParseType(Enum):
     LOCAL = 'local'  # 本地模式解析
     UNS = 'uns'  # uns服务解析，全部转为pdf文件
 
+    # 1.3.0之后的枚举，之前的属于就版本解析的文件
+    ETL4LM = 'etl4lm'  # etl4lm服务解析，包含pdf的版式分析
+    UN_ETL4LM = 'un_etl4lm'  # 非etl4lm服务解析，没有bbox内容，只有源文件和md文件
+
 
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)

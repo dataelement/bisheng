@@ -593,7 +593,7 @@ def read_chunk_text(
     """
     0：chunks text
     1：chunks metadata
-    2：parse_type: uns or local
+    2：parse_type: etl4lm or un_etl4lm
     3: ocr bbox data: maybe None
     """
     # 获取文档总结标题的llm
@@ -613,7 +613,7 @@ def read_chunk_text(
     )
     # 加载文档内容
     logger.info(f"start_file_loader file_name={file_name}")
-    parse_type = ParseType.LOCAL.value
+    parse_type = ParseType.UN_ETL4LM.value
     # excel 文件的处理单独出来
     partitions = []
     etl_for_lm_url = settings.get_knowledge().get('etl4lm', {}).get('url', None)
@@ -678,7 +678,7 @@ def read_chunk_text(
                 # replace the origin image links with new url. 
                 # meanwhile save all images to minio.
                 # documents = extract_images_from_md_converted_by_etl4lm(documents)
-                parse_type = ParseType.UNS.value
+                parse_type = ParseType.ETL4LM.value
                 partitions = loader.partitions
                 partitions = parse_partitions(partitions)
             else:
