@@ -529,23 +529,8 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         # 异步处理文件解析和入库, 如果通过cache_key可以获取到数据，则使用cache中的数据来进行入库操作
-        if process_files:
-            background_tasks.add_task(
-                process_file_task,
-                knowledge=knowledge,
-                db_files=process_files,
-                separator=req_data.separator,
-                separator_rule=req_data.separator_rule,
-                chunk_size=req_data.chunk_size,
-                chunk_overlap=req_data.chunk_overlap,
-                callback_url=req_data.callback_url,
-                extra_metadata=None,
-                preview_cache_keys=preview_cache_keys,
-                retain_images=req_data.retain_images,
-                enable_formula=req_data.enable_formula,
-                force_ocr=req_data.force_ocr,
-                filter_page_header_footer=req_data.filter_page_header_footer,
-            )
+        for index, one in enumerate(process_files):
+            file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
 
         cls.upload_knowledge_file_hook(request, login_user, knowledge, process_files)
         return failed_files + process_files

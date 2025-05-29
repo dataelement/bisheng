@@ -247,12 +247,12 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
 
 
 @bisheng_celery.task
-def parse_knowledge_file_celery(file_id: int, callback_url: str = None):
+def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 异步解析一个入库成功的文件 """
     with logger.contextualize(trace_id=f'parse_file_{file_id}'):
         logger.info("parse_knowledge_file_celery start file_id={}", file_id)
         try:
-            _parse_knowledge_file(file_id, callback_url)
+            _parse_knowledge_file(file_id, preview_cache_key, callback_url)
         except Exception as e:
             logger.error("parse_knowledge_file_celery error: {}", str(e))
 
