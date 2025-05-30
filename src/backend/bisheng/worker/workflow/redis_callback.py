@@ -1,6 +1,6 @@
-import os
 import asyncio
 import json
+import os
 import time
 import uuid
 from typing import AsyncIterator
@@ -23,7 +23,6 @@ from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
     OutputMsgData, StreamMsgData, StreamMsgOverData, OutputMsgChooseData, OutputMsgInputData
 from bisheng.workflow.common.workflow import WorkflowStatus
-
 
 
 class RedisCallback(BaseCallback):
@@ -153,7 +152,8 @@ class RedisCallback(BaseCallback):
                         break
                     yield chat_response
                 break
-            elif status_info['status'] in [WorkflowStatus.WAITING.value, WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
+            elif status_info['status'] in [WorkflowStatus.WAITING.value,
+                                           WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
