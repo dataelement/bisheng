@@ -159,7 +159,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         <div
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[20px]`}>
+            className={`${selected ? 'border-primary' : 'border-transparent'} border rounded-[25px]`}>
             {/* head bars */}
             <NodeToolbar isVisible align="end" className={`${isVisible ? '' : 'hidden'}`} >
                 <NodeToolbarComponent nodeId={node.id} type={node.type} onRun={handleRun}></NodeToolbarComponent>
@@ -365,7 +365,7 @@ const useBorderColor = (node) => {
 }
 
 
-const useHoverToolbar = () => {
+export const useHoverToolbar = () => {
     const [isVisible, setIsVisible] = useState(false);
     const timeoutRef = useRef(null);
 

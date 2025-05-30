@@ -130,7 +130,7 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
                 description: t('max100CharactersForSimilarQuestion')
             });
         }
-        if (form.answer.length > 1000) {
+        if (form.answer.length > 10000) {
             return message({
                 variant: 'warning',
                 description: t('max1000CharactersForAnswer')

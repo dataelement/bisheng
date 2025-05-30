@@ -1,5 +1,8 @@
 FROM python:3.10-slim
 
+ARG PANDOC_ARCH=amd64
+ENV PANDOC_ARCH=$PANDOC_ARCH
+
 WORKDIR /app
 
 RUN echo \
@@ -14,9 +17,20 @@ RUN echo \
     > /etc/apt/sources.list
 
 
-# Install Poetry
-RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all -y
+
+# Install lib
+RUN apt-get update && apt-get install gcc g++ curl build-essential postgresql-server-dev-all wget libreoffice -y
 RUN apt-get update && apt-get install procps -y
+
+# Install pandoc
+RUN mkdir -p /opt/pandoc \
+    && cd /opt/pandoc \
+    && wget https://github.com/jgm/pandoc/releases/download/3.6.4/pandoc-3.6.4-linux-${PANDOC_ARCH}.tar.gz \
+    && tar xvf pandoc-3.6.4-linux-${PANDOC_ARCH}.tar.gz \
+    && cd pandoc-3.6.4 \
+    && cp bin/pandoc /usr/bin/ \
+    && cd ..
+
 # Install font
 RUN apt install vim fonts-wqy-zenhei -y
 # opencv
@@ -24,9 +38,7 @@ RUN apt-get update && apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 # # Add Poetry to PATH
 ENV PATH="${PATH}:/root/.local/bin"
-# # Copy the pyproject.toml and poetry.lock files
-# COPY poetry.lock pyproject.toml ./
-# Copy the rest of the application codes
+
 COPY ./pyproject.toml ./
 
 RUN python -m pip install --upgrade pip && \

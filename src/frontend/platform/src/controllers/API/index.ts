@@ -162,9 +162,19 @@ export async function copyLibDatabase(knowledge_id) {
 /**
  * 获取知识库下文件列表
  */
-export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status }) {
-  const statusStr = status === 999 ? '' : `&status=${status}`;
-  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}?page_size=${pageSize}&page_num=${page}&file_name=${name}${statusStr}`);
+export async function readFileByLibDatabase({ id, page, pageSize = 20, name = '', status, file_ids }) {
+
+  const params = {
+    page_num: page,
+    page_size: pageSize,
+    file_name: name,
+    status: status === 999 ? undefined : status,
+    file_ids,
+  }
+  const response: { data: any[], total: number, writeable: any } = await axios.get(`/api/v1/knowledge/file_list/${id}`, {
+    params, paramsSerializer
+  });
+
   return response
   // return { data, writeable, pages: Math.ceil(total / pageSize) }
 }
@@ -191,6 +201,13 @@ export async function uploadLibFile(data, config, type: 'knowledge' | 'icon', ur
  * 确定上传文件
  * file_path knowledge_id chunck_size
  */
+
+type ExcelRule = {
+  slice_length: number;
+  append_header: boolean;
+  header_start_row: number;
+  header_end_row: number;
+};
 type UploadFileFc = {
   knowledge_id: number; // 必需
   separator: string[]; // 必需，切分相关参数，如果不传，使用默认值
@@ -198,11 +215,19 @@ type UploadFileFc = {
   chunk_size: number; // 必需
   chunk_overlap: number; // 必需
   file_list: { file_path: string }[]; // 必需
+  retain_images?: boolean; //保留文档图片
+  force_ocr?: boolean;//强制开启ocr
+  enable_formula?: boolean;//开启公式识别
+  filter_page_header_footer?: boolean;//过滤页眉页脚
+  excel_rules: {
+    [uuid: string]: ExcelRule
+  };
 }
 type DefaultUploadFileFc = {
   knowledge_id: number; // 必需
   file_list: { file_path: string }[]; // 必需
 };
+///
 export async function subUploadLibFile(data: UploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: DefaultUploadFileFc): Promise<any>;
 export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc) {
@@ -213,7 +238,9 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
  * 查看文件切片
  */
 export async function previewFileSplitApi(data) {
-  return await axios.post(`/api/v1/knowledge/preview`, data);
+  return await axios.post(`/api/v1/knowledge/preview`, data).then(res => {
+    return res
+  });
 }
 
 /**
@@ -244,7 +271,7 @@ export async function delChunkInPreviewApi(data) {
 }
 
 /**
- * 删除知识库分块内容
+ * 跟新知识库分块内容
  */
 export async function updatePreviewChunkApi(data) {
   return await axios.put(`/api/v1/knowledge/preview`, data);
@@ -754,5 +781,51 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
   } catch (error) {
     console.error(error);
     throw error;
+  }
+}
+
+
+/**
+ * 上传文件
+ */
+export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFail, onAbort }:
+  {
+    fileKey: string,
+    file: File,
+    onProgress?: (progressEvent: number) => void,
+    onFail?: (error: any) => void,
+    onFinish?: (response: any) => void,
+    onAbort?: (abortCtlr: any) => void
+  }): Promise<any> {
+  // 创建新的控制器
+  const abortCtlr = new AbortController();
+  onAbort(abortCtlr);
+
+  try {
+    const formData = new FormData();
+    formData.append(fileKey, file);
+
+    const config = {
+      headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
+      onUploadProgress: (progressEvent) => {
+        const { loaded, total } = progressEvent;
+        const progress = Math.min(99.99, (loaded * 100) / total);
+        console.log(`Upload progress: ${file.name} ${progress}%`);
+        // UI with the progress information here
+        onProgress(progress)
+      },
+      signal: abortCtlr.signal,
+    }
+    const response = await axios.post('/api/v1/knowledge/upload', formData, config);
+    // 处理成功
+    onFinish(response);
+  } catch (error) {
+    if (error?.code === "ERR_CANCELED") {
+      console.log('用户取消了上传');
+    } else {
+      onFail(error);
+    }
+  } finally {
+    onAbort(null);
   }
 }

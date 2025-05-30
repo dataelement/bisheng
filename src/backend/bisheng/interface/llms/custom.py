@@ -18,7 +18,7 @@ from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_b
 
 
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['base_url'] = server_config.get('base_url', '')
+    params['base_url'] = server_config.get('base_url', '').rstrip('/')
     # some bugs
     params['extract_reasoning'] = False
     params['stream'] = params.pop('streaming', True)
@@ -45,6 +45,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
             'api_key': server_config.get('openai_api_key') or server_config.get('api_key'),
             'base_url': server_config.get('openai_api_base') or server_config.get('base_url'),
         })
+        params['base_url'] = params['base_url'].rstrip('/')
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
     return params
@@ -52,7 +53,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
 
 def _get_azure_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update({
-        'azure_endpoint': server_config.get('azure_endpoint'),
+        'azure_endpoint': server_config.get('azure_endpoint').rstrip('/'),
         'openai_api_key': server_config.get('openai_api_key'),
         'openai_api_version': server_config.get('openai_api_version'),
         'azure_deployment': params.pop('model'),
@@ -81,7 +82,7 @@ def _get_qianfan_params(params: dict, server_config: dict, model_config: dict) -
 
 def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['minimax_api_key'] = server_config.get('openai_api_key')
-    params['base_url'] = server_config.get('openai_api_base')
+    params['base_url'] = server_config.get('openai_api_base').rstrip('/')
     if 'max_tokens' not in params:
         params['max_tokens'] = 2048
     if '/chat/completions' not in params['base_url']:
@@ -96,7 +97,7 @@ def _get_anthropic_params(params: dict, server_config: dict, model_config: dict)
 
 def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['zhipuai_api_key'] = server_config.get('openai_api_key')
-    params['zhipuai_api_base'] = server_config.get('openai_api_base')
+    params['zhipuai_api_base'] = server_config.get('openai_api_base').rstrip('/')
     if 'chat/completions' not in params['zhipuai_api_base']:
         params['zhipuai_api_base'] = f"{params['zhipuai_api_base'].rstrip('/')}/chat/completions"
     return params
@@ -105,7 +106,7 @@ def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> 
 def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update({
         'api_key': f'{server_config.get("api_key")}:{server_config.get("api_secret")}',
-        'base_url': server_config.get('openai_api_base'),
+        'base_url': server_config.get('openai_api_base').rstrip('/'),
     })
     return params
 

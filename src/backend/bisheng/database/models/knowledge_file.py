@@ -5,7 +5,7 @@ from typing import List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text
+from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
 from sqlmodel import Field, delete, func, select
 
 from bisheng.database.base import session_getter
@@ -28,6 +28,10 @@ class QAStatus(Enum):
 class ParseType(Enum):
     LOCAL = 'local'  # 本地模式解析
     UNS = 'uns'  # uns服务解析，全部转为pdf文件
+
+    # 1.3.0之后的枚举，之前的属于就版本解析的文件
+    ETL4LM = 'etl4lm'  # etl4lm服务解析，包含pdf的版式分析
+    UN_ETL4LM = 'un_etl4lm'  # 非etl4lm服务解析，没有bbox内容，只有源文件和md文件
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -97,7 +101,7 @@ class KnowledgeFile(KnowledgeFileBase, table=True):
 class QAKnowledge(QAKnowledgeBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
-    answers: Optional[str] = Field(default=None, sa_column=Column(String(length=2048)))
+    answers: Optional[str] = Field(default=None, sa_column=Column(Text))
 
 
 class KnowledgeFileRead(KnowledgeFileBase):
@@ -187,12 +191,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
                             file_name: str = None,
                             status: int = None,
                             page: int = 0,
-                            page_size: int = 0) -> List[KnowledgeFile]:
+                            page_size: int = 0,
+                            file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status is not None:
             statement = statement.where(KnowledgeFile.status == status)
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         statement = statement.order_by(KnowledgeFile.update_time.desc())
@@ -203,13 +210,16 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def count_file_by_filters(cls,
                               knowledge_id: int,
                               file_name: str = None,
-                              status: int = None) -> int:
+                              status: int = None,
+                              file_ids: List[int] = None) -> int:
         statement = select(func.count(
             KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status is not None:
             statement = statement.where(KnowledgeFile.status == status)
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
         with session_getter() as session:
             return session.scalar(statement)
 

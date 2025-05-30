@@ -3,21 +3,22 @@ import urllib.parse
 from datetime import datetime
 from io import BytesIO
 from typing import List, Optional, Any
+from uuid import uuid4
 
-import numpy as np
 import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 
-from bisheng.api.errcode.base import UnAuthorizedError, ServerError
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa, QA_save_knowledge
 from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk, UploadFileResponse,
+from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
+from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -35,10 +36,14 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        file_path = save_uploaded_file(file.file, 'bisheng', file_name)
+        file_ext = file_name.split(".")[-1]
+        uuid = str(uuid4())
+        uuid_file_name = f"{uuid}.{file_ext}"
+        redis_client.set(uuid, file_name)
+        file_path = save_uploaded_file(file.file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
-        return resp_200(UploadFileResponse(file_path=file_path))
+        return resp_200(UploadFileResponse(file_path=file_path, file_name=uuid))
     except Exception as exc:
         logger.exception(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -48,7 +53,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def preview_file_chunk(*,
                              request: Request,
                              login_user: UserPayload = Depends(get_login_user),
-                             req_data: PreviewFileChunk):
+                             req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
     try:
         parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(
@@ -181,6 +186,7 @@ def get_filelist(*,
                  request: Request,
                  login_user: UserPayload = Depends(get_login_user),
                  file_name: str = None,
+                 file_ids: list[int] = None,
                  knowledge_id: int = 0,
                  page_size: int = 10,
                  page_num: int = 1,
@@ -188,7 +194,7 @@ def get_filelist(*,
     """ 获取知识库文件信息. """
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
                                                              file_name, status, page_num,
-                                                             page_size)
+                                                             page_size, file_ids)
 
     return resp_200({
         'data': data,
@@ -503,6 +509,7 @@ def convert_excel_value(value: Any):
     if str(value) == 'nan' or str(value) == 'null':
         return ''
     return str(value)
+
 
 @router.post('/qa/preview/{qa_knowledge_id}', status_code=200)
 def post_import_file(*,

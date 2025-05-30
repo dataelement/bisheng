@@ -4,7 +4,7 @@ import { copyReportTemplate } from "@/controllers/API/workflow";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
 import { autoNodeName, filterUselessFlow, initNode, useCopyPasteNode } from "@/util/flowUtils";
 import { useUndoRedo } from "@/util/hook";
-import { Background, BackgroundVariant, Connection, Controls, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
+import { Background, BackgroundVariant, Connection, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import '@xyflow/react/dist/style.css';
 import cloneDeep from "lodash-es/cloneDeep";
@@ -14,9 +14,11 @@ import FlowNode from "./FlowNode";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 import useFlowStore from "./flowStore";
+import { Controls } from "./Controls";
+import NoteNode from "./NoteNode";
 
 // 自定义组件
-const nodeTypes = { flowNode: FlowNode };
+const nodeTypes = { flowNode: FlowNode, noteNode: NoteNode };
 // 流程编排面板
 export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: string }) {
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
@@ -43,7 +45,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
     const {
         reactFlowWrapper, nodes, edges, keyBoardPanneRef,
         setNodes, onNodesChange, onSelectionChange, onEdgesChange,
-        onEdgeSelect, onConnect, onDragOver, onDrop, setEdges, setViewport
+        onEdgeSelect, onConnect, onDragOver, onDrop, setEdges, setViewport, createNote
     } = useFlow(reactFlowInstance, flow, takeSnapshot)
 
     /**
@@ -178,7 +180,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             }}
                         >
                             <Background className="dark:bg-gray-950" color='#999' variant={BackgroundVariant.Dots} />
-                            <Controls className="bg-muted [&>button]:border-b-border hover:[&>button]:bg-border"></Controls>
+                            <Controls position="bottom-left" onCreateNote={createNote}></Controls>
                         </ReactFlow>
                     </div>
                 </div>
@@ -349,6 +351,22 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
 
             const newNodes = await Promise.all(nodeIds.map(async nodeId => {
                 const node = nodes.find(n => n.id === nodeId);
+                if (node.type === "noteNode") {
+                    const newNodeId = `note_${generateUUID(5)}`
+                    return {
+                        id: newNodeId,
+                        type: "noteNode",
+                        position: {
+                            x: node.position.x + 100,
+                            y: node.position.y + 100,
+                        },
+                        data: {
+                            ...node.data,
+                            id: newNodeId,
+                        },
+                        selected: false
+                    };
+                }
                 const newNodeId = `${node.data.type}_${generateUUID(5)}`
                 // id替换
                 const data = JSON.parse(JSON.stringify(node.data).replaceAll(nodeId, newNodeId))
@@ -372,7 +390,9 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
             // 增加节点
             setNodes((nds) => {
                 const _newNodes = newNodes.map(node => {
-                    node.data.name = autoNodeName(nds, node.data.name)
+                    if (node.type === "flowNode") {
+                        node.data.name = autoNodeName(nds, node.data.name)
+                    }
                     return node
                 });
                 return nds.map((e) => ({ ...e, selected: false })).concat(_newNodes)
@@ -429,6 +449,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
             ]);
         }
 
+
         // 删除输出节点连线
         const handleDelOutputEdge = (event) => {
             const { nodeId } = event.detail;
@@ -452,6 +473,25 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         };
     }, [_reactFlowInstance]);
 
+    // 添加便签节点
+    const handleAddNote = () => {
+        takeSnapshot()
+        const nodeId = `note_${generateUUID(5)}`
+        const reactflowBounds = reactFlowWrapper.current.getBoundingClientRect();
+        const pos = _reactFlowInstance.screenToFlowPosition({
+            x: reactflowBounds.width * 0.2, y: reactflowBounds.height * 0.9
+        });
+        // 增加节点
+        setNodes((nds) => {
+            return nds.concat({
+                id: nodeId, type: 'noteNode', position: pos, data: {
+                    id: nodeId,
+                    group_params: [],
+                    value: ''
+                }
+            })
+        });
+    }
     // 选中节点
     const onSelectionChange = useCallback((data) => {
         setLastSelection(data);
@@ -459,7 +499,9 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
 
     return {
         reactFlowWrapper, nodes, edges, keyBoardPanneRef,
-        onNodesChange, onEdgesChange, onConnect, setViewport, onDragOver, onDrop, onSelectionChange, onEdgeSelect, setNodes, setEdges
+        onNodesChange, onEdgesChange, onConnect, setViewport,
+        onDragOver, onDrop, onSelectionChange, onEdgeSelect, setNodes, setEdges,
+        createNote: handleAddNote
     }
 }
 

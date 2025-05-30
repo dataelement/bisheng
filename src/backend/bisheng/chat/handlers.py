@@ -87,7 +87,7 @@ class Handler:
                                              is_bot=True)
                 if chat_id:
                     db_message = ChatMessageDao.insert_one(chat_message)
-                    await session.send_json(client_id, chat_id, db_message, add=False)
+                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
 
             if answer.strip():
                 chat_message = ChatMessageDB(flow_id=client_id, chat_id=chat_id,
@@ -99,7 +99,7 @@ class Handler:
                                              is_bot=True)
                 if chat_id:
                     db_message = ChatMessageDao.insert_one(chat_message)
-                    await session.send_json(client_id, chat_id, db_message, add=False)
+                    await session.send_json(client_id, chat_id, ChatMessage(**db_message.model_dump(), message_id=db_message.id), add=False)
             # 普通技能的stop
             res = thread_pool.cancel_task([key])  # 将进行中的任务进行cancel
             if res[0]:
