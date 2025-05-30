@@ -95,6 +95,10 @@ class WorkflowConf(BaseModel):
     timeout: int = Field(default=720, description="节点超时时间（min）")
 
 
+class CeleryConf(BaseModel):
+    knowledge_file_time_limit: Optional[int] = Field(default=None, description='知识库文件解析的速率限制，单位为秒')
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 
@@ -137,6 +141,7 @@ class Settings(BaseModel):
     vector_stores: VectorStores = {}
     object_storage: ObjectStore = {}
     workflow_conf: WorkflowConf = WorkflowConf()
+    celery_task: CeleryConf = CeleryConf()
 
     @field_validator('database_url')
     @classmethod
