@@ -341,7 +341,6 @@ const useEventMaster = (node, setNodeError) => {
     }, [node])
 
     return {
-        validateParams,
         validateAll,
         paramValidateEntities,
         varValidateEntities

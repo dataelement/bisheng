@@ -2,20 +2,20 @@ import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { copyReportTemplate } from "@/controllers/API/workflow";
 import { WorkFlow, WorkflowNode } from "@/types/flow";
-import { autoNodeName, filterUselessFlow, initNode, useCopyPasteNode } from "@/util/flowUtils";
+import { autoNodeName, calculatePosition, filterUselessFlow, initNode, useCopyPasteNode } from "@/util/flowUtils";
 import { useUndoRedo } from "@/util/hook";
 import { Background, BackgroundVariant, Connection, ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 import '@xyflow/react/dist/style.css';
 import cloneDeep from "lodash-es/cloneDeep";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Controls } from "./Controls";
 import CustomEdge from "./FlowEdge";
 import FlowNode from "./FlowNode";
 import Header from "./Header";
+import NoteNode from "./NoteNode";
 import Sidebar from "./Sidebar";
 import useFlowStore from "./flowStore";
-import { Controls } from "./Controls";
-import NoteNode from "./NoteNode";
 
 // 自定义组件
 const nodeTypes = { flowNode: FlowNode, noteNode: NoteNode };
@@ -351,19 +351,20 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
 
             const newNodes = await Promise.all(nodeIds.map(async nodeId => {
                 const node = nodes.find(n => n.id === nodeId);
+                const position = calculatePosition(nodes, {
+                    x: node.position.x + 100,
+                    y: node.position.y + 100,
+                })
                 if (node.type === "noteNode") {
                     const newNodeId = `note_${generateUUID(5)}`
                     return {
                         id: newNodeId,
                         type: "noteNode",
-                        position: {
-                            x: node.position.x + 100,
-                            y: node.position.y + 100,
-                        },
                         data: {
                             ...node.data,
-                            id: newNodeId,
+                            id: newNodeId
                         },
+                        position,
                         selected: false
                     };
                 }
@@ -375,10 +376,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
                 return {
                     id: newNodeId,
                     type: "flowNode",
-                    position: {
-                        x: node.position.x + 100,
-                        y: node.position.y + 100,
-                    },
+                    position,
                     data: {
                         ...data,
                         id: newNodeId,
@@ -487,6 +485,7 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
                 id: nodeId, type: 'noteNode', position: pos, data: {
                     id: nodeId,
                     group_params: [],
+                    type: 'note',
                     value: ''
                 }
             })
