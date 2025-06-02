@@ -83,12 +83,12 @@ export const TestDialog = forwardRef<{
         await captureAndAlertRequestErrorHoc(testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
-            auth_method: toolRef.current.authMethod === 'apikey' ? 1 : 0,
-            auth_type: toolRef.current.authType,
-            api_key: toolRef.current.apiKey,
+            auth_method: toolRef.current.auth_method,
+            auth_type: toolRef.current.auth_type,
+            api_key: toolRef.current.api_key,
             request_params: formRef.current.values,
-            api_location: toolRef.current.apiLocation,
-            parameter_name: toolRef.current.parameter
+            api_location: toolRef.current.api_location,
+            parameter_name: toolRef.current.parameter_name
         }).then(setResult))
         setLoading(false)
     }
