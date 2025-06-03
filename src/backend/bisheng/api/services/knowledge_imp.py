@@ -28,7 +28,10 @@ from bisheng.api.errcode.knowledge import KnowledgeSimilarError
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
 from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
-from bisheng.api.services.libreoffice_converter import convert_doc_to_docx, convert_ppt_to_pdf
+from bisheng.api.services.libreoffice_converter import (
+    convert_doc_to_docx,
+    convert_ppt_to_pdf,
+)
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
@@ -41,9 +44,16 @@ from bisheng.cache.utils import CACHE_DIR
 from bisheng.cache.utils import file_download
 from bisheng.database.base import session_getter
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao
-from bisheng.database.models.knowledge_file import (KnowledgeFile, KnowledgeFileDao,
-                                                    KnowledgeFileStatus, ParseType, QAKnoweldgeDao,
-                                                    QAKnowledge, QAKnowledgeUpsert, QAStatus)
+from bisheng.database.models.knowledge_file import (
+    KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+    ParseType,
+    QAKnoweldgeDao,
+    QAKnowledge,
+    QAKnowledgeUpsert,
+    QAStatus,
+)
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
@@ -98,13 +108,13 @@ class KnowledgeUtils:
         if not chunk.startswith("{<file_title>"):
             return chunk.split(cls.chunk_split)[-1]
 
-        chunk = chunk.split('<paragraph_content>')[-1]
-        chunk = chunk.split('</paragraph_content>')[0]
+        chunk = chunk.split("<paragraph_content>")[-1]
+        chunk = chunk.split("</paragraph_content>")[0]
         return chunk
 
     @classmethod
     def save_preview_cache(
-            cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
+        cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
     ):
         if mapping:
             for key, val in mapping.items():
@@ -152,19 +162,19 @@ def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
 
 def process_file_task(
-        knowledge: Knowledge,
-        db_files: List[KnowledgeFile],
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        callback_url: str = None,
-        extra_metadata: str = None,
-        preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+    knowledge: Knowledge,
+    db_files: List[KnowledgeFile],
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    callback_url: str = None,
+    extra_metadata: str = None,
+    preview_cache_keys: List[str] = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
 ):
     """处理知识文件任务"""
     try:
@@ -261,7 +271,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 
 def decide_vectorstores(
-        collection_name: str, vector_store: str, embedding: Embeddings
+    collection_name: str, vector_store: str, embedding: Embeddings
 ) -> VectorStore:
     """vector db"""
     param: dict = {"embedding": embedding}
@@ -270,7 +280,7 @@ def decide_vectorstores(
         vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
         if not vector_config:
             # 无相关配置
-            raise RuntimeError('vector_stores.elasticsearch not find in config.yaml')
+            raise RuntimeError("vector_stores.elasticsearch not find in config.yaml")
         param["index_name"] = collection_name
         if isinstance(vector_config["ssl_verify"], str):
             vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
@@ -279,12 +289,12 @@ def decide_vectorstores(
         vector_config = settings.get_vectors_conf().milvus.model_dump()
         if not vector_config:
             # 无相关配置
-            raise RuntimeError('vector_stores.milvus not find in config.yaml')
+            raise RuntimeError("vector_stores.milvus not find in config.yaml")
         param["collection_name"] = collection_name
         vector_config.pop("partition_suffix", "")
         vector_config.pop("is_partition", "")
     else:
-        raise RuntimeError('unknown vector store type')
+        raise RuntimeError("unknown vector store type")
 
     param.update(vector_config)
     class_obj = import_vectorstore(vector_store)
@@ -306,22 +316,22 @@ def decide_knowledge_llm() -> Any:
 
 
 def addEmbedding(
-        collection_name: str,
-        index_name: str,
-        knowledge_id: int,
-        model: str,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        knowledge_files: List[KnowledgeFile],
-        callback: str = None,
-        extra_meta: str = None,
-        preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+    collection_name: str,
+    index_name: str,
+    knowledge_id: int,
+    model: str,
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    knowledge_files: List[KnowledgeFile],
+    callback: str = None,
+    extra_meta: str = None,
+    preview_cache_keys: List[str] = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
 ):
     """将文件加入到向量和es库内"""
 
@@ -387,21 +397,21 @@ def addEmbedding(
 
 
 def add_file_embedding(
-        vector_client,
-        es_client,
-        minio_client,
-        db_file: KnowledgeFile,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        extra_meta: str = None,
-        preview_cache_key: str = None,
-        knowledge_id: int = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+    vector_client,
+    es_client,
+    minio_client,
+    db_file: KnowledgeFile,
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    extra_meta: str = None,
+    preview_cache_key: str = None,
+    knowledge_id: int = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
 ):
     # download original file
     logger.info(
@@ -449,7 +459,7 @@ def add_file_embedding(
         enable_formula=enable_formula,
         force_ocr=force_ocr,
         filter_page_header_footer=filter_page_header_footer,
-        excel_rule=excel_rule
+        excel_rule=excel_rule,
     )
     if len(texts) == 0:
         raise ValueError("文件解析为空")
@@ -466,7 +476,9 @@ def add_file_embedding(
                 metadatas.append(val["metadata"])
     for index, one in enumerate(texts):
         if len(one) > 10000:
-            raise ValueError('分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分')
+            raise ValueError(
+                "分段结果超长，请尝试在自定义策略中使用更多切分符（例如 \\n、。、\\.）进行切分"
+            )
         # 入库时 拼接文件名和文档摘要
         texts[index] = KnowledgeUtils.aggregate_chunk_metadata(one, metadatas[index])
 
@@ -511,11 +523,11 @@ def add_file_embedding(
 
 
 def add_text_into_vector(
-        vector_client,
-        es_client,
-        db_file: KnowledgeFile,
-        texts: List[str],
-        metadatas: List[dict],
+    vector_client,
+    es_client,
+    db_file: KnowledgeFile,
+    texts: List[str],
+    metadatas: List[dict],
 ):
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
     # 存入milvus
@@ -539,23 +551,23 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         for index, bbox in enumerate(bboxes):
             key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
             if index == len(bboxes) - 1:
-                val = text[indexes[index][0]:]
+                val = text[indexes[index][0] :]
             else:
-                val = text[indexes[index][0]: indexes[index][1] + 1]
+                val = text[indexes[index][0] : indexes[index][1] + 1]
             res[key] = {"text": val, "type": part["type"], "part_id": part_index}
     return res
 
 
 def convert_file_for_preview(file_name, knowledge_id):
     extension_name = file_name.split(".")[-1]
-    if extension_name not in ['doc', "pptx", "ppt"]:
+    if extension_name not in ["doc", "pptx", "ppt"]:
         return
 
     origin_file_name = os.path.basename(file_name)
     target_file_name = None
     success = False
 
-    if extension_name == 'doc':
+    if extension_name == "doc":
         success = convert_doc_to_docx(input_doc_path=file_name, output_dir=CACHE_DIR)
         if success:
             target_file_name = f"{origin_file_name.split('.')[0]}.docx"
@@ -577,18 +589,18 @@ def convert_file_for_preview(file_name, knowledge_id):
 
 
 def read_chunk_text(
-        input_file,
-        file_name,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        knowledge_id: Optional[int] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
-        excel_rule: Dict = None,
+    input_file,
+    file_name,
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    knowledge_id: Optional[int] = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
+    excel_rule: Dict = None,
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -616,33 +628,42 @@ def read_chunk_text(
     parse_type = ParseType.UN_ETL4LM.value
     # excel 文件的处理单独出来
     partitions = []
-    etl_for_lm_url = settings.get_knowledge().get('etl4lm', {}).get('url', None)
+    etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", None)
     file_extension_name = file_name.split(".")[-1].lower()
 
     if file_extension_name in ["xls", "xlsx", "csv"]:
         # set default values.
-        if not excel_rule or len(excel_rule) == 0:
+        if not excel_rule:
             excel_rule = {}
-            excel_rule['header_start_row'] = 1
-            excel_rule['header_end_row'] = 1
-            excel_rule['slice_length'] = 10
-            excel_rule['append_header'] = 1
+            excel_rule.header_start_row = 1
+            excel_rule.header_end_row = 1
+            excel_rule.slice_length = 10
+            excel_rule.append_header = 1
 
         # convert excel contents to markdown
         md_files_path, local_image_dir, doc_id = convert_file_to_md(
             file_name=file_name,
             input_file_name=input_file,
             header_rows=[
-                excel_rule['header_start_row'] - 1,
-                excel_rule['header_end_row'],
+                excel_rule.header_start_row - 1,  # convert to 0-based index
+                excel_rule.header_end_row,
+                # excel_rule["header_start_row"] - 1,
+                # excel_rule["header_end_row"],
             ],
-            data_rows=excel_rule['slice_length'],
-            append_header=excel_rule['append_header'],
+            data_rows=excel_rule.slice_length,
+            append_header=excel_rule.append_header,
         )
         # skip following processes and return splited values.
         return combine_multiple_md_files_to_raw_texts(llm, md_files_path)
 
     if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
+
+        if file_extension_name == "doc":
+            # convert doc to docx
+            input_file = convert_doc_to_docx(
+                input_doc_path=input_file, output_dir=CACHE_DIR
+            )
+
         md_file_name, local_image_dir, doc_id = convert_file_to_md(
             file_name=file_name, input_file_name=input_file, knowledge_id=knowledge_id
         )
@@ -650,8 +671,14 @@ def read_chunk_text(
         if md_file_name:
             # save images to minio
             if knowledge_id and local_image_dir and retain_images == 1:
-                put_images_to_minio(local_image_dir=local_image_dir, knowledge_id=knowledge_id, doc_id=doc_id)
-                convert_file_for_preview(file_name=input_file, knowledge_id=knowledge_id)
+                put_images_to_minio(
+                    local_image_dir=local_image_dir,
+                    knowledge_id=knowledge_id,
+                    doc_id=doc_id,
+                )
+                convert_file_for_preview(
+                    file_name=input_file, knowledge_id=knowledge_id
+                )
 
             # 沿用原来的方法处理md文件
             loader = filetype_load_map["md"](file_path=md_file_name)
@@ -664,20 +691,17 @@ def read_chunk_text(
             documents = loader.load()
         else:
             if etl_for_lm_url:
-                etl4lm_settings = settings.get_knowledge().get('etl4lm', {})
+                etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
                 loader = Etl4lmLoader(
                     file_name,
                     input_file,
-                    unstructured_api_url=etl4lm_settings.get('url', ''),
-                    ocr_sdk_url=etl4lm_settings.get('ocr_sdk_url', ''),
+                    unstructured_api_url=etl4lm_settings.get("url", ""),
+                    ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
                     force_ocr=bool(force_ocr),
                     enable_formular=bool(enable_formula),
-                    filter_page_header_footer=bool(filter_page_header_footer)
+                    filter_page_header_footer=bool(filter_page_header_footer),
                 )
                 documents = loader.load()
-                # replace the origin image links with new url. 
-                # meanwhile save all images to minio.
-                # documents = extract_images_from_md_converted_by_etl4lm(documents)
                 parse_type = ParseType.ETL4LM.value
                 partitions = loader.partitions
                 partitions = parse_partitions(partitions)
@@ -695,9 +719,9 @@ def read_chunk_text(
             # 配置了相关llm的话，就对文档做总结
             title = extract_title(llm, one.page_content)
             # remove <think>.*</think> tag content
-            title = re.sub('<think>.*</think>', '', title, flags=re.S).strip()
-            one.metadata['title'] = title
-        logger.info('file_extract_title=success timecost={}', time.time() - t)
+            title = re.sub("<think>.*</think>", "", title, flags=re.S).strip()
+            one.metadata["title"] = title
+        logger.info("file_extract_title=success timecost={}", time.time() - t)
 
     logger.info(f"start_split_text file_name={file_name}")
     texts = text_splitter.split_documents(documents)
@@ -723,7 +747,7 @@ def read_chunk_text(
 
 
 def text_knowledge(
-        db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
+    db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """使用text 导入knowledge"""
     embeddings = decide_embeddings(db_knowledge.model)
@@ -828,11 +852,13 @@ def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
                 fake_req.separator_rule,
                 fake_req.chunk_size,
                 fake_req.chunk_overlap,
+                callback_url=None,
                 extra_metadata=file.extra_meta,
                 preview_cache_keys=[file_preview_cache_key],
-                header_rows=fake_req.header_rows,
-                data_rows=fake_req.data_rows,
-                keep_images=fake_req.keep_images,
+                retain_images=fake_req.retain_images,
+                enable_formula=fake_req.enable_formula,
+                force_ocr=fake_req.force_ocr,
+                filter_page_header_footer=fake_req.filter_page_header_footer,
             )
         except Exception as e:
             logger.exception(f"retry_file_error file_id={file.id}")
@@ -877,9 +903,15 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
         embeddings = decide_embeddings(db_knowledge.model)
-        vector_client = decide_vectorstores(db_knowledge.collection_name, "Milvus", embeddings)
-        es_client = decide_vectorstores(db_knowledge.index_name, "ElasticKeywordsSearch", embeddings)
-        logger.info(f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}")
+        vector_client = decide_vectorstores(
+            db_knowledge.collection_name, "Milvus", embeddings
+        )
+        es_client = decide_vectorstores(
+            db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
+        )
+        logger.info(
+            f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}"
+        )
         # 统一document
         metadata = [
             {
@@ -894,7 +926,9 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             }
             for index, doc in enumerate(docs)
         ]
-        vector_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        vector_client.add_texts(
+            texts=[t.page_content for t in docs], metadatas=metadata
+        )
         logger.info(f"qa_save_knowledge add vector over")
         es_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
         logger.info(f"qa_save_knowledge add es over")
@@ -903,8 +937,8 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         KnowledgeFileDao.update(QA)
     except Exception as e:
         logger.error(e)
-        setattr(QA, 'status', QAStatus.FAILED.value)
-        setattr(QA, 'remark', str(e)[:500])
+        setattr(QA, "status", QAStatus.FAILED.value)
+        setattr(QA, "remark", str(e)[:500])
         KnowledgeFileDao.update(QA)
 
     return QA
@@ -957,13 +991,13 @@ def qa_status_change(qa_id: int, target_status: int):
 
 
 def list_qa_by_knowledge_id(
-        knowledge_id: int,
-        page_size: int = 10,
-        page_num: int = 1,
-        question: Optional[str] = None,
-        answer: Optional[str] = None,
-        keyword: Optional[str] = None,
-        status: Optional[int] = None,
+    knowledge_id: int,
+    page_size: int = 10,
+    page_num: int = 1,
+    question: Optional[str] = None,
+    answer: Optional[str] = None,
+    keyword: Optional[str] = None,
+    status: Optional[int] = None,
 ) -> List[QAKnowledge]:
     """获取知识库下的所有qa"""
     if not knowledge_id:
