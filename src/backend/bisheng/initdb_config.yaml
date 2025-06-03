@@ -1,7 +1,7 @@
 knowledges: # 知识库相关配置
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
-    url: "http://192.168.106.12:8180/v1/etl4llm/predict"
+    url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
     timeout: 60
     # OCR SDK服务地址，默认为空则使用ETL4LM自带的轻量OCR模型（速度快，对于困难场景效果一般），若填写OCR SDK服务地址则使用高精度的OCR模型。
     ocr_sdk_url: ""
