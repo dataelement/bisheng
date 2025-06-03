@@ -12,7 +12,7 @@ import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } f
 // import { createMcpServer, deleteMcpServer, getMcpTools, testMcpTool, updateMcpServer } from "@/controllers/API/mcp";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 // 测试对话框组件
 const TestDialog = forwardRef((props, ref) => {
@@ -137,6 +137,9 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const testToolDialogRef = useRef(null);
     const { user } = useContext(userContext);
     const [isSelf, setIsSelf] = useState(false);
+    // 解析标记
+    const getingOpenapiSchemaRef = useRef(false);
+    const [needSave, setNeedSave] = useState(false);
 
     // 示例配置
     const exampleConfigs = {
@@ -169,6 +172,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setIsEditMode(false);
             }
             setIsDialogOpen(true);
+            setNeedSave(false)
         }
     }));
 
@@ -181,10 +185,14 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     };
 
     const loadToolsFromSchema = async (schemaContent) => {
-        if (!schemaContent.trim()) return;
+        if (!schemaContent.trim()) {
+            getingOpenapiSchemaRef.current = false;
+            return
+        };
 
         if (!isValidJSON(schemaContent)) {
             setAvailableTools([]);
+            getingOpenapiSchemaRef.current = false;
             return message({
                 description: "配置格式错误，请检查JSON格式是否正确",
                 variant: "warning"
@@ -207,7 +215,11 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 children: tools.children
             }))
         }
+        getingOpenapiSchemaRef.current && setNeedSave(true);
+        getingOpenapiSchemaRef.current = false;
     };
+
+    useEffect(() => { needSave && handleSubmit() }, [needSave])
 
     const validateForm = () => {
         const errors = [];
@@ -237,7 +249,9 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     };
 
     // 表单提交
-    const handleSubmit = () => {
+    const [loading, setLoading] = useState(false);
+    const handleSubmit = async() => {
+        if (getingOpenapiSchemaRef.current) return setLoading(true) // 解析中
         // 校验逻辑
         const validationErrors = validateForm();
         if (validationErrors.length > 0) {
@@ -248,9 +262,10 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         }
 
         // 提交数据
+        setLoading(true);
         const apiMethod = isEditMode ? updateTool : createTool;
         const { openapiSchema, ...other } = formData;
-        captureAndAlertRequestErrorHoc(apiMethod({
+        await captureAndAlertRequestErrorHoc(apiMethod({
             ...serverRef.current,
             ...other,
             description: serverRef.current.description,
@@ -262,6 +277,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             setIsDialogOpen(false);
             onReload()
         });
+        setLoading(false);
     };
 
     // 删除服务器
@@ -331,10 +347,13 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                 value={formData.openapiSchema}
                                 placeholder="输入您的 MCP 服务器配置 json"
                                 className="min-h-[200px] font-mono"
-                                onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    openapiSchema: e.target.value
-                                }))}
+                                onChange={(e) => {
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        openapiSchema: e.target.value
+                                    }))
+                                    getingOpenapiSchemaRef.current = true;
+                                }}
                                 onBlur={() => loadToolsFromSchema(formData.openapiSchema)}
                             />
                         </div>
@@ -393,7 +412,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                             取消
                         </Button>
-                        <Button onClick={handleSubmit}>保存</Button>
+                        <Button disabled={loading} onClick={handleSubmit}>保存</Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>

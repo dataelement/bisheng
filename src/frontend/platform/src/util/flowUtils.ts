@@ -287,7 +287,7 @@ export function importFlow() {
                                             param.value = workflowModelId
                                         } else if (param.type === 'agent_model') {
                                             param.value = assistantModelId
-                                        } else if (param.type === 'knowledge_select_multi' && param.value.type === 'knowledge') {
+                                        } else if (param.type === 'knowledge_select_multi') {
                                             param.value.value = []
                                         } else if (param.type === 'add_tool') {
                                             param.value = []
@@ -305,4 +305,12 @@ export function importFlow() {
         input.onerror = reject
         input.click();
     })
+}
+
+// 计算复制后的节点目标位置
+export function calculatePosition(nodes, position) {
+    if (nodes.some(node => node.position.x === position.x && node.position.y === position.y)) {
+        return calculatePosition(nodes, { x: position.x + 50, y: position.y + 50 })
+    }
+    return position
 }

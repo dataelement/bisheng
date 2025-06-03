@@ -558,10 +558,16 @@ const useNodeEvent = (flow) => {
 
         traverseTree(startNodeId, '0', [{ branch: '0', nodeId: startNodeId, type: '' }]);
 
-        if (treeNodeIdSet.size !== flow.nodes.length - 1) {
+        // 节点连线完整校验
+        if (treeNodeIdSet.size !== flow.nodes.filter(node => node.type === 'flowNode').length - 1) {
+            const ids = flow.nodes.reduce((res, node) => {
+                if (node.type === 'flowNode' && node.data.type !== 'start' && !treeNodeIdSet.has(node.id))
+                    res.push(node.id)
+                return res
+            }, [])
+            sendEvent(ids);
             return [t('unconnectedNodes')];
         }
-        // console.log('flow :>> ', flow.edges, branchLines);
 
         // 并行校验
         // input节点s & 分支节点s
