@@ -22,7 +22,6 @@ from bisheng.api.services.knowledge_imp import (
     delete_knowledge_file_vectors,
     process_file_task,
     read_chunk_text,
-    retry_files,
 )
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
@@ -53,7 +52,7 @@ from bisheng.database.models.knowledge import (
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
-    KnowledgeFileStatus,
+    KnowledgeFileStatus, ParseType,
 )
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -586,25 +585,39 @@ class KnowledgeService(KnowledgeUtils):
         ):
             raise UnAuthorizedError.http_exception()
         res = []
+
         req_data["knowledge_id"] = knowledge.id
-        split_rule = FileProcessBase(**req_data).__dict__
         for file in db_files:
-            # file exist
             input_file = id2input.get(file.id)
+
+            # file exist
+            file.object_name = input_file.get("object_name", file.object_name)
+            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(
+                file.knowledge_id, input_file.get("file_path", "")
+            )
+
+            if file.object_name.startswith('tmp'):
+                # 把临时文件移动到正式目录
+                new_object_name = f"original/{file.id}.{file.object_name.split('.')[-1]}"
+                minio_client.copy_object(file.object_name, new_object_name,
+                                         bucket_name=minio_client.tmp_bucket,
+                                         target_bucket_name=minio_client.bucket)
+                file.object_name = new_object_name
+
             if input_file["remark"] and "对应已存在文件" in input_file["remark"]:
                 file.file_name = input_file["remark"].split(" 对应已存在文件 ")[0]
                 file.remark = ""
-                # 覆盖, 使用前端传入的
-                file.split_rule = json.dumps(split_rule)
-            else:
-                # 重试
-                file.split_rule = input_file["split_rule"]
-            file.status = 1  # 解析中
+
+            file.split_rule = input_file["split_rule"]
+            file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
 
             file = KnowledgeFileDao.update(file)
-            res.append(file)
-        background_tasks.add_task(retry_files, res, id2input)
-        cls.upload_knowledge_file_hook(request, login_user, knowledge, res)
+            res.append([file, file_preview_cache_key])
+        tmp = []
+        for one_file in res:
+            file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
+            tmp.append(one_file[0])
+        cls.upload_knowledge_file_hook(request, login_user, knowledge, tmp)
         return []
 
     @classmethod
@@ -643,7 +656,7 @@ class KnowledgeService(KnowledgeUtils):
 
         uuid_file_name = file_name.split(".")[0]
         file_extension_name = file_name.split(".")[-1]
-        original_file_name = redis_client.get(uuid_file_name)
+        original_file_name = redis_client.get(uuid_file_name) or file_name
         # 是否包含重复文件
         content_repeat = KnowledgeFileDao.get_file_by_condition(
             md5_=md5_, knowledge_id=knowledge.id
@@ -657,7 +670,7 @@ class KnowledgeService(KnowledgeUtils):
             file_type = file_name.rsplit(".", 1)[-1]
             obj_name = f"tmp/{db_file.id}.{file_type}"
             db_file.object_name = obj_name
-            db_file.remark = f"{file_name} 对应已存在文件 {old_name}"
+            db_file.remark = f"{original_file_name} 对应已存在文件 {old_name}"
             # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
             with open(filepath, "rb") as file:
                 minio_client.upload_tmp(db_file.object_name, file.read())
@@ -1026,8 +1039,34 @@ class KnowledgeService(KnowledgeUtils):
     def get_file_share_url(
             cls, request: Request, login_user: UserPayload, file_id: int
     ) -> str:
-        download_url = minio_client.get_share_link(str(file_id))
+        file = KnowledgeFileDao.get_file_by_ids([file_id])
+        if not file:
+            raise NotFoundError.http_exception()
+        file = file[0]
+        # 130版本以前的文件解析
+        if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
+            download_url = minio_client.get_share_link(str(file_id))
+        else:
+            # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
+            if file.file_name.endswith(".doc"):
+                download_url = cls.get_file_share_url_with_empty(file.object_name.replace(".doc", ".docx"))
+            elif file.file_name.endswith(('.ppt', '.pptx')):
+                download_url = cls.get_file_share_url_with_empty(
+                    file.object_name.replace(".ppt", ".pdf").replace(".pptx", ".pdf"))
+            else:
+                download_url = cls.get_file_share_url_with_empty(file.object_name)
         return download_url
+
+    @classmethod
+    def get_file_share_url_with_empty(cls, object_name: str) -> str:
+        """
+        获取文件的分享链接
+        :param object_name: 文件在minio中的对象名称
+        :return: 文件的分享链接
+        """
+        if minio_client.object_exists(minio_client.bucket, object_name):
+            return minio_client.get_share_link(object_name, minio_client.bucket)
+        return ""
 
     @classmethod
     def get_file_bbox(

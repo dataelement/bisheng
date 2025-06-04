@@ -14,7 +14,6 @@ from bisheng.cache.utils import CACHE_DIR
 
 
 def combine_multiple_md_files_to_raw_texts(llm, path):
-
     """
     combine multiple md file to raw texts including meta-data list.
     Args:
@@ -47,8 +46,14 @@ def combine_multiple_md_files_to_raw_texts(llm, path):
             index += 1
     return raw_texts, metadata_list, "local", []
 
+
 def convert_file_to_md(
-    file_name, input_file_name, header_rows=[0, 1], data_rows=10, append_header=True, knowledge_id : int = None
+    file_name,
+    input_file_name,
+    header_rows=[0, 1],
+    data_rows=10,
+    append_header=True,
+    knowledge_id: int = None,
 ):
     """
     处理文件转换的主函数。
@@ -56,9 +61,9 @@ def convert_file_to_md(
         file_name:
         input_file_name:
         header_rows:
-        data_rows: 
+        data_rows:
         append_header:
-        knowledge_id: 
+        knowledge_id:
     """
     md_file_name = None
     local_image_dir = None
@@ -86,9 +91,12 @@ def convert_file_to_md(
             local_image_dir,
             doc_id,
         ) = html_handler(CACHE_DIR, input_file_name)
-        if not file_name.endswith("mhtml"):
-            local_image_dir = None
-    return replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id=knowledge_id)
+        # if not file_name.endswith("mhtml"):
+        # local_image_dir = None
+    return replace_image_url(
+        md_file_name, local_image_dir, doc_id, knowledge_id=knowledge_id
+    )
+
 
 def replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id: int = None):
     """
@@ -97,13 +105,13 @@ def replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id: int =
     Args:
         md_file_name:
         local_image_dir:
-        doc_id: 
-        knowledge_id: 
-            if the knowledge_id is None, this process will be interrupted, 
+        doc_id:
+        knowledge_id:
+            if the knowledge_id is None, this process will be interrupted,
             because the image files wouldn't be put into minio
     """
     if knowledge_id is None:
-        return
+        return md_file_name, local_image_dir, doc_id
 
     minio_image_path = f"/{BUCKET_NAME}/{knowledge_id}/{doc_id}"
     if md_file_name and local_image_dir and doc_id:
