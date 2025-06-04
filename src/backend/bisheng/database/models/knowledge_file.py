@@ -6,7 +6,7 @@ from typing import List, Optional
 # if TYPE_CHECKING:
 from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
-from sqlmodel import Field, delete, func, select
+from sqlmodel import Field, delete, func, select, update
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -156,6 +156,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
+
+    @classmethod
+    def update_file_status(cls, file_id: int, status: KnowledgeFileStatus, reason: str = None):
+        statement = update(KnowledgeFile).where(KnowledgeFile.id == file_id).values(status=status.value, remark=reason)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
 
     @classmethod
     def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):

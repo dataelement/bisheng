@@ -203,9 +203,12 @@ class MinioClient:
             source_object_name,
             target_object_name,
             bucket_name=bucket,
+            target_bucket_name=None
     ):
+        if target_bucket_name is None:
+            target_bucket_name = bucket_name
         copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
-        response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
+        response = self.minio_client.copy_object(target_bucket_name, target_object_name, copy_source)
         return response
 
 

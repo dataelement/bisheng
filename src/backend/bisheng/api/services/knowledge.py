@@ -65,6 +65,7 @@ from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
+from bisheng.worker import retry_knowledge_file_celery
 from bisheng.worker.knowledge import file_worker
 
 
@@ -586,23 +587,36 @@ class KnowledgeService(KnowledgeUtils):
         ):
             raise UnAuthorizedError.http_exception()
         res = []
+
         req_data["knowledge_id"] = knowledge.id
-        split_rule = FileProcessBase(**req_data).__dict__
         for file in db_files:
-            # file exist
             input_file = id2input.get(file.id)
+
+            # file exist
+            file.object_name = input_file.get("object_name", file.object_name)
+            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(
+                file.knowledge_id, input_file.get("file_path", "")
+            )
+
+            if file.object_name.startswith('tmp'):
+                # 把临时文件移动到正式目录
+                new_object_name = f"original/{file.id}.{file.object_name.split('.')[-1]}"
+                minio_client.copy_object(file.object_name, new_object_name,
+                                         bucket_name=minio_client.tmp_bucket,
+                                         target_bucket_name=minio_client.bucket)
+                file.object_name = new_object_name
+
             if input_file["remark"] and "对应已存在文件" in input_file["remark"]:
                 file.file_name = input_file["remark"].split(" 对应已存在文件 ")[0]
                 file.remark = ""
-                # 覆盖, 使用前端传入的
-                file.split_rule = json.dumps(split_rule)
-            else:
-                # 重试
-                file.split_rule = input_file["split_rule"]
-            file.status = 1  # 解析中
+
+            file.split_rule = input_file["split_rule"]
+            file.status = KnowledgeFileStatus.PROCESSING.value  # 解析中
 
             file = KnowledgeFileDao.update(file)
-            res.append(file)
+            res.append([file, file_preview_cache_key])
+        for one_file in res:
+            retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
         background_tasks.add_task(retry_files, res, id2input)
         cls.upload_knowledge_file_hook(request, login_user, knowledge, res)
         return []
@@ -657,7 +671,7 @@ class KnowledgeService(KnowledgeUtils):
             file_type = file_name.rsplit(".", 1)[-1]
             obj_name = f"tmp/{db_file.id}.{file_type}"
             db_file.object_name = obj_name
-            db_file.remark = f"{file_name} 对应已存在文件 {old_name}"
+            db_file.remark = f"{original_file_name} 对应已存在文件 {old_name}"
             # 上传到minio，不修改数据库，由前端决定是否覆盖，覆盖的话调用重试接口
             with open(filepath, "rb") as file:
                 minio_client.upload_tmp(db_file.object_name, file.read())
