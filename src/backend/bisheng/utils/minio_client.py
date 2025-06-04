@@ -35,6 +35,8 @@ class MinioClient:
             secure=_MinioConf.schema,
             cert_check=_MinioConf.cert_check)
 
+        self._init_bucket_conf()
+
     def _init_bucket_conf(self):
         # create need bucket
         self.mkdir(new_bucket=self.bucket)
@@ -130,7 +132,8 @@ class MinioClient:
         if object_name[0] == '/':
             object_name = object_name[1:]
         # 因为bucket都允许公开访问了，所以不再需要生成有期限的url
-        return f'/{bucket}/{object_name}'
+        share_host = self.get_minio_share_host()
+        return f'{share_host}/{bucket}/{object_name}'
 
     def upload_tmp(self, object_name, data):
         self.minio_client.put_object(bucket_name=tmp_bucket,
@@ -165,17 +168,24 @@ class MinioClient:
         return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)
 
     @classmethod
+    def get_minio_share_host(cls) -> str:
+        """
+        获取minio share host
+        """
+        minio_share = _MinioConf.sharepoint
+        if _MinioConf.schema:
+            return f'https://{minio_share}'
+        return f'http://{minio_share}'
+
+    @classmethod
     def clear_minio_share_host(cls, file_url: str):
         """
          TODO maybe 合理方案是部署一个支持https的minio配合前端使用
          抹去url中的minio share地址， 让前端通过nginx代理去访问资源
         """
-        minio_share = _MinioConf.sharepoint
-        old_host = f'http://{minio_share}'
-        if _MinioConf.schema:
-            old_host = f'https://{minio_share}'
+        share_host = cls.get_minio_share_host()
 
-        return file_url.replace(old_host, '')
+        return file_url.replace(share_host, '')
 
     def object_exists(self, bucket_name, object_name, **kwargs):
         try:
