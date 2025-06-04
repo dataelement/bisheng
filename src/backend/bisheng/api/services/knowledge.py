@@ -64,7 +64,6 @@ from bisheng.settings import settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
-from bisheng.worker import retry_knowledge_file_celery
 from bisheng.worker.knowledge import file_worker
 
 
@@ -614,9 +613,11 @@ class KnowledgeService(KnowledgeUtils):
 
             file = KnowledgeFileDao.update(file)
             res.append([file, file_preview_cache_key])
+        tmp = []
         for one_file in res:
-            retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
-        cls.upload_knowledge_file_hook(request, login_user, knowledge, res)
+            file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
+            tmp.append(one_file[0])
+        cls.upload_knowledge_file_hook(request, login_user, knowledge, tmp)
         return []
 
     @classmethod
