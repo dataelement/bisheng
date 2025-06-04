@@ -1,6 +1,5 @@
 import io
 import json
-from datetime import timedelta
 from typing import BinaryIO
 
 import minio
@@ -130,9 +129,8 @@ class MinioClient:
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
-        return self.minio_share.presigned_get_object(bucket_name=bucket,
-                                                     object_name=object_name,
-                                                     expires=timedelta(days=7))
+        # 因为bucket都允许公开访问了，所以不再需要生成有期限的url
+        return f'/{bucket}/{object_name}'
 
     def upload_tmp(self, object_name, data):
         self.minio_client.put_object(bucket_name=tmp_bucket,
@@ -203,9 +201,12 @@ class MinioClient:
             source_object_name,
             target_object_name,
             bucket_name=bucket,
+            target_bucket_name=None
     ):
+        if target_bucket_name is None:
+            target_bucket_name = bucket_name
         copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
-        response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
+        response = self.minio_client.copy_object(target_bucket_name, target_object_name, copy_source)
         return response
 
 

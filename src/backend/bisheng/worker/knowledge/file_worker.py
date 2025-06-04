@@ -5,7 +5,7 @@ from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task
+from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge_file import (
@@ -293,3 +293,22 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
                       force_ocr=file_rule.force_ocr,
                       filter_page_header_footer=file_rule.filter_page_header_footer)
     logger.debug("parse_knowledge_file_celery_over", file_id)
+
+
+@bisheng_celery.task(time_limit=settings.celery_task.knowledge_file_time_limit)
+def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
+    """ 重试解析一个入库失败或者重名的文件 """
+    with logger.contextualize(trace_id=f'retry_file_{file_id}'):
+        logger.info("retry_knowledge_file_celery start file_id={}", file_id)
+        try:
+            delete_knowledge_file_vectors(
+                file_ids=[file_id], clear_minio=False
+            )
+        except Exception as e:
+            logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
+            KnowledgeFileDao.update_file_status(file_id, KnowledgeFileStatus.FAILED.value, str(e)[:500])
+            return
+        try:
+            _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+        except Exception as e:
+            logger.error("retry_knowledge_file_celery error: {}", str(e))
