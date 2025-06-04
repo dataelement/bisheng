@@ -35,7 +35,6 @@ from bisheng.api.services.patch_130 import (
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.utils import md5_hash
-from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import CACHE_DIR
 from bisheng.cache.utils import file_download
@@ -795,50 +794,6 @@ def text_knowledge(
         result["status"] = 3
         result["remark"] = str(e)[:500]
     return result
-
-
-def retry_files(db_files: List[KnowledgeFile], new_files: Dict):
-    if not db_files:
-        return
-    try:
-        delete_knowledge_file_vectors(
-            file_ids=list(new_files.keys()), clear_minio=False
-        )
-    except Exception as e:
-        logger.exception(e)
-        for file in db_files:
-            file.status = 3
-            file.remark = str(e)[:500]
-            KnowledgeFileDao.update(file)
-        return
-
-    for file in db_files:
-        fake_req = FileProcessBase(**json.loads(file.split_rule))
-        try:
-            knowledge = KnowledgeDao.query_by_id(file.knowledge_id)
-            input_files = new_files.get(file.id)
-            file.object_name = input_files.get("object_name", file.object_name)
-            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(
-                file.knowledge_id, input_files.get("file_path", "")
-            )
-            process_file_task(
-                knowledge,
-                [file],
-                fake_req.separator,
-                fake_req.separator_rule,
-                fake_req.chunk_size,
-                fake_req.chunk_overlap,
-                extra_metadata=file.extra_meta,
-                preview_cache_keys=[file_preview_cache_key],
-                header_rows=fake_req.header_rows,
-                data_rows=fake_req.data_rows,
-                keep_images=fake_req.keep_images,
-            )
-        except Exception as e:
-            logger.exception(f"retry_file_error file_id={file.id}")
-            file.status = 3
-            file.remark = str(e)[:500]
-            KnowledgeFileDao.update(file)
 
 
 def delete_vector(collection_name: str, partition_key: str):

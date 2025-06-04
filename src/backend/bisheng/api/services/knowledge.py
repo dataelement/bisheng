@@ -22,7 +22,6 @@ from bisheng.api.services.knowledge_imp import (
     delete_knowledge_file_vectors,
     process_file_task,
     read_chunk_text,
-    retry_files,
 )
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
@@ -617,7 +616,6 @@ class KnowledgeService(KnowledgeUtils):
             res.append([file, file_preview_cache_key])
         for one_file in res:
             retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
-        background_tasks.add_task(retry_files, res, id2input)
         cls.upload_knowledge_file_hook(request, login_user, knowledge, res)
         return []
 
