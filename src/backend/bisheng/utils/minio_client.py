@@ -49,30 +49,22 @@ class MinioClient:
                 "Principal": {
                     "AWS": ["*"]
                 },
-                "Action": ["s3:GetBucketLocation"],
-                "Resource": ["arn:aws:s3:::test"]
-            }, {
-                "Effect": "Allow",
-                "Principal": {
-                    "AWS": ["*"]
-                },
-                "Action": ["s3:ListBucket"],
-                "Resource": ["arn:aws:s3:::test"],
-                "Condition": {
-                    "StringEquals": {
-                        "s3:prefix": ["*"]
-                    }
-                }
-            }, {
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{self.bucket}/**"]
+            }]
+        }
+        tmp_policy = {
+            "Version": "2012-10-17",
+            "Statement": [{
                 "Effect": "Allow",
                 "Principal": {
                     "AWS": ["*"]
                 },
                 "Action": ["s3:GetObject"],
-                "Resource": ["arn:aws:s3:::test/**"]
+                "Resource": [f"arn:aws:s3:::{self.tmp_bucket}/**"]
             }]
         }
-        # set bucket public read policy
+
         try:
             policy = self.minio_client.get_bucket_policy(self.bucket)
         except Exception as e:
@@ -85,7 +77,7 @@ class MinioClient:
         except Exception as e:
             if str(e).find('NoSuchBucketPolicy') == -1:
                 raise e
-            self.minio_client.set_bucket_policy(self.tmp_bucket, json.dumps(anonymous_read_policy))
+            self.minio_client.set_bucket_policy(self.tmp_bucket, json.dumps(tmp_policy))
 
         # set tmp bucket lifecycle
         if not self.minio_client.get_bucket_lifecycle(self.tmp_bucket):
