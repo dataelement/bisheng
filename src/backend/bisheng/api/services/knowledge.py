@@ -52,7 +52,7 @@ from bisheng.database.models.knowledge import (
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
-    KnowledgeFileStatus,
+    KnowledgeFileStatus, ParseType,
 )
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -1039,8 +1039,34 @@ class KnowledgeService(KnowledgeUtils):
     def get_file_share_url(
             cls, request: Request, login_user: UserPayload, file_id: int
     ) -> str:
-        download_url = minio_client.get_share_link(str(file_id))
+        file = KnowledgeFileDao.get_file_by_ids([file_id])
+        if not file:
+            raise NotFoundError.http_exception()
+        file = file[0]
+        # 130版本以前的文件解析
+        if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
+            download_url = minio_client.get_share_link(str(file_id))
+        else:
+            # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
+            if file.file_name.endswith(".doc"):
+                download_url = cls.get_file_share_url_with_empty(file.object_name.replace(".doc", ".docx"))
+            elif file.file_name.endswith(('.ppt', '.pptx')):
+                download_url = cls.get_file_share_url_with_empty(
+                    file.object_name.replace(".ppt", ".pdf").replace(".pptx", ".pdf"))
+            else:
+                download_url = cls.get_file_share_url_with_empty(file.object_name)
         return download_url
+
+    @classmethod
+    def get_file_share_url_with_empty(cls, object_name: str) -> str:
+        """
+        获取文件的分享链接
+        :param object_name: 文件在minio中的对象名称
+        :return: 文件的分享链接
+        """
+        if minio_client.object_exists(minio_client.bucket, object_name):
+            return minio_client.get_share_link(object_name, minio_client.bucket)
+        return ""
 
     @classmethod
     def get_file_bbox(
