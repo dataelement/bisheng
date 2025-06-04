@@ -656,7 +656,7 @@ class KnowledgeService(KnowledgeUtils):
 
         uuid_file_name = file_name.split(".")[0]
         file_extension_name = file_name.split(".")[-1]
-        original_file_name = redis_client.get(uuid_file_name)
+        original_file_name = redis_client.get(uuid_file_name) or file_name
         # 是否包含重复文件
         content_repeat = KnowledgeFileDao.get_file_by_condition(
             md5_=md5_, knowledge_id=knowledge.id
