@@ -255,9 +255,9 @@ def getFileContent(filepath):
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
         filepath_local,
         file_name,
-        ['\n\n\n\n\n'],
-        [],
-        102400,
+        ['\n\n', '\n'],
+        ['after', 'after'],
+        1000,
         0,
         excel_rule=ExcelRule()
     )
