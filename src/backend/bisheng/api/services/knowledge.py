@@ -418,27 +418,17 @@ class KnowledgeService(KnowledgeUtils):
         # 默认是源文件的地址
         file_share_url = file_path
         if file_ext == 'doc':
-            new_file_path = f"{filepath.split('.')[0]}.docx"
-            if os.path.exists(new_file_path):
-                with open(filepath, "rb") as f:
-                    minio_client.upload_tmp(f"{cache_key}.docx", f.read())
+            new_file_name = f"preview/{file_name.split('.')[0]}.docx"
+            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
-                    f"{cache_key}.docx", minio_client.tmp_bucket
+                    new_file_name, minio_client.tmp_bucket
                 )
-            else:
-                logger.warning(f"convert doc to docx failed: {file_name}")
-                file_share_url = ''
         elif file_ext in ['ppt', 'pptx']:
-            new_file_path = f"{filepath.split('.')[0]}.pdf"
-            if os.path.exists(new_file_path):
-                with open(filepath, "rb") as f:
-                    minio_client.upload_tmp(f"{cache_key}.pdf", f.read())
+            new_file_name = f"preview/{file_name.split('.')[0]}.pdf"
+            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
-                    f"{cache_key}.pdf", minio_client.tmp_bucket
+                    new_file_name, minio_client.tmp_bucket
                 )
-            else:
-                logger.warning(f"convert pdf to pdf failed: {file_name}")
-                file_share_url = ''
 
         # 存入缓存
         cls.save_preview_cache(cache_key, mapping=cache_map)
