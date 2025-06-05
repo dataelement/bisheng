@@ -41,11 +41,10 @@ def generate_markdown_table_string(
 ):
     """
     根据表头和数据行生成 Markdown 表格字符串。
-    (已修正)
     """
     md_lines = []
 
-    # 首先，添加所有表头行
+    # 首先，添加所有表头行 (根据逻辑，这里只会有1行或0行)
     for row_values in header_rows_list_of_lists:
         md_lines.append(
             "| "
@@ -53,7 +52,7 @@ def generate_markdown_table_string(
             + " |"
         )
 
-    # 然后，如果存在表头行，则添加分隔符
+    # 如果存在表头行，则添加分隔符
     if header_rows_list_of_lists and num_columns > 0:
         md_lines.append("|" + "---|" * num_columns)
 
@@ -67,13 +66,14 @@ def generate_markdown_table_string(
     return "\n".join(md_lines)
 
 
-# --- 核心 DataFrame 到 Markdown 处理逻辑 (已根据新需求再次修正) ---
+# --- 核心 DataFrame 到 Markdown 处理逻辑 (根据最终排序要求修正) ---
 def process_dataframe_to_markdown_files(
     df, source_name, num_header_rows, rows_per_markdown, output_dir, append_header=True
 ):
     """
     将单个 DataFrame 处理成分页的 Markdown 文件。
-    新规则：即使指定了多行表头，也只取第一行作为表头，确保分隔符永远在第二行。
+    强制规则：分隔符在第二行。
+    最终数据排序规则：[降级的表头行] -> [表头前的数据行] -> [表头后的数据行]。
     """
     if df.empty:
         logger.warning(f"  源 '{source_name}' 的数据DataFrame为空，跳过Markdown生成。")
@@ -83,18 +83,6 @@ def process_dataframe_to_markdown_files(
     header_rows_as_lists = []
 
     if append_header:
-        # --- 新逻辑：强制单行表头 ---
-        if num_header_rows[0] < 0:
-            logger.error(
-                f"错误：源 '{source_name}' 的表头起始行 ({num_header_rows[0]}) 不能为负。跳过。"
-            )
-            return
-        if rows_per_markdown <= 0:
-            logger.error(
-                f"错误：源 '{source_name}' 的每个Markdown文件数据行数 ({rows_per_markdown}) 必须大于0。跳过。"
-            )
-            return
-
         header_start, header_end = num_header_rows[0], num_header_rows[1]
 
         if header_start >= len(df):
@@ -104,30 +92,30 @@ def process_dataframe_to_markdown_files(
             header_rows_as_lists = []
             data_block_df = df
         else:
-            # 1. 只取指定范围的第一行作为唯一的表头
+            # 1. 强制选择指定范围的第一行作为唯一的“表头”
             single_header_df = df.iloc[header_start : header_start + 1]
             header_rows_as_lists = single_header_df.values.tolist()
 
-            # 2. 所有其他行都成为数据行
-            # 包括：原始表头范围之前的所有行
+            # 2. 识别出所有需要成为“数据”的部分
+            #    - 表头之前的部分
             rows_before_header = df.iloc[0:header_start]
-            # 包括：原始表头范围中，被舍弃的那些行（现在作为数据）
+            #    - 原表头范围中被“降级”为数据的部分
             other_header_rows_as_data = df.iloc[header_start + 1 : header_end]
-            # 包括：原始表头范围之后的所有行
+            #    - 表头之后的部分
             rows_after_header = df.iloc[header_end:]
 
-            # 3. 按顺序合并所有数据行
+            # 3. 【关键修改】按照您描述的最新顺序合并成最终的数据块
+            #    新顺序: [降级的表头行] -> [表头前的数据行] -> [表头后的数据行]
             data_block_df = pd.concat(
-                [rows_before_header, other_header_rows_as_data, rows_after_header],
+                [other_header_rows_as_data, rows_before_header, rows_after_header],
                 ignore_index=True,
             )
 
     else:
-        # 如果不需要表头，所有行都是数据 (此逻辑不变)
+        # 如果不附加表头，所有行都是数据。
         header_rows_as_lists = []
         data_block_df = df
 
-    # --- 后续分页和文件写入逻辑保持不变 ---
     if data_block_df.empty:
         if header_rows_as_lists:
             logger.debug(
@@ -374,6 +362,26 @@ def handler(
         rows_per_markdown=data_rows,
         append_header=append_header,
     )
-    # The function now creates a directory per conversion.
-    # Returning the directory path is more appropriate.
     return md_file_dir, None, doc_id
+
+
+if __name__ == "__main__":
+    # 定义测试参数
+    test_cache_dir = "/Users/tju/Desktop/"
+    test_file_name = "/Users/tju/Resources/docs/excel/test_excel_v2.csv"
+    test_header_rows = [0, 3]
+    test_data_rows = 12
+    test_append_header = True
+
+    # Call the handler function with test parameters
+    md_file_name, _, doc_id = handler(
+        cache_dir=test_cache_dir,
+        file_name=test_file_name,
+        header_rows=test_header_rows,
+        data_rows=test_data_rows,
+        append_header=test_append_header,
+    )
+
+    # Output the results
+    print(f"Generated Markdown file path: {md_file_name}")
+    print(f"Document ID: {doc_id}")
