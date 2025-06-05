@@ -449,7 +449,7 @@ class BishengLLM(BaseChatModel):
         # todo 接入到异步任务模块 累计5分钟更新一次
         if self.model_info.status != status:
             self.model_info.status = status
-            LLMDao.update_model_status(self.model_id, status, remark)
+            LLMDao.update_model_status(self.model_id, status, remark[:500])
 
     def bind_tools(
             self,
