@@ -2,6 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
+from langchain.docstore.document import Document
+from orjson import orjson
+from pydantic import BaseModel, Field, model_validator, field_validator
+
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
@@ -10,9 +14,6 @@ from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.llm_server import LLMModelBase, LLMServerBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
-from langchain.docstore.document import Document
-from orjson import orjson
-from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class CaptchaInput(BaseModel):
@@ -503,14 +504,14 @@ class FileProcessBase(BaseModel):
         if values.get('filter_page_header_footer') is None:
             values['filter_page_header_footer'] = 0
         if values.get('force_ocr') is None:
-            values['force_ocr'] = 0
+            values['force_ocr'] = 1
         if values.get('enable_formula') is None:
             values['enable_formula'] = 1
         if values.get("retain_images") is None:
-            values['retain_images'] = 0
+            values['retain_images'] = 1
         if values.get("excel_rules") is None:
-            values['excel_rules'] = {}
-        
+            values['excel_rules'] = ExcelRule()
+
         return values
 
 
