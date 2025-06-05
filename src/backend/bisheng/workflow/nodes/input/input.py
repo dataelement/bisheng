@@ -161,7 +161,7 @@ class InputNode(BaseNode):
         try:
             texts, metadatas, _, _ = read_chunk_text(filepath, file_name,
                                                      ['\n\n', '\n'],
-                                                     ['after', 'after'], 1000, 500)
+                                                     ['after', 'after'], 1000, 0)
             for metadata in metadatas:
                 metadata.update({
                     'file_id': file_id,
