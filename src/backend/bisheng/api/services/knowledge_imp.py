@@ -616,6 +616,7 @@ def read_chunk_text(
     # 获取文档总结标题的llm
     try:
         llm = decide_knowledge_llm()
+        knowledge_llm = LLMService.get_knowledge_llm()
     except Exception as e:
         logger.exception("knowledge_llm_error:")
         raise Exception(
