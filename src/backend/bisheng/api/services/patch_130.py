@@ -1,18 +1,19 @@
-import json
 import os
+import requests
 import re
-
-from bisheng_langchain.rag.extract_info import extract_title
-
+import pypandoc
+from uuid import uuid4
+import json
 from bisheng.api.services.md_from_docx import handler as docx_handler
+from bisheng.api.services.md_from_pptx import handler as pptx_handler
 from bisheng.api.services.md_from_excel import handler as excel_handler
 from bisheng.api.services.md_from_html import handler as html_handler
-from bisheng.api.services.md_from_pptx import handler as pptx_handler
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng.utils.minio_client import bucket as BUCKET_NAME
 from bisheng.cache.utils import CACHE_DIR
-from bisheng.utils.minio_client import minio_client
 
 
-def combine_multiple_md_files_to_raw_texts(llm, path):
+def combine_multiple_md_files_to_raw_texts(llm, path, abstract_propmpt=None):
     """
     combine multiple md file to raw texts including meta-data list.
     Args:
@@ -47,12 +48,12 @@ def combine_multiple_md_files_to_raw_texts(llm, path):
 
 
 def convert_file_to_md(
-        file_name,
-        input_file_name,
-        header_rows=[0, 1],
-        data_rows=10,
-        append_header=True,
-        knowledge_id: int = None,
+    file_name,
+    input_file_name,
+    header_rows=[0, 1],
+    data_rows=10,
+    append_header=True,
+    knowledge_id: int = None,
 ):
     """
     处理文件转换的主函数。
@@ -72,18 +73,18 @@ def convert_file_to_md(
     elif file_name.endswith(".pptx") or file_name.endswith(".ppt"):
         md_file_name, local_image_dir, doc_id = pptx_handler(CACHE_DIR, input_file_name)
     elif (
-            file_name.endswith(".xlsx")
-            or file_name.endswith(".xls")
-            or file_name.endswith(".csv")
+        file_name.endswith(".xlsx")
+        or file_name.endswith(".xls")
+        or file_name.endswith(".csv")
     ):
         md_file_name, local_image_dir, doc_id = excel_handler(
             CACHE_DIR, input_file_name, header_rows, data_rows, append_header
         )
         local_image_dir = None
     elif (
-            file_name.endswith(".html")
-            or file_name.endswith(".htm")
-            or file_name.endswith(".mhtml")
+        file_name.endswith(".html")
+        or file_name.endswith(".htm")
+        or file_name.endswith(".mhtml")
     ):
         (
             md_file_name,
@@ -109,10 +110,10 @@ def replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id: int =
             if the knowledge_id is None, this process will be interrupted,
             because the image files wouldn't be put into minio
     """
-    from bisheng.api.services.knowledge_imp import KnowledgeUtils
+    if knowledge_id is None:
+        return md_file_name, local_image_dir, doc_id
 
-    minio_image_path = f"/{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
-
+    minio_image_path = f"/{BUCKET_NAME}/{knowledge_id}/{doc_id}"
     if md_file_name and local_image_dir and doc_id:
         with open(md_file_name, "r", encoding="utf-8") as f:
             content = f.read()
