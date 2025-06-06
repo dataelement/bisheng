@@ -656,7 +656,7 @@ def read_chunk_text(
             append_header=excel_rule.append_header,
         )
         # skip following processes and return splited values.
-        return combine_multiple_md_files_to_raw_texts(llm, md_files_path)
+        return combine_multiple_md_files_to_raw_texts(llm = llm, path= md_files_path, abstract_prompt=knowledge_llm.ab)
 
     if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
 

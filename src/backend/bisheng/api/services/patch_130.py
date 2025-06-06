@@ -12,7 +12,7 @@ from bisheng.cache.utils import CACHE_DIR
 from bisheng.utils.minio_client import minio_client
 
 
-def combine_multiple_md_files_to_raw_texts(llm, path):
+def combine_multiple_md_files_to_raw_texts(llm, path, abstract_prompt):
     """
     combine multiple md file to raw texts including meta-data list.
     Args:
@@ -30,7 +30,9 @@ def combine_multiple_md_files_to_raw_texts(llm, path):
         with open(full_file_name, "r", encoding="utf-8") as f:
             content = f.read()
             if index == 0:
-                title = extract_title(llm=llm, text=content)
+                title = extract_title(
+                    llm=llm, text=content, abstract_prompt=abstract_prompt
+                )
                 title = re.sub("<think>.*</think>", "", title)
             raw_texts.append(content)
             metedata = {
@@ -47,12 +49,12 @@ def combine_multiple_md_files_to_raw_texts(llm, path):
 
 
 def convert_file_to_md(
-        file_name,
-        input_file_name,
-        header_rows=[0, 1],
-        data_rows=10,
-        append_header=True,
-        knowledge_id: int = None,
+    file_name,
+    input_file_name,
+    header_rows=[0, 1],
+    data_rows=10,
+    append_header=True,
+    knowledge_id: int = None,
 ):
     """
     处理文件转换的主函数。
@@ -72,18 +74,18 @@ def convert_file_to_md(
     elif file_name.endswith(".pptx") or file_name.endswith(".ppt"):
         md_file_name, local_image_dir, doc_id = pptx_handler(CACHE_DIR, input_file_name)
     elif (
-            file_name.endswith(".xlsx")
-            or file_name.endswith(".xls")
-            or file_name.endswith(".csv")
+        file_name.endswith(".xlsx")
+        or file_name.endswith(".xls")
+        or file_name.endswith(".csv")
     ):
         md_file_name, local_image_dir, doc_id = excel_handler(
             CACHE_DIR, input_file_name, header_rows, data_rows, append_header
         )
         local_image_dir = None
     elif (
-            file_name.endswith(".html")
-            or file_name.endswith(".htm")
-            or file_name.endswith(".mhtml")
+        file_name.endswith(".html")
+        or file_name.endswith(".htm")
+        or file_name.endswith(".mhtml")
     ):
         (
             md_file_name,
