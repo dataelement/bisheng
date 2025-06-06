@@ -13,7 +13,7 @@ from bisheng.utils.minio_client import bucket as BUCKET_NAME
 from bisheng.cache.utils import CACHE_DIR
 
 
-def combine_multiple_md_files_to_raw_texts(llm, path, abstract_propmpt=None):
+def combine_multiple_md_files_to_raw_texts(llm, path, abstract_prompt):
     """
     combine multiple md file to raw texts including meta-data list.
     Args:
@@ -31,7 +31,9 @@ def combine_multiple_md_files_to_raw_texts(llm, path, abstract_propmpt=None):
         with open(full_file_name, "r", encoding="utf-8") as f:
             content = f.read()
             if index == 0:
-                title = extract_title(llm=llm, text=content)
+                title = extract_title(
+                    llm=llm, text=content, abstract_prompt=abstract_prompt
+                )
                 title = re.sub("<think>.*</think>", "", title)
             raw_texts.append(content)
             metedata = {

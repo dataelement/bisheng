@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 
 
+
 def unmerge_and_read_sheet(sheet_obj):
     """
     读取 openpyxl 工作表对象，通过将合并区域左上角的值填充到该区域的所有单元格中来取消合并单元格，
@@ -129,6 +130,7 @@ def process_dataframe_to_markdown_files(
             )
             file_name = f"{source_name}_header_only.md"
             file_path = os.path.join(output_dir, file_name)
+            file_path = os.path.join(output_dir, file_name)
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(markdown_content)
@@ -151,6 +153,7 @@ def process_dataframe_to_markdown_files(
 
     for i in range(num_files_to_create):
         start_idx = i * rows_per_markdown
+        end_idx = min(start_idx + rows_per_markdown, num_data_rows_total)
         end_idx = min(start_idx + rows_per_markdown, num_data_rows_total)
         current_data_chunk_df = data_block_df.iloc[start_idx:end_idx]
         current_data_chunk_as_lists = current_data_chunk_df.values.tolist()
@@ -202,9 +205,11 @@ def excel_file_to_markdown(
         process_dataframe_to_markdown_files(
             df,
             sheet_name,
+            sheet_name,
             num_header_rows,
             rows_per_markdown,
             output_dir,
+            append_header=append_header,
             append_header=append_header,
         )
     if workbook:
@@ -220,6 +225,7 @@ def csv_file_to_markdown(
     csv_encoding="utf-8",
     csv_delimiter=",",
     append_header=True,
+    append_header=True,
 ):
     logger.debug(f"\n开始处理CSV文件：'{csv_path}'")
     try:
@@ -231,6 +237,7 @@ def csv_file_to_markdown(
             sep=csv_delimiter,
             keep_default_na=False,
         )
+        df.fillna("", inplace=True)
         df.fillna("", inplace=True)
 
     except pd.errors.EmptyDataError:
@@ -266,8 +273,10 @@ def convert_file_to_markdown(
     csv_encoding="utf-8",
     csv_delimiter=",",
     append_header=True,
+    append_header=True,
 ):
     """
+    将 Excel 或 CSV 文件转换为多个 Markdown 文件。
     将 Excel 或 CSV 文件转换为多个 Markdown 文件。
     """
     if not os.path.exists(input_file_path):
@@ -287,6 +296,11 @@ def convert_file_to_markdown(
             rows_per_markdown,
             base_output_dir,
             append_header,
+            input_file_path,
+            num_header_rows,
+            rows_per_markdown,
+            base_output_dir,
+            append_header,
         )
     elif file_extension == ".csv":
         csv_file_to_markdown(
@@ -296,6 +310,7 @@ def convert_file_to_markdown(
             base_output_dir,
             csv_encoding,
             csv_delimiter,
+            append_header,
             append_header,
         )
     else:

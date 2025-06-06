@@ -610,9 +610,6 @@ def read_chunk_text(
     # 获取文档总结标题的llm
     try:
         llm = decide_knowledge_llm()
-        """
-            这行代码与上面获取llm有重复，需要优化.
-        """
         knowledge_llm = LLMService.get_knowledge_llm()
     except Exception as e:
         logger.exception("knowledge_llm_error:")
@@ -657,9 +654,7 @@ def read_chunk_text(
             append_header=excel_rule.append_header,
         )
         # skip following processes and return splited values.
-        return combine_multiple_md_files_to_raw_texts(
-            llm=llm, path=md_files_path, abstract_propmpt=knowledge_llm.abstract_prompt
-        )
+        return combine_multiple_md_files_to_raw_texts(llm = llm, path= md_files_path, abstract_prompt=knowledge_llm.ab)
 
     if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
 
