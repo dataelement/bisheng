@@ -725,7 +725,11 @@ def read_chunk_text(
         t = time.time()
         for one in documents:
             # 配置了相关llm的话，就对文档做总结
-            title = extract_title(llm, one.page_content)
+            title = extract_title(
+                llm=llm,
+                text=one.page_content,
+                abstract_prompt=knowledge_llm.abstract_prompt,
+            )
             # remove <think>.*</think> tag content
             title = re.sub("<think>.*</think>", "", title, flags=re.S).strip()
             one.metadata["title"] = title
