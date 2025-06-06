@@ -59,6 +59,7 @@ from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import MinioClient, bucket as BUCKET_NAME
+from bisheng.api.v1.schemas import ExcelRule
 
 filetype_load_map = {
     "txt": TextLoader,
@@ -599,7 +600,7 @@ def read_chunk_text(
     enable_formula: int = 1,
     force_ocr: int = 0,
     filter_page_header_footer: int = 0,
-    excel_rule: Dict = None,
+    excel_rule: ExcelRule = None,
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -640,21 +641,32 @@ def read_chunk_text(
             excel_rule.slice_length = 10
             excel_rule.append_header = 1
 
+        if isinstance(excel_rule, dict):
+            header_start_row = excel_rule.get("header_start_row", 1)
+            header_end_row = excel_rule.get("header_end_row", 1)
+            slice_length = excel_rule.get("slice_length", 10)
+            append_header = excel_rule.get("append_header", 1)
+        else:
+            header_start_row = excel_rule.header_start_row
+            header_end_row = excel_rule.header_end_row
+            slice_length = excel_rule.slice_length
+            append_header = excel_rule.append_header
+
         # convert excel contents to markdown
         md_files_path, local_image_dir, doc_id = convert_file_to_md(
             file_name=file_name,
             input_file_name=input_file,
             header_rows=[
-                excel_rule.header_start_row - 1,  # convert to 0-based index
-                excel_rule.header_end_row,
-                # excel_rule["header_start_row"] - 1,
-                # excel_rule["header_end_row"],
+                header_start_row - 1,  # convert to 0-based index
+                header_end_row - 1,
             ],
-            data_rows=excel_rule.slice_length,
-            append_header=excel_rule.append_header,
+            data_rows=slice_length,
+            append_header=append_header,
         )
         # skip following processes and return splited values.
-        return combine_multiple_md_files_to_raw_texts(llm = llm, path= md_files_path, abstract_prompt=knowledge_llm.ab)
+        return combine_multiple_md_files_to_raw_texts(
+            llm=llm, path=md_files_path, abstract_prompt=knowledge_llm.abstract_prompt
+        )
 
     if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
 
