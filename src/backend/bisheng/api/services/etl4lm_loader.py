@@ -3,41 +3,43 @@
 import base64
 import logging
 import os
-import fitz
-import cv2
-from PIL import Image
 from typing import List
 from uuid import uuid4
+
+import cv2
+import fitz
 import requests
+from PIL import Image
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
-
-
 logger = logging.getLogger(__name__)
+
 
 def get_image_tag(results, part):
     element_id = part.get("element_id", None)
     url = results.get(element_id)
     return f"![]({url})"
 
+
 def get_image_parts(partitions):
     page_dict = {}
-    for part in partitions: 
-        label = part['type'] 
+    for part in partitions:
+        label = part['type']
         if label == 'Image':
-            bboxes =part.get("metadata", {}).get("extra_data", {}).get("bboxes", [])
+            bboxes = part.get("metadata", {}).get("extra_data", {}).get("bboxes", [])
             page = part.get("metadata", {}).get("extra_data", {}).get("pages", -1)
             element_id = part.get("element_id", None)
             if len(bboxes) == 0 or page == -1 or not element_id:
                 continue
-            item = {} 
+            item = {}
             item['bboxes'] = bboxes[0]
-            item['element_id'] =element_id
+            item['element_id'] = element_id
             if page not in page_dict:
                 page_dict[page] = []
             page_dict[page].append(item)
     return page_dict
+
 
 def crop_image(image_file, item, cropped_imag_base_dir):
     element_id = item.get("element_id")
@@ -45,8 +47,8 @@ def crop_image(image_file, item, cropped_imag_base_dir):
     img = cv2.imread(image_file)
     x1, y1, x2, y2 = bbox
     cropped_img = img[y1:y2, x1:x2]
-    file_name =  f"{element_id}.png"
-    cv2.imwrite(os.path.join(cropped_imag_base_dir,file_name, cropped_img))
+    file_name = f"{element_id}.png"
+    cv2.imwrite(os.path.join(cropped_imag_base_dir, file_name, cropped_img))
     return file_name
 
 
@@ -59,7 +61,7 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
     pdf_document = fitz.open(file_name)
     cropped_image_base_dir = f"{CACHE_DIR}/{doc_id}/images"
     for page_number, items in page_dict.items():
-        page  = pdf_document[page_number]
+        page = pdf_document[page_number]
         pix = page.get_pixmap()
         image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         pdf_image_file_name = f"{base_dir}/pdf/{page_number}.png"
@@ -77,7 +79,7 @@ def pre_handle(partitions, file_name, knowledge_id):
     if len(image_parts) == 0:
         return []
     return extract_pdf_images(file_name, image_parts, doc_id, knowledge_id)
-    
+
 
 def merge_partitions(file_name, partitions, knowledge_id=None):
     # 预处理pdf，提取图片
@@ -152,7 +154,7 @@ class Etl4lmLoader(BasePDFLoader):
         self.force_ocr = force_ocr
         self.enable_formular = enable_formular
         self.filter_page_header_footer = filter_page_header_footer
-        self.ocr_sdk_url = ocr_sdk_url,
+        self.ocr_sdk_url = ocr_sdk_url
         self.headers = {'Content-Type': 'application/json'}
         self.file_name = file_name
         self.start = start
@@ -173,7 +175,7 @@ class Etl4lmLoader(BasePDFLoader):
                        mode='partition',
                        force_ocr=self.force_ocr,
                        enable_formula=self.enable_formular,
-                       ocr_sdk_url = self.ocr_sdk_url,
+                       ocr_sdk_url=self.ocr_sdk_url,
                        parameters=parameters)
 
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload)
