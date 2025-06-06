@@ -48,14 +48,14 @@ def crop_image(image_file, item, cropped_imag_base_dir):
     x1, y1, x2, y2 = bbox
     cropped_img = img[y1:y2, x1:x2]
     file_name = f"{element_id}.png"
-    cv2.imwrite(os.path.join(cropped_imag_base_dir, file_name, cropped_img))
+    cv2.imwrite(os.path.join(cropped_imag_base_dir, file_name), cropped_img)
     return file_name
 
 
 def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
-    from bisheng.worker.knowledge.file_worker import put_images_to_minio
+    from bisheng.api.services.knowledge_imp import put_images_to_minio
+    from bisheng.api.services.knowledge_imp import KnowledgeUtils
     from bisheng.cache.utils import CACHE_DIR
-    from bisheng.utils.minio_client import bucket as BUCKET_NAME
     result = {}
     base_dir = f"{CACHE_DIR}/{doc_id}"
     pdf_document = fitz.open(file_name)
@@ -68,7 +68,8 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
         image.save(pdf_image_file_name)
         for item in items:
             cropped_image_file = crop_image(pdf_image_file_name, item, cropped_image_base_dir)
-            result[item["element_id"]] = f"{BUCKET_NAME}/{knowledge_id}/{doc_id}/{cropped_image_file}"
+            result[item[
+                "element_id"]] = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
 
