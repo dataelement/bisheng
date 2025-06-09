@@ -91,11 +91,18 @@ def process_dataframe_to_markdown_files(
 
     num_columns = df.shape[1]
 
+    start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
+    rows = df.shape[0]
+    if start_header_idx > rows:
+        append_header = False
+
+    if start_header_idx <= rows and end_header_idx > rows:
+        end_header_idx = rows - 1
+
     # --- 核心逻辑修改：根据 append_header 决定如何切分数据 ---
     if append_header:
         # 当需要表头时，执行“包含首尾”逻辑
         try:
-            start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
             # Python iloc切片是“含头不含尾”，所以 B 需要 +1
             header_slice = slice(start_header_idx, end_header_idx + 1)
 
@@ -333,7 +340,7 @@ if __name__ == "__main__":
     # 定义测试参数
     test_cache_dir = "/Users/tju/Desktop/"
     test_file_name = "/Users/tju/Resources/docs/excel/test_excel_v2.xlsx"
-    test_header_rows = [2, 2]
+    test_header_rows = [15, 20]
     test_data_rows = 5
     test_append_header = True
 
