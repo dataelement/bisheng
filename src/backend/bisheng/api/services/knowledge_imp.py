@@ -593,6 +593,21 @@ def upload_preview_file_to_minio(original_file_path: str, preview_file_path: str
     return object_name
 
 
+def parse_document_title(title: str) -> str:
+    """
+    解析文档标题，去除特殊字符和多余空格
+    :param title: 文档标题
+    :return: 处理后的标题
+    """
+    # 去除思考模型的think标签内容
+    title = re.sub("<think>.*</think>", "", title, flags=re.S).strip()
+
+    # 去除md的代码块标记
+    if title.find('```') != -1:
+        title = '\n'.join(extract_code_blocks(title))
+    return title
+
+
 def read_chunk_text(
         input_file,
         file_name,
@@ -731,8 +746,7 @@ def read_chunk_text(
                 abstract_prompt=knowledge_llm.abstract_prompt,
             )
             # remove <think>.*</think> tag content
-            title = re.sub("<think>.*</think>", "", title, flags=re.S).strip()
-            one.metadata["title"] = title
+            one.metadata["title"] = parse_document_title(title)
         logger.info("file_extract_title=success timecost={}", time.time() - t)
 
     logger.info(f"start_split_text file_name={file_name}")
