@@ -602,9 +602,9 @@ def parse_document_title(title: str) -> str:
     # 去除思考模型的think标签内容
     title = re.sub("<think>.*</think>", "", title, flags=re.S).strip()
 
-    # 去除md的代码块标记
-    if title.find('```') != -1:
-        title = '\n'.join(extract_code_blocks(title))
+    # 如果有符合md 代码快的标记则去除代码块标记
+    if final_title := extract_code_blocks(title):
+        title = '\n'.join(final_title)
     return title
 
 
