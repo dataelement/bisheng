@@ -251,7 +251,8 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 异步解析一个入库成功的文件 """
     with logger.contextualize(trace_id=f'parse_file_{file_id}'):
-        logger.info("parse_knowledge_file_celery start file_id={}", file_id)
+        logger.info(
+            f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
         try:
             _parse_knowledge_file(file_id, preview_cache_key, callback_url)
         except Exception as e:

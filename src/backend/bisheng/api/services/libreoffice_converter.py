@@ -1,6 +1,7 @@
-import subprocess
 import os
-import shutil # For checking if the executable is in PATH
+import shutil  # For checking if the executable is in PATH
+import subprocess
+
 from loguru import logger
 
 
@@ -29,6 +30,7 @@ def get_libreoffice_path():
         if os.path.exists(path):
             return path
     return None
+
 
 def convert_doc_to_docx(input_doc_path, output_dir=None):
     """
@@ -73,9 +75,9 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
     # Check if libreoffice_exec is in PATH if it's not a full path
     soffice_path = get_libreoffice_path()
     if not soffice_path:
-        logger.debug("Error: LibreOffice (soffice) command not found. Please install LibreOffice and ensure it's in your PATH, or adjust 'get_libreoffice_path()'.")
+        logger.debug(
+            "Error: LibreOffice (soffice) command not found. Please install LibreOffice and ensure it's in your PATH, or adjust 'get_libreoffice_path()'.")
         return False
-
 
     # Construct the output .docx file path
     base_name = os.path.basename(input_doc_path)
@@ -84,18 +86,19 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
 
     command = [
         soffice_path,
-        '--headless',         # Run in headless mode (no GUI)
-        '--convert-to', 'docx', # Specify the output format
-        '--outdir', output_dir, # Specify the output directory
-        input_doc_path        # The input file
+        '--headless',  # Run in headless mode (no GUI)
+        '--convert-to', 'docx',  # Specify the output format
+        '--outdir', output_dir,  # Specify the output directory
+        input_doc_path  # The input file
     ]
 
     logger.debug(f"Executing command: {' '.join(command)}")
 
     try:
-        process = subprocess.run(command, check=True, capture_output=True, text=True, timeout=120) # 120 seconds timeout
+        process = subprocess.run(command, check=True, capture_output=True, text=True,
+                                 timeout=120)  # 120 seconds timeout
         logger.debug(f"LibreOffice STDOUT: {process.stdout}")
-        if process.stderr: # LibreOffice sometimes logger.debugs info to stderr even on success
+        if process.stderr:  # LibreOffice sometimes logger.debugs info to stderr even on success
             logger.debug(f"LibreOffice STDERR: {process.stderr}")
 
         # Check if the file was actually created
@@ -110,7 +113,8 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
         else:
             # This case should ideally not happen if subprocess.run didn't raise an error
             # and LibreOffice worked as expected.
-            logger.debug(f"Error: Conversion command seemed to succeed, but output file '{expected_file_in_outdir}' not found.")
+            logger.debug(
+                f"Error: Conversion command seemed to succeed, but output file '{expected_file_in_outdir}' not found.")
             logger.debug("Please check LibreOffice's behavior and output directory permissions.")
             return None
 
@@ -132,6 +136,7 @@ def convert_doc_to_docx(input_doc_path, output_dir=None):
         logger.debug(f"An unexpected error occurred during conversion of '{input_doc_path}': {e}")
         return None
 
+
 def convert_ppt_to_pdf(input_path, output_dir=None):
     """
     Converts .ppt or .pptx to PDF using LibreOffice soffice command.
@@ -151,7 +156,8 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
 
     soffice_path = get_libreoffice_path()
     if not soffice_path:
-        logger.debug("Error: LibreOffice (soffice) command not found. Please install LibreOffice and ensure it's in your PATH, or adjust 'get_libreoffice_path()'.")
+        logger.debug(
+            "Error: LibreOffice (soffice) command not found. Please install LibreOffice and ensure it's in your PATH, or adjust 'get_libreoffice_path()'.")
         return False
 
     if not output_dir:
@@ -178,23 +184,25 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
         logger.debug(f"Converting {input_path} to PDF using {soffice_path}...")
         # LibreOffice can sometimes be slow to start up and convert.
         # It may also not provide much stdout/stderr unless there's a significant error.
-        process = subprocess.run(command, capture_output=True, text=True, check=True, timeout=180) # 180 seconds timeout
+        process = subprocess.run(command, capture_output=True, text=True, check=True,
+                                 timeout=180)  # 180 seconds timeout
 
         if process.stdout:
-            logger.debug(f"soffice stdout: {process.stdout}") # Often empty on success
+            logger.debug(f"soffice stdout: {process.stdout}")  # Often empty on success
         if process.stderr:
-            logger.debug(f"soffice stderr: {process.stderr}") # Check for any warnings/errors
+            logger.debug(f"soffice stderr: {process.stderr}")  # Check for any warnings/errors
 
         if os.path.exists(expected_pdf_path):
             logger.debug(f"Successfully converted {input_path} to {expected_pdf_path}")
-            return True
+            return expected_pdf_path
         else:
             logger.debug(f"Conversion command ran, but output PDF not found at expected location: {expected_pdf_path}")
             logger.debug("Please check LibreOffice's behavior. Stdout/Stderr from above might provide clues.")
             return False
 
-    except FileNotFoundError: # Should be caught by get_libreoffice_path, but as a fallback
-        logger.debug(f"Error: {soffice_path} command not found. Please install LibreOffice and ensure it's in your PATH.")
+    except FileNotFoundError:  # Should be caught by get_libreoffice_path, but as a fallback
+        logger.debug(
+            f"Error: {soffice_path} command not found. Please install LibreOffice and ensure it's in your PATH.")
         return False
     except subprocess.CalledProcessError as e:
         logger.debug(f"Error during soffice conversion for {input_path}: {e}")
@@ -205,19 +213,18 @@ def convert_ppt_to_pdf(input_path, output_dir=None):
         # Check if the file was created anyway.
         if os.path.exists(expected_pdf_path):
             logger.debug(f"Warning: soffice returned an error code, but PDF was created at {expected_pdf_path}")
-            return True
+            return expected_pdf_path
         return False
     except subprocess.TimeoutExpired:
         logger.debug(f"Error: soffice conversion for {input_path} timed out.")
         # Check if the file was partially created or created despite timeout
         if os.path.exists(expected_pdf_path):
             logger.debug(f"Warning: soffice timed out, but PDF might have been created at {expected_pdf_path}")
-            return True
+            return expected_pdf_path
         return False
     except Exception as e:
         logger.debug(f"An unexpected error occurred with soffice for {input_path}: {e}")
         return False
-
 
 
 if __name__ == "__main__":
