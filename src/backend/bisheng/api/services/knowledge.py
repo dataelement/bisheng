@@ -418,13 +418,15 @@ class KnowledgeService(KnowledgeUtils):
         # 默认是源文件的地址
         file_share_url = file_path
         if file_ext == 'doc':
-            new_file_name = f"preview/{file_name.split('.')[0]}.docx"
+            file_share_url = ''
+            new_file_name = f"preview/{os.path.basename(filepath).split('.')[0]}.docx"
             if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
                 )
         elif file_ext in ['ppt', 'pptx']:
-            new_file_name = f"preview/{file_name.split('.')[0]}.pdf"
+            file_share_url = ''
+            new_file_name = f"preview/{os.path.basename(filepath).split('.')[0]}.pdf"
             if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
