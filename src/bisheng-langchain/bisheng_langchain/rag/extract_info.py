@@ -28,10 +28,10 @@ def extract_title(llm, text, max_length=7000, abstract_prompt: str = None) -> st
     """
     if abstract_prompt:
         updated_messages = [
-            SystemMessagePromptTemplate.from_template(updated_messages),
+            SystemMessagePromptTemplate.from_template(abstract_prompt),
             HumanMessagePromptTemplate.from_template(human_template),
         ]
-        updated_title_extract_prompt = ChatPromptTemplate.from_messages(messages)
+        updated_title_extract_prompt = ChatPromptTemplate.from_messages(updated_messages)
         chain = LLMChain(llm=llm, prompt=updated_title_extract_prompt)
     else:
         chain = LLMChain(llm=llm, prompt=title_extract_prompt)

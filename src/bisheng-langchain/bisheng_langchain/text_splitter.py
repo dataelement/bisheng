@@ -106,6 +106,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         self._separator_rule = separator_rule or ['after' for _ in range(4)]
         self.separator_rule = {one: self._separator_rule[index] for index, one in enumerate(separators)}
         self._is_separator_regex = is_separator_regex
+        self._chunk_overlap = kwargs.get('chunk_overlap', 0)
 
     def split_documents(self, documents: Iterable[Document]) -> List[Document]:
         texts, metadatas = [], []
@@ -165,6 +166,7 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
     ) -> List[Document]:
         """Create documents from a list of texts."""
         documents = []
+        prev_document = None
         for i, text in enumerate(texts):
             index = -1
             # metadata = copy.deepcopy(_metadatas[i])
@@ -215,7 +217,9 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 #         for elem in box_no_duplicates:
                 #             new_metadata['chunk_bboxes'].append(
                 #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
-
+                if prev_document and self._chunk_overlap > 0:
+                    chunk = f"{prev_document.page_content[-self._chunk_overlap:]}\n{chunk}"
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
+                prev_document = new_doc
                 documents.append(new_doc)
         return documents
