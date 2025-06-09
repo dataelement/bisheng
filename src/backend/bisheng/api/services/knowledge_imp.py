@@ -712,6 +712,7 @@ def read_chunk_text(
                     force_ocr=bool(force_ocr),
                     enable_formular=bool(enable_formula),
                     filter_page_header_footer=bool(filter_page_header_footer),
+                    knowledge_id=knowledge_id,
                 )
                 documents = loader.load()
                 parse_type = ParseType.ETL4LM.value
