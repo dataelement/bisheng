@@ -1,8 +1,6 @@
-import json
 import os
-import re
 
-from bisheng_langchain.rag.extract_info import extract_title
+from langchain_core.documents import Document
 
 from bisheng.api.services.md_from_docx import handler as docx_handler
 from bisheng.api.services.md_from_excel import handler as excel_handler
@@ -12,40 +10,26 @@ from bisheng.cache.utils import CACHE_DIR
 from bisheng.utils.minio_client import minio_client
 
 
-def combine_multiple_md_files_to_raw_texts(llm, path, abstract_prompt):
+def combine_multiple_md_files_to_raw_texts(path) -> (list[Document], list[Document]):
     """
     combine multiple md file to raw texts including meta-data list.
     Args:
-        llm: for extracting digest title
         path: the directory containing the md files.
+    Returns:
+        0: split raw texts, each text is a Document object.
+        1: a single Document object containing all the texts combined.
     """
 
     files = [f for f in os.listdir(path)]
     raw_texts = []
-    metadata_list = []
-    title = ""
-    index = 0
+    document = Document(page_content='', metadata={})
     for file_name in files:
         full_file_name = f"{path}/{file_name}"
         with open(full_file_name, "r", encoding="utf-8") as f:
             content = f.read()
-            if index == 0:
-                title = extract_title(
-                    llm=llm, text=content, abstract_prompt=abstract_prompt
-                )
-                title = re.sub("<think>.*</think>", "", title)
-            raw_texts.append(content)
-            metedata = {
-                "bbox": json.dumps({"chunk_bboxes": ""}),
-                "page": 0,
-                "source": file_name,
-                "title": title,
-                "chunk_index": index,
-                "extra": "",
-            }
-            metadata_list.append(metedata)
-            index += 1
-    return raw_texts, metadata_list, "local", []
+            document.page_content += content + "\n"
+            raw_texts.append(Document(page_content=content, metadata={}))
+    return raw_texts, [document]
 
 
 def convert_file_to_md(

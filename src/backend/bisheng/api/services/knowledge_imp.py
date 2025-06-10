@@ -15,7 +15,6 @@ from langchain_community.document_loaders import (
     BSHTMLLoader,
     PyPDFLoader,
     TextLoader,
-    UnstructuredMarkdownLoader,
     UnstructuredPowerPointLoader,
     UnstructuredWordDocumentLoader,
 )
@@ -64,7 +63,7 @@ filetype_load_map = {
     "txt": TextLoader,
     "pdf": PyPDFLoader,
     "html": BSHTMLLoader,
-    "md": UnstructuredMarkdownLoader,
+    "md": TextLoader,
     "docx": UnstructuredWordDocumentLoader,
     "pptx": UnstructuredPowerPointLoader,
 }
@@ -649,6 +648,7 @@ def read_chunk_text(
     parse_type = ParseType.UN_ETL4LM.value
     # excel 文件的处理单独出来
     partitions = []
+    texts = []
     etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", None)
     file_extension_name = file_name.split(".")[-1].lower()
 
@@ -670,11 +670,11 @@ def read_chunk_text(
             data_rows=excel_rule.slice_length,
             append_header=excel_rule.append_header,
         )
-        # skip following processes and return splited values.
-        return combine_multiple_md_files_to_raw_texts(llm=llm, path=md_files_path,
-                                                      abstract_prompt=knowledge_llm.abstract_prompt)
 
-    if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
+        # skip following processes and return splited values.
+        texts, documents = combine_multiple_md_files_to_raw_texts(path=md_files_path)
+
+    elif file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
 
         if file_extension_name == "doc":
             # convert doc to docx
@@ -749,8 +749,10 @@ def read_chunk_text(
             one.metadata["title"] = parse_document_title(title)
         logger.info("file_extract_title=success timecost={}", time.time() - t)
 
-    logger.info(f"start_split_text file_name={file_name}")
-    texts = text_splitter.split_documents(documents)
+    if file_extension_name not in ["xls", "xlsx", "csv"]:
+        logger.info(f"start_split_text file_name={file_name}")
+        texts = text_splitter.split_documents(documents)
+
     raw_texts = [t.page_content for t in texts]
     logger.info(f"start_process_metadata file_name={file_name}")
     metadatas = [
