@@ -93,6 +93,12 @@ export default function Files({ onPreview }) {
         })
     }, [datalist])
 
+    const splitRuleDesc = (el) => {
+        const suffix = el.file_name.split('.').pop().toUpperCase()
+        const excel_rule = JSON.parse(el.split_rule).excel_rule
+        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `每 ${excel_rule.slice_length} 行作为一个分段` : el.strategy[1].replace(/\n/g, '\\n')
+    }
+
     return <div className="relative">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
@@ -170,7 +176,7 @@ export default function Files({ onPreview }) {
                                             <div className="max-w-96 text-left break-all whitespace-normal">{el.strategy[1].replace(/\n/g, '\\n')}</div>
                                         </TooltipContent>
                                     </Tooltip>
-                                </TooltipProvider> : el.strategy[1].replace(/\n/g, '\\n')}
+                                </TooltipProvider> : splitRuleDesc(el)}
                             </TableCell>
                             <TableCell className="text-right">
                                 <Button variant="link" disabled={el.status !== 2} className="px-2 dark:disabled:opacity-80" onClick={() => onPreview(el.id)}>{t('view')}</Button>

@@ -50,6 +50,9 @@ export default function RuleFile({
                                 onChange={(e) => handleSettingChange('chunkSize', e.target.value)}
                                 placeholder={t('splitSizePlaceholder')}
                                 className="flex-1 min-w-[150px]"
+                                onBlur={(e) => {
+                                    !e.target.value && handleSettingChange('chunkSize', '1000');
+                                }}
                             />
                         </div>
 
@@ -67,6 +70,9 @@ export default function RuleFile({
                                 onChange={(e) => handleSettingChange('chunkOverlap', e.target.value)}
                                 placeholder={t('chunkOverlapPlaceholder')}
                                 className="flex-1 min-w-[150px]"
+                                onBlur={(e) => {
+                                    !e.target.value && handleSettingChange('chunkOverlap', '100');
+                                }}
                             />
                         </div>
                     </div>

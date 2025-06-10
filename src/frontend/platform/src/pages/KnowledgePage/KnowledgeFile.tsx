@@ -125,17 +125,17 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                     <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">{t('lib.description')}</label>
+                    <label htmlFor="name" className="bisheng-label">知识库描述</label>
                     <Textarea
                         id="desc"
                         ref={descRef}
-                        placeholder={t('lib.description')}
+                        placeholder="请输入知识库的描述"
                         rows={8}
                         className={`col-span-3 ${error.desc && 'border-red-400'}`}
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
+                    <label htmlFor="roleAndTasks" className="bisheng-label">知识库embedding模型选择</label>
                     {
                         modal && <Cascader
                             defaultValue={modal}
@@ -157,7 +157,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                     disabled={isSubmitting}
                 >
                     {isSubmitting && <LoadIcon className="mr-1" />}
-                    {t('create')}
+                    完成创建
                 </Button>
                 <Button
                     type="submit"

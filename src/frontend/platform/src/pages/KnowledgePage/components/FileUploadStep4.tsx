@@ -93,6 +93,8 @@ export default function FileUploadStep4({ data }) {
         if (files.length > 0 && files.every(f => f.progress === 'end')) {
             clearInterval(timerRef.current);
             setFinish(true);
+        } else {
+            setFinish(false);
         }
     }, [files]);
     console.log('fukes :>> ', data, files);
@@ -121,7 +123,7 @@ export default function FileUploadStep4({ data }) {
                     <Button onClick={() => navigate(-1)}>返回知识库</Button>
                 </div>
             </div>
-            <div className="w-96 pt-24">
+            {finish && <div className="w-96 pt-24">
                 <CardComponent
                     data={null}
                     type='assist'
@@ -129,7 +131,7 @@ export default function FileUploadStep4({ data }) {
                     description={(<p><p>文档解析完成后。使用预制的知识库问答模版建立智能体，并测试问答效果</p></p>)}
                     onClick={handleCreateFlow}
                 ></CardComponent>
-            </div>
+            </div>}
         </div>
     </div>
 };

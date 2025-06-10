@@ -53,6 +53,10 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
     const [open, setOpen] = useState(false)
     const modifyNotSavedRef = useRef(false)
+    const [textValue, setTextValue] = useState(value)
+    useEffect(() => {
+        open && setTextValue(value)
+    }, [value, open])
 
     const handleCancel = () => {
         if (modifyNotSavedRef.current) {
@@ -62,7 +66,7 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
                 onOk: (next) => {
                     next();
                     setOpen(false);
-                    onRestore()
+                    // onRestore()
                     modifyNotSavedRef.current = false
                 }
             })
@@ -70,20 +74,21 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
         setOpen(false);
     }
 
+
     return <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger>
             {children}
         </DialogTrigger>
-        <DialogContent close={false} className="sm:max-w-[625px] bg-background-login">
+        <DialogContent  className="sm:max-w-[625px] bg-background-login">
             <DialogHeader>
                 <DialogTitle>编辑提示词</DialogTitle>
             </DialogHeader>
             <div>
                 <Label className="bisheng-label">文档知识库摘要提示词</Label>
                 <Textarea
-                    value={value}
+                    value={textValue}
                     onChange={(e) => {
-                        onChange(e);
+                        setTextValue(e.target.value)
                         modifyNotSavedRef.current = true;
                     }}
                     className="mt-1"
@@ -96,6 +101,7 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
                     modifyNotSavedRef.current = false
                     onSave()
                     setOpen(false)
+                    onChange(textValue)
                 }}>
                     保存
                 </Button>
@@ -127,7 +133,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
                 sourceModelId: source_model_id,
                 extractModelId: extract_title_model_id,
                 qaSimilarModelId: qa_similar_model_id,
-                abstractPrompt: abstract_prompt || defalutPrompt
+                abstractPrompt: abstract_prompt ?? defalutPrompt
             })
             lastSaveFormDataRef.current = { ...config, abstract_prompt: abstract_prompt || defalutPrompt }
             setLoading(false)
@@ -212,7 +218,7 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
             <div className="absolute top-44 -right-28">
                 <PromptDialog
                     value={form.abstractPrompt}
-                    onChange={e => setForm({ ...form, abstractPrompt: e.target.value })}
+                    onChange={value => setForm({ ...form, abstractPrompt: value })}
                     onSave={handleSavePrompt}
                     onRestore={() => setForm({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
                 >
@@ -239,25 +245,21 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
 
 const defalutPrompt = `你是一名资深的“文档摘要专家”，能针对不同类型的文档（如报告、规章制度、合同、会议纪要、产品说明等）灵活调整摘要风格。
 接下来你会收到一篇文档的主要内容，请按以下流程进行处理，并以 JSON 输出，方便后续程序化使用：
-1. 文档识别（Type）  
-   – 判断并简要说明这是哪种类型的文档及其主要目的（如“这是产品功能说明，用于向用户介绍 X 功能”）。
+1. 总体概述（Summary）  
+   – 判断并简要说明这是哪种类型的文档，用 2～3 句话概括文档的核心内容和结论（例如“这是产品功能说明，用于向用户介绍 X 功能……”）。
 
 2. 关键信息（KeyInfo）  
-   – 列出 3～7 条最重要的信息或论点，每条 10～20 字。（如有“重要条款”“核心决策”“关键日期”“行动项”等都写入）
-
-3. 总体概述（Summary）  
-   – 用 2～4 句话概括文档的核心内容和结论。
+   – 列出 3 条最重要的信息或论点，每条 10～20 字。
 
 请严格按下面 JSON 模板输出（字段顺序和名称请保持一致）：
 
 \`\`\`json
-{
-  "Type": "文档类型及目的说明",
+{{
+  "Summary": "2～3句的总体概述……",
   "KeyInfo": [
     "要点1",
     "要点2",
     "要点3"
-  ],
-  "Summary": "两到四句的总体概述……"
-}
+  ]
+}}
 \`\`\``
