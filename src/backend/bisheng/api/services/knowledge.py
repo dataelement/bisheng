@@ -1040,9 +1040,7 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def get_file_share_url(
-            cls, request: Request, login_user: UserPayload, file_id: int
-    ) -> str:
+    def get_file_share_url(cls, file_id: int) -> str:
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
             raise NotFoundError.http_exception()
