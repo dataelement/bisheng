@@ -8,6 +8,17 @@ import math
 from pathlib import Path
 
 
+def remove_characters(s, chars_to_remove=["\n", "\r"]):
+    """
+    从字符串中移除指定的字符。
+    """
+    if not isinstance(s, str):
+        return s
+    for char in chars_to_remove:
+        s = s.replace(char, "")
+    return s.strip()
+
+
 def unmerge_and_read_sheet(sheet_obj):
     """
     读取 openpyxl 工作表对象，通过将合并区域左上角的值填充到该区域的所有单元格中来取消合并单元格，
@@ -50,7 +61,10 @@ def generate_markdown_table_string(
         for row_values in pre_separator_header:
             md_lines.append(
                 "| "
-                + " | ".join(str(v) if v is not None else "" for v in row_values)
+                + " | ".join(
+                    remove_characters(str(v)) if v is not None else ""
+                    for v in row_values
+                )
                 + " |"
             )
 
@@ -62,7 +76,10 @@ def generate_markdown_table_string(
         for row_values in post_separator_header:
             md_lines.append(
                 "| "
-                + " | ".join(str(v) if v is not None else "" for v in row_values)
+                + " | ".join(
+                    remove_characters(str(v)) if v is not None else ""
+                    for v in row_values
+                )
                 + " |"
             )
 
@@ -70,7 +87,9 @@ def generate_markdown_table_string(
     for row_values in data_rows_list_of_lists:
         md_lines.append(
             "| "
-            + " | ".join(str(v) if v is not None else "" for v in row_values)
+            + " | ".join(
+                remove_characters(str(v)) if v is not None else "" for v in row_values
+            )
             + " |"
         )
 
@@ -78,7 +97,12 @@ def generate_markdown_table_string(
 
 
 def process_dataframe_to_markdown_files(
-    df, source_name, num_header_rows, rows_per_markdown, output_dir, append_header=True
+    df,
+    sheet_index: str,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    append_header=True,
 ):
     """
     **FINAL VERSION**: 根据 append_header 正确定义数据区和表头区。
@@ -86,7 +110,7 @@ def process_dataframe_to_markdown_files(
     - append_header=False: 全部内容视为数据，表头为空，忽略 num_header_rows。
     """
     if df.empty:
-        logger.warning(f"  源 '{source_name}' 的数据DataFrame为空，跳过Markdown生成。")
+        logger.warning(f"  源 '{sheet_index}' 的数据DataFrame为空，跳过Markdown生成。")
         return
 
     num_columns = df.shape[1]
@@ -106,9 +130,9 @@ def process_dataframe_to_markdown_files(
             # Python iloc切片是“含头不含尾”，所以 B 需要 +1
             header_slice = slice(start_header_idx, end_header_idx + 1)
 
-            if not (0 <= start_header_idx <= end_header_idx < len(df)):
+            if not (0 <= start_header_idx <= end_header_idx <= len(df)):
                 logger.error(
-                    f"错误：源 '{source_name}' 的表头参数 [A, B] = [{start_header_idx}, {end_header_idx}] 无效。索引超出范围。跳过。"
+                    f"错误：源 '{sheet_index}' 的表头参数 [A, B] = [{start_header_idx}, {end_header_idx}] 无效。索引超出范围。跳过。"
                 )
                 return
 
@@ -118,7 +142,7 @@ def process_dataframe_to_markdown_files(
 
         except (IndexError, TypeError):
             logger.error(
-                f"错误：源 '{source_name}' 的表头参数 'num_header_rows' 格式不正确。应为 [A, B] 形式，例如 [2, 4]。跳过。"
+                f"错误：源 '{sheet_index}' 的表头参数 'num_header_rows' 格式不正确。应为 [A, B] 形式，例如 [2, 4]。跳过。"
             )
             return
     else:
@@ -134,7 +158,7 @@ def process_dataframe_to_markdown_files(
             markdown_content = generate_markdown_table_string(
                 header_rows_as_lists, [], num_columns
             )
-            file_name = f"{source_name}_header_only.md"
+            file_name = f"{str(sheet_index)[:4].ljust(4, '0')}.md"
             file_path = os.path.join(output_dir, file_name)
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
@@ -149,13 +173,6 @@ def process_dataframe_to_markdown_files(
     if num_files_to_create == 0 and num_data_rows_total > 0:
         num_files_to_create = 1
 
-    logger.debug(
-        f"  源 '{source_name}': 表头块行数: {len(header_rows_as_lists)}, 总数据行数: {num_data_rows_total}, 每文件数据行: {rows_per_markdown}"
-    )
-    logger.debug(
-        f"  将为源 '{source_name}' 创建 {num_files_to_create} 个Markdown文件。"
-    )
-
     for i in range(num_files_to_create):
         start_idx = i * rows_per_markdown
         end_idx = min(start_idx + rows_per_markdown, num_data_rows_total)
@@ -166,8 +183,7 @@ def process_dataframe_to_markdown_files(
             header_rows_as_lists, current_data_chunk_as_lists, num_columns
         )
 
-        part_name = f"part_{i + 1}" if num_files_to_create > 1 else "full"
-        file_name = f"{source_name}_{part_name}.md"
+        file_name = f"{sheet_index+str(i)[:4].ljust(4, '0')}.md"
         file_path = os.path.join(output_dir, file_name)
 
         try:
@@ -190,6 +206,7 @@ def excel_file_to_markdown(
         logger.debug(f"错误：无法加载Excel文件 '{excel_path}'。原因: {e}")
         return
 
+    sheet_index = 0
     for sheet_name in workbook.sheetnames:
         logger.debug(f"\n  正在处理Excel工作表：'{sheet_name}'...")
         sheet_obj = workbook[sheet_name]
@@ -208,12 +225,14 @@ def excel_file_to_markdown(
 
         process_dataframe_to_markdown_files(
             df,
-            sheet_name,
+            str(sheet_index),
             num_header_rows,
             rows_per_markdown,
             output_dir,
             append_header=append_header,
         )
+        sheet_index += 1
+
     if workbook:
         workbook.close()
     logger.debug(f"\nExcel文件 '{excel_path}' 处理完成。")
@@ -254,10 +273,9 @@ def csv_file_to_markdown(
         logger.debug(f"CSV文件 '{csv_path}' 为空或处理后为空，跳过。")
         return
 
-    csv_filename_base = os.path.splitext(os.path.basename(csv_path))[0]
     process_dataframe_to_markdown_files(
         df,
-        csv_filename_base,
+        "0",
         num_header_rows,
         rows_per_markdown,
         output_dir,
@@ -339,9 +357,9 @@ def handler(
 if __name__ == "__main__":
     # 定义测试参数
     test_cache_dir = "/Users/tju/Desktop/"
-    test_file_name = "/Users/tju/Resources/docs/excel/test_excel_v2.xlsx"
-    test_header_rows = [15, 20]
-    test_data_rows = 5
+    test_file_name = "/Users/tju/Desktop/ceshi.csv"
+    test_header_rows = [1, 2]
+    test_data_rows = 15
     test_append_header = True
 
     # Call the handler function with test parameters
