@@ -126,7 +126,7 @@ export default function RuleTable({
                   </div>
                   <span className="whitespace-nowrap text-gray-500">{t('segemnt')}</span>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                {cellGeneralConfig.append_header ? <div className="flex items-center gap-1 shrink-0">
                   <span className="whitespace-nowrap text-gray-500">{t('bonly')}</span>
                   <div className="relative">
                     <Input
@@ -150,7 +150,11 @@ export default function RuleTable({
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
                   </div>
                   <span className="whitespace-nowrap text-gray-500">{t('gauge')}</span>
+                </div> : <div className="flex items-center gap-2">
+                  <Checkbox disabled={true} />
+                  <Label className="text-sm"> {t("addHeader")} </Label>
                 </div>
+                }
               </div>
             </div>
             {/* splice rule */}
@@ -158,7 +162,7 @@ export default function RuleTable({
               <h3 className="text-md font-bold text-gray-800 text-left">
                 {t('splitMethod')}
               </h3>
-              <div className="relative mt-2 pr-2 overflow-y-auto max-h-[calc(100vh-500px)]">
+              <div className="relative mt-2 pr-2 overflow-y-auto max-h-[calc(100vh-298px)]">
                 <Accordion
                   type="single"
                   collapsible
@@ -170,7 +174,7 @@ export default function RuleTable({
                       <AccordionTrigger className="p-0 cursor-pointer relative overflow-hidden flex flex-row-reverse justify-between">
                         <p className="flex gap-2 p-2 items-center relative">
                           <FileIcon type='xls' className="size-[30px] min-w-8" />
-                          <span className="w-80 truncate text-left">{file.fileName}</span>
+                          <span className="w-80 truncate text-left">{file.fileName.slice(0, 15)}{file.fileName.length > 15 ? '...' : ''}</span>
                         </p>
                       </AccordionTrigger>
                       <AccordionContent className="flex flex-col gap-4 p-4">

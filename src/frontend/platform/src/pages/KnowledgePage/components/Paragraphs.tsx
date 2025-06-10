@@ -170,7 +170,7 @@ export default function Paragraphs({ fileId }) {
                     edit={isEditable}
                     fileId={paragraph.fileId}
                     chunkId={paragraph.chunkId}
-                    isUns={paragraph.isUns}
+                    isUns={paragraph.isUns || ['etl4lm', 'un_etl4lm'].includes(paragraph.parseType)}
                     parseType={paragraph.parseType}
                     onClose={() => setParagraph({ ...paragraph, show: false })}
                     onChange={(value) => refreshData((item) => item.metadata.chunk_index === paragraph.chunkId, { text: value })}

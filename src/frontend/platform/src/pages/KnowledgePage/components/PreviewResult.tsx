@@ -107,7 +107,6 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         })
         setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === chunkIndex ? { ...chunk, text } : chunk))
     }
-    console.log('chunks :>> ', chunks);
 
     return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-1/2' : 'w-full')}>
         {step === 3 && currentFile && < PreviewFile

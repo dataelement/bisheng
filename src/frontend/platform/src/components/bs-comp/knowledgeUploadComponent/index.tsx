@@ -111,6 +111,11 @@ const KnowledgeUploadComponent = ({
                 error: !result.file_path
             } : pros
         )))
+        
+        // 临时去重方式
+        successFilesRef.current = successFilesRef.current.filter((pros) => pros.id !== id)
+        failFilesRef.current = failFilesRef.current.filter((pros) => pros.id !== id)
+        
         result.file_path
             ? successFilesRef.current.push(result)
             : failFilesRef.current.push(result)

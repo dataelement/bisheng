@@ -33,9 +33,10 @@ export default function FilesUpload() {
     const handleSave = (_config) => {
         captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
             const _repeatFiles = res.filter(e => e.status === 3)
-           
+
             if (_repeatFiles.length) {
                 setRepeatFiles(_repeatFiles)
+                repeatCallBackRef.current = () => setCurrentStep(4)
                 // TODO 移动到第一步?
                 // } else if (failFiles.length) {
                 //     bsConfirm({
@@ -69,14 +70,23 @@ export default function FilesUpload() {
     // 默认配置保存
     const handleSaveByDefaultConfig = (_config) => {
         captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
-            message({ variant: 'success', description: "添加成功" })
-            navigate(-1)
+            const _repeatFiles = res.filter(e => e.status === 3)
+            if (_repeatFiles.length) {
+                setRepeatFiles(_repeatFiles)
+                repeatCallBackRef.current = () => navigate(-1)
+            } else {
+                message({ variant: 'success', description: "添加成功" })
+                navigate(-1)
+            }
         }))
     }
 
     // 重复文件列表
     const [repeatFiles, setRepeatFiles] = useState([])
-    // // 重试解析
+    const repeatCallBackRef = useRef(() => {
+        setCurrentStep(4)
+    })
+    // 重试解析
     const [retryLoad, setRetryLoad] = useState(false)
     const handleRetry = (objs) => {
         setRetryLoad(true)
@@ -93,7 +103,7 @@ export default function FilesUpload() {
             setRetryLoad(false)
             // onNext()
             message({ variant: 'success', description: t('addSuccess') });
-            setCurrentStep(4)
+            repeatCallBackRef.current()
         }))
     }
 
@@ -109,7 +119,7 @@ export default function FilesUpload() {
                 >
                     <ChevronLeft />
                 </Button>
-                <span className="text-foreground text-sm font-black pl-4">{t('back')}</span>
+                <span className="text-foreground text-sm font-black pl-4">返回知识库</span>
             </div>
             {/* 上方步进条 */}
             <StepProgress
@@ -159,7 +169,7 @@ export default function FilesUpload() {
                     ))}
                 </ul>
                 <DialogFooter>
-                    <Button className="h-8" variant="outline" onClick={() => { setRepeatFiles([]); setCurrentStep(4) }}>{t('keepOriginal')}</Button>
+                    <Button className="h-8" variant="outline" onClick={() => { setRepeatFiles([]); repeatCallBackRef.current() }}>{t('keepOriginal')}</Button>
                     <Button className="h-8" disabled={retryLoad} onClick={() => handleRetry(repeatFiles)}>
                         {retryLoad && <span className="loading loading-spinner loading-xs"></span>}{t('override')}
                     </Button>

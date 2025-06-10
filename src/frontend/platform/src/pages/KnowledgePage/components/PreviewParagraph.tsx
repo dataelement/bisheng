@@ -6,7 +6,7 @@ import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { cn } from "@/util/utils";
 import { debounce } from "lodash-es";
 import { CircleX, FileCode, LocateFixed } from "lucide-react";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import AceEditor from "react-ace";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
@@ -15,6 +15,7 @@ import remarkMath from 'remark-math';
 import Vditor from 'vditor';
 import 'vditor/dist/index.css';
 import useKnowledgeStore from "../useKnowledgeStore";
+import { locationContext } from "@/contexts/locationContext";
 
 export const MarkdownView = ({ noHead = false, data }) => {
     const text = useMemo(() =>
@@ -85,7 +86,7 @@ const AceEditorCom = ({ markdown, hidden, onChange, onBlur }) => {
 }
 
 // 预览编辑
-const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur }, ref) => {
+const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref) => {
     const vditorRef = useRef(null);
     const readyRef = useRef(false);
     const valurCacheRef = useRef('');
@@ -144,19 +145,21 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur }, ref) => {
             },
             // input: onChange, // 有延时
             blur: () => {
+                const value = vditorRef.current.getValue()
                 blurRef.current(
-                    vditorRef.current.getValue(),
+                    value,
                     () => {
                         // 还原
                         const processedMarkdown = defalutValue.replace(/^( {4,})/gm, '   ')
                         vditorRef.current.setValue(processedMarkdown);
                     }
                 );
+                onChange(value);
             },
         });
 
         return () => {
-            vditorRef.current.destroy();
+            vditorRef.current?.destroy();
         };
     }, []);
 
@@ -165,6 +168,8 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur }, ref) => {
 
 const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange }) => {
     const [edit, setEdit] = useState(false); // 编辑原始格式
+    const { appConfig } = useContext(locationContext)
+
     const [value, setValue] = useState(data.text) // 不支持动态更新,更新文本请重新创建该组件
     const setDebounceValue = useCallback(debounce((value) => {
         setValue(value)
@@ -208,7 +213,7 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange }) =>
                 <span>{data.text.length} 字符</span>
                 <div>
                     {
-                        fileSuffix === 'pdf' && <Tip content={"点击定位到原文件"} side={"top"}  >
+                        fileSuffix === 'pdf' && appConfig.enableEtl4lm && <Tip content={"点击定位到原文件"} side={"top"}  >
                             <Button
                                 size="icon"
                                 variant="ghost"
@@ -236,7 +241,7 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange }) =>
             </Tip>
         </div>
 
-        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onBlur={handleBlur} />
+        <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlur} />
         <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlur} />
     </div>
 }
@@ -268,17 +273,15 @@ export default function PreviewParagraph({ fileId, edit, fileSuffix, loading, ch
         return () => container.removeEventListener('scroll', handleScroll);
     }, [chunks.length]);
 
-    return <div
-        ref={containerRef}
-        className="w-full pt-3 pb-10 relative h-[calc(100vh-284px)] overflow-y-auto"
-        style={{ scrollbarWidth: 'thin' }}
-    >
+    return <div className="w-full pt-3 pb-10 relative ">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div className="">
+        <div ref={containerRef} className="h-[calc(100vh-284px)] overflow-y-auto"
+            style={{ scrollbarWidth: 'thin' }}
+        >
             <div className="space-y-6">
                 {chunks.slice(0, visibleItems).map((chunk) => (
                     edit

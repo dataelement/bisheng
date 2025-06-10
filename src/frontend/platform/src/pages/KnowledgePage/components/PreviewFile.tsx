@@ -1,11 +1,11 @@
 import FileView from "@/components/bs-comp/FileView";
 import { Info } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useKnowledgeStore from "../useKnowledgeStore";
+import DocxPreview from "./DocxFileViewer";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
-import DocxPreview from "./DocxFileViewer";
 
 /**
  * 
@@ -26,16 +26,17 @@ export default function PreviewFile({ file, partitions, chunks }
     //     '1-140-140-400-180': { text: '2222', type: 'Title', part_id: '1' },
     //     '1-240-240-400-330': { text: '3333', type: 'Title', part_id: '2' }
     // }
-    console.log('file :>> ', file);
 
     const [postion, setPostion] = useState([1, 0])
     const [labelsMap, setLabelsMap] = useState(new Map()) // {p-bbox: label}
+    const labelsMapRef = useRef(new Map())
     // 分段标注有变更
     const [labelChange, setLabelChange] = useState(false)
     useEffect(() => {
         setLabelChange(false)
         if (file.suffix !== 'pdf') {
             setSelectedBbox([])
+            labelsMapRef.current = new Map()
             return setLabelsMap(new Map())
         }
 
@@ -54,10 +55,12 @@ export default function PreviewFile({ file, partitions, chunks }
 
                 // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
                 if (isActive || !existing) {
+                    const obj = labelsMapRef.current.get(id);
                     labelsMap.set(id, {
                         id,
                         page: label.page,
                         label: label.bbox,
+                        // active: obj?.active !== false && isActive,
                         active: isActive,
                         txt: chunk.text
                     });
@@ -72,6 +75,7 @@ export default function PreviewFile({ file, partitions, chunks }
         });
 
         setLabelsMap(labelsMap)
+        labelsMapRef.current = labelsMap
     }, [file.suffix, chunks, selectedChunkIndex]);
 
     const pageLabels = useMemo(() => {
@@ -106,7 +110,6 @@ export default function PreviewFile({ file, partitions, chunks }
         activeLabels.forEach((item) => {
             // 记录当前chunk选中的bbox
 
-
             const label = newMap.get(item.id);
             if (label) {
                 newMap.set(item.id, { ...label, active: item.active });
@@ -116,6 +119,7 @@ export default function PreviewFile({ file, partitions, chunks }
         // 记录当前chunk选中的bbox
         setSelectedBbox(bbox)
 
+        labelsMapRef.current = newMap
         setLabelsMap(newMap);
         setLabelChange(true)
     }
@@ -126,6 +130,7 @@ export default function PreviewFile({ file, partitions, chunks }
             case 'pptx':
             case 'pdf':
                 return <FileView
+                    startIndex={0}
                     select={selectedChunkIndex !== -1}
                     fileUrl={file.filePath}
                     labels={pageLabels}
@@ -180,6 +185,7 @@ export default function PreviewFile({ file, partitions, chunks }
         })
         console.log('JSON. :>> ', JSON.stringify(str));
         setNeedCoverData({ index: selectedChunkIndex, txt: str })
+
     }
 
     if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null

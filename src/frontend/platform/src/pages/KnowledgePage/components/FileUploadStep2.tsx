@@ -8,6 +8,7 @@ import { useParams } from "react-router-dom";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
+import useKnowledgeStore from "../useKnowledgeStore";
 
 export interface FileItem {
     id: string;
@@ -36,6 +37,7 @@ const initialStrategies = [
 export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: IProps) {
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
+    const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
 
     const displayMode: DisplayModeType = useMemo(
         () => {
@@ -63,6 +65,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
     const handleNext = () => {
         const nextStep = step + 1
         if (step === 2) {
+            setSelectedChunkIndex(-1) // 清空选中块
             return onNext(nextStep);
         }
         //  合并配置
