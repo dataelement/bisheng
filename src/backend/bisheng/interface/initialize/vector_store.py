@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 from typing import Any, Callable, Dict, Type
@@ -244,7 +245,7 @@ def initial_elastic(class_object: Type[ElasticKeywordsSearch], params: dict, sea
     if not params.get('ssl_verify') and settings.get_vectors_conf().elasticsearch.ssl_verify:
         params['ssl_verify'] = settings.get_vectors_conf().elasticsearch.ssl_verify
     if isinstance(params.get('ssl_verify'), str):
-        params['ssl_verify'] = json.loads(params['ssl_verify'])
+        params['ssl_verify'] = ast.literal_eval(params['ssl_verify'])
 
     collection_id = params.pop('collection_id', '')
     if collection_id:
