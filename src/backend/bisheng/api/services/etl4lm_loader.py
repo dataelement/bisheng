@@ -81,8 +81,9 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
             cropped_image_file = crop_image(
                 pdf_image_file_name, item, cropped_image_base_dir
             )
-            result[item[
-                "element_id"]] = f"{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+            result[item["element_id"]] = (
+                f"{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+            )
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
 
@@ -154,20 +155,21 @@ class Etl4lmLoader(BasePDFLoader):
     """
 
     def __init__(
-            self,
-            file_name: str,
-            file_path: str,
-            unstructured_api_key: str = None,
-            unstructured_api_url: str = None,
-            force_ocr: bool = False,
-            enable_formular: bool = True,
-            filter_page_header_footer: bool = False,
-            ocr_sdk_url: str = None,
-            knowledge_id: int = None,
-            start: int = 0,
-            n: int = None,
-            verbose: bool = False,
-            kwargs: dict = {},
+        self,
+        file_name: str,
+        file_path: str,
+        unstructured_api_key: str = None,
+        unstructured_api_url: str = None,
+        force_ocr: bool = False,
+        enable_formular: bool = True,
+        filter_page_header_footer: bool = False,
+        ocr_sdk_url: str = None,
+        timeout: int = 60,
+        knowledge_id: int = None,
+        start: int = 0,
+        n: int = None,
+        verbose: bool = False,
+        kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
@@ -178,6 +180,7 @@ class Etl4lmLoader(BasePDFLoader):
         self.ocr_sdk_url = ocr_sdk_url
         self.headers = {"Content-Type": "application/json"}
         self.file_name = file_name
+        self.timemout = timeout
         self.start = start
         self.n = n
         self.extra_kwargs = kwargs
@@ -198,6 +201,7 @@ class Etl4lmLoader(BasePDFLoader):
             force_ocr=self.force_ocr,
             enable_formula=self.enable_formular,
             ocr_sdk_url=self.ocr_sdk_url,
+            timout=self.timemout,
             parameters=parameters,
         )
 
@@ -253,15 +257,15 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
     """The appropriate parser is automatically selected based on the file format and OCR is supported"""
 
     def __init__(
-            self,
-            file_name: str,
-            file_path: str,
-            unstructured_api_key: str = None,
-            unstructured_api_url: str = None,
-            start: int = 0,
-            n: int = None,
-            verbose: bool = False,
-            kwargs: dict = {},
+        self,
+        file_name: str,
+        file_path: str,
+        unstructured_api_key: str = None,
+        unstructured_api_url: str = None,
+        start: int = 0,
+        n: int = None,
+        verbose: bool = False,
+        kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
