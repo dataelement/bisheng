@@ -13,6 +13,8 @@ from PIL import Image
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
+from bisheng.utils.minio_client import minio_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +82,7 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
                 pdf_image_file_name, item, cropped_image_base_dir
             )
             result[item[
-                "element_id"]] = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+                "element_id"]] = f"{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
 
