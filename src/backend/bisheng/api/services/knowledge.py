@@ -1103,9 +1103,8 @@ class KnowledgeService(KnowledgeUtils):
         params = {
             "source_knowledge_id": knowledge.id,
             "target_id": target_knowlege.id,
-            "login_user": login_user,
+            "login_user_id": login_user.user_id,
         }
-        # file_worker.file_copy_celery.delay()
         cls.create_knowledge_hook(request, login_user, target_knowlege)
         file_worker.file_copy_celery.delay(params)
         return target_knowlege
