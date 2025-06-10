@@ -22,7 +22,7 @@ export default function FilesPage() {
                 {/* title */}
                 <Header />
                 <TabsList>
-                    <TabsTrigger value="file" className="rounded-xl">
+                    <TabsTrigger value="file">
                         {t('fileManagement')}
                     </TabsTrigger>
                     <TabsTrigger value="chunk">

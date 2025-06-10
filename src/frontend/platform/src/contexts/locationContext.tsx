@@ -65,7 +65,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [extraComponent, setExtraComponent] = useState(<></>);
   const [appConfig, setAppConfig] = useState<any>({
     libAccepts: [],
-    noFace: true
+    noFace: true,
   })
 
   const loadConfig = () => {
@@ -84,6 +84,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           noFace: !res.show_github_and_help,
           register: !!res.enable_registration,
           uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
+          enableEtl4lm: res.enable_etl4lm
         });
 
         // backend version

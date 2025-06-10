@@ -1014,7 +1014,7 @@
   }
 
   .bisheng-node {
-    @apply relative flex w-[332px] flex-col justify-center rounded-[20px] border-4 group-hover:shadow-sm
+    @apply relative flex w-[332px] flex-col justify-center rounded-[24px] border-4 group-hover:shadow-sm
   }
   .bisheng-node-top{
     @apply bg-[#EFF1F5] dark:bg-background rounded-t-[20px] px-3 py-1.5

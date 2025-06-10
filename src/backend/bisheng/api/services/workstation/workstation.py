@@ -37,7 +37,7 @@ class WorkStationService(BaseService):
 
     @classmethod
     def get_config(cls) -> WorkstationConfig | None:
-        """ 获取评测功能的默认模型配置 """
+        """ 获取工作台的默认配置 """
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         if config:
             ret = json.loads(config.value)
@@ -46,6 +46,11 @@ class WorkStationService(BaseService):
                 ret.assistantIcon.image = cls.get_logo_share_link(ret.assistantIcon.relative_path)
             if ret.sidebarIcon and ret.sidebarIcon.relative_path:
                 ret.sidebarIcon.image = cls.get_logo_share_link(ret.sidebarIcon.relative_path)
+
+            # 兼容旧的websearch配置
+            if ret.webSearch and not ret.webSearch.params:
+                ret.webSearch.tool = 'bing'
+                ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
             return ret
         return None
 

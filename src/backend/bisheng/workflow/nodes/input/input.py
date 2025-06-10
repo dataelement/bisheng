@@ -8,6 +8,7 @@ from loguru import logger
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
+from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
 from bisheng.workflow.nodes.base import BaseNode
@@ -149,6 +150,8 @@ class InputNode(BaseNode):
 
         file_id = md5_hash(f'{file_url}')
         filepath, file_name = file_download(file_url)
+        uuid_file_name = file_name.split(".")[0]
+        file_name = redis_client.get(uuid_file_name)
 
         # save original file path, because uns will convert file to pdf
         original_file_path = os.path.join(tempfile.gettempdir(), f'{file_id}.{file_name.split(".")[-1]}')
@@ -158,7 +161,7 @@ class InputNode(BaseNode):
         try:
             texts, metadatas, _, _ = read_chunk_text(filepath, file_name,
                                                      ['\n\n', '\n'],
-                                                     ['after', 'after'], 1000, 500)
+                                                     ['after', 'after'], 1000, 0)
             for metadata in metadatas:
                 metadata.update({
                     'file_id': file_id,

@@ -20,7 +20,7 @@ export default function Tip({
             <TooltipTrigger asChild={asChild}>{children}</TooltipTrigger>
 
             <TooltipContent
-                className={`${styleClasses} bg-popover text-sm shadow-md text-popover-foreground`}
+                className={`${styleClasses} text-sm shadow-md`}
                 side={side}
                 avoidCollisions={false}
                 sticky="always"

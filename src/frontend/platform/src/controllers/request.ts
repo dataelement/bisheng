@@ -52,7 +52,7 @@ customAxios.interceptors.response.use(function (response) {
         infoStr && location.reload()
         return Promise.reject('登录过期,请重新登录');
     }
-    if (error.code === "ERR_CANCELED") return Promise.reject(null);
+    if (error.code === "ERR_CANCELED") return Promise.reject(error);
     // app 弹窗
     toast({
         title: `${i18next.t('prompt')}`,

@@ -252,7 +252,14 @@
 	padding: 2px 4px !important;
 	word-break: break-all !important;
 }
-
+.file-vditor .vditor-reset{
+	font-size: 14px;
+	color: #6b7280;
+	padding: 0 !important;
+}
+.file-vditor .vditor-content{
+	min-height: 20px;
+}
 
 /* .react-flow.theme-attribution {
 	animation: scrollBackground 10s linear infinite;

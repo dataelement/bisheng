@@ -64,6 +64,10 @@ class ElemUnstructuredLoader(BasePDFLoader):
                  file_path: str,
                  unstructured_api_key: str = None,
                  unstructured_api_url: str = None,
+                 force_ocr: bool = False,
+                 enable_formular: bool = True,
+                 filter_page_header_footer: bool = False,
+                 ocr_sdk_url: str = None,
                  start: int = 0,
                  n: int = None,
                  verbose: bool = False,
@@ -71,6 +75,10 @@ class ElemUnstructuredLoader(BasePDFLoader):
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
         self.unstructured_api_key = unstructured_api_key
+        self.force_ocr = force_ocr
+        self.enable_formular = enable_formular
+        self.filter_page_header_footer = filter_page_header_footer
+        self.ocr_sdk_url = ocr_sdk_url,
         self.headers = {'Content-Type': 'application/json'}
         self.file_name = file_name
         self.start = start
@@ -84,9 +92,13 @@ class ElemUnstructuredLoader(BasePDFLoader):
         b64_data = base64.b64encode(open(self.file_path, 'rb').read()).decode()
         parameters = {'start': self.start, 'n': self.n}
         parameters.update(self.extra_kwargs)
+        # TODO: add filter_page_header_footer into payload when elt4llm is ready.
         payload = dict(filename=os.path.basename(self.file_name),
                        b64_data=[b64_data],
                        mode='partition',
+                       force_ocr=self.force_ocr,
+                       enable_formula=self.enable_formular,
+                       ocr_sdk_url=self.ocr_sdk_url,
                        parameters=parameters)
 
         resp = requests.post(self.unstructured_api_url, headers=self.headers, json=payload)

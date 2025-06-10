@@ -16,7 +16,7 @@ export function Toaster() {
         <ToastProvider>
             {toasts.map(function ({ id, title, description, action, ...props }) {
                 return (
-                    <Toast key={id} {...props} duration={2600}>
+                    <Toast key={id} {...props} duration={4000}>
                         <div className=" self-start">
                             <ToastIcon type={props.variant} />
                         </div>
