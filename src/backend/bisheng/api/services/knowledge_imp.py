@@ -531,14 +531,15 @@ def add_file_embedding(
     if preview_cache_key:
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
-    logger.info(f"upload_preview_file_to_minio file={db_file.id} file_name={db_file.file_name}")
     if db_file.file_name.endswith('.doc'):
-        preview_object_name = f'preview/{os.path.basename(filepath).rstrip(".doc")}.docx'
+        preview_object_name = f'preview/{os.path.basename(filepath).split(".")[0]}.docx'
+        logger.info(f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}")
         if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
             minio_client.copy_object(preview_object_name, f'preview/{db_file.id}.docx',
                                      minio_client.tmp_bucket, minio_client.bucket)
     elif db_file.file_name.endswith(('.ppt', '.pptx')):
-        preview_object_name = f'preview/{os.path.basename(filepath).rstrip(".doc")}.pdf'
+        preview_object_name = f'preview/{os.path.basename(filepath).split(".")[0]}.pdf'
+        logger.info(f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}")
         if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
             minio_client.copy_object(preview_object_name, f'preview/{db_file.id}.pdf',
                                      minio_client.tmp_bucket, minio_client.bucket)

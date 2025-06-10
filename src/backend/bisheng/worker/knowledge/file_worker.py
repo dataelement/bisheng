@@ -32,7 +32,7 @@ def file_copy_celery(param: json) -> str:
 
     source_knowledge_id = param.get("source_knowledge_id")
     target_id = param.get("target_id")
-    login_user = param.get("login_user")
+    login_user_id = param.get("login_user_id")
     logger.info(
         "file_copy_celery start source_id={} target_id={}",
         source_knowledge_id,
@@ -62,17 +62,17 @@ def file_copy_celery(param: json) -> str:
                         one,
                         source_knowledge,
                         target_knowledge,
-                        login_user.user_id,
+                        login_user_id,
                     )
                 except Exception as e:
                     logger.error(f"copy file error: {one.file_name} {e}")
 
         else:
-            qa: List[QAKnowledge] = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
+            files = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_id(
                 source_knowledge_id, page=page_num, page_size=page_size
             )
-            for one in qa:
-                copy_qa(one, source_knowledge, target_knowledge, login_user.user_id)
+            for one in files:
+                copy_qa(one, source_knowledge, target_knowledge, login_user_id)
         page_num += 1
         if not files or len(files) < page_size:
             break
@@ -288,7 +288,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
                       chunk_overlap=file_rule.chunk_overlap,
                       callback_url=callback_url,
                       extra_metadata=db_file.extra_meta,
-                      preview_cache_keys=preview_cache_key,
+                      preview_cache_keys=[preview_cache_key],
                       retain_images=file_rule.retain_images,
                       enable_formula=file_rule.enable_formula,
                       force_ocr=file_rule.force_ocr,

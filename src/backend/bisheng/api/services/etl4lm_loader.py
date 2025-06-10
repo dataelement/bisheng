@@ -13,7 +13,6 @@ from PIL import Image
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -80,18 +79,9 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
             cropped_image_file = crop_image(
                 pdf_image_file_name, item, cropped_image_base_dir
             )
-            if knowledge_id:
-                result[item["element_id"]] = (
-                    f"{knowledge_id}{doc_id}/{cropped_image_file}"
-                    # f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
-                )
-
-            else:
-                result[item["element_id"]] = (
-                    f"{cropped_image_base_dir}/{cropped_image_file}"
-                )
-    if knowledge_id:
-        put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
+            result[item[
+                "element_id"]] = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+    put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
 
 
@@ -118,8 +108,9 @@ def merge_partitions(file_name, partitions, knowledge_id=None):
     for part in partitions:
         label, text = part["type"], part["text"]
         extra_data = part["metadata"]["extra_data"]
-        if label == "Image" and knowledge_id:
+        if label == "Image":
             part["text"] = get_image_tag(pre_handle_results, part)
+            text = part["text"]
 
         if is_first_elem:
             f_text = text + "\n" if label == "Title" else text
@@ -161,20 +152,20 @@ class Etl4lmLoader(BasePDFLoader):
     """
 
     def __init__(
-        self,
-        file_name: str,
-        file_path: str,
-        unstructured_api_key: str = None,
-        unstructured_api_url: str = None,
-        force_ocr: bool = False,
-        enable_formular: bool = True,
-        filter_page_header_footer: bool = False,
-        ocr_sdk_url: str = None,
-        knowledge_id: int = None,
-        start: int = 0,
-        n: int = None,
-        verbose: bool = False,
-        kwargs: dict = {},
+            self,
+            file_name: str,
+            file_path: str,
+            unstructured_api_key: str = None,
+            unstructured_api_url: str = None,
+            force_ocr: bool = False,
+            enable_formular: bool = True,
+            filter_page_header_footer: bool = False,
+            ocr_sdk_url: str = None,
+            knowledge_id: int = None,
+            start: int = 0,
+            n: int = None,
+            verbose: bool = False,
+            kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
@@ -260,15 +251,15 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
     """The appropriate parser is automatically selected based on the file format and OCR is supported"""
 
     def __init__(
-        self,
-        file_name: str,
-        file_path: str,
-        unstructured_api_key: str = None,
-        unstructured_api_url: str = None,
-        start: int = 0,
-        n: int = None,
-        verbose: bool = False,
-        kwargs: dict = {},
+            self,
+            file_name: str,
+            file_path: str,
+            unstructured_api_key: str = None,
+            unstructured_api_url: str = None,
+            start: int = 0,
+            n: int = None,
+            verbose: bool = False,
+            kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
