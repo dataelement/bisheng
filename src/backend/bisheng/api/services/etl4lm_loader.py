@@ -155,21 +155,21 @@ class Etl4lmLoader(BasePDFLoader):
     """
 
     def __init__(
-        self,
-        file_name: str,
-        file_path: str,
-        unstructured_api_key: str = None,
-        unstructured_api_url: str = None,
-        force_ocr: bool = False,
-        enable_formular: bool = True,
-        filter_page_header_footer: bool = False,
-        ocr_sdk_url: str = None,
-        timeout: int = 60,
-        knowledge_id: int = None,
-        start: int = 0,
-        n: int = None,
-        verbose: bool = False,
-        kwargs: dict = {},
+            self,
+            file_name: str,
+            file_path: str,
+            unstructured_api_key: str = None,
+            unstructured_api_url: str = None,
+            force_ocr: bool = False,
+            enable_formular: bool = True,
+            filter_page_header_footer: bool = False,
+            ocr_sdk_url: str = None,
+            timeout: int = 60,
+            knowledge_id: int = None,
+            start: int = 0,
+            n: int = None,
+            verbose: bool = False,
+            kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
@@ -201,12 +201,11 @@ class Etl4lmLoader(BasePDFLoader):
             force_ocr=self.force_ocr,
             enable_formula=self.enable_formular,
             ocr_sdk_url=self.ocr_sdk_url,
-            timout=self.timemout,
             parameters=parameters,
         )
 
         resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload
+            self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
         )
         if resp.status_code != 200:
             raise Exception(
@@ -257,15 +256,15 @@ class ElemUnstructuredLoaderV0(BasePDFLoader):
     """The appropriate parser is automatically selected based on the file format and OCR is supported"""
 
     def __init__(
-        self,
-        file_name: str,
-        file_path: str,
-        unstructured_api_key: str = None,
-        unstructured_api_url: str = None,
-        start: int = 0,
-        n: int = None,
-        verbose: bool = False,
-        kwargs: dict = {},
+            self,
+            file_name: str,
+            file_path: str,
+            unstructured_api_key: str = None,
+            unstructured_api_url: str = None,
+            start: int = 0,
+            n: int = None,
+            verbose: bool = False,
+            kwargs: dict = {},
     ) -> None:
         """Initialize with a file path."""
         self.unstructured_api_url = unstructured_api_url
