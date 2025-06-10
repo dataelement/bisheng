@@ -1041,10 +1041,9 @@ class KnowledgeService(KnowledgeUtils):
         else:
             # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
             if file.file_name.endswith(".doc"):
-                download_url = cls.get_file_share_url_with_empty(file.object_name.replace(".doc", ".docx"))
+                download_url = cls.get_file_share_url_with_empty(f"preview/{file.id}.docx")
             elif file.file_name.endswith(('.ppt', '.pptx')):
-                download_url = cls.get_file_share_url_with_empty(
-                    file.object_name.replace(".ppt", ".pdf").replace(".pptx", ".pdf"))
+                download_url = cls.get_file_share_url_with_empty(f"preview/{file.id}.pdf")
             else:
                 download_url = cls.get_file_share_url_with_empty(file.object_name)
         return download_url
