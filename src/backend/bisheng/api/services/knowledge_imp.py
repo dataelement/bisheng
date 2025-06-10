@@ -750,7 +750,10 @@ def read_chunk_text(
             one.metadata["title"] = parse_document_title(title)
         logger.info("file_extract_title=success timecost={}", time.time() - t)
 
-    if file_extension_name not in ["xls", "xlsx", "csv"]:
+    if file_extension_name in ["xls", "xlsx", "csv"]:
+        for one in texts:
+            one.metadata['title'] = documents[0].metadata.get("title", "")
+    else:
         logger.info(f"start_split_text file_name={file_name}")
         texts = text_splitter.split_documents(documents)
 
