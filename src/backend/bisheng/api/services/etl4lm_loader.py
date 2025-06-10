@@ -13,6 +13,8 @@ from PIL import Image
 from langchain_community.docstore.document import Document
 from langchain_community.document_loaders.pdf import BasePDFLoader
 
+from bisheng.utils.minio_client import minio_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,8 +81,9 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
             cropped_image_file = crop_image(
                 pdf_image_file_name, item, cropped_image_base_dir
             )
-            result[item[
-                "element_id"]] = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+            result[item["element_id"]] = (
+                f"{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+            )
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
 
@@ -161,6 +164,7 @@ class Etl4lmLoader(BasePDFLoader):
             enable_formular: bool = True,
             filter_page_header_footer: bool = False,
             ocr_sdk_url: str = None,
+            timeout: int = 60,
             knowledge_id: int = None,
             start: int = 0,
             n: int = None,
@@ -176,6 +180,7 @@ class Etl4lmLoader(BasePDFLoader):
         self.ocr_sdk_url = ocr_sdk_url
         self.headers = {"Content-Type": "application/json"}
         self.file_name = file_name
+        self.timemout = timeout
         self.start = start
         self.n = n
         self.extra_kwargs = kwargs
@@ -200,7 +205,7 @@ class Etl4lmLoader(BasePDFLoader):
         )
 
         resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload
+            self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
         )
         if resp.status_code != 200:
             raise Exception(

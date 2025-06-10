@@ -1,14 +1,14 @@
 import asyncio
 import json
-from typing import Annotated, List
+from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Depends
+from fastapi import APIRouter, Body, HTTPException
 from sqlmodel import select
 
-from bisheng.api.services.user_service import get_login_user
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.v1.schemas import resp_200
 from bisheng.database.base import session_getter
-from bisheng.database.models.knowledge_file import KnowledgeFile
+from bisheng.database.models.knowledge_file import KnowledgeFileDao
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.utils.minio_client import MinioClient
 
@@ -38,7 +38,7 @@ async def get_answer_keyword(message_id: int):
 
 
 @router.post('/chunk', status_code=200)
-def get_original_file(*, message_id: Annotated[int, Body(embed=True)],
+def get_original_file(message_id: Annotated[int, Body(embed=True)],
                       keys: Annotated[str, Body(embed=True)]):
     # 获取命中的key
     with session_getter() as session:
@@ -50,9 +50,7 @@ def get_original_file(*, message_id: Annotated[int, Body(embed=True)],
 
     # chunk 的所有file
     file_ids = {chunk.file_id for chunk in chunks}
-    with session_getter() as session:
-        db_knowledge_files = session.exec(
-            select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+    db_knowledge_files = KnowledgeFileDao.get_file_by_ids(list(file_ids))
     id2file = {file.id: file for file in db_knowledge_files}
     # keywords
     keywords = keys.split(';') if keys else []
@@ -60,11 +58,13 @@ def get_original_file(*, message_id: Annotated[int, Body(embed=True)],
     minio_client = MinioClient()
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
+        if not file:
+            continue
         chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
         file_access = json.loads(chunk.meta_data).get('right', True)
         chunk_res['right'] = file_access
         if file_access and file:
-            chunk_res['source_url'] = minio_client.get_share_link(str(chunk.file_id))
+            chunk_res['source_url'] = KnowledgeService.get_file_share_url(file.id)
             chunk_res['original_url'] = minio_client.get_share_link(
                 file.object_name if file.object_name else str(file.id))
             chunk_res['source'] = file.file_name

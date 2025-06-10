@@ -112,14 +112,16 @@ class KnowledgeUtils:
 
     @classmethod
     def save_preview_cache(
-            cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
+        cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
     ):
         if mapping:
             for key, val in mapping.items():
                 mapping[key] = json.dumps(val, ensure_ascii=False)
             redis_client.hset(cache_key, mapping=mapping)
         else:
-            redis_client.hset(cache_key, key=chunk_index, value=json.dumps(value, ensure_ascii=False))
+            redis_client.hset(
+                cache_key, key=chunk_index, value=json.dumps(value, ensure_ascii=False)
+            )
 
     @classmethod
     def delete_preview_cache(cls, cache_key, chunk_index: int = None):
@@ -146,15 +148,17 @@ class KnowledgeUtils:
 
     @classmethod
     def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """ 获取文件图片在minio的存储目录 """
+        """获取文件图片在minio的存储目录"""
         if knowledge_id:
             return f"knowledge/images/{knowledge_id}/{doc_id}"
         else:
             return f"tmp/images/{doc_id}"
 
     @classmethod
-    def get_knowledge_file_preview_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """ 获取预览文件在minio的存储目录 比如pptx需要转为pdf doc需要转为docx"""
+    def get_knowledge_file_preview_dir(
+        cls, doc_id: str, knowledge_id: int = None
+    ) -> str:
+        """获取预览文件在minio的存储目录 比如pptx需要转为pdf doc需要转为docx"""
         if knowledge_id:
             return f"knowledge/preview/{knowledge_id}/{doc_id}"
         else:
@@ -176,19 +180,19 @@ def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
 
 def process_file_task(
-        knowledge: Knowledge,
-        db_files: List[KnowledgeFile],
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        callback_url: str = None,
-        extra_metadata: str = None,
-        preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+    knowledge: Knowledge,
+    db_files: List[KnowledgeFile],
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    callback_url: str = None,
+    extra_metadata: str = None,
+    preview_cache_keys: List[str] = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
 ):
     """处理知识文件任务"""
     try:
@@ -284,7 +288,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 
 def decide_vectorstores(
-        collection_name: str, vector_store: str, embedding: Embeddings
+    collection_name: str, vector_store: str, embedding: Embeddings
 ) -> VectorStore:
     """vector db"""
     param: dict = {"embedding": embedding}
@@ -329,22 +333,22 @@ def decide_knowledge_llm() -> Any:
 
 
 def addEmbedding(
-        collection_name: str,
-        index_name: str,
-        knowledge_id: int,
-        model: str,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        knowledge_files: List[KnowledgeFile],
-        callback: str = None,
-        extra_meta: str = None,
-        preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+    collection_name: str,
+    index_name: str,
+    knowledge_id: int,
+    model: str,
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    knowledge_files: List[KnowledgeFile],
+    callback: str = None,
+    extra_meta: str = None,
+    preview_cache_keys: List[str] = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
 ):
     """将文件加入到向量和es库内"""
 
@@ -410,21 +414,21 @@ def addEmbedding(
 
 
 def add_file_embedding(
-        vector_client,
-        es_client,
-        minio_client,
-        db_file: KnowledgeFile,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        extra_meta: str = None,
-        preview_cache_key: str = None,
-        knowledge_id: int = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+    vector_client,
+    es_client,
+    minio_client,
+    db_file: KnowledgeFile,
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    extra_meta: str = None,
+    preview_cache_key: str = None,
+    knowledge_id: int = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 0,
+    filter_page_header_footer: int = 0,
 ):
     # download original file
     logger.info(
@@ -531,26 +535,38 @@ def add_file_embedding(
     if preview_cache_key:
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
-    if db_file.file_name.endswith('.doc'):
+    if db_file.file_name.endswith(".doc"):
         preview_object_name = f'preview/{os.path.basename(filepath).split(".")[0]}.docx'
-        logger.info(f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}")
+        logger.info(
+            f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}"
+        )
         if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
-            minio_client.copy_object(preview_object_name, f'preview/{db_file.id}.docx',
-                                     minio_client.tmp_bucket, minio_client.bucket)
-    elif db_file.file_name.endswith(('.ppt', '.pptx')):
+            minio_client.copy_object(
+                preview_object_name,
+                f"preview/{db_file.id}.docx",
+                minio_client.tmp_bucket,
+                minio_client.bucket,
+            )
+    elif db_file.file_name.endswith((".ppt", ".pptx")):
         preview_object_name = f'preview/{os.path.basename(filepath).split(".")[0]}.pdf'
-        logger.info(f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}")
+        logger.info(
+            f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}"
+        )
         if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
-            minio_client.copy_object(preview_object_name, f'preview/{db_file.id}.pdf',
-                                     minio_client.tmp_bucket, minio_client.bucket)
+            minio_client.copy_object(
+                preview_object_name,
+                f"preview/{db_file.id}.pdf",
+                minio_client.tmp_bucket,
+                minio_client.bucket,
+            )
 
 
 def add_text_into_vector(
-        vector_client,
-        es_client,
-        db_file: KnowledgeFile,
-        texts: List[str],
-        metadatas: List[dict],
+    vector_client,
+    es_client,
+    db_file: KnowledgeFile,
+    texts: List[str],
+    metadatas: List[dict],
 ):
     logger.info(f"add_vectordb file={db_file.id} file_name={db_file.file_name}")
     # 存入milvus
@@ -574,16 +590,21 @@ def parse_partitions(partitions: List[Any]) -> Dict:
         for index, bbox in enumerate(bboxes):
             key = f"{pages[index]}-" + "-".join([str(int(one)) for one in bbox])
             if index == len(bboxes) - 1:
-                val = text[indexes[index][0]:]
+                val = text[indexes[index][0] :]
             else:
-                val = text[indexes[index][0]: indexes[index][1] + 1]
+                val = text[indexes[index][0] : indexes[index][1] + 1]
             res[key] = {"text": val, "type": part["type"], "part_id": part_index}
     return res
 
 
 def upload_preview_file_to_minio(original_file_path: str, preview_file_path: str):
-    if os.path.basename(original_file_path).split('.')[0] != os.path.basename(preview_file_path).split('.')[0]:
-        logger.error(f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}")
+    if (
+        os.path.basename(original_file_path).split(".")[0]
+        != os.path.basename(preview_file_path).split(".")[0]
+    ):
+        logger.error(
+            f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}"
+        )
     object_name = f"preview/{os.path.basename(preview_file_path)}"
     with open(preview_file_path, "rb") as file_obj:
         # 上传预览文件到minio
@@ -604,23 +625,23 @@ def parse_document_title(title: str) -> str:
 
     # 如果有符合md 代码快的标记则去除代码块标记
     if final_title := extract_code_blocks(title):
-        title = '\n'.join(final_title)
+        title = "\n".join(final_title)
     return title
 
 
 def read_chunk_text(
-        input_file,
-        file_name,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        knowledge_id: Optional[int] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 1,
-        filter_page_header_footer: int = 0,
-        excel_rule: ExcelRule = None,
+    input_file,
+    file_name,
+    separator: List[str],
+    separator_rule: List[str],
+    chunk_size: int,
+    chunk_overlap: int,
+    knowledge_id: Optional[int] = None,
+    retain_images: int = 1,
+    enable_formula: int = 1,
+    force_ocr: int = 1,
+    filter_page_header_footer: int = 0,
+    excel_rule: ExcelRule = None,
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -681,7 +702,9 @@ def read_chunk_text(
             # convert doc to docx
             input_file = convert_doc_to_docx(input_doc_path=input_file)
             if not input_file:
-                raise Exception(f"failed to convert {file_name} to docx, please check backend log")
+                raise Exception(
+                    f"failed to convert {file_name} to docx, please check backend log"
+                )
 
         md_file_name, local_image_dir, doc_id = convert_file_to_md(
             file_name=file_name, input_file_name=input_file, knowledge_id=knowledge_id
@@ -698,11 +721,11 @@ def read_chunk_text(
                 doc_id=doc_id,
             )
         # 将pptx转为预览文件存到
-        if file_extension_name in ['ppt', 'pptx']:
+        if file_extension_name in ["ppt", "pptx"]:
             ppt_pdf_path = convert_ppt_to_pdf(input_path=input_file)
             if ppt_pdf_path:
                 upload_preview_file_to_minio(input_file, ppt_pdf_path)
-        elif file_extension_name == 'doc':
+        elif file_extension_name == "doc":
             upload_preview_file_to_minio(input_file, input_file)
 
         # 沿用原来的方法处理md文件
@@ -722,6 +745,7 @@ def read_chunk_text(
                 ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
                 force_ocr=bool(force_ocr),
                 enable_formular=bool(enable_formula),
+                timeout=etl4lm_settings.get("timeout", 60),
                 filter_page_header_footer=bool(filter_page_header_footer),
                 knowledge_id=knowledge_id,
             )
@@ -750,7 +774,10 @@ def read_chunk_text(
             one.metadata["title"] = parse_document_title(title)
         logger.info("file_extract_title=success timecost={}", time.time() - t)
 
-    if file_extension_name not in ["xls", "xlsx", "csv"]:
+    if file_extension_name in ["xls", "xlsx", "csv"]:
+        for one in texts:
+            one.metadata['title'] = documents[0].metadata.get("title", "")
+    else:
         logger.info(f"start_split_text file_name={file_name}")
         texts = text_splitter.split_documents(documents)
 
@@ -776,7 +803,7 @@ def read_chunk_text(
 
 
 def text_knowledge(
-        db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
+    db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """使用text 导入knowledge"""
     embeddings = decide_embeddings(db_knowledge.model)
@@ -974,13 +1001,13 @@ def qa_status_change(qa_id: int, target_status: int):
 
 
 def list_qa_by_knowledge_id(
-        knowledge_id: int,
-        page_size: int = 10,
-        page_num: int = 1,
-        question: Optional[str] = None,
-        answer: Optional[str] = None,
-        keyword: Optional[str] = None,
-        status: Optional[int] = None,
+    knowledge_id: int,
+    page_size: int = 10,
+    page_num: int = 1,
+    question: Optional[str] = None,
+    answer: Optional[str] = None,
+    keyword: Optional[str] = None,
+    status: Optional[int] = None,
 ) -> List[QAKnowledge]:
     """获取知识库下的所有qa"""
     if not knowledge_id:
