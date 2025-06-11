@@ -549,7 +549,7 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description='文件路径')
-    excel_rule: Optional[ExcelRule] = Field(default={}, description="Excel rules")
+    excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
 
 
 # 知识库文件处理
