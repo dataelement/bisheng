@@ -116,7 +116,7 @@ def copy_normal(
         knowledge_new.object_name = target_source_file
 
         # 拷贝生成的pdf文件
-        if minio_client.object_exists(minio_client.bucket, source_file_pdf):
+        if minio_client.object_exists(minio_client.bucket, f"{source_file_pdf}"):
             minio_client.copy_object(source_file, f"{knowledge_new.id}")
 
         # 拷贝bbox文件
@@ -137,7 +137,7 @@ def copy_normal(
                 minio_client.copy_object(preview_file, target_preview_file)
 
     except Exception as e:
-        logger.error("copy_file_error file_id={} e={}", knowledge_new.id, str(e))
+        logger.exception(f"copy_file_error file_id={knowledge_new.id}")
         knowledge_new.remark = str(e)[:500]
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)

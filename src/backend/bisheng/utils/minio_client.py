@@ -180,6 +180,8 @@ class MinioClient:
         return file_url.replace(share_host, '')
 
     def object_exists(self, bucket_name, object_name, **kwargs):
+        if not object_name:
+            return False
         try:
             self.minio_client.stat_object(bucket_name, object_name, **kwargs)
             return True
