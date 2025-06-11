@@ -674,7 +674,7 @@ class KnowledgeService(KnowledgeUtils):
             db_file.status = KnowledgeFileStatus.FAILED.value
             return db_file
 
-        if file_extension_name in ['xls', 'xlsx', 'csv'] and not file_info.excel_rule:
+        if not file_info.excel_rule:
             file_info.excel_rule = ExcelRule()
         split_rule["excel_rule"] = file_info.excel_rule.model_dump()
         str_split_rule = json.dumps(split_rule)
