@@ -47,7 +47,7 @@ from bisheng.database.models.knowledge import (
     KnowledgeDao,
     KnowledgeRead,
     KnowledgeTypeEnum,
-    KnowledgeUpdate,
+    KnowledgeUpdate, KnowledgeState,
 )
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
@@ -430,16 +430,9 @@ class KnowledgeService(KnowledgeUtils):
 
         # 默认是源文件的地址
         file_share_url = file_path
-        if file_ext == 'doc':
+        if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
-            new_file_name = f"preview/{os.path.basename(filepath).split('.')[0]}.docx"
-            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
-                file_share_url = minio_client.get_share_link(
-                    new_file_name, minio_client.tmp_bucket
-                )
-        elif file_ext in ['ppt', 'pptx']:
-            file_share_url = ''
-            new_file_name = f"preview/{os.path.basename(filepath).split('.')[0]}.pdf"
+            new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(file_path)
             if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
@@ -603,7 +596,7 @@ class KnowledgeService(KnowledgeUtils):
 
             if file.object_name.startswith('tmp'):
                 # 把临时文件移动到正式目录
-                new_object_name = f"original/{file.id}.{file.object_name.split('.')[-1]}"
+                new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
                 minio_client.copy_object(file.object_name, new_object_name,
                                          bucket_name=minio_client.tmp_bucket,
                                          target_bucket_name=minio_client.bucket)
@@ -695,8 +688,7 @@ class KnowledgeService(KnowledgeUtils):
         )
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存
-        file_type = db_file.file_name.rsplit(".", 1)[-1]
-        db_file.object_name = f"original/{db_file.id}.{file_type}"
+        db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         res = minio_client.upload_minio(db_file.object_name, filepath)
         logger.info("upload_original_file path={} res={}", db_file.object_name, res)
         KnowledgeFileDao.update(db_file)
@@ -1050,10 +1042,9 @@ class KnowledgeService(KnowledgeUtils):
             download_url = minio_client.get_share_link(str(file_id))
         else:
             # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
-            if file.file_name.endswith(".doc"):
-                download_url = cls.get_file_share_url_with_empty(f"preview/{file.id}.docx")
-            elif file.file_name.endswith(('.ppt', '.pptx')):
-                download_url = cls.get_file_share_url_with_empty(f"preview/{file.id}.pdf")
+            if file.file_name.endswith(('.doc', '.ppt', '.pptx')):
+                preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(file.id, file.file_name)
+                download_url = cls.get_file_share_url_with_empty(preview_object_name)
             else:
                 download_url = cls.get_file_share_url_with_empty(file.object_name)
         return download_url
@@ -1096,7 +1087,7 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge: Knowledge,
     ) -> Any:
-        knowledge.state = 2
+        knowledge.state = KnowledgeState.COPYING.value
         KnowledgeDao.update_one(knowledge)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
@@ -1105,7 +1096,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["user_id"] = login_user.user_id
         knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
         knowldge_dict["name"] = f"{knowledge.name} 副本"
-        knowldge_dict["state"] = 0
+        knowldge_dict["state"] = KnowledgeState.COPYING.value
         knowledge_new = Knowledge(**knowldge_dict)
         target_knowlege = KnowledgeDao.insert_one(knowledge_new)
         # celery 还没ok

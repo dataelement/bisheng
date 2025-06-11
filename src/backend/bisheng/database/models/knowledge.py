@@ -2,21 +2,28 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Optional, Union
 
+from pydantic import BaseModel, field_validator
+from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
+from sqlmodel.sql.expression import Select, SelectOfScalar
+
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
-from pydantic import BaseModel, field_validator
-from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update, CHAR
-from sqlmodel.sql.expression import Select, SelectOfScalar
 
 
 class KnowledgeTypeEnum(Enum):
     QA = 1
     NORMAL = 0
     PRIVATE = 2
+
+
+class KnowledgeState(Enum):
+    UNPUBLISHED = 0
+    PUBLISHED = 1
+    COPYING = 2
 
 
 class KnowledgeBase(SQLModelSerializable):
@@ -27,7 +34,8 @@ class KnowledgeBase(SQLModelSerializable):
     model: Optional[str] = Field(default=None, index=False)
     collection_name: Optional[str] = Field(default=None, index=False)
     index_name: Optional[str] = Field(default=None, index=False)
-    state: Optional[int] = Field(index=False, default=1, description='0 为未发布，1 为已发布, 2 为复制中')
+    state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
+                                 description='0 为未发布，1 为已发布, 2 为复制中')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
