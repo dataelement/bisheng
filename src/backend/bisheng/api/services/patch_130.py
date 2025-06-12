@@ -8,9 +8,12 @@ from bisheng.api.services.md_from_html import handler as html_handler
 from bisheng.api.services.md_from_pptx import handler as pptx_handler
 from bisheng.cache.utils import CACHE_DIR
 from bisheng.utils.minio_client import minio_client
+from bisheng.api.services.md_post_processing import post_processing
 
 
-def combine_multiple_md_files_to_raw_texts(path) -> (list[Document], list[Document]):
+def combine_multiple_md_files_to_raw_texts(
+    path,
+) -> tuple[list[Document], list[Document]]:
     """
     combine multiple md file to raw texts including meta-data list.
     Args:
@@ -38,7 +41,8 @@ def convert_file_to_md(
     header_rows=[0, 1],
     data_rows=10,
     append_header=True,
-    knowledge_id: int = None,
+    knowledge_id=None,
+    retain_images=True,
 ):
     """
     处理文件转换的主函数。
@@ -52,11 +56,13 @@ def convert_file_to_md(
     """
     md_file_name = None
     local_image_dir = None
+    include_cache_dir = True
     doc_id = None
     if file_name.endswith(".docx") or file_name.endswith(".doc"):
         md_file_name, local_image_dir, doc_id = docx_handler(CACHE_DIR, input_file_name)
     elif file_name.endswith(".pptx") or file_name.endswith(".ppt"):
         md_file_name, local_image_dir, doc_id = pptx_handler(CACHE_DIR, input_file_name)
+        include_cache_dir = False
     elif (
         file_name.endswith(".xlsx")
         or file_name.endswith(".xls")
@@ -76,14 +82,27 @@ def convert_file_to_md(
             local_image_dir,
             doc_id,
         ) = html_handler(CACHE_DIR, input_file_name)
+        include_cache_dir = False
         # if not file_name.endswith("mhtml"):
         # local_image_dir = None
     return replace_image_url(
-        md_file_name, local_image_dir, doc_id, knowledge_id=knowledge_id
+        md_file_name,
+        local_image_dir,
+        doc_id,
+        include_cache_dir,
+        knowledge_id=knowledge_id,
+        retain_images=retain_images,
     )
 
 
-def replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id: int = None):
+def replace_image_url(
+    md_file_name,
+    local_image_dir,
+    doc_id,
+    include_cache_dir,
+    knowledge_id=None,
+    retain_images=True,
+):
     """
     Usage:
         user the same bucket as origin file located.
@@ -98,11 +117,16 @@ def replace_image_url(md_file_name, local_image_dir, doc_id, knowledge_id: int =
     from bisheng.api.services.knowledge_imp import KnowledgeUtils
 
     minio_image_path = f"/{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
+    url_for_replacement = local_image_dir
+    if not include_cache_dir:
+        url_for_replacement = doc_id
 
     if md_file_name and local_image_dir and doc_id:
         with open(md_file_name, "r", encoding="utf-8") as f:
             content = f.read()
-        content = content.replace(local_image_dir, minio_image_path)
+        content = content.replace(url_for_replacement, minio_image_path)
+
         with open(md_file_name, "w", encoding="utf-8") as f:
             f.write(content)
+    post_processing(md_file_name, retain_images)
     return md_file_name, local_image_dir, doc_id

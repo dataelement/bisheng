@@ -92,3 +92,21 @@ def handler(cache_dir, file_name):
         image_dir_name=local_image_dir,
     )
     return md_file_name, f"{local_image_dir}/media", doc_id
+
+
+if __name__ == "__main__":
+    # 定义测试参数
+    test_cache_dir = "/Users/tju/Desktop"
+    test_file_name = "/Users/tju/Resources/docs/docx/resume.docx"
+    # test_file_name = "/Users/tju/Resources/docs/docx/2307.09288.docx"
+
+    # 调用 handler 函数进行测试
+    md_file_name, image_dir, doc_id = handler(
+        cache_dir=test_cache_dir,
+        file_name=test_file_name,
+    )
+
+    # 输出结果
+    print(f"Markdown 文件路径: {md_file_name}")
+    print(f"图片目录路径: {image_dir}")
+    print(f"文档 ID: {doc_id}")
