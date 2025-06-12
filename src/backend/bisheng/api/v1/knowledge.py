@@ -67,7 +67,7 @@ async def preview_file_chunk(*,
             })
     except Exception as e:
         logger.exception('preview_file_chunk_error')
-        return resp_500(data="文档解析失败")
+        return resp_500(message="文档解析失败")
 
 
 @router.put('/preview')
