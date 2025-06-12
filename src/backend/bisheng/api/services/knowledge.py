@@ -422,6 +422,8 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule
         )
+        if len(texts) == 0:
+            raise ValueError("文件解析为空")
         res = []
         cache_map = {}
         for index, val in enumerate(texts):

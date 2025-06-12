@@ -65,7 +65,10 @@ async def preview_file_chunk(*,
                 'chunks': res,
                 'partitions': partitions
             })
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        # productor hope raise this tips
         logger.exception('preview_file_chunk_error')
         return resp_500(message="文档解析失败")
 
