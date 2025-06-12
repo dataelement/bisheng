@@ -151,7 +151,6 @@ def process_dataframe_to_markdown_files(
     append_header=True,
 ):
     """
-    **FINAL VERSION**: 根据 append_header 正确定义数据区和表头区。
     - append_header=True: 按 num_header_rows 分离表头和数据。
     - append_header=False: 全部内容视为数据，表头为空，忽略 num_header_rows。
     """
@@ -165,45 +164,38 @@ def process_dataframe_to_markdown_files(
     if rows == 0 or num_columns == 0:
         return
 
-    start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
-    if start_header_idx > rows:
-        append_header = False
-
-    if start_header_idx <= rows and end_header_idx > rows:
-        end_header_idx = rows - 1
+    header_block_df = pd.DataFrame()
 
     # --- 核心逻辑修改：根据 append_header 决定如何切分数据 ---
     if append_header:
-        # 当需要表头时，执行“包含首尾”逻辑
+        start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
+
+        # 根据用户规则处理表头索引越界问题
+        if start_header_idx >= rows:
+            logger.warning(f"  表头起始行 {start_header_idx} 超出总行数 {rows}。将使用第一行作为表头。")
+            start_header_idx, end_header_idx = 0, 0
+        elif end_header_idx >= rows:
+            logger.warning(f"  表头结束行 {end_header_idx} 超出总行数 {rows}。将截断至最后一行。")
+            end_header_idx = rows - 1
+        
+        # 确保索引合法
+        if start_header_idx < 0: start_header_idx = 0
+        if end_header_idx < start_header_idx: end_header_idx = start_header_idx
+
         try:
-            # Python iloc切片是“含头不含尾”，所以 B 需要 +1
             header_slice = slice(start_header_idx, end_header_idx + 1)
-
-            if not (0 <= start_header_idx <= end_header_idx <= len(df)):
-                logger.error(
-                    f"错误：源 '{sheet_index}' 的表头参数 [A, B] = [{start_header_idx}, {end_header_idx}] 无效。索引超出范围。跳过。"
-                )
-                return
-
             header_block_df = df.iloc[header_slice]
             data_block_df = df.drop(df.index[header_slice]).reset_index(drop=True)
             header_rows_as_lists = header_block_df.values.tolist()
-
-        except (IndexError, TypeError):
-            logger.error(
-                f"错误：源 '{sheet_index}' 的表头参数 'num_header_rows' 格式不正确。应为 [A, B] 形式，例如 [2, 4]。跳过。"
-            )
+        except Exception as e:
+            logger.error(f"  在源 '{sheet_index}' 中根据表头索引 [{start_header_idx}, {end_header_idx}] 切分数据时出错: {e}。跳过。")
             return
     else:
-        if not df.empty:
-            header_rows_as_lists = [df.iloc[0].values.tolist()]
-            data_block_df = df.iloc[1:].reset_index(drop=True)
-        else:
-            header_rows_as_lists = []
-            data_block_df = pd.DataFrame()
+        # 当 append_header 为 False 时，所有内容都视为数据，表头列表为空
+        header_rows_as_lists = []
+        data_block_df = df.reset_index(drop=True)
 
-    # --- 后续分页逻辑基于上面正确定义的 data_block_df 和 header_rows_as_lists ---
-
+    # --- 后续分页逻辑 ---
     if data_block_df.empty:
         if append_header and not header_block_df.empty:
             markdown_content = generate_markdown_table_string(
@@ -220,18 +212,23 @@ def process_dataframe_to_markdown_files(
         return
 
     num_data_rows_total = len(data_block_df)
-    num_files_to_create = math.ceil(num_data_rows_total / rows_per_markdown)
-    if num_files_to_create == 0 and num_data_rows_total > 0:
-        num_files_to_create = 1
+    num_files_to_create = math.ceil(num_data_rows_total / rows_per_markdown) if rows_per_markdown > 0 else (1 if num_data_rows_total > 0 else 0)
 
     for i in range(num_files_to_create):
         start_idx = i * rows_per_markdown
         end_idx = min(start_idx + rows_per_markdown, num_data_rows_total)
-        current_data_chunk_df = data_block_df.iloc[start_idx:end_idx]
-        current_data_chunk_as_lists = current_data_chunk_df.values.tolist()
+        current_data_chunk_as_lists = data_block_df.iloc[start_idx:end_idx].values.tolist()
+
+        final_header_for_chunk = header_rows_as_lists
+        final_data_for_chunk = current_data_chunk_as_lists
+
+        # 如果不附加真实表头，并且当前数据块不为空，则将数据的第一行用作“伪表头”以生成分隔符
+        if not append_header and current_data_chunk_as_lists:
+            final_header_for_chunk = [current_data_chunk_as_lists[0]]
+            final_data_for_chunk = current_data_chunk_as_lists[1:]
 
         markdown_content = generate_markdown_table_string(
-            header_rows_as_lists, current_data_chunk_as_lists, num_columns
+            final_header_for_chunk, final_data_for_chunk, num_columns
         )
 
         file_name = f"{sheet_index+str(i)[:4].ljust(4, '0')}.md"
@@ -241,7 +238,7 @@ def process_dataframe_to_markdown_files(
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
             logger.debug(
-                f"  已保存：'{file_path}' (含 {len(current_data_chunk_df)} 行数据)"
+                f"  已保存：'{file_path}' (含 {len(current_data_chunk_as_lists)} 行原始数据)"
             )
         except Exception as e:
             logger.debug(f"  保存文件 '{file_path}' 时出错: {e}")
@@ -410,15 +407,18 @@ if __name__ == "__main__":
     # 定义测试参数
     test_cache_dir = "/Users/tju/Desktop/"
     test_file_name = "/Users/tju/Resources/docs/excel/test_excel_v2.xlsx"
-    test_header_rows = [100, 100]
+    # 测试 append_header=True 且索引越界的情况
+    test_header_rows = [5, 6] # start_header_index 超出范围
     test_data_rows = 5
     test_append_header = True
 
-    # Call the handler function with test parameters
-    md_file_name, _, doc_id = handler(
+    # 调用 handler 函数
+    print("--- 测试场景: append_header=True, 表头索引越界 ---")
+    handler(
         cache_dir=test_cache_dir,
         file_name=test_file_name,
         header_rows=test_header_rows,
         data_rows=test_data_rows,
         append_header=test_append_header,
     )
+    
