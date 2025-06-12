@@ -5,7 +5,7 @@ from bisheng.api.v1 import (assistant_router, audit_router, chat_router, compone
                             report_router, server_router, skillcenter_router, tag_router,
                             user_router, validate_router, variable_router, workflow_router, promise_router,
                             operation_router, scheduled_task_router, model_fun_router,
-                            workstation_router)
+                            workstation_router, pack_router)
 from bisheng.api.v2 import (assistant_router_rpc, chat_router_rpc, flow_router,
                             knowledge_router_rpc, rpc_router_rpc, workflow_router_rpc, group_router_rpc,
                             workstation_router_rpc)
@@ -39,6 +39,7 @@ router.include_router(workstation_router)
 router.include_router(promise_router)
 router.include_router(scheduled_task_router)
 router.include_router(model_fun_router)
+router.include_router(pack_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)

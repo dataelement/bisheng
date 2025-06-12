@@ -276,6 +276,20 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_one_tool_type_exist_key(cls, tool_type_name: str) -> GptsToolsType:
+        """
+        获取某个工具类别的详细信息
+        """
+        with session_getter() as session:
+            statement = select(GptsToolsType).filter(
+                GptsToolsType.name == tool_type_name,
+                GptsToolsType.is_delete == 0,
+                GptsToolsType.api_key != "",
+                GptsToolsType.api_key.isnot(None)
+            )
+            return session.exec(statement).first()
+
+    @classmethod
     def insert_tool_type(cls, data: GptsToolsTypeRead) -> GptsToolsTypeRead:
         """
         新增工具类别 和对应的工具列表
