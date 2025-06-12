@@ -892,27 +892,33 @@ def text_knowledge(
 
 
 def delete_vector(collection_name: str, partition_key: str):
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-    if isinstance(vectore_client.col, Collection):
-        if partition_key:
-            pass
-        else:
-            res = vectore_client.col.drop(timeout=1)
-            logger.info("act=delete_milvus col={} res={}", collection_name, res)
+    try:
+        embeddings = FakeEmbedding()
+        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+        if isinstance(vectore_client.col, Collection):
+            if partition_key:
+                pass
+            else:
+                res = vectore_client.col.drop(timeout=1)
+                logger.info('act=delete_milvus col={} res={}', collection_name, res)
+    except Exception as e:
+        # 处理集合不存在或其他错误的情况
+        logger.warning(f'act=delete_milvus_failed col={collection_name} error={str(e)}')
+        # 即使出错也视为成功删除，因为目标是确保没有脏数据
 
 
 def delete_es(index_name: str):
-    embeddings = FakeEmbedding()
-    esvectore_client = decide_vectorstores(
-        index_name, "ElasticKeywordsSearch", embeddings
-    )
+    try:
+        embeddings = FakeEmbedding()
+        esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
-    if esvectore_client:
-        res = esvectore_client.client.indices.delete(
-            index=index_name, ignore=[400, 404]
-        )
-        logger.info(f"act=delete_es index={index_name} res={res}")
+        if esvectore_client:
+            res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+            logger.info(f'act=delete_es index={index_name} res={res}')
+    except Exception as e:
+        # 处理索引不存在或其他错误的情况
+        logger.warning(f'act=delete_es_failed index={index_name} error={str(e)}')
+        # 即使出错也视为成功删除，因为目标是确保没有脏数据
 
 
 def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
