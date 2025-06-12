@@ -7,10 +7,8 @@ import base64
 from urllib.parse import urljoin, urlparse
 from uuid import uuid4
 from loguru import logger
-from email import message_from_bytes
-from email.policy import default as default_policy
-import shutil  # Added for file copying
-from pathlib import Path  # Added for robust path handling
+import shutil
+from pathlib import Path
 
 # Configure logger
 
@@ -30,6 +28,7 @@ class HTML2MarkdownConverter:
         self.current_image_absolute_path = None
         self.current_video_absolute_path = None
         self.base_url = None
+        # mhtml_resources is kept for cid processing in case it's used by other parts, but parsing is removed.
         self.mhtml_resources = {}
         self.source_html_filepath = None
 
@@ -162,9 +161,7 @@ class HTML2MarkdownConverter:
                     logger.info(f"Data URI media saved to {absolute_filepath}")
                     return markdown_path, media_url
                 except Exception as e:
-                    logger.error(
-                        f"Failed to decode/save data URI media: {e}"
-                    )
+                    logger.error(f"Failed to decode/save data URI media: {e}")
                     return None, media_url
 
             actual_media_url_str = media_url
@@ -514,9 +511,7 @@ class HTML2MarkdownConverter:
                                 ].lower()
                                 if len(candidate_ext) <= 5 and candidate_ext.isalnum():
                                     ext_from_mhtml = candidate_ext
-                            unique_filename = (
-                                f"video_{uuid4().hex}.{ext_from_mhtml}"
-                            )
+                            unique_filename = f"video_{uuid4().hex}.{ext_from_mhtml}"
                             absolute_filepath = os.path.join(
                                 self.current_video_absolute_path, unique_filename
                             )
@@ -548,46 +543,16 @@ class HTML2MarkdownConverter:
                         else:
                             if "src" in video_tag.attrs:
                                 del video_tag["src"]
-            if (
-                not processed_source_successfully
-                and not video_tag.find_all("source", src=True)
-                and not video_tag.get("src")
-            ):
-                logger.warning(f"Video tag found with no downloadable sources.")
+
+            # If no video source was successfully processed, remove the entire video tag.
+            if not processed_source_successfully:
+                logger.warning(
+                    f"Decomposing video tag as no downloadable sources were found."
+                )
+                video_tag.decompose()
+
         logger.debug("Video processing finished.")
         return str(soup)
-
-    def _fetch_url_content(self, url):
-        try:
-            headers = {"User-Agent": USER_AGENT}
-            response = requests.get(
-                url, headers=headers, timeout=self.MEDIA_DOWNLOAD_TIMEOUT
-            )
-            response.raise_for_status()
-            html_text = None
-            try:
-                html_text = response.content.decode("utf-8")
-            except UnicodeDecodeError:
-                apparent_encoding = response.apparent_encoding
-                try:
-                    html_text = response.content.decode(apparent_encoding)
-                except (UnicodeDecodeError, TypeError) as e:
-                    html_text = response.text
-            if "text/html" not in response.headers.get("content-type", "").lower():
-                logger.warning(
-                    f"URL {url} may not be HTML. Content-Type: {response.headers.get('content-type')}"
-                )
-            return html_text
-        except requests.exceptions.Timeout:
-            return f"# 错误：请求超时\n\n请求 {url} 的响应时间过长。"
-        except requests.exceptions.ConnectionError:
-            return f"# 错误：连接失败\n\n无法连接到 {url}。"
-        except requests.exceptions.HTTPError as e:
-            return f"# 错误：获取 URL 失败 ({e.response.status_code})\n\n页面 {url} 返回错误：{e.response.reason}。"
-        except requests.exceptions.RequestException as e:
-            return (
-                f"# 错误：无法检索内容\n\n无法从 {url} 检索内容。\n\n详细信息：{str(e)}"
-            )
 
     def _cleanup_markdown(self, markdown_text):
         logger.debug("Starting Markdown cleanup.")
@@ -604,160 +569,43 @@ class HTML2MarkdownConverter:
         logger.debug("Markdown cleanup finished.")
         return markdown_text.strip()
 
-    def _parse_mhtml(self, mhtml_file_path):
-        logger.info(f"Parsing MHTML file: {mhtml_file_path}")
-        self.mhtml_resources = {}
-        try:
-            with open(mhtml_file_path, "rb") as f:
-                mhtml_bytes = f.read()
-            msg = message_from_bytes(mhtml_bytes, policy=default_policy)
-            html_content = None
-            start_cid = None
-            if msg.is_multipart() and msg.get_content_type() == "multipart/related":
-                start_param = msg.get_param("start", header="content-type")
-                if start_param:
-                    start_cid = start_param.strip("<>")
-            for part_idx, part in enumerate(msg.walk()):
-                content_type = part.get_content_type()
-                content_id_header = part.get("Content-ID")
-                content_location_header = part.get("Content-Location")
-                current_cid = None
-                if content_id_header:
-                    current_cid = content_id_header.strip("<>")
-                is_html_part = content_type == "text/html"
-                if html_content is None:
-                    if start_cid and current_cid == start_cid and is_html_part:
-                        html_content = part.get_payload(decode=True).decode(
-                            part.get_content_charset() or "utf-8", errors="replace"
-                        )
-                    elif (
-                        not start_cid
-                        and is_html_part
-                        and (
-                            not part.get_filename()
-                            or (
-                                content_location_header
-                                and urlparse(content_location_header).path.endswith(
-                                    (".htm", ".html")
-                                )
-                            )
-                        )
-                    ):
-                        html_content = part.get_payload(decode=True).decode(
-                            part.get_content_charset() or "utf-8", errors="replace"
-                        )
-                if current_cid and (
-                    any(
-                        content_type.startswith(p)
-                        for p in ["image/", "video/", "audio/"]
-                    )
-                    or part.get_filename()
-                ):
-                    try:
-                        resource_data = part.get_payload(decode=True)
-                        resource_filename = (
-                            part.get_filename()
-                            or f"{current_cid}.{content_type.split('/')[-1].split('+')[0]}"
-                        )
-                        self.mhtml_resources[current_cid] = (
-                            resource_data,
-                            resource_filename,
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Could not decode/store MHTML resource CID {current_cid}: {e}"
-                        )
-            if not html_content and start_cid:
-                for part in msg.walk():
-                    if (
-                        part.get_content_type() == "text/html"
-                        and not part.get_filename()
-                    ):
-                        html_content = part.get_payload(decode=True).decode(
-                            part.get_content_charset() or "utf-8", errors="replace"
-                        )
-                        break
-            if not html_content:
-                for part in msg.walk():
-                    if part.get_content_type() == "text/html":
-                        html_content = part.get_payload(decode=True).decode(
-                            part.get_content_charset() or "utf-8", errors="replace"
-                        )
-                        break
-            if not html_content:
-                return None, None
-            return html_content, None
-        except Exception as e:
-            self.mhtml_resources = {}
-            return None, None
-
-    def convert(self, source, source_type="url", output_filename_stem=None):
+    def convert(self, source, output_filename_stem=None):
         html_content = None
         self.base_url = None
         self.mhtml_resources = {}
         self.source_html_filepath = None
 
         if not output_filename_stem:
-            if source_type == "url":
-                parsed_url = urlparse(source)
-                host_part = parsed_url.netloc.replace(".", "_")
-                path_part = (
-                    parsed_url.path.strip("/").replace("/", "_").replace(".", "_")
-                )
-                stem = f"{host_part}_{path_part}" if path_part else host_part
-                stem = re.sub(r"[^a-zA-Z0-9_-]", "", stem)[:100]
-                output_filename_stem = (
-                    stem if stem else f"url_conversion_{uuid4().hex[:8]}"
-                )
-            else:
-                stem = os.path.splitext(os.path.basename(source))[0]
-                output_filename_stem = (
-                    stem if stem else f"file_conversion_{uuid4().hex[:8]}"
-                )
+            stem = os.path.splitext(os.path.basename(source))[0]
+            output_filename_stem = (
+                stem if stem else f"file_conversion_{uuid4().hex[:8]}"
+            )
 
         logger.info(
-            f"Starting conversion. Source: {source}, Type: {source_type}, Output stem: {output_filename_stem}"
+            f"Starting conversion. Source: {source}, Type: html_file, Output stem: {output_filename_stem}"
         )
 
-        if source_type == "url":
-            self.base_url = source
-            html_content = self._fetch_url_content(source)
-            if html_content and html_content.startswith(("# 错误：", "# Error:")):
-                error_md_path = os.path.join(
-                    self.output_dir, f"{output_filename_stem}_error.md"
-                )
-                try:
-                    with open(error_md_path, "w", encoding="utf-8") as f:
-                        f.write(html_content)
-                    return error_md_path
-                except IOError as e_io:
-                    return None
-        elif source_type == "html_file":
-            self.source_html_filepath = os.path.abspath(
-                source
-            )  # Store absolute path of source HTML
-            try:
-                with open(
-                    self.source_html_filepath, "r", encoding="utf-8", errors="replace"
-                ) as f:
-                    html_content = f.read()
-                self.base_url = (
-                    Path(self.source_html_filepath).parent.as_uri() + "/"
-                )  # file:///path/to/containing_directory/
-            except FileNotFoundError:
-                logger.error(f"HTML file not found: {source}")
-                return None
-            except IOError as e:
-                logger.error(f"Could not read HTML file {source}: {e}")
-                return None
-            except Exception as e:
-                logger.error(f"Unexpected error reading HTML file {source}: {e}")
-                return None
-        elif source_type == "mhtml_file":
-            html_content, self.base_url = self._parse_mhtml(source)
-        else:
-            logger.error(f"Invalid source type: {source_type}")
+        self.source_html_filepath = os.path.abspath(
+            source
+        )  # Store absolute path of source HTML
+        try:
+            with open(
+                self.source_html_filepath, "r", encoding="utf-8", errors="replace"
+            ) as f:
+                html_content = f.read()
+            self.base_url = (
+                Path(self.source_html_filepath).parent.as_uri() + "/"
+            )  # file:///path/to/containing_directory/
+        except FileNotFoundError:
+            logger.error(f"HTML file not found: {source}")
             return None
+        except IOError as e:
+            logger.error(f"Could not read HTML file {source}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error reading HTML file {source}: {e}")
+            return None
+
         if not html_content:
             logger.error(f"No HTML content to process from {source}.")
             return None
@@ -849,49 +697,19 @@ class HTML2MarkdownConverter:
             return None
 
 
-def mhtml_handler(file_path, file_name, converter):
-
-    if os.path.exists(file_path):
-        md_path_mhtml = converter.convert(
-            file_path, source_type="mhtml_file", output_filename_stem="test_mhtml"
-        )
-        if md_path_mhtml:
-            logger.debug(f"MHTML file converted to: {md_path_mhtml}")
-        else:
-            logger.warning(f"Failed to convert MHTML file: {file_path}")
-    else:
-        logger.warning(
-            f"\nTest MHTML file '{file_path}' not found. Skipping MHTML test."
-        )
-
-
-def url_handler(url, converter):
-    md_path_url = converter.convert(
-        url, source_type="url", output_filename_stem="url_test_sample"
-    )
-    if md_path_url:
-        logger.debug(f"URL converted to: {md_path_url}")
-    else:
-        logger.warning(f"Failed to convert URL: {url}")
-
-
 def html_handler(input_file_name, doc_id, converter):
     if os.path.exists(input_file_name):
         md_path_local_html = converter.convert(
             input_file_name,
-            source_type="html_file",
             output_filename_stem=doc_id,
         )
         if not md_path_local_html:
             logger.warning(f"Failed to convert local HTML: {input_file_name}")
     else:
-        logger.debug(
-            f"\nLocal HTML test file not found at '{input_file_name}'. Please set up the test case as described in the comments."
-        )
+        logger.debug(f"\nLocal HTML test file not found at '{input_file_name}'.")
 
 
 def handler(cache_dir, file_or_url: str):
-
     output_dir = f"{cache_dir}"
 
     converter = HTML2MarkdownConverter(
@@ -900,10 +718,25 @@ def handler(cache_dir, file_or_url: str):
     )
 
     doc_id = str(uuid4())
-    # if file_or_url.startswith("http://") or file_or_url.startswith("https://"):
-        # url_handler(file_or_url, converter)
-    if file_or_url.endswith(".mhtml"):
-        mhtml_handler(file_or_url, converter)
-    if file_or_url.endswith(".html") or file_or_url.endswith("htm"):
+
+    if file_or_url.endswith((".html", ".htm")):
         html_handler(file_or_url, doc_id, converter)
+    else:
+        logger.error(
+            f"Unsupported file type: {file_or_url}. Only .html and .htm files are supported."
+        )
+        return None, None, None
+
     return f"{cache_dir}/{doc_id}.md", f"{cache_dir}/{doc_id}", doc_id
+
+
+if __name__ == "__main__":
+
+    output_dir = "/Users/tju/Library/Caches/bisheng"
+    input_file = "/Users/tju/Resources/docs/html/f.html"
+
+    output_md, asset_dir, doc_id = handler(output_dir, input_file)
+    if output_md and os.path.exists(output_md):
+        print(f"Markdown saved to: {output_md}")
+    else:
+        print("Conversion failed.")

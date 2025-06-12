@@ -3,9 +3,55 @@ from loguru import logger
 import openpyxl
 from typing import List
 from uuid import uuid4
-import os
 import math
-from pathlib import Path
+import os
+import sys
+
+
+def xls_to_xlsx(xls_path):
+    if not xls_path.lower().endswith(".xls"):
+        print(f"错误: '{xls_path}' 不是 .xls 文件。", file=sys.stderr)
+        return None
+
+    if not os.path.exists(xls_path):
+        print(f"错误: 文件 '{xls_path}' 不存在。", file=sys.stderr)
+        return None
+
+    try:
+        xls_file = pd.ExcelFile(xls_path)
+        sheets_to_write = {}
+
+        # 2. 遍历所有工作表，检查是否为空，并将非空内容存入字典
+        print(f"正在读取: {xls_path}...")
+        for sheet_name in xls_file.sheet_names:
+            df = xls_file.parse(sheet_name)
+            # df.empty 会判断 DataFrame 是否无数据（行数为0）
+            if not df.empty:
+                print(f"  -> 发现非空工作表: '{sheet_name}'")
+                sheets_to_write[sheet_name] = df
+            else:
+                print(f"  -> 丢弃空工作表: '{sheet_name}'")
+
+        # 3. 如果没有任何非空工作表，则不创建新文件
+        if not sheets_to_write:
+            print(
+                f"提示: '{xls_path}' 中所有工作表都为空，已跳过创建新文件。\n",
+                file=sys.stderr,
+            )
+            return None
+
+        # 4. 如果存在非空工作表，则写入新文件
+        xlsx_path = os.path.splitext(xls_path)[0] + ".xlsx"
+        with pd.ExcelWriter(xlsx_path, engine="openpyxl") as writer:
+            for sheet_name, df in sheets_to_write.items():
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        print(f"成功转换为: {xlsx_path}\n")
+        return xlsx_path
+
+    except Exception as e:
+        print(f"转换文件 '{xls_path}' 时发生错误: {e}\n", file=sys.stderr)
+        return None
 
 
 def remove_characters(s, chars_to_remove=["\n", "\r"]):
@@ -114,9 +160,12 @@ def process_dataframe_to_markdown_files(
         return
 
     num_columns = df.shape[1]
+    rows = df.shape[0]
+
+    if rows == 0 or num_columns == 0:
+        return
 
     start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
-    rows = df.shape[0]
     if start_header_idx > rows:
         append_header = False
 
@@ -146,10 +195,12 @@ def process_dataframe_to_markdown_files(
             )
             return
     else:
-        # 当不需要表头时，整个DataFrame都是数据
-        header_block_df = pd.DataFrame()  # 表头块为空
-        data_block_df = df.copy()  # 数据块为全部内容
-        header_rows_as_lists = []  # 传递给生成器的表头为空列表
+        if not df.empty:
+            header_rows_as_lists = [df.iloc[0].values.tolist()]
+            data_block_df = df.iloc[1:].reset_index(drop=True)
+        else:
+            header_rows_as_lists = []
+            data_block_df = pd.DataFrame()
 
     # --- 后续分页逻辑基于上面正确定义的 data_block_df 和 header_rows_as_lists ---
 
@@ -218,7 +269,6 @@ def excel_file_to_markdown(
 
         df = pd.DataFrame(unmerged_data_list_of_lists)
         df.fillna("", inplace=True)
-
         if df.empty:
             logger.debug(f"  工作表 '{sheet_name}' 处理后为空DataFrame，跳过。")
             continue
@@ -306,6 +356,8 @@ def convert_file_to_markdown(
 
     _, file_extension = os.path.splitext(input_file_path)
     file_extension = file_extension.lower()
+    if file_extension == ".xls":
+        input_file_path = xls_to_xlsx(input_file_path)
 
     if file_extension in [".xlsx", ".xls"]:
         excel_file_to_markdown(
@@ -357,9 +409,9 @@ def handler(
 if __name__ == "__main__":
     # 定义测试参数
     test_cache_dir = "/Users/tju/Desktop/"
-    test_file_name = "/Users/tju/Desktop/ceshi.csv"
-    test_header_rows = [1, 2]
-    test_data_rows = 15
+    test_file_name = "/Users/tju/Resources/docs/excel/test_excel_v2.xlsx"
+    test_header_rows = [100, 100]
+    test_data_rows = 5
     test_append_header = True
 
     # Call the handler function with test parameters
