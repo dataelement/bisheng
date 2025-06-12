@@ -151,7 +151,6 @@ def process_dataframe_to_markdown_files(
     append_header=True,
 ):
     """
-    **FINAL VERSION**: 根据 append_header 正确定义数据区和表头区。
     - append_header=True: 按 num_header_rows 分离表头和数据。
     - append_header=False: 全部内容视为数据，表头为空，忽略 num_header_rows。
     """
