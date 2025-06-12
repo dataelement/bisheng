@@ -364,14 +364,27 @@ class KnowledgeService(KnowledgeUtils):
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
         """
-        获取上传文件的原始名称
+        通过uuid的文件名，获取上传文件的原始名称
         """
         if not file_name:
             raise ServerError.http_exception("file_name is empty")
         # 从redis内获取
         uuid_file_name = file_name.split(".")[0]
-        original_file_name = redis_client.get(uuid_file_name) or file_name
+        original_file_name = redis_client.get(f"file_name:{uuid_file_name}") or file_name
         return original_file_name
+
+    @classmethod
+    def save_upload_file_original_name(cls, original_file_name: str) -> str:
+        """
+        保存上传文件的原始名称到redis，生成一个uuid的文件名
+        """
+        if not original_file_name:
+            raise ServerError.http_exception("original_file_name is empty")
+        file_ext = original_file_name.split(".")[-1]
+        # 生成一个唯一的uuid作为key
+        uuid_file_name = generate_uuid()
+        redis_client.set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
+        return f"{uuid_file_name}.{file_ext}"
 
     @classmethod
     def get_preview_file_chunk(
@@ -422,6 +435,8 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule
         )
+        if len(texts) == 0:
+            raise ValueError("文件解析为空")
         res = []
         cache_map = {}
         for index, val in enumerate(texts):

@@ -129,7 +129,6 @@ def sort_and_filter_all_chunks(keywords, all_chunks, thr=0.0):
         chunk_match_score.append(match_score(chunk, keywords))
 
     sorted_res = sorted(enumerate(chunk_match_score), key=lambda x: -x[1])
-    print(sorted_res)
     remain_chunks = [all_chunks[elem[0]] for elem in sorted_res if elem[1] >= thr]
     if not remain_chunks:
         remain_chunks = [all_chunks[sorted_res[0][0]]]
