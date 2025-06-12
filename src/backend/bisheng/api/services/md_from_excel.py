@@ -166,19 +166,14 @@ def process_dataframe_to_markdown_files(
 
     header_block_df = pd.DataFrame()
 
-    # --- 核心逻辑修改：根据 append_header 决定如何切分数据 ---
     if append_header:
         start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
 
-        # 根据用户规则处理表头索引越界问题
         if start_header_idx >= rows:
-            logger.warning(f"  表头起始行 {start_header_idx} 超出总行数 {rows}。将使用第一行作为表头。")
             start_header_idx, end_header_idx = 0, 0
         elif end_header_idx >= rows:
-            logger.warning(f"  表头结束行 {end_header_idx} 超出总行数 {rows}。将截断至最后一行。")
             end_header_idx = rows - 1
         
-        # 确保索引合法
         if start_header_idx < 0: start_header_idx = 0
         if end_header_idx < start_header_idx: end_header_idx = start_header_idx
 
