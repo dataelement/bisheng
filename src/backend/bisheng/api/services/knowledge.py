@@ -447,7 +447,7 @@ class KnowledgeService(KnowledgeUtils):
         file_share_url = file_path
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
-            new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(file_path)
+            new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
