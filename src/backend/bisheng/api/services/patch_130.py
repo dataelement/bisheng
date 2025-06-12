@@ -25,14 +25,16 @@ def combine_multiple_md_files_to_raw_texts(
 
     files = sorted([f for f in os.listdir(path)])
     raw_texts = []
-    document = Document(page_content="", metadata={})
+    documents = []
     for file_name in files:
+        document = Document(page_content="", metadata={})
         full_file_name = f"{path}/{file_name}"
         with open(full_file_name, "r", encoding="utf-8") as f:
             content = f.read()
             document.page_content += content + "\n"
             raw_texts.append(Document(page_content=content, metadata={}))
-    return raw_texts, [document]
+            documents.append(document)
+    return raw_texts, documents
 
 
 def convert_file_to_md(
