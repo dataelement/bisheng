@@ -5,10 +5,13 @@ import { SearchIcon } from "../../bs-icons/search"
 import { cname, generateUUID } from "../utils"
 
 export interface InputProps
-    extends React.InputHTMLAttributes<HTMLInputElement> { }
+    extends React.InputHTMLAttributes<HTMLInputElement> {
+    boxClassName?: string;    // 外层容器的 className
+    showCount?: boolean;
+}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-    ({ className, boxClassName, type, maxLength, value, defaultValue, onChange, ...props }, ref) => {
+    ({ className, boxClassName, type, maxLength, showCount, value, defaultValue, onChange, ...props }, ref) => {
         // 用于存储当前的输入值
         const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
 
@@ -45,7 +48,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                     {...noEmptyProps}
                     {...props}
                 />
-                {maxLength && (
+                {showCount && maxLength && (
                     <div className="absolute right-1 bottom-1 text-xs text-gray-400 dark:text-gray-500">
                         {currentValue.length}/{maxLength}
                     </div>

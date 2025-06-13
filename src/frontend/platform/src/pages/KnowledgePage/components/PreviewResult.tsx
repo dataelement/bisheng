@@ -40,9 +40,10 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
     const currentFile = useMemo(() => {  // 当前选择文件
         return rules.fileList.find(file => file.id === selectId)
     }, [selectId, rules])
+    const [fileViewUrl, setFileViewUrl] = useState('') // 当前选择文件预览url
 
     const [loading, setLoading] = useState(false)
-    const prevPreviewCountRef = useRef(0)
+    const prevPreviewCountMapRef = useRef({})
     useEffect(() => {
         if (!selectId) return
         setLoading(true)
@@ -53,7 +54,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         captureAndAlertRequestErrorHoc(previewFileSplitApi({
             // 缓存(修改规则后需要清空缓存, 切换文件使用缓存)
             // previewCount变更时为重新预览分段操作,不使用缓存
-            cache: prevPreviewCountRef.current === previewCount,
+            cache: prevPreviewCountMapRef.current[currentFile.id] === previewCount,
             knowledge_id: id,
             file_list: [{
                 file_path: currentFile?.filePath,
@@ -70,7 +71,10 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             force_ocr: forceOcr,
             fileter_page_header_footer: pageHeaderFooter
 
-        })).then(res => {
+        }), (error) => {
+            setChunks([])
+        }).then(res => {
+            if (!res) return setLoading(false)
             console.log("previewFileSplitApi:", res)
             res && setChunks(res.chunks.map(chunk => ({
                 bbox: chunk.metadata.bbox,
@@ -80,11 +84,12 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             })))
             setSelectIdSyncChunks(selectId)
 
+            setFileViewUrl(res.file_url)
             setPartitions(res.partitions)
             setLoading(false)
         })
 
-        prevPreviewCountRef.current = previewCount
+        prevPreviewCountMapRef.current[currentFile.id] = previewCount
     }, [selectId, previewCount])
 
     const handleDelete = async (chunkIndex: number, text: string) => {
@@ -110,6 +115,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
 
     return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-1/2' : 'w-full')}>
         {step === 3 && currentFile && < PreviewFile
+            url={fileViewUrl}
             file={currentFile}
             chunks={chunks}
             partitions={partitions}
@@ -125,7 +131,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
                         {rules.fileList.map((file, index) => (
                             <SelectItem key={file.id} value={file.id}>
                                 <div className="flex items-center gap-2">
-                                    <FileIcon type={file.suffix} className="size-4" />
+                                    <FileIcon type={file.suffix} className="size-4 min-w-4" />
                                     {file.fileName}
                                 </div>
                             </SelectItem>
@@ -138,6 +144,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             <PreviewParagraph
                 fileId={syncChunksSelectId}
                 fileSuffix={currentFile?.suffix}
+                previewCount={previewCount}
                 edit={step === 3}
                 loading={loading}
                 chunks={chunks}

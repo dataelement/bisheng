@@ -125,7 +125,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             </div>
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.finetuneModelName')}</small>
-                <Input maxLength={50} className="max-w-[400px]" onChange={(e) => resultRef.current['model_name'] = e.target.value}></Input>
+                <Input maxLength={50} showCount className="max-w-[400px]" onChange={(e) => resultRef.current['model_name'] = e.target.value}></Input>
             </div>
         </div>
         {/* datas */}

@@ -47,6 +47,7 @@ export default function ReportItem({ nodeId, data, onChange, onValidate }) {
                 className={`mt-2 ${error && 'border-red-500'}`}
                 placeholder={data.placeholder}
                 maxLength={100}
+                showCount
                 onChange={(e) => {
                     setValue({ ...value, name: e.target.value });
                     onChange({
