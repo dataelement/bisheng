@@ -28,9 +28,13 @@ const ItemForm = ({ data, setData }) => {
           <Input
             type="number"
             min={1}
+            max={1000}
             value={data.slice_length}
             onChange={e => setData('slice_length', e.target.value)}
             className="w-28 h-8"
+            onBlur={(e) => {
+              !e.target.value && setData('slice_length', 15);
+            }}
           />
           <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
         </div>
@@ -53,8 +57,12 @@ const ItemForm = ({ data, setData }) => {
           <Input
             type="number"
             min={1}
+            max={1000}
             value={data.header_start_row}
             onChange={e => setData('header_start_row', e.target.value)}
+            onBlur={(e) => {
+              !e.target.value && setData('header_start_row', 1);
+            }}
             className="w-28 h-8"
           />
           <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
@@ -64,8 +72,12 @@ const ItemForm = ({ data, setData }) => {
           <Input
             type="number"
             min={1}
+            max={1000}
             value={data.header_end_row}
             onChange={e => setData('header_end_row', e.target.value)}
+            onBlur={(e) => {
+              !e.target.value && setData('header_end_row', 1);
+            }}
             className="w-28 h-8"
           />
           <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
@@ -171,7 +183,7 @@ export default function RuleTable({
                   {tableFils.map((file) => (
                     <AccordionItem key={file.id} value={file.id} className="border border-gray/80 rounded-xl mb-2 hover:border-primary hover:shadow-lg">
                       {/* 下拉触发按钮 */}
-                      <AccordionTrigger className="p-0 cursor-pointer relative overflow-hidden flex flex-row-reverse justify-between">
+                      <AccordionTrigger hoverable className="p-0 cursor-pointer relative overflow-hidden flex flex-row-reverse justify-between">
                         <p className="flex gap-2 p-2 items-center relative">
                           <FileIcon type='xls' className="size-[30px] min-w-8" />
                           <span className="w-80 truncate text-left">{file.fileName.slice(0, 15)}{file.fileName.length > 15 ? '...' : ''}</span>

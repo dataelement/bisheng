@@ -49,13 +49,13 @@ const TxtFileViewer = ({ html = false, markdown = false, filePath }) => {
     if (markdown) return <MarkdownView noHead data={{ text: content }} />
 
     if (html) return <iframe
-        className="w-full h-[500px] border"
+        className="w-full h-full border"
         srcDoc={content}  // 使用srcdoc直接嵌入HTML内容
         sandbox="allow-scripts"
     />
 
     return (
-        <div className="p-4 text-sm whitespace-pre-wrap bg-gray-50 rounded border border-gray-200 max-h-96 overflow-y-auto">
+        <div className="p-4 text-sm whitespace-pre-wrap bg-gray-50 rounded border border-gray-200 h-full overflow-y-auto">
             {content || <span className="text-gray-400">(Empty file)</span>}
         </div>
     );

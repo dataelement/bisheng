@@ -18,7 +18,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
     const handleFileChange = (files, failFiles) => {
         filesRef.current = files.map(file => ({
             ...file,
-            suffix: file.fileName.split('.').pop() || 'txt',
+            suffix: file.fileName.split('.').pop().toLowerCase() || 'txt',
             fileType: ['xlsx', 'xls', 'csv'].includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file',
             fileId: 0
         }))
@@ -56,7 +56,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
     return <div className={`relative h-full max-w-[1200px] mx-auto flex flex-col px-10 pt-4 ${hidden ? 'hidden' : ''}`}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
-            progressClassName='max-h-[calc(100vh-500px)]'
+            progressClassName='max-h-[460px]'
             onSelectFile={(count) => {
                 setFileCount(count)
                 setFinish(false)

@@ -447,7 +447,7 @@ class KnowledgeService(KnowledgeUtils):
         file_share_url = file_path
         if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
-            new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(file_path)
+            new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
@@ -676,6 +676,12 @@ class KnowledgeService(KnowledgeUtils):
         name_repeat = KnowledgeFileDao.get_file_by_condition(
             file_name=original_file_name, knowledge_id=knowledge.id
         )
+
+        if not file_info.excel_rule:
+            file_info.excel_rule = ExcelRule()
+        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
+        str_split_rule = json.dumps(split_rule)
+
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
             old_name = db_file.file_name
@@ -687,12 +693,9 @@ class KnowledgeService(KnowledgeUtils):
             with open(filepath, "rb") as file:
                 minio_client.upload_tmp(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
+            db_file.split_rule = str_split_rule
             return db_file
 
-        if not file_info.excel_rule:
-            file_info.excel_rule = ExcelRule()
-        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
-        str_split_rule = json.dumps(split_rule)
         # 插入新的数据，把原始文件上传到minio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,

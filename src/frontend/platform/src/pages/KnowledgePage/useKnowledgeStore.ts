@@ -10,6 +10,9 @@ interface KnowledgeStore {
     /** 选中的chunk index */
     selectedChunkIndex: number | null;
     setSelectedChunkIndex: (index: number | null) => void;
+    /** 选中的chunk距离因子 */
+    selectedChunkDistanceFactor: number;
+    setSelectedChunkDistanceFactor: () => void;
     /** 需要覆盖的数据 */
     needCoverData: { index: number, txt: string };
     setNeedCoverData: (data: { index: number, txt: string }) => void;
@@ -29,7 +32,9 @@ const useKnowledgeStore = create<KnowledgeStore>((set) => ({
     needCoverData: { index: -1, txt: '' },
     setNeedCoverData: (data) => set({ needCoverData: data }),
     selectedBbox: [],
-    setSelectedBbox: (data) => set({ selectedBbox: data })
+    setSelectedBbox: (data) => set({ selectedBbox: data }),
+    selectedChunkDistanceFactor: 0,
+    setSelectedChunkDistanceFactor: () => set({ selectedChunkDistanceFactor: Math.random() / 100 })
 }));
 
 export default useKnowledgeStore;

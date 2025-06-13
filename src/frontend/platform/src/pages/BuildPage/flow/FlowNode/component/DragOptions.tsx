@@ -161,6 +161,7 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
                             placeholder={t('inputOptionPlaceholder')} // 请输入选项展示文本
                             onChange={(e) => setInputValue(e.target.value)}
                             maxLength={50}
+                            showCount
                         />
                         <Button type="button" onClick={handleAddItem} className="flex-none">
                             {t('confirm')} {/* 确定 */}

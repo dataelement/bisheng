@@ -2,6 +2,7 @@ import { AppNumType, AppType } from "@/types/app";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
+import originAxios from "axios";
 import {
   APIClassType,
   BuildStatusTypeAPI,
@@ -237,8 +238,16 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
 /**
  * 查看文件切片
  */
+let cancelTokenSource = originAxios.CancelToken.source();
 export async function previewFileSplitApi(data) {
-  return await axios.post(`/api/v1/knowledge/preview`, data).then(res => {
+  // 取消之前的请求
+  cancelTokenSource.cancel('Operation canceled due to new request');
+
+  // 创建新的取消令牌
+  cancelTokenSource = originAxios.CancelToken.source();
+  return await axios.post(`/api/v1/knowledge/preview`, data, {
+    cancelToken: cancelTokenSource.token
+  }).then(res => {
     return res
   });
 }
@@ -805,6 +814,8 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
     const formData = new FormData();
     formData.append(fileKey, file);
 
+    let isFinished = false;
+
     const config = {
       headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
       onUploadProgress: (progressEvent) => {
@@ -812,12 +823,13 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
         const progress = Math.min(99.99, (loaded * 100) / total);
         console.log(`Upload progress: ${file.name} ${progress}%`);
         // UI with the progress information here
-        onProgress(progress)
+        !isFinished && onProgress(progress)
       },
       signal: abortCtlr.signal,
     }
     const response = await axios.post('/api/v1/knowledge/upload', formData, config);
     // 处理成功
+    isFinished = true;
     onFinish(response);
   } catch (error) {
     if (error?.code === "ERR_CANCELED") {

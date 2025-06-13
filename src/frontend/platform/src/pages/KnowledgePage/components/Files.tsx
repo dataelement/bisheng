@@ -22,6 +22,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
+import { truncateString } from "@/util/utils";
 
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
@@ -94,8 +95,10 @@ export default function Files({ onPreview }) {
     }, [datalist])
 
     const splitRuleDesc = (el) => {
+        if (!el.split_rule) return el.strategy[1].replace(/\n/g, '\\n') // 兼容历史数据
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
+        if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n') // 兼容历史数据
         return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? `每 ${excel_rule.slice_length} 行作为一个分段` : el.strategy[1].replace(/\n/g, '\\n')
     }
 
@@ -137,7 +140,7 @@ export default function Files({ onPreview }) {
                 <TableBody>
                     {dataSouce.map(el => (
                         <TableRow key={el.id}>
-                            <TableCell className="font-medium">{el.file_name}</TableCell>
+                            <TableCell className="font-medium">{truncateString(el.file_name, 35)}</TableCell>
                             <TableCell className="font-medium">
                                 {el.title?.length > 20 ? <TooltipProvider delayDuration={100}>
                                     <Tooltip>

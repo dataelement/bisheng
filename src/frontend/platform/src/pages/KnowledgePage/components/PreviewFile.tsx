@@ -14,10 +14,11 @@ import TxtFileViewer from "./TxtFileViewer";
  * 选中label -> 更新labelsMap
  * 覆盖chunk -> labelsMap + partitions = string -> store -> update markdown
  */
-export default function PreviewFile({ file, partitions, chunks }
+export default function PreviewFile({ url, file, partitions, chunks }
     : { file: any, partitions: Partition, chunks: any }) {
     const { t } = useTranslation('knowledge')
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
+    const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
     const setNeedCoverData = useKnowledgeStore((state) => state.setNeedCoverData);
     const setSelectedBbox = useKnowledgeStore((state) => state.setSelectedBbox);
     // test
@@ -78,6 +79,11 @@ export default function PreviewFile({ file, partitions, chunks }
         labelsMapRef.current = labelsMap
     }, [file.suffix, chunks, selectedChunkIndex]);
 
+    // 点击定位
+    useEffect(() => {
+        setPostion((p) => [p[0] + selectedChunkDistanceFactor, p[1]])
+    }, [selectedChunkDistanceFactor])
+
     const pageLabels = useMemo(() => {
         // 转换为按页面分组的对象
         return Array.from(labelsMap.values()).reduce((acc, item) => {
@@ -125,6 +131,7 @@ export default function PreviewFile({ file, partitions, chunks }
     }
 
     const render = (type) => {
+        if (!url) return <div className="flex justify-center items-center h-full text-gray-400">加载中...</div>
         switch (type) {
             case 'ppt':
             case 'pptx':
@@ -132,22 +139,23 @@ export default function PreviewFile({ file, partitions, chunks }
                 return <FileView
                     startIndex={0}
                     select={selectedChunkIndex !== -1}
-                    fileUrl={file.filePath}
+                    fileUrl={url}
                     labels={pageLabels}
                     scrollTo={postion}
                     onSelectLabel={handleSelectLabels}
                 // onPageChange={handlePageChange}
                 />
-            case 'txt': return <TxtFileViewer filePath={file.filePath} />
-            case 'md': return <TxtFileViewer markdown filePath={file.filePath} />
-            case 'html': return <TxtFileViewer html filePath={file.filePath} />
-            case 'docx': return <DocxPreview filePath={file.filePath} />
+            case 'txt': return <TxtFileViewer filePath={url} />
+            case 'md': return <TxtFileViewer markdown filePath={url} />
+            case 'html': return <TxtFileViewer html filePath={url} />
+            case 'doc':
+            case 'docx': return <DocxPreview filePath={url} />
             case 'png':
             case 'jpg':
             case 'jpeg':
             case 'bmp': return <img
                 className="border"
-                src={file.filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+                src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
             default:
                 return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
         }
@@ -191,7 +199,9 @@ export default function PreviewFile({ file, partitions, chunks }
     if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
 
 
-    return <div className="w-1/2">
+    return <div className="w-1/2" onClick={e => {
+        e.stopPropagation()
+    }}>
         <div className="flex justify-center items-center relative h-10 mb-2 text-sm">
             <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
                 <Info className='mr-1 text-red-500' size={14} />
