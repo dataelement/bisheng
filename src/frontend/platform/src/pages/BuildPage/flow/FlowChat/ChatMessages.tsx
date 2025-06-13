@@ -1,6 +1,6 @@
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal";
 import ThumbsMessage from "@/pages/ChatAppPage/components/ThumbsMessage";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 // import FileBs from "./FileBs";
 // import MessageBs from "./MessageBs";
@@ -9,7 +9,6 @@ import { useTranslation } from "react-i18next";
 // import RunLog from "./RunLog";
 // import Separator from "./Separator";
 import Separator from "@/components/bs-comp/chatComponent/Separator";
-import InputForm from "./InputForm";
 import MessageBs from "./MessageBs";
 import MessageBsChoose from "./MessageBsChoose";
 import MessageNodeRun from "./MessageNodeRun";
@@ -18,28 +17,92 @@ import MessageUser from "./MessageUser";
 
 export default function ChatMessages({
     debug,
+    operation = false,
+    audit = false,
     mark = false,
     logo,
     useName,
+    disableBtn = false,
     guideWord,
     loadMore,
-    onMarkClick = undefined
+    onMarkClick = undefined,
+    msgVNode,
+    flow
 }) {
     const { t } = useTranslation()
-    const { chatId, messages, inputForm } = useMessageStore()
+    const { chatId, messages, historyEnd, hisMessages, inputForm } = useMessageStore()
+
+    const [isViolation, setIsViolation] = useState(false);
+    const [keyword, setKeyword] = useState('');
+
+    // 用于目标消息定位
+    const scrollTimeoutRef = useRef(null);
+    // 仅第一次加载进行滚动
+    const [isFirstLoad, setIsFirstLoad] = useState(true);
 
     // 反馈
     const thumbRef = useRef(null)
-    // 溯
-    const sourceRef = useRef(null
-    )
+    // 溯源
+    const sourceRef = useRef(null)
+
     // 自动滚动
     const messagesRef = useRef(null)
     const scrollLockRef = useRef(false)
+
     useEffect(() => {
         scrollLockRef.current = false
         queryLockRef.current = false
     }, [chatId])
+
+    useEffect(() => {
+        // 只有审计和运营页面存在滚动过去的逻辑
+        if (!audit && !operation) return;
+        // 当前是否存在违规
+        const reviewStatus = localStorage.getItem('reviewStatus');
+        setIsViolation(reviewStatus === '3');
+        // 当前是否存在搜索关键词带入
+        let keyword = '';
+        if (audit) {
+            keyword = localStorage.getItem('auditKeyword');
+        }
+        if (operation) {
+            keyword = localStorage.getItem('operationKeyword');
+        }
+        setKeyword(keyword);
+    })
+
+    
+    useEffect(() => {
+        // 页面校验： 只有审计和运营页面存在滚动过去的逻辑
+        if (!audit && !operation) return;
+        // 逻辑校验： 只有第一次进入 同时消息列表有数据 才进行滚动
+        if (!isFirstLoad && !messages.length) return;
+        
+        if (keyword) {
+            const lastMsg = findKeywordMsg();
+            if (lastMsg) {
+                scrollToMessage(lastMsg);
+                setIsFirstLoad(false);
+            } else {
+                // 没加载完则进行加载
+                !historyEnd && loadMore();
+            }
+            return;
+        }
+        // 只有审核页面进行违规消息滚动
+        if (isViolation && audit) {
+            const lastViolation = findLastViolation();
+            if (lastViolation) {
+                scrollToMessage(lastViolation);
+                setIsFirstLoad(false);
+            } else {
+                // 没加载完则进行加载
+                !historyEnd && loadMore();
+            }
+            return;
+        }
+    }, [messages, isViolation, keyword, isFirstLoad])
+
     const lastScrollTimeRef = useRef(0); // 记录上次执行的时间戳
     useEffect(() => {
         if (scrollLockRef.current) return;
@@ -58,6 +121,46 @@ export default function ChatMessages({
         // 更新上次执行的时间戳
         lastScrollTimeRef.current = now;
     }, [messages]);
+    
+    /**
+     * 滚动到指定消息
+     * @param {Message} message
+     */
+    const scrollToMessage = useCallback((message) => {
+        console.log('目标滚动的msg', message);
+        if (!message) return;
+        
+        const element = document.getElementById(`msg-${message.id}`);
+        if (!element) return;
+        
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        element.classList.add('highlight-message');
+        
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+        
+        scrollTimeoutRef.current = setTimeout(() => {
+        element.classList.remove('highlight-message');
+        }, 2000);
+    }, []);
+        
+    /**
+     * 查找最后违规的消息id
+     * @returns {Message|null}
+     */
+    const findLastViolation = useCallback(() => {
+        const violationMessages = messagesList.filter(item => item.review_reason);
+        return violationMessages.pop();
+    }, [chatId, messages]);
+
+    const findKeywordMsg = useCallback(() => {
+        const lastHasKeywordMsg = messagesList.findLast(item =>
+            item.message?.msg?.includes?.(keyword) || 
+            item.message?.includes?.(keyword)
+        );
+        return lastHasKeywordMsg;
+    }, [keyword, messages])
 
     // 消息滚动加载
     const queryLockRef = useRef(false)
@@ -82,7 +185,7 @@ export default function ChatMessages({
 
         messagesRef.current?.addEventListener('scroll', handleScroll);
         return () => messagesRef.current?.removeEventListener('scroll', handleScroll)
-    }, [messagesRef.current, messages, chatId]);
+    }, [messagesRef.current, messages, chatId, isFirstLoad]);
 
     // const messagesList = [...hisMessages, ...messages]
     const messagesList = [...messages]
@@ -123,35 +226,90 @@ export default function ChatMessages({
                     case 'input':
                         return null
                     case 'question':
-                        return <MessageUser
-                            mark={mark}
-                            key={msg.message_id}
-                            useName={useName}
-                            data={msg}
-                            onMarkClick={() => { onMarkClick?.('question', msg.id, findQa(messagesList, index)) }}
-                        />;
+                        return <div
+                            id={`msg-${msg.id}`}
+                            key={msg.id}
+                            className="message-item">
+                            <MessageUser
+                                operation={operation}
+                                audit={audit}
+                                mark={mark}
+                                key={msg.message_id}
+                                useName={useName}
+                                data={msg}
+                                onMarkClick={() => { onMarkClick?.('question', msg.id, findQa(messagesList, index)) }}
+                            />
+                        </div>;
                     case 'guide_word':
                     case 'output_msg':
                     case 'stream_msg':
                     case "answer":
-                        return <MessageBs
-                            debug={debug}
-                            mark={mark}
-                            logo={logo}
-                            key={msg.message_id}
-                            data={msg}
-                            onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
-                            onSource={(data) => { sourceRef.current?.openModal(data) }}
-                            onMarkClick={() => onMarkClick?.('answer', msg.message_id, findQa(messagesList, index))}
-                        />;
+                        return <div
+                        id={`msg-${msg.id}`}
+                        key={msg.id}
+                        className="message-item">
+                            <MessageBs
+                                debug={debug}
+                                flow={flow}
+                                operation={operation}
+                                audit={audit}
+                                mark={mark}
+                                logo={logo}
+                                disableBtn={disableBtn}
+                                key={msg.message_id}
+                                data={msg}
+                                msgVNode={msgVNode}
+                                onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
+                                onSource={(data) => { sourceRef.current?.openModal(data) }}
+                                onMarkClick={() => onMarkClick?.('answer', msg.message_id, findQa(messagesList, index))}
+                            />
+                        </div>;
                     case 'separator':
-                        return <Separator key={msg.message_id} text={msg.message || t('chat.roundOver')} />;
+                        return <div
+                        id={`msg-${msg.id}`}
+                        key={msg.id}
+                        className="message-item">
+                            <Separator
+                                key={msg.message_id}
+                                text={msg.message || t('chat.roundOver')}
+                            />
+                        </div>;
                     case 'output_with_choose_msg':
-                        return <MessageBsChoose key={msg.message_id} data={msg} logo={logo} />;
+                        return <div
+                            id={`msg-${msg.id}`}
+                            key={msg.id}
+                            className="message-item">
+                                <MessageBsChoose
+                                    key={msg.message_id}
+                                    data={msg}
+                                    logo={logo}
+                                    flow={flow}
+                                />
+                            </div>;
                     case 'output_with_input_msg':
-                        return <MessageBsChoose type='input' key={msg.message_id} data={msg} logo={logo} />;
+                        return <div
+                            id={`msg-${msg.id}`}
+                            key={msg.id}
+                            className="message-item">
+                                <MessageBsChoose
+                                type='input'
+                                key={msg.message_id}
+                                data={msg}
+                                logo={logo}
+                                flow={flow}
+                                />
+                            </div>;
                     case 'node_run':
-                        return <MessageNodeRun key={msg.message_id} data={msg} />;
+                        return <div
+                            id={`msg-${msg.id}`}
+                            key={msg.id}
+                            className="message-item">
+                                <MessageNodeRun
+                                    key={msg.message_id}
+                                    data={msg}
+                                    flow={flow}
+                                />
+                            </div>;
                     default:
                         return <div className="text-sm mt-2 border rounded-md p-2" key={msg.message_id}>Unknown message type</div>;
                 }

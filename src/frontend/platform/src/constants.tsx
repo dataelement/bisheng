@@ -551,3 +551,18 @@ export const NOUNS: string[] = [
  *
  */
 export const USER_PROJECTS_HEADER = "My Collection";
+
+export const enum SourceType {
+  /** 无溯源 */
+  NONE = 0,
+  /** 文件 */
+  FILE = 1,
+  /** 无权限 */
+  NO_PERMISSION = 2,
+  /** 链接s */
+  LINK = 3,
+  /** 已命中的QA */
+  HAS_QA = 4,
+}
+
+export const KNOWLEDGE_ANALYSIS_FILE_TYPES = ['pdf', 'txt', 'docx', 'pptx', 'md', 'html', 'xls', 'xlsx', 'doc', 'ppt', 'png', 'jpg', 'jpeg', 'bmp'];

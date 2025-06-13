@@ -1,0 +1,23 @@
+/* 禁用工具栏按钮的默认样式 */
+.ql-file {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px 5px;
+}
+
+.ql-file:hover {
+  background: #f3f3f3;
+}
+
+/* 隐藏默认的文件输入 */
+input[type="file"].ql-file-input {
+  display: none !important;
+}
+
+/* 覆盖 Quill 默认样式 */
+.ql-editor .ql-bsfile {
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+}

@@ -36,6 +36,10 @@ export interface AssistantDetail {
     /** 知识库ID列表，为None则不更新 */
     knowledge_list?: { id: number, name: string, index_name: string }[];
     max_token: number;
+    /** 是否允许上传文件 整数型：1=开启，0=关闭 */
+    is_allow_upload: number;
+    /** 文件最大长度限制 */
+    file_max_size: number;
 }
 
 

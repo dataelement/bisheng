@@ -3,15 +3,19 @@ import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select"
 import { Check } from "lucide-react";
 import { useState } from "react";
 
+type FileType = 'file' | 'image' | 'audio';
+
+type FileTypes = FileType[];
+
 interface FileTypeSelectProps {
     data: {
         label: string;
-        value: 'all' | 'file' | 'image';
+        value: FileTypes;
     };
-    onChange: (value: 'all' | 'file' | 'image') => void;
+    onChange: (value: FileTypes) => void;
 }
 
-const options = [
+const options: { value: FileType, label: string }[] = [
     {
         label: '文档（pdf、txt、md、html、xls、xlsx、doc、docx、ppt、pptx）',
         value: 'file'
@@ -19,38 +23,41 @@ const options = [
     {
         label: '图片（png、jpg、jpeg、bmp）',
         value: 'image'
+    },
+    {
+        label: '音频（mp3）',
+        value: 'audio'
     }
 ];
 
 export default function FileTypeSelect({ data, onChange }: FileTypeSelectProps) {
-    const [type, setType] = useState(data.value)
-    const handleSelect = (clickedValue: 'file' | 'image') => {
-        let newValue: 'all' | 'file' | 'image' = type;
-
-        if (type === 'all') {
-            // 全选时点击某个类型：取消该类型，保留另一个
-            newValue = clickedValue === 'file' ? 'image' : 'file';
-        } else if (type !== clickedValue) {
-            // 点击已选中的唯一类型：切换回全选
-            newValue = 'all';
+    const [types, setTypes] = useState<FileTypes>(data.value)
+    const handleSelect = (clickedValue: FileType) => {
+        let newValue = types;
+        // 原来已存在 则移除
+        if (types.includes(clickedValue)) {
+            //只剩一项不允许删除
+            if (types.length === 1) return;
+            newValue = types.filter(item => item !== clickedValue);
         } else {
-            return
+            newValue = [...types, clickedValue];
         }
-        setType(newValue);
+        setTypes(newValue);
         onChange(newValue);
     };
 
     const getDisplayText = () => {
-        switch (type) {
-            case 'all': return '全部类型';
-            case 'file': return '文档';
-            case 'image': return '图片';
-            default: return '全部类型';
-        }
+        if (types.length === 3) return "全部类型";
+        const map = {
+            file: '文档',
+            image: '图片',
+            audio: '音频',
+        };
+        return types.map(item => map[item]).join('、');
     };
 
-    const isOptionSelected = (value: 'file' | 'image') => {
-        return type === 'all' || type === value;
+    const isOptionSelected = (value: 'file' | 'image' | 'audio') => {
+        return types.includes(value)
     };
 
     return (
@@ -68,7 +75,7 @@ export default function FileTypeSelect({ data, onChange }: FileTypeSelectProps) 
                             key={option.value}
                             data-focus={isOptionSelected(option.value)}
                             className="flex justify-between w-full select-none items-center mb-1 last:mb-0 rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                            onClick={() => handleSelect(option.value as 'file' | 'image')}
+                            onClick={() => handleSelect(option.value as FileType)}
                         >
                             <span className="w-64 overflow-hidden text-ellipsis">
                                 {option.label}

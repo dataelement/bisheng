@@ -37,6 +37,8 @@ import Report from "./pages/Report";
 import SystemPage from "./pages/SystemPage";
 import ResoucePage from "./pages/resoucePage";
 import { AppNumType } from "./types/app";
+import OperationPage from "./pages/OperationPage";
+import OperationAppChatDetail from "./pages/OperationPage/useAppLog/appChatDetail";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -87,6 +89,8 @@ const privateRouter = [
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail /> },
+      { path: "operation", element: <OperationPage />},
+      { path: "operation/chatLog/:fid/:cid/:type", element: <OperationAppChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },

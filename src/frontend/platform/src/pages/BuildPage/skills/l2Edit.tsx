@@ -19,12 +19,15 @@ import FormSet from "./FormSet";
 import Avator from "@/components/bs-ui/input/avator";
 import { SkillIcon } from "@/components/bs-icons";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
+import { SelectCommitment } from "@/pages/ChatAppPage/components/CommitmentDialog";
+import { getCommitmentApi, setCommitmentApi } from "@/controllers/API";
 
 export default function l2Edit() {
     const { t } = useTranslation()
 
     const { id, vid } = useParams()
     const { appConfig } = useContext(locationContext)
+    const [commitmentId, setCommitmentId] = useState<string>('');
     const { flow: nextFlow, setFlow, saveFlow } = useContext(TabsContext);
     const flow = useMemo(() => {
         return id ? nextFlow : null
@@ -47,6 +50,13 @@ export default function l2Edit() {
             setGuideWords(_flow.guide_word);
             setLogo(_flow.logo);
         });
+
+        // 承诺书
+        if (appConfig.securityCommitment) {
+            getCommitmentApi(id).then(res => {
+                setCommitmentId(res[0].promise_id);
+            })
+        }
     }, [id]);
 
 
@@ -91,6 +101,7 @@ export default function l2Edit() {
             navigate("/skill/" + newFlow.id, { replace: true }); // l3
             // 创建技能后在保存
             flowSettingSaveRef.current?.(newFlow.id)
+            appConfig.securityCommitment && setCommitmentApi(newFlow.id, commitmentId)
         }))
         setLoading(false)
     }
@@ -110,6 +121,7 @@ export default function l2Edit() {
         await saveFlow({ ...flow, name, description, guide_word: guideWords, logo })
         await updateVersion(vid, { data: flow.data })
         setLoading(false)
+        flow.status === 1 && appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId)
         navigate('/skill/' + id, { replace: true })
     }
 
@@ -130,6 +142,7 @@ export default function l2Edit() {
             });
             setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
         }
+        flow.status === 1 && appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId)
     }
 
     // 表单收缩
@@ -225,6 +238,11 @@ export default function l2Edit() {
                     }
                     {/* 表单设置 */}
                     {isForm && <FormSet ref={formRef} id={id} vid={vid}></FormSet>}
+                    {/* 承诺书 */}
+                    {appConfig.securityCommitment && <div className="mb-6">
+                        <label className="bisheng-label">承诺书:</label>
+                        <SelectCommitment value={commitmentId} onChange={setCommitmentId} />
+                    </div>}
                     {/* 安全审查 */}
                     {appConfig.isPro && <div>
                         <p className="text-center text-gray-400 mt-8 cursor-pointer flex justify-center" onClick={showContent}>

@@ -8,7 +8,7 @@ import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
-import { readTempsDatabase } from "@/controllers/API";
+import { getCommitmentApi, readTempsDatabase, setCommitmentApi } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant"; // 假设有对应的接口
 import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflow";
 // import { createWorkflowApi, getWorkflowApi, updateWorkflowApi } from "@/controllers/API/workflow"; // 假设有对应的接口
@@ -18,6 +18,7 @@ import { AppType } from "@/types/app";
 import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { SelectCommitment } from "../ChatAppPage/components/CommitmentDialog";
 
 type ModalProps = {};
 type ModalRef = {
@@ -38,9 +39,13 @@ const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
     const { t } = useTranslation('flow');
     const { appConfig } = useContext(locationContext)
     const securityRef = useRef<any>(null);
+    // 承诺书id
+    const [commitmentId, setCommitmentId] = useState<string>('');
 
     // 应用id (edit)
     const [appId, setAppId] = useState<string>('');
+    const onlineRef = useRef(false);
+
     // State for errors
     const [errors, setErrors] = useState<any>({});
 
@@ -76,6 +81,13 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             setOpen(true);
             tempDataRef.current = null;
             setAppId(flow.id);
+            onlineRef.current = flow.status === 2
+            // 承诺书
+            if (appConfig.securityCommitment) {
+                getCommitmentApi(flow.id).then(res => {
+                    setCommitmentId(res.length ? res[0].promise_id : '');
+                })
+            }
         },
     }));
 
@@ -151,6 +163,8 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             // 编辑
             setLoading(false);
             setOpen(false);
+
+            !onlineRef.current && appConfig.securityCommitment && setCommitmentApi(appId, commitmentId)
             // 修改成功
             return onSave({
                 name: formData.name,
@@ -169,12 +183,14 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     await copyReportTemplate(node.data)
                 }
                 const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current))
+                appConfig.securityCommitment && setCommitmentApi(res.id, commitmentId)
                 if (res) navigate('/flow/' + res.id)
             }
         } else {
             // 创建
             if (appType === AppType.ASSISTANT) {
                 const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.desc, formData.url))
+                appConfig.securityCommitment && setCommitmentApi(res.id, commitmentId)
                 if (res) {
                     //@ts-ignore
                     window.assistantCreate = true // 标记新建助手
@@ -184,6 +200,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 if (appId) return navigate('/flow/' + appId) // 避免重复创建
                 // 创建工作流
                 const workflow = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url))
+                appConfig.securityCommitment && setCommitmentApi(workflow.id, commitmentId)
                 if (workflow) {
                     const navigateToFlow = (id) => navigate(`/flow/${id}`);
                     // 非Pro版本直接跳转
@@ -251,6 +268,10 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                         />
                         {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
                     </div>
+                    {appConfig.securityCommitment && <div className="mb-6">
+                        <label className="bisheng-label">承诺书:</label>
+                        <SelectCommitment value={commitmentId} onChange={setCommitmentId} />
+                    </div>}
                 </div>
                 {/* 工作流安全审查 */}
                 {appConfig.isPro && <Accordion type="multiple" className="w-full">

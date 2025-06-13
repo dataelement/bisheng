@@ -1,13 +1,123 @@
 import axios from "axios";
 import clsx, { ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import DOMPurify from "dompurify";
 import * as XLSX from 'xlsx';
 import { APITemplateType } from "../types/api";
 import { checkUpperWords } from "../utils";
+import { checkSassUrl } from "@/components/bs-comp/FileView";
+import { createElement, ReactElement } from "react";
+import ReactMarkdown from "react-markdown";
+import ReactDOMServer, { renderToStaticMarkup } from 'react-dom/server';
 
 export function classNames(...classes: Array<string>): string {
     return classes.filter(Boolean).join(" ");
 }
+
+/**
+ * 统一绑定quill富文本渲染自定义bolt的事件
+ * 考虑安全性
+*/
+export const bindQuillEvent = (ref: any) => {
+    if (!ref?.current) return;
+    const links = ref.current.querySelectorAll("div.ql-bsfile");
+    links.forEach(link => {
+        const url = link.getAttribute('data-url');
+        const name = link.getAttribute('data-name');
+        link.addEventListener("click", (e) => {
+            e.preventDefault();
+            downloadFile(checkSassUrl(url), name)
+        });
+    });
+    const images = ref.current.querySelectorAll("img");
+    images.forEach(image => {
+        const url = image.getAttribute('src');
+        if (url && shouldPrefixUrl(url, __APP_ENV__.BASE_URL)) {
+            image.setAttribute('src', prefixUrl(url, __APP_ENV__.BASE_URL));
+        }
+    });
+}
+
+/**
+ * 安全处理富文本中的图片URL
+ * @param html 富文本HTML字符串
+ * @param baseUrl 要添加的基础URL
+ * @returns 处理后的HTML字符串
+ */
+export function  processImageUrlsSafely(html: string, baseUrl: string): string {
+  const res = html.replace(
+    /<img([^>]*?)src=["']([^"']+)["']([^>]*?)>/gi,
+    (match, before, src, after) => {
+      // 如果src不是绝对路径且不以baseUrl开头
+      console.log(shouldPrefixUrl(src, baseUrl), baseUrl);
+      
+      if (shouldPrefixUrl(src, baseUrl)) {
+        return `<img${before}src="${baseUrl}${src}"${after}>`;
+      }
+      return match;
+    }
+  );
+  return res;
+}
+
+/**
+ * 判断URL是否需要添加前缀
+ */
+function shouldPrefixUrl(url: string, baseUrl: string): boolean {
+    return !(
+        url.startsWith('http:') ||
+        url.startsWith('https:') ||
+        url.startsWith('//') ||
+        url.startsWith('data:') ||
+        url.startsWith('blob:') ||
+        url.startsWith(baseUrl)
+    );
+}
+
+/**
+ * 为URL添加前缀
+ */
+function prefixUrl(url: string, baseUrl: string): string {
+  // 确保baseUrl以/结尾，url不以/开头
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const normalizedUrl = url.startsWith('/') ? url.slice(1) : url;
+  return `${normalizedBase}${normalizedUrl}`;
+}
+
+export const uploadFile = async ({ url, fileName = 'file', file, callback, cancel = null }) : Promise<any> => {
+    try {
+        const CancelToken = axios.CancelToken;    
+        const formData = new FormData();
+        formData.append(fileName, file);
+        const config = {
+            headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
+            onUploadProgress: (progressEvent) => {
+                const { loaded, total } = progressEvent;
+                const progress = Math.round((loaded * 100) / total);
+                console.log(`Upload progress: ${file.name} ${progress}%`);
+                callback?.(progress)
+                // You can update your UI with the progress information here
+            },
+            cancelToken: new CancelToken(function executor(c) {
+                if (cancel) cancel = c;
+            })
+        };
+
+        // Convert the FormData to binary using the FileReader API
+        const data = await axios.post(url, formData, config);
+
+        data && callback?.(100);
+
+        console.log('Upload complete:', data);
+        return data.data
+        // Handle the response data as needed
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        return ''
+        // Handle errors
+    }
+}
+
 
 export function downloadFile(url, label) {
     console.log('download file :>> ', url);
@@ -242,3 +352,151 @@ export function getFileExtension(filename) {
     const match = basename.match(/\.([^.]+)$/);
     return (match ? match[1] : '').toUpperCase();
 }
+
+
+export async function webmToWav(webmBlob) {
+    const audioCtx = new AudioContext();
+    const buffer = await audioCtx.decodeAudioData(await webmBlob.arrayBuffer());
+    const wavBlob = bufferToWav(buffer); // 实现 WAV 编码
+    return wavBlob;
+  }
+
+function bufferToWav(buffer, options = {}) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = options.float32 ? 3 : 1; // 1: PCM, 3: Float32
+  const bitDepth = options.float32 ? 32 : 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+
+  // 计算数据大小
+  const dataSize = buffer.length * blockAlign;
+  const bufferSize = 44 + dataSize;
+  const arrayBuffer = new ArrayBuffer(bufferSize);
+  const view = new DataView(arrayBuffer);
+
+  // 写入 WAV 头部信息
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, bufferSize - 8, true); // RIFF 块大小
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt 子块大小
+  view.setUint16(20, format, true); // 音频格式（1: PCM）
+  view.setUint16(22, numChannels, true); // 声道数
+  view.setUint32(24, sampleRate, true); // 采样率
+  view.setUint32(28, sampleRate * blockAlign, true); // 字节率
+  view.setUint16(32, blockAlign, true); // 块对齐
+  view.setUint16(34, bitDepth, true); // 位深度
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true); // 数据块大小
+
+  // 写入 PCM 数据
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = buffer.getChannelData(ch)[i];
+      if (format === 1) { // PCM
+        view.setInt16(offset, sample * (0x7fff), true);
+      } else { // Float32
+        view.setFloat32(offset, sample, true);
+      }
+      offset += bytesPerSample;
+    }
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+// 辅助函数：写入字符串到 DataView
+function writeString(view, offset, string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+function sanitizeHtmlToText(html) {
+  // 使用DOMPurify进行安全清理
+  const cleanHtml = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['p', 'strong', 'em', 'u', 's', 'br', 'img', 'div', 'a'], // 允许的标签
+    ALLOWED_ATTR: ['src', 'data-url', 'data-name', 'class'] // 允许的属性
+  });
+
+  // 创建临时div来解析HTML
+  const temp = document.createElement('div');
+  temp.innerHTML = cleanHtml;
+
+  // 处理特殊元素
+  // 图片替换为[图片]
+  const images = temp.querySelectorAll('img');
+  images.forEach(img => {
+    img.replaceWith('[图片]');
+  });
+
+  // 文件处理
+  const files = temp.querySelectorAll('.ql-file');
+  files.forEach(file => {
+    const fileName = file.getAttribute('data-name') || '文件';
+    file.replaceWith(`[文件:${fileName}]`);
+  });
+
+  // 获取纯文本
+  return temp.textContent || temp.innerText || '';
+}
+function markdownToText(markdown: string): string {
+  // 使用createElement替代JSX语法
+  const reactElement: ReactElement = createElement(
+    ReactMarkdown,
+    { children: markdown }
+  );
+  
+  // 将React元素渲染为HTML字符串
+  const htmlString = renderToStaticMarkup(reactElement);
+  
+  // 使用HTML处理方法转换为纯文本
+  return sanitizeHtmlToText(htmlString);
+}
+
+/**
+ * 智能内容转换函数
+ * @param {string} content 富文本或Markdown内容
+ * @returns {string} 纯文本
+ */
+export function contentToPlainText(content) {
+  if (!content) return '';
+  
+  // 简单判断是否是HTML（包含HTML标签）
+  const isHtml = /<[a-z][\s\S]*>/i.test(content);
+  
+  // 简单判断是否是Markdown（包含Markdown特有语法）
+  const isMarkdown = !isHtml && /^[\s\S]*([*_`\[]|#+\s)/.test(content);
+  
+  if (isHtml) {
+    return sanitizeHtmlToText(content);
+  }
+  
+  if (isMarkdown) {
+    return markdownToText(content);
+  }
+  
+  // 纯文本直接返回
+  return content;
+}
+
+export function optimizeForTTS(text) {
+    if (!text) return '';
+    
+    return text
+      // 合并连续空白字符
+      .replace(/\s+/g, ' ')
+      // 处理特殊符号
+      .replace(/\.{3,}/g, '省略号')
+      .replace(/…/g, '省略号')
+      .replace(/#/g, '井号')
+      .replace(/\*/g, '星号')
+      // 去除首尾空白
+      .trim();
+  }
+  
+  export function formatTTSText(text) {
+      return optimizeForTTS(contentToPlainText(text));
+  }

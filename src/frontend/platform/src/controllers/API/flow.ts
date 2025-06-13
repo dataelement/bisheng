@@ -1,6 +1,7 @@
 import { ReactFlowJsonObject } from "@xyflow/react";
 import { FlowStyleType, FlowType, FlowVersionItem } from "../../types/flow";
 import axios from "../request";
+import { webmToWav } from "@/util/utils";
 
 /**
  * 保存组件 variables 变量
@@ -343,13 +344,49 @@ export async function runTestCase(data: { question_list, version_list, node_id, 
     return await axios.post(`/api/v1/flows/compare`, data);
 }
 
-/**
+/** 
  * 聊天窗上传文件
  */
-export async function uploadChatFile(v, file: File, onProgress): Promise<any> {
+export async function uploadChatFile(file: File, onProgress, preParsing, v = 1): Promise<any> {
     const formData = new FormData();
     formData.append("file", file);
-    return await axios.post(`/api/v1/knowledge/upload`, formData, {
+    return await axios.post(preParsing ? `/api/${v}/workflow/input/file` : `/api/v1/knowledge/upload`, formData, {
+        headers: {
+            "Content-Type": "multipart/form-data"
+        },
+        onUploadProgress: (progressEvent) => {
+            // Calculate progress percentage
+            if (progressEvent.total) {
+                const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                onProgress(progress);
+            }
+        }
+    });
+}
+
+/** 
+ * 文字转语音接口
+*/
+export async function textToSpeech(data: { text }): Promise<any[]> {
+    return await axios.post(`/api/v1/model_fun/tts`, data);
+}
+
+/** 
+ * 语音转文字接口
+*/
+export async function speechToText(data: { url }): Promise<any[]> {
+    return await axios.post(`/api/v1/model_fun/stt`, data);
+}
+
+
+/**
+ * 语音转文字组件接口 传入webm文件
+ */
+export async function uploadAndStt(file: File, onProgress): Promise<any> {
+    const formData = new FormData();
+    const newNewFile = await webmToWav(file);
+    formData.append("file", newNewFile, 'recording.wav');
+    return await axios.post(`/api/v1/model_fun/upload_and_stt`, formData, {
         headers: {
             "Content-Type": "multipart/form-data"
         },

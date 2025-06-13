@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
+import { Switch } from "@/components/bs-ui/switch";
 
 export default function Setting() {
   const { t } = useTranslation();
@@ -136,6 +137,49 @@ export default function Setting() {
         </AccordionItem>
         {/* 内容安全审查 */}
         {appConfig.isPro && <AssistantSetting id={assistantState.id} type={3} />}
+        <AccordionItem value="item-4">
+            <AccordionTrigger>
+                <div className="flex flex-1 items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <span>{t('build.fileSetting')}</span>
+                        <TooltipProvider delayDuration={0}>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <CircleHelp className="w-4 h-4" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="text-slate-50">{t('build.fileSettingDesc')}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                </div>
+            </AccordionTrigger>
+            <AccordionContent className="mb-[-16px]">
+              <div className="mb-4 px-6 flex items-center justify-between">
+                <label htmlFor="model" className="bisheng-label">
+                  {t("build.allowUploadFile")}
+                </label>
+                <Switch
+                  className="mx-4"
+                  onClick={(e) => e.stopPropagation()}
+                  checked={!!assistantState.is_allow_upload}
+                  onCheckedChange={(val: boolean) =>
+                    dispatchAssistant("setting", { is_allow_upload: +val })
+                  }
+                />
+              </div>
+              <div className="mb-4 px-6">
+              <label htmlFor="slider" className="bisheng-label flex gap-1">
+                {t("build.fileContextMax")}
+                <QuestionTooltip content={t("build.fileContextMaxDesc")}></QuestionTooltip>
+              </label>
+              <Input value={assistantState.file_max_size} type="number" className="mt-2" defaultValue={15000} min={0} onChange={e =>
+                dispatchAssistant("setting", { file_max_size: Number(e.target.value) })
+              }></Input>
+            </div>
+            </AccordionContent>
+        </AccordionItem>
       </Accordion>
       <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.knowledge")}

@@ -1,6 +1,6 @@
-import { paramsSerializer } from ".";
 import { ROLE, User } from "../../types/api/user";
 import axios from "../request";
+import { paramsSerializer } from ".";
 
 // 获取 key
 export const getPublicKeyApi = async (): Promise<{ public_key: string }> => {
@@ -37,29 +37,36 @@ export async function registerApi(name, pwd, captcha_key?, captcha?) {
     captcha,
   });
 }
-// 用户列表
+
+// 管理员视角 获取用户列表
 export async function getUsersApi({ name = '', page, pageSize, groupId, roleId }: {
   name: string,
   page: number,
   pageSize: number,
   groupId?: number[],
-  roleId?: number[]
-},
-  config?: { signal?: AbortSignal }): Promise<{ data: User[]; total: number }> {
-
+  roleId?: number[],
+}): Promise<{ data: User[]; total: number }> {
+  const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
+  const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
   return await axios.get(
-    `/api/v1/user/list`,
-    {
-      params: {
-        name,
-        page_num: page,
-        page_size: pageSize,
-        group_id: groupId,
-        role_id: roleId,
-      },
-      paramsSerializer,
-      signal: config?.signal, // 绑定 AbortSignal
-    }
+    `/api/v1/user/list?page_num=${page}&page_size=${pageSize}&name=${name}${groupStr}${roleStr}`
+  );
+}
+
+// 审计员&运营员视角 获取用户列表
+export async function getUsersApiForUser({ name = '', page, pageSize, groupId, roleId, isAudit }: {
+  name: string,
+  page: number,
+  pageSize: number,
+  groupId?: number[],
+  roleId?: number[],
+  isAudit: boolean,
+}): Promise<{ data: User[]; total: number }> {
+  const groupStr = groupId?.reduce((res, id) => `${res}&group_id=${id}`, '') || ''
+  const roleStr = roleId?.reduce((res, id) => `${res}&role_id=${id}`, '') || ''
+  const role = isAudit ? 'audit' : 'operation';
+  return await axios.get(
+    `/api/v1/user/list?group_role_type=${role}&page_num=${page}&page_size=${pageSize}&name=${name}${groupStr}${roleStr}`
   );
 }
 
@@ -78,16 +85,39 @@ export async function disableUserApi(userid, status) {
   });
 }
 // 角色列表
-export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
+export async function getRolesApi(params: {
+  group_id: string[],
+  keyword: string,
+  include_parent: boolean,
+  page: number,
+  limit: number
+}): Promise<{ data: ROLE[] }> {
+  return await axios.get(`/api/v1/group/roles?role_name`, { params, paramsSerializer })
     .then(res => res.data);
+}
+
+// 角色详情
+export async function getRoleDetailApi(roleId: number) {
+  return await axios.get(`/api/v1/role/${roleId}`)
 }
 // 用户组下角色列表
-export async function getRolesByGroupApi(searchkey = "", groupIds: any[]): Promise<{ data: ROLE[] }> {
+export async function getRolesByGroupApi(searchkey = "", groupIds: any[], include_parent: boolean = false): Promise<{ data: ROLE[] }> {
   const groupStr = groupIds?.reduce((pre, id) => `${pre}&group_id=${id}`, '') || ''
-  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}${groupStr}`)
+  return await axios.get(`/api/v1/group/roles?keyword=${searchkey}${groupStr}&include_parent=${include_parent}`)
     .then(res => res.data);
 }
+
+// 用户的用户组下的所有角色
+export async function getUserRolesApi(groupId: string, userId: number | undefined) {
+  if (!userId) return getRolesByGroupApi("", [groupId], true)
+  return await axios.get(`/api/v1/group/user/roles`, {
+    params: {
+      user_id: userId,
+      group_id: groupId
+    }
+  }).then(res => res.data);
+}
+
 /**
  * 获取配置
  */
@@ -141,10 +171,9 @@ export async function getGroupResourcesApi(
 /**
  * 新增角色
  */
-export async function createRole(groupId, name) {
+export async function createRole(data: { role_name: string, group_id: number, is_bind_all: boolean, user_ids: number[] }) {
   return await axios.post(`/api/v1/role/add`, {
-    group_id: groupId,
-    role_name: name,
+    ...data,
     remark: "手动创建用户",
   });
 }
@@ -185,9 +214,9 @@ export async function getRolePermissionsApi(
 /**
  * 更新角色基本信息
  */
-export async function updateRoleNameApi(roleId, name) {
+export async function updateRoleNameApi(roleId, data: { role_name: string, extra: string, is_bind_all: boolean, user_ids: number[] }) {
   return axios.patch(`/api/v1/role/${roleId}`, {
-    role_name: name,
+    ...data,
     remark: "手动创建用户",
   });
 }
@@ -206,6 +235,26 @@ export function getUserGroupsApi(config) {
   });
 }
 
+// 用户组列表 用于列表页
+export function getUserGroupsProApiV2({ name = '', page, pageSize, groupId, roleId }: {
+  name: string,
+  page: number,
+  pageSize: number,
+  groupId?: number[],
+  roleId?: number[],
+}): Promise<{ data: User[]; total: number }> {
+    return axios.get(`/api/v1/group/list_v2?page=${page}&page_size=${pageSize}&keyword=${name}`);
+}
+
+// 审计视角获取用户组列表
+export function getAuditGroupsApi(params: { keyword, page, page_size }) {
+  return axios.get(`/api/v1/group/list_audit`, {params});
+}
+
+// 运营视角获取用户组列表
+export function getOperationGroupsApi(params: { keyword, page, page_size }) {
+  return axios.get(`/api/v1/group/list_operation`, {params});
+}
 
 // 删除用户组post
 export function delUserGroupApi(group_id) {
@@ -214,17 +263,20 @@ export function delUserGroupApi(group_id) {
 }
 
 // 保存用户组
-export function saveUserGroup(form, selected) {
+export function saveUserGroup(form, admins, audits, operations) {
   console.log('form :>> ', form);
   const { groupName: group_name } = form
   return axios.post(`/api/v1/group/create`, {
     group_name,
-    group_admins: selected.map(item => item.value),
+    group_admins: admins.map(item => item.value),
+    group_audits: audits.map(item => item.value),
+    group_operations: operations.map(item => item.value),
+    parent_id: form.department.id
   });
 }
 
 // 修改用户组
-export function updateUserGroup(id, form, selected) {
+export function updateUserGroup(id, form, admins, audits, operations) {
   const { groupName: group_name } = form
   const a = axios.put(`/api/v1/group/create`, {
     id,
@@ -232,9 +284,17 @@ export function updateUserGroup(id, form, selected) {
   });
   const b = axios.post(`/api/v1/group/set_group_admin`, {
     group_id: id,
-    user_ids: selected.map(item => item.value)
+    user_ids: admins.map(item => item.value)
   })
-  return Promise.all([a, b])
+  const c = axios.post(`/api/v1/group/set_group_audit`, {
+    group_id: id,
+    user_ids: audits.map(item => item.value)
+  })
+  const d = axios.post(`/api/v1/group/set_group_operation`, {
+    group_id: id,
+    user_ids: operations.map(item => item.value)
+  })
+  return Promise.all([a, b, c, d])
 }
 
 
@@ -307,4 +367,14 @@ export async function loggedChangePasswordApi(password, new_password): Promise<a
     password,
     new_password
   })
+}
+
+// 用户组树数据
+export async function getUserGroupTreeApi(groupId: string): Promise<any> {
+  return axios.get(`/api/v1/group/tree`, { params: { group_id: groupId } });
+}
+
+// 获取用户组下所有用户
+export async function getUserGroupUsersApi(groupId): Promise<any> {
+  return axios.get(`/api/v1/group/get_group_user`, { params: { group_id: groupId, page: 1, page_size: 10000, include_child: true } });
 }

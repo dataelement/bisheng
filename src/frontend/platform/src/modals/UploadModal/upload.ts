@@ -1,7 +1,7 @@
 import { uploadLibFile } from "../../controllers/API";
 
 // Function to upload the file with progress tracking
-export const uploadFileWithProgress = async (file, callback, type: 'knowledge' | 'icon' = 'knowledge', url): Promise<any> => {
+export const uploadFileWithProgress = async (file, callback, type: 'knowledge' | 'icon' = 'knowledge', url?: string): Promise<any> => {
   try {
     const formData = new FormData();
     formData.append('file', file);

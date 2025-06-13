@@ -218,6 +218,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                 description: errors
             });
         }
+        setSaveLoad(true);
         //提交
         const res = await captureAndAlertRequestErrorHoc(postImportQaFile(id, {
             url: form.fileUrl
@@ -229,17 +230,20 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
         } else {
             message({ variant: 'success', description: t('successMsg') });
         }
+        setSaveLoad(false);
         close();
         onChange();
     };
     const { id } = useParams();
     const handleFileUploadSuccess = async (name, url) => {
         // 发送请求进行预览
+        setSaveLoad(true);
         const res = await captureAndAlertRequestErrorHoc(getQaFilePreview(id, {
             // 最多预览10条
             size: 10,
             url,
         }));
+        setSaveLoad(false);
         const { result } = res;
         setDataList(result);
         setForm({

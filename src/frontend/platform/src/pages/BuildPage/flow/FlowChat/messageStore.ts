@@ -1,4 +1,3 @@
-import { message } from '@/components/bs-ui/toast/use-toast';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
@@ -29,6 +28,9 @@ type State = {
      */
     showGuideQuestion: boolean
     inputForm: null | any
+    // 存储违规消息ID { [chatId]: [messageId1, messageId2] }
+    violations: {}, 
+    searchMatches: {}, // 存储历史搜索匹配的消息ID
 }
 
 type Actions = {
@@ -59,6 +61,7 @@ const handleHistoryMsg = (data: any[]): ChatMessageType[] => {
         .replace(/'/g, '"');                    // 将单引号替换为双引号
 
     return data.filter(item =>
+        // TODO: 注意这里
         ["question", "output_with_input_msg", "output_with_choose_msg", "stream_msg", "output_msg", "guide_question", "guide_word", "node_run", "answer"].includes(item.category)
         && (item.message || item.reasoning_log)).map(item => {
             let { message, files, is_bot, intermediate_steps, category, ...other } = item
@@ -93,6 +96,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     hisMessages: [],
     historyEnd: false,
     showGuideQuestion: false,
+    violations: {}, // 存储违规消息ID { [chatId]: [messageId1, messageId2] }
+    searchMatches: {}, // 存储历史搜索匹配的消息ID
+
     changeChatId(chatId) {
         set((state) => ({ chatId }))
     },

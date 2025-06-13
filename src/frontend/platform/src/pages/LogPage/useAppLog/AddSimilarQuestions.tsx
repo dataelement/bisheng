@@ -1,3 +1,4 @@
+import RichText from "@/components/bs-comp/richText";
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
@@ -118,7 +119,7 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {datalist.map((el) => (
+                                    {datalist.map((el: any) => (
                                         <TableRow key={el.id}>
                                             <TableCell className="font-medium">
                                                 <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
@@ -127,7 +128,9 @@ const AddSimilarQuestions = forwardRef(({ onMarked }, ref) => {
                                                 <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">{el.questions}</div>
                                             </TableCell>
                                             <TableCell className="font-medium whitespace-nowrap text-ellipsis overflow-hidden">
-                                                <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">{el.answers}</div>
+                                                <div className="max-w-[360px] whitespace-nowrap text-ellipsis overflow-hidden">
+                                                    <RichText msg={el.answers}/>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}

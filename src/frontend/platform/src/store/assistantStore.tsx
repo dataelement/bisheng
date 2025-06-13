@@ -49,7 +49,9 @@ const assistantTemp = {
   tool_list: [],
   flow_list: [],
   knowledge_list: [],
-  max_token: 32000
+  max_token: 32000,
+  is_allow_upload: 0,
+  file_max_size: 15000,
 }
 
 export const useAssistantStore = create<State & Actions>((set) => ({

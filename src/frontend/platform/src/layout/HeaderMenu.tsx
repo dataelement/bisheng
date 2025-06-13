@@ -10,9 +10,10 @@ export default function HeaderMenu({ }) {
     console.log('location.pathname :>> ', location.pathname);
 
     const { user } = useContext(userContext);
+
     // 系统管理员(超管、组超管)
     const isAdmin = useMemo(() => {
-        return ['admin', 'group_admin'].includes(user.role)
+        return user.role?.includes('admin')
     }, [user])
 
     if (['/build/apps', '/build/tools', '/build/client'].includes(location.pathname)) {
@@ -35,7 +36,7 @@ export default function HeaderMenu({ }) {
                     <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">{t('build.tools')}</span>
                 </NavLink>
             </div>
-            {user.role === 'admin' && <div className="px-4">
+            {isAdmin && <div className="px-4">
                 <NavLink to={'build/client'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
                     <TabIcon className="text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]"></TabIcon>
                     <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">工作台</span>

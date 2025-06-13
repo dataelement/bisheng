@@ -1,144 +1,80 @@
+import { useRef, useState } from "react";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getGroupsApi } from "@/controllers/API/log";
-import debounce from "lodash-es/debounce";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { getAuditGroupsApi, getOperationGroupsApi } from "@/controllers/API/log";
 
-interface AppOption {
-    label: string;
-    value: string;
-}
-
-export default function FilterByApp({ value, onChange }) {
-    const { apps, loadApps, searchApps, loadMoreApps } = useApps();
+export default function FilterByApp({ value, onChange, isAudit }) {
+    const { apps, loadApps, searchApp, loadMoreApps } = useApps(isAudit);
 
     return (
         <div className="w-[200px] relative">
             <MultiSelect
-                contentClassName="max-w-[200px]"
+                contentClassName="overflow-y-auto max-w-[200px]"
                 options={apps}
                 value={value}
                 multiple
                 placeholder="应用名称"
-                onLoad={() => loadApps("")} // 初始加载
-                onSearch={searchApps} // 搜索时触发
-                onScrollLoad={loadMoreApps} // 滚动加载更多
-                onChange={onChange} // 选择项变化时触发
+                onLoad={loadApps}
+                onSearch={searchApp}
+                onScrollLoad={loadMoreApps}
+                onChange={onChange}
             />
         </div>
     );
 }
 
-/**
- * 自定义 Hook：用于管理应用列表的数据加载逻辑
- */
-const useApps = () => {
-    const [apps, setApps] = useState<AppOption[]>([]); // 应用列表数据
-    const pageRef = useRef(1); // 当前页码
-    const hasMoreRef = useRef(true); // 是否还有更多数据
-    const loadLock = useRef(false); // 加载锁，防止重复请求
-    const keywordRef = useRef(""); // 当前搜索关键词
-    const abortControllerRef = useRef<AbortController>(); // 用于取消请求
+const useApps = (isAudit: boolean) => {
+    const [apps, setApps] = useState<any[]>([]);
+    const [page, setPage] = useState(1);
+    const hasMoreRef = useRef(true);
+    const loadLock = useRef(false); // Prevent multiple simultaneous requests
+    const keyWordRef = useRef("");
 
-    /**
-     * 将 API 返回的数据映射为选项格式
-     */
-    const mapApiData = (data: any[]): AppOption[] =>
-        data.map((item) => ({ label: item.name, value: item.id }));
-
-    /**
-     * 发起 API 请求获取数据
-     */
-    const fetchData = async (params: {
-        keyword: string;
-        page: number;
-        pageSize: number;
-    }) => {
-        // 取消之前的请求
-        abortControllerRef.current?.abort();
-        abortControllerRef.current = new AbortController();
-
+    // Load apps from the API and store in state
+    const loadApps = async (name: string) => {
         try {
-            const res = await getGroupsApi(
-                {
-                    keyword: params.keyword,
-                    page: params.page,
-                    page_size: params.pageSize,
-                },
-                { signal: abortControllerRef.current.signal } // 绑定 AbortController
-            );
-            return res.data;
+            loadLock.current = true;
+            const res = await (isAudit ? getAuditGroupsApi : getOperationGroupsApi)({ keyword: name, page: 1, page_size: 50 });
+            const options = res.data.map((a: any) => ({
+                label: a.name,
+                value: a.id,
+            }));
+            keyWordRef.current = name;
+            setApps(options);
+            setPage(1);
+            hasMoreRef.current = res.data.length > 0;
+
+            setTimeout(() => {
+                loadLock.current = false;
+            }, 500);
         } catch (error) {
-            if (error.name === "AbortError") return []; // 忽略取消请求的错误
-            throw error; // 抛出其他错误
+            console.error("Error loading apps:", error);
+            // Optionally, you can set apps to an empty array or show an error message
         }
     };
 
-    /**
-     * 加载应用列表（初始加载或搜索）
-     */
-    const loadApps = useCallback(async (keyword: string) => {
-        if (loadLock.current) return; // 如果正在加载，则直接返回
-
-        loadLock.current = true; // 加锁
-        keywordRef.current = keyword; // 更新搜索关键词
-
+    // Load more apps when scrolling
+    const loadMoreApps = async () => {
+        if (!hasMoreRef.current) return;
+        if (loadLock.current) return;
         try {
-            const data = await fetchData({
-                keyword,
-                page: 1,
-                pageSize: 10,
-            });
-
-            setApps(mapApiData(data)); // 更新应用列表
-            pageRef.current = 1; // 重置页码
-            hasMoreRef.current = data.length === 10; // 判断是否还有更多数据
+            const nextPage = page + 1;
+            const res = await (isAudit ? getAuditGroupsApi : getOperationGroupsApi)({ keyword: keyWordRef.current, page: nextPage, page_size: 10 });
+            const options = res.data.map((a: any) => ({
+                label: a.name,
+                value: a.id,
+            }));
+            setApps((prevApps) => [...prevApps, ...options]);
+            setPage(nextPage);
+            hasMoreRef.current = res.data.length > 0;
         } catch (error) {
-            console.error("加载应用列表失败:", error);
-        } finally {
-            loadLock.current = false; // 解锁
+            console.error("Error loading more apps:", error);
         }
-    }, []);
+    };
 
-    /**
-     * 加载更多应用（滚动加载）
-     */
-    const loadMoreApps = useCallback(async () => {
-        if (!hasMoreRef.current || loadLock.current) return; // 如果没有更多数据或正在加载，则直接返回
-
-        loadLock.current = true; // 加锁
-
-        try {
-            const nextPage = pageRef.current + 1;
-            const data = await fetchData({
-                keyword: keywordRef.current,
-                page: nextPage,
-                pageSize: 10,
-            });
-
-            setApps((prev) => [...prev, ...mapApiData(data)]); // 追加新数据
-            pageRef.current = nextPage; // 更新页码
-            hasMoreRef.current = data.length === 10; // 判断是否还有更多数据
-        } catch (error) {
-            console.error("加载更多应用失败:", error);
-        } finally {
-            loadLock.current = false; // 解锁
-        }
-    }, []);
-
-    /**
-     * 搜索应用（带防抖）
-     */
-    const searchApps = useCallback(
-        debounce((keyword: string) => loadApps(keyword), 500), // 500ms 防抖
-        [loadApps]
-    );
-
-    /**
-     * 组件卸载时取消未完成的请求
-     */
-    useEffect(() => {
-        return () => abortControllerRef.current?.abort();
-    }, []);
-
-    return { apps, loadApps, searchApps, loadMoreApps };
+    return {
+        apps,
+        loadApps,
+        searchApp: loadApps,
+        loadMoreApps
+    };
 };

@@ -1,4 +1,5 @@
 import UsersSelect from "@/components/bs-comp/selectComponent/Users";
+import SelectGroup from "@/components/bs-comp/selectGroup";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
@@ -8,13 +9,14 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { locationContext } from "@/contexts/locationContext";
 import { getGroupFlowsApi, saveGroupApi } from "@/controllers/API/pro";
-import { getAdminsApi, saveUserGroup, updateUserGroup } from "@/controllers/API/user";
+import { getAdminsApi, getUserGroupTreeApi, saveUserGroup, updateUserGroup } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input, SearchInput } from "../../../components/bs-ui/input";
+import { useQuery } from "react-query";
 
 /**
  * 
@@ -40,21 +42,17 @@ function FlowRadio({ limit, onChange }) {
     const { t } = useTranslation()
     const [status, setStatus] = useState(LimitType.UNLIMITED)
     const [limitState, setLimitState] = useState<any>(limit)
-    const limitRef = useRef(0)
 
     const handleCommit = (type: LimitType, value: string = '0') => {
-        if (value === '') return
         const valueNum = parseInt(value)
         if (valueNum < 0 || valueNum > 9999) return
         setStatus(type)
         setLimitState(value)
         onChange(Number(value))
-        limitRef.current = Number(value)
     }
     useEffect(() => {
         setStatus(limit ? LimitType.LIMITED : LimitType.UNLIMITED)
         setLimitState(limit)
-        limitRef.current = limit
     }, [limit])
 
     return <div>
@@ -76,13 +74,7 @@ function FlowRadio({ limit, onChange }) {
                     type="number"
                     value={limitState}
                     className="inline h-5 w-[70px] font-medium"
-                    onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)}
-                    onBlur={(e) => {
-                        if(e.target.value === '') {
-                            e.target.value = limitRef.current + ''
-                        }
-                    }}
-                />
+                    onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)} />
                 <Label className="whitespace-nowrap">{t('system.perMinute')}</Label>
             </div>}
         </RadioGroup>
@@ -94,7 +86,7 @@ function FlowControl({ groupId, type, onChange }) {
     const map = {
         3: { name: t('build.assistantName'), label: t('system.AssistantFlowCtrl'), placeholder: t('system.assistantName') },
         2: { name: t('skills.skillName'), label: t('system.SkillFlowCtrl'), placeholder: t('skills.skillName') },
-        5: { name: t('build.workFlowName'), label: t('system.flowCtrl'), placeholder: t('build.workFlowName') },
+        5: { name: '工作流名称', label: '工作流流量控制', placeholder: '工作流名称' },
     }
     const { name, label, placeholder } = map[type]
     const { page, pageSize, data, total, setPage, search, refreshData } = useTable({ pageSize: 10 }, (params) =>
@@ -181,17 +173,28 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         groupLimit: 0,
         assistant: [],
         skill: [],
-        workFlows: []
+        workFlows: [],
+        department: null,
     })
+    // console.log('form :>> ', form);
     /**
      * 用户
      */
     const [selected, setSelected] = useState([])
+    
+    
+    // 用户权限管理员
+    const [adminsSelected, setAdminsSelected] = useState([])
+
+    // 审计员
+    const [auditorsSelected, setAuditorsSelected] = useState([])
+    
+    // 运营员
+    const [operatorsSelected, setOperatorsSelected] = useState([])
+    
     const [lockOptions, setLockOptions] = useState([])
 
     const handleSave = async () => {
-        console.log('form', form);
-
         if (!form.groupName) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNameRequired'), variant: 'error' });
@@ -199,6 +202,9 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         if (form.groupName.length > 30) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNamePrompt'), variant: 'error' });
+        }
+        if (!form.department && !data.group_name) {
+            return toast({ title: t('prompt'), description: '上级用户组不可为空', variant: 'error' });
         }
         const flag = onBeforeChange(form.groupName)
         if (flag) {
@@ -208,47 +214,106 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
 
         // 过滤系统管理员
         const users = selected.filter(item => !lockOptions.some(id => id === item.value))
+        const admins = adminsSelected.filter(item => !lockOptions.some(id => id === item.value))
+        const auditors = auditorsSelected.filter(item => !lockOptions.some(id => id === item.value))
+        const operators = operatorsSelected.filter(item => !lockOptions.some(id => id === item.value))
 
-        const res: any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
-            saveUserGroup(form, users)) // 保存
+        const res: any = await (data.id ? updateUserGroup(data.id, form, admins, auditors, operators) : // 修改
+            saveUserGroup(form, admins, auditors, operators)) // 保存
 
         if (appConfig.isPro) {
             await captureAndAlertRequestErrorHoc(saveGroupApi({
                 ...form,
                 id: data.id || res.id, // 修改id:data.id， 创建id：res.id
                 adminUser: users.map(item => item.label).join(','),
-                adminUserId: users.map(item => item.value).join(',')
+                adminUserId: users.map(item => item.value).join(','),
+                parent_id: form.department.id
             }))
         }
 
         onChange(true)
+        refetchGroupTree()
     }
 
     useEffect(() => { // 初始化数据
-        setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
+        setForm({
+            ...form, groupName: data.group_name, groupLimit: data.group_limit || 0,
+            department: data.parent_id ? {
+                group_name: data.parent_group_path.split('/').pop(),
+                id: data.parent_id
+            } : null
+        })
         async function init() {
             const res = await getAdminsApi()
             const users = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
+
+            const admins = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
+            const auditors = data.group_audits?.map(d => ({ label: d.user_name, value: d.user_id })) || [];
+            const operators = data.group_operations?.map(d => ({ label: d.user_name, value: d.user_id })) || [];
+            
             const defaultUsers = res.map(d => ({ label: d.user_name, value: d.user_id }))
             setLockOptions(defaultUsers.map(el => el.value))
+
+            setAdminsSelected([...defaultUsers, ...admins]);
+            setAuditorsSelected([...defaultUsers, ...auditors]);
+            setOperatorsSelected([...defaultUsers, ...operators]);
+
             setSelected([...defaultUsers, ...users])
         }
         init()
     }, [])
+
+    // 用户组数据
+    const { data: options = [], refetch: refetchGroupTree } = useQuery({
+        queryKey: "QueryGroupTreeKey",
+        queryFn: () => getUserGroupTreeApi()
+    });
+
 
     return <div className="max-w-[630px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-10 scrollbar-hide">
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.groupName')}</p>
             <Input placeholder={t('system.userGroupName')} required value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })}></Input>
         </div>
+        <div className="font-bold mt-4">
+            <p className="text-xl mb-4">上级用户组</p>
+            <SelectGroup
+                disabled={data.group_name}
+                value={form.department}
+                onChange={(department) => setForm({ ...form, department })}
+                options={options}
+            />
+        </div>
         <div className="font-bold mt-12">
-            <p className="text-xl mb-4">{t('system.admins')}</p>
+            <p className="text-xl mb-4">{t('system.permissionsAdmins')}</p>
             <div className="">
                 <UsersSelect
                     multiple
                     lockedValues={lockOptions}
-                    value={selected}
-                    onChange={setSelected}
+                    value={adminsSelected}
+                    onChange={setAdminsSelected}
+                />
+            </div>
+        </div>
+        <div className="font-bold mt-12">
+            <p className="text-xl mb-4">{t('system.auditor')}</p>
+            <div className="">
+                <UsersSelect
+                    multiple
+                    lockedValues={lockOptions}
+                    value={auditorsSelected}
+                    onChange={setAuditorsSelected}
+                />
+            </div>
+        </div>
+        <div className="font-bold mt-12">
+            <p className="text-xl mb-4">{t('system.operator')}</p>
+            <div className="">
+                <UsersSelect
+                    multiple
+                    lockedValues={lockOptions}
+                    value={operatorsSelected}
+                    onChange={setOperatorsSelected}
                 />
             </div>
         </div>

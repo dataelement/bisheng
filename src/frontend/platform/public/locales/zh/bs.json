@@ -1,10 +1,10 @@
 {
-  "title": "BISHENG",
+  "title": "智慧中英",
   "prompt": "提示",
   "login": {
     "slogen": "便捷、灵活、可靠的企业级大模型应用开发平台",
-    "bottomText": "文擎毕昇",
-    "account": "邮箱",
+    "bottomText": "智慧中英",
+    "account": "用户名",
     "password": "密码",
     "confirmPassword": "确认密码",
     "noAccountRegister": "没有账号？注册",
@@ -85,6 +85,9 @@
     "userGroupName": "输入用户组名称",
     "groupName": "用户组名称",
     "admins": "管理员",
+    "permissionsAdmins": "用户权限管理员",
+    "auditor": "审计员",
+    "operator": "运营员",
     "flowControl": "用户组整体流量控制",
     "AssistantFlowCtrl": "助手流量控制",
     "SkillFlowCtrl": "技能流量控制",
@@ -97,7 +100,7 @@
     "maximum": "最多",
     "perMinute": "个同时在线会话",
     "changeTime": "修改时间",
-    "deleteGroup": "删除后 【{{name}}】 将不再存在，是否删除?",
+    "deleteGroup": "删除后 【{{name}}】 及下级用户组将不再存在，是否删除?",
     "currentGroup": "当前用户组",
     "defaultGroup": "默认用户组",
     "resetPwd": "重置密码",
@@ -178,7 +181,7 @@
     "contactAdmin": "请联系管理员上线助手",
     "deleteSure": "确认删除该工具？",
     "modelRequired": "模型为空",
-    "avatar": "技能头像",
+    "avatar": "技能头像（限制文件大小5MB）",
     "switchTo": "切换到"
   },
   "chat": {
@@ -186,7 +189,7 @@
     "chooseOne": "选择一个",
     "dialogue": "对话",
     "start": "开始",
-    "wenqingruijian": "文擎睿见",
+    "wenqingruijian": "智慧中英",
     "inputPlaceholder": "请输入问题",
     "uploadFileTooltip": "上传文件",
     "sendTooltip": "发送",
@@ -234,8 +237,7 @@
     "searchLabels": "搜索标签",
     "confirmed": "已确认",
     "confirm": "确认",
-    "runNewWorkflow": "开启新会话",
-    "chatEndMessage": "本轮会话已结束"
+    "runNewWorkflow": "开启新会话"
   },
   "model": {
     "modelManagement": "模型管理",
@@ -250,6 +252,7 @@
     "serviceProvider": "模型服务提供方",
     "actions": "操作",
     "modelType": "模型类型",
+    "enableMonitoring": "模型状态监控",
     "onlineOfflineOperation": "上下线操作",
     "available": "可用",
     "abnormal": "异常",
@@ -390,11 +393,14 @@
     "complete": "完成",
     "setSplitSize": "请设置文件切分大小",
     "selectFileToUpload": "请先选择文件上传",
+    "fileSizeExceedsLimit": "文件不能超50M",
     "file": "文件",
-    "sizeExceedsLimit": "超过{{size}}M,已移除",
+    "sizeExceedsLimit": "超过50M,已移除",
     "editDictionary": "编辑词典",
     "exportCodeDialogTip": "生成代码，将流程集成到外部应用程序中 (打开此页面前请先build技能)。",
-    "chunkOverlap": "切分文本重叠长度"
+    "chunkOverlap": "切分文本重叠长度",
+    "preCheckFailed": "文件不符合规范，请重新上传",
+    "preCheckError": "文件不符合规范，请重新上传"
   },
   "report": {
     "reportTemplate": "报告模板",
@@ -501,9 +507,15 @@
     "forBetter": "为了更好的助手效果，描述需要大于20 个字",
     "forExample": "例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等",
     "contentSecurityR": "内容安全审查",
+    "fileSetting": "文件上传配置",
+    "fileSettingDesc": "配置助手会话上传文件的规则",
+    "allowUploadFile": "允许上传文件",
+    "allowUploadFileDesc": "通过开关控制是否允许助手上传文件",
+    "fileContextMax": "文件内容长度限制",
+    "fileContextMaxDesc": "文件最大解析长度",
     "errors": {
-      "selectAtLeastOneWordType": "词表至少需要选择一个",
-      "autoReplyNotEmpty": "自动回复内容不可为空"
+        "selectAtLeastOneWordType": "词表至少需要选择一个",
+        "autoReplyNotEmpty": "自动回复内容不可为空"
     },
     "saveSuccess": "保存成功",
     "contentSecurity": "内容安全",
@@ -521,7 +533,7 @@
     "txtFile": "txt文件",
     "sensitiveWordMatch": "敏感词匹配",
     "defaultAutoReply": "填写命中安全审查时的自动回复内容，例如“当前对话内容违反相关规范，请修改后重新输入。",
-    "uploadAvator": "上传头像",
+    "uploadAvator": "上传头像（限制文件大小5MB）",
     "fileSizeLimit": "文件大小不能超过",
     "fileTypeLimit": "文件类型不符合要求：",
     "fieldRequired": "此字段是必填项",
@@ -544,7 +556,7 @@
     "apiKey": "API密钥",
     "azureEndpoint": "Azure端点",
     "apiVersion": "API版本",
-    "assistantAvatar": "助手头像",
+    "assistantAvatar": "助手头像（限制文件大小5MB）",
     "confirmDeleteSkill": "确认删除该技能?",
     "confirmDeleteFlow": "确认删除该工作流?",
     "confirmDeleteAssistant": "确认删除该助手?",
@@ -566,9 +578,9 @@
   },
   "tools": {
     "addTool": "添加工具",
-    "createCustomTool": "API工具",
+    "createCustomTool": "自定义工具",
     "builtinTools": "内置工具",
-    "customTools": "API工具",
+    "customTools": "自定义工具",
     "search": "搜索",
     "empty": "空空如也",
     "manageCustomTools": "在此页面管理您的自定义工具，对自定义工具创建、编辑等等",
@@ -726,6 +738,9 @@
     "empty": "空空如也",
     "selectQaLib": "请选择 QA 知识库",
     "detailedSession": "详细会话"
+  },
+  "operation": {
+      "appUsageRecord": "应用使用记录"
   },
   "tag": {
     "labelMaxLength": "标签名不能超过10个字符",
@@ -899,8 +914,10 @@
     "10900": "知识库名称不可重复",
     "10901": "知识库必须选择一个embedding模型",
     "10910": "当前知识库版本不支持修改分段，请创建新知识库后进行分段修改",
-    "10800": "模型服务提供方名称重复，请修改",
+    "10800": "服务提供方名称重复，请修改",
     "10801": "模型不可重复",
+    "10802": "添加服务提供方失败，模型全部初始化失败",
+    "10803": "添加服务提供方失败，部分模型初始化失败",
     "10700": "标签已存在",
     "10701": "未找到对应的标签",
     "10600": "账号或密码错误",
@@ -912,7 +929,7 @@
     "10606": "用户组和角色不能为空",
     "10610": "用户组内还有用户，不能删除",
     "10920": "未配置QA知识库相似问模型",
-    "10930": "该问题已存在",
+    "10930": "该问题已被标注过",
     "10527": "工作流等待用户输入超时",
     "10528": "{{type}}节点执行超过最大次数",
     "10531": "{{type}}功能已升级,需删除后重新拖入",

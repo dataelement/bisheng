@@ -47,6 +47,8 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
             <span className="text-sm ">{t('build.debugPreview')}</span>
         </div>
         <ChatComponent
+            showUpload={!!assistantState.is_allow_upload}
+            assistant
             debug
             clear
             logo={assistantState.logo}

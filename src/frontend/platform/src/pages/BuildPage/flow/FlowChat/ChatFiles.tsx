@@ -8,12 +8,12 @@ import { FileIcon, PaperclipIcon, X } from "lucide-react";
 import { useContext, useMemo, useRef, useState } from "react";
 
 // @accepts '.png,.jpg'
-export default function ChatFiles({ v, accepts, onChange }) {
+export default function ChatFiles({ v, accepts, onChange, preParsing }) {
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
     const remainingUploadsRef = useRef(0);
     const { appConfig } = useContext(locationContext);
-    // const fileAccepts = useMemo(() => appConfig.libAccepts.map((ext) => `.${ext}`), [appConfig.libAccepts]);
+    const fileAccepts = useMemo(() => appConfig.libAccepts.map((ext) => `.${ext}`), [appConfig.libAccepts]);
     const { toast } = useToast();
 
     const fileInputRef = useRef(null);
@@ -71,7 +71,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
 
         // Create an array of promises to handle multiple file uploads concurrently
         const uploadPromises = validFiles.map(({ file, id }) => {
-            return uploadChatFile(v, file, (progress) => {
+            return uploadChatFile(file, (progress) => {
                 // Update progress for each file individually
                 setFiles((prevFiles) => {
                     const updatedFiles = prevFiles.map(f => {
@@ -83,7 +83,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
                     filesRef.current = updatedFiles;
                     return updatedFiles;
                 });
-            }).then(response => {
+            }, preParsing, v).then(response => {
                 const filePath = response.file_path; // Assuming the response contains the file ID
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
@@ -185,7 +185,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
             </div>}
 
             {/* File Upload Button */}
-            <div className="absolute right-10 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
+            <div className="absolute right-20 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
                 <PaperclipIcon size={18} />
             </div>
 
@@ -194,7 +194,7 @@ export default function ChatFiles({ v, accepts, onChange }) {
                 type="file"
                 ref={fileInputRef}
                 multiple
-                accept={accepts}
+                accept={accepts || fileAccepts.join(',')}
                 onChange={handleFileChange}
                 className="hidden"
             />

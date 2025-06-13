@@ -134,7 +134,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
     // ws 请求数据包装
     const { tabsState } = useContext(TabsContext);
     // 依赖 chatId更新闭包，不依赖 flow
-    const getWsParamData = (action, msg) => {
+    const getWsParamData = (action, msg, files = []) => {
         if (type === AppNumType.SKILL) {
             const _flow = flowRef.current
             let inputs = tabsState[_flow.id].formKeysData.input_keys;
@@ -157,6 +157,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             return [msgData, inputKey]
         } else {
             const inputKey = 'input';
+            const filesKey = 'file_ids';
             const msgData = {
                 chatHistory: messages,
                 flow_id: data?.id || '',
@@ -166,6 +167,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 inputs: {}
             } as any
             if (msg) msgData.inputs = { [inputKey]: msg }
+            if (files.length && msg) msgData.inputs[filesKey] = files;
             if (data) msgData.inputs.data = data
             if (action === 'continue') msgData.action = action
             return [msgData, inputKey]

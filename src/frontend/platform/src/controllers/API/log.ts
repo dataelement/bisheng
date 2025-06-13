@@ -6,6 +6,16 @@ export async function getOperatorsApi(): Promise<[]> {
     return await axios.get('/api/v1/audit/operators')
 }
 
+// 审计视角 获取用户所管理的用户组内的应用
+export async function getAuditGroupsApi(params: { keyword, page, page_size }): Promise<[]> {
+    return await axios.get('/api/v1/group/audit/resources', { params })
+}
+
+// 运营视角 获取用户所管理的用户组内的应用
+export async function getOperationGroupsApi(params: { keyword, page, page_size }): Promise<[]> {
+    return await axios.get('/api/v1/group/operation/resources', { params })
+}
+
 // 分页获取审计列表
 export async function getLogsApi({ page, pageSize, userIds, groupId = '', start, end, moduleId = '', action = '' }: {
     page: number,
@@ -25,6 +35,39 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
         `&system_id=${moduleId}&event_type=${action}` + startStr + endStr
     )
 }
+
+// 获取会话分析策略配置
+export async function getChatAnalysisConfigApi(): Promise<any> {
+    return await axios.get('/api/v1/audit/session/config').then(res => {
+        const formData = {
+            reviewEnabled: res.flag,          // Map flag to reviewEnabled
+            reviewKeywords: res.prompt,      // Map prompt to reviewKeywords
+            reviewFrequency: res.day_cron === 'day' ? 'daily' : 'weekly',  // Check if it's daily or weekly
+            reviewTime: res.hour_cron,       // Map hour_cron to reviewTime
+            reviewDay: '',                    // Default empty, to be set if frequency is weekly
+        };
+
+        // Set reviewDay only if the frequency is weekly
+        if (formData.reviewFrequency === 'weekly') {
+            formData.reviewDay = res.day_cron; // Map the backend day to reviewDay (e.g., 'mon', 'tues', etc.)
+        }
+
+        return formData;
+    })
+}
+
+// 更新会话分析策略配置
+export async function updateChatAnalysisConfigApi(formData: { reviewEnabled: boolean, reviewKeywords: string, reviewFrequency: string, reviewTime: string, reviewDay: string }) {
+    const backendData = {
+        flag: formData.reviewEnabled,         // Map reviewEnabled to flag
+        prompt: formData.reviewKeywords,      // Map reviewKeywords to prompt
+        day_cron: formData.reviewFrequency === 'daily' ? 'day' : formData.reviewDay,  // Convert frequency and day
+        hour_cron: formData.reviewTime,      // Map reviewTime to hour_cron
+    };
+
+    return await axios.post('/api/v1/audit/session/config', backendData)
+}
+
 
 // 系统模块
 export async function getModulesApi(): Promise<{ data: any[] }> {
@@ -169,21 +212,21 @@ export async function getGroupsApi(
 
 
 // 获取审计应用列表
-export async function getAuditAppListApi(params: {
-    flow_ids,
-    user_ids,
-    group_ids,
-    start_date,
-    end_date,
-    feedback,
-    sensitive_status,
-    page,
-    page_size
-}) {
-    return await axios.get('/api/v1/audit/session', {
-        params, paramsSerializer
-    })
-}
+// export async function getAuditAppListApi(params: {
+//     flow_ids,
+//     user_ids,
+//     group_ids,
+//     start_date,
+//     end_date,
+//     feedback,
+//     sensitive_status,
+//     page,
+//     page_size
+// }) {
+//     return await axios.get('/api/v1/audit/session', {
+//         params, paramsSerializer
+//     })
+// }
 
 // 导出csv
 
@@ -212,6 +255,114 @@ export async function exportCsvDataApi(params: {
     sensitive_status
 }) {
     return await axios.get('/api/v1/audit/session/export/data', {
+        params, paramsSerializer
+    })
+}
+
+
+// 审计视角 获取会话的统计数据
+export async function getAuditChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
+    return await axios.get('/api/v1/audit/session/chart', {
+        params,
+        paramsSerializer
+    })
+}
+
+
+// 审计视角 获取报告下载链接
+export async function getAuditReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
+    return await axios.get('/api/v1/audit/session/chart/export', { params, paramsSerializer })
+}
+
+// 运营视角 获取会话的统计数据
+export async function getOperationChatStatisticsApi(params: { flow_ids, group_ids, start_date, end_date, page, page_size, order_field, order_type }) {
+    return await axios.get('/api/v1/operation/session/chart', {
+        params,
+        paramsSerializer
+    })
+}
+
+// 运营视角 获取报告下载链接
+export async function getOperationReportDownloadLinkApi(params: { flow_ids, group_ids, start_date, end_date }) {
+    return await axios.get('/api/v1/operation/session/chart/export', { params, paramsSerializer })
+}
+
+
+// 获取审计应用列表
+export async function getAuditAppListApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status,
+    page,
+    page_size,
+    keyword,
+}) {
+    return await axios.get('/api/v1/audit/session', {
+        params, paramsSerializer
+    })
+}
+
+//导出审计信息exportAduitDataApi
+export async function exportAduitDataApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status,
+    keyword,
+}) {
+    return await axios.get('/api/v1/audit/export', {
+        params, paramsSerializer
+    })
+}
+
+//导出运营信息exportAduitDataApi
+export async function exportOperationDataApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    keyword,
+}) {
+    return await axios.get('/api/v1/operation/export', {
+        params, paramsSerializer
+    })
+}
+
+// 手动审查应用使用情况
+export async function auditApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    review_status
+}): Promise<[]> {
+    return await axios.get('/api/v1/audit/session/review', { params, paramsSerializer })
+}
+
+// 获取运营应用列表
+export async function getOperationAppListApi(params: {
+    flow_ids,
+    user_ids,
+    group_ids,
+    start_date,
+    end_date,
+    feedback,
+    page,
+    page_size,
+    keyword,
+}) {
+    return await axios.get('/api/v1/operation/session', {
         params, paramsSerializer
     })
 }

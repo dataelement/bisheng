@@ -42,8 +42,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         filecontent: '',
         filepath: '',
         fileType: 'all',
+        fileTypes: ['file', 'image', 'audio'],
         fileContentSize: 15000,
         imageFile: '',
+        audioFile: '',
         isMultiple: true, // default value for multiple file upload
         isRequired: true,
         allowMultiple: false,  // Allow multiple file uploads
@@ -63,6 +65,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     const oldcontentNameRef = useRef("");
     const oldPathNameRef = useRef("");
     const oldImageFileRef = useRef("");
+    const oldAudioFileRef = useRef("");
     useEffect(() => {
         editRef.current = false
         if (initialData) {
@@ -74,9 +77,11 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 multiple: allowMultiple,
                 file_content: filecontent,
                 file_type: fileType,
+                file_types: fileTypes,
                 file_path: filepath,
                 file_content_size: fileContentSize,
                 image_file: imageFile,
+                audio_file: audioFile,
                 options = [] } = initialData;
             setFormData({
                 formType,
@@ -87,9 +92,11 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 options,
                 filecontent,
                 fileType,
+                fileTypes,
                 filepath,
                 fileContentSize,
                 imageFile,
+                audioFile,
                 isMultiple: allowMultiple
             });
 
@@ -99,6 +106,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             oldcontentNameRef.current = filecontent;
             oldPathNameRef.current = filepath;
             oldImageFileRef.current = imageFile;
+            oldAudioFileRef.current = audioFile;
         }
     }, [initialData]);
 
@@ -110,10 +118,12 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let initialFileContent = 'file_content'
         let initialFilePath = 'file_path'
         let initialFileImage = 'image_file'
+        let initialFileAudio = 'audio_file'
         let counter = 1;
         let initialFileContentCounter = 1;
         let initialFilePathCounter = 1;
         let initialFileImageCounter = 1
+        let initialFileAudioCounter = 1
         while (existingOptions?.some(opt => opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
@@ -131,6 +141,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             initialFileImageCounter += 1;
             initialFileImage = `image_file${initialFileImageCounter}`;
         }
+        while (fileOtions?.some(opt => opt.audio_file === initialFileAudio)) {
+            initialFileAudioCounter += 1;
+            initialFileAudio = `audio_file${initialFileAudioCounter}`;
+        }
         // 变量重命名
         // existingOptions.
         setFormData((prevData) => ({
@@ -138,7 +152,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             variableName: initialVarName,
             filecontent: initialFileContent,
             filepath: initialFilePath,
-            imageFile: initialFileImage
+            imageFile: initialFileImage,
+            audioFile: initialFileAudio
         }));
     }, [initialData, formData.formType])
 
@@ -199,11 +214,16 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             ) {
                 newErrors.filepath = t("variableNameExists");
             }
-
-            if (formData.fileType !== 'file') {
-                const _error = validateImageFileVariableName(formData.imageFile, existingOptions);
+            if (formData.fileTypes.includes('image')) {
+                const _error = validateFileVariableName(formData.imageFile, existingOptions, 'image');
                 if (_error) {
                     newErrors.imageFile = _error
+                }
+            }
+            if (formData.fileTypes.includes('audio')) {
+                const _error = validateFileVariableName(formData.imageFile, existingOptions, 'audio');
+                if (_error) {
+                    newErrors.audioFile = _error
                 }
             }
         }
@@ -213,7 +233,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         return Object.keys(newErrors).length === 0;
     };
 
-    const validateImageFileVariableName = (varName, existingOptions) => {
+    const validateFileVariableName = (varName, existingOptions, fileType: 'image' | 'audio') => {
         const errors = [];
 
         // 1. 非空检查
@@ -235,12 +255,20 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         if (varName.length > 50) {
             return '变量名称不能超过50个字符';
         }
-
+        
         // 5. 不能重复
-        if (existingOptions?.some(opt => opt.type === 'file'
-            && opt.image_file === formData.imageFile)
-            && formData.imageFile !== oldImageFileRef.current) {
-            return '变量名已存在';
+        if (fileType === 'image') {
+            if (existingOptions?.some(opt => opt.type === 'file'
+                && opt.image_file === formData.imageFile)
+                && formData.imageFile !== oldImageFileRef.current) {
+                return '变量名已存在';
+            }
+        } else if (fileType === 'audio') {
+            if (existingOptions?.some(opt => opt.type === 'file'
+                && opt.audio_file === formData.audioFile)
+                && formData.audioFile !== oldAudioFileRef.current) {
+                return '变量名已存在';
+            }
         }
 
         return '';
@@ -424,8 +452,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         </div>
         <FileTypeSelect data={{
             label: "上传文件类型",
-            value: formData.fileType,
-        }} onChange={(fileType) => setFormData({ ...formData, fileType })} />
+            value: formData.fileTypes,
+        }} onChange={(fileTypes) => setFormData({ ...formData, fileTypes })} />
         <div>
             <Label className="flex items-center bisheng-label">
                 临时知识库名称
@@ -482,7 +510,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             />
             {errors.filepath && <p className="text-red-500 text-sm">{errors.filepath}</p>}
         </div>
-        {formData.fileType !== 'file' && <div>
+        {formData.fileTypes.includes('image') && <div>
             <Label className="flex items-center bisheng-label">
                 上传图片文件
                 <QuestionTooltip content={'提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。'} />
@@ -495,6 +523,21 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 onChange={(e) => setFormData({ ...formData, imageFile: e.target.value })}
             />
             {errors.imageFile && <p className="text-red-500 text-sm">{errors.imageFile}</p>}
+        </div>}
+        {formData.fileTypes.includes('audio') && <div>
+            <Label className="flex items-center bisheng-label">
+                上传音频文件
+                <QuestionTooltip content={'提取上传文件中的音频文件，当使用音频转文字时，可传入此音频。'} />
+            </Label>
+            
+            <Input
+                className={`mt-2 ${errors.audioFile ? "border-red-500" : ""}`}
+                id="audioFile"
+                placeholder={t("enterVariableName")}
+                value={formData.audioFile}
+                onChange={(e) => setFormData({ ...formData, audioFile: e.target.value })}
+            />
+            {errors.audioFile && <p className="text-red-500 text-sm">{errors.audioFile}</p>}
         </div>}
     </div>;
 
@@ -582,8 +625,10 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             filecontent: file_content,
             filepath: file_path,
             fileType: file_type,
+            fileTypes: file_types,
             fileContentSize: file_content_size,
-            imageFile: image_file
+            imageFile: image_file,
+            audioFile: audio_file
         } = _data;
 
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
@@ -601,8 +646,10 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                         file_content,
                         file_path,
                         file_type,
+                        file_types,
                         file_content_size,
-                        image_file
+                        image_file,
+                        audio_file
                     }
                     : opt
             );
@@ -617,9 +664,11 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 file_content,
                 file_path,
                 file_type,
+                file_types,
                 options,
                 file_content_size,
-                image_file
+                image_file,
+                audio_file
             }];
             setTimeout(() => {
                 scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部

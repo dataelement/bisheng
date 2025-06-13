@@ -9,18 +9,21 @@ import { useTranslation } from "react-i18next";
 // import GuideQuestions from "./GuideQuestions";
 // import { useMessageStore } from "./messageStore";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { RefreshCw } from "lucide-react";
+import { Minimize2, RefreshCw } from "lucide-react";
 import useFlowStore from "../flowStore";
-import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
+import InputForm from "./InputForm";
 import { useMessageStore } from "./messageStore";
+import ChatFiles from "./ChatFiles";
+import SpeechToTextComponent from "@/components/SpeechToTextComponent";
 
 export const FileTypes = {
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
-    FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.DOC', '.DOCX', '.PPT', '.PPTX'],
+    FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.DOC', '.CSV', '.DOCX', '.PPT', '.PPTX'],
+    AUDIO: ['.MP3', '.AMR', 'WAV', 'AAC'],
 }
 
-export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
+export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBeforSend, onLoad, flow }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -30,8 +33,12 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
+    // const [inputForm, setInputForm] = useState(null) // input表单
+    const [formShow, setFormShow] = useState(false) // input表单显示
+    const [allowUpload, setAllowUpload] = useState(true) // input允许上传文件
 
     const [showWhenLocked, setShowWhenLocked] = useState(false) // 强制开启表单按钮，不限制于input锁定
+    const restartTaskRef = useRef({}) // 重启任务列表
 
     const {
         messages,
@@ -55,13 +62,24 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const continueRef = useRef(false)
     // 停止状态
     const [stop, setStop] = useState({
-        show: true,
+        show: false,
         disable: false
     })
     /**
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
     const changeChatedRef = useRef(false)
+    useEffect(() => {
+        //根据当前节点 去flow中去寻找allowUpload配置
+        if (!inputNodeIdRef.current) return;
+        const currentNode = (flow?.nodes || []).find(item => item.id === inputNodeIdRef.current);
+        if (!currentNode) return;
+        const params = (currentNode?.data?.group_params?.[0]?.params || []).find(item => item.key === "is_allow_upload");
+        if (params) {
+            setAllowUpload(params.value);
+        }
+    }, [inputNodeIdRef.current, flow])
+
     useEffect(() => {
         // console.log('message msg', messages, form);
 
@@ -83,13 +101,15 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         // setInputLock({ locked: false, reason: '' })
         // console.log('message chatid', messages, form, chatId);
         // setShowWhenLocked(false)
-
+        wsRef.current && sendWsMsg({ "action": "stop" });
+        questionsRef.current.updateQuestions([])
         currentChatIdRef.current = chatId
         // changeChatedRef.current = true
-        // setFormShow(false)
+        setInputForm(false)
         createWebSocket().then(() => {
             // 切换会话默认发送一条空消息(action, input)
-            const wsMsg = onBeforSend((messages.length === 0 && hisMessages.length === 0) || chatId.startsWith('test') ? 'init_data' : 'check_status', {})
+            const wsMsg = onBeforSend('init_data', {})
+            // const wsMsg = onBeforSend((messages.length === 0 && hisMessages.length === 0) || chatId.startsWith('test') ? 'init_data' : 'check_status', {})
             sendWsMsg(wsMsg)
         })
     }, [chatId])
@@ -164,7 +184,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     }
 
     const wsRef = useRef(null)
-    const reRunStateRef = useRef(false)
     const createWebSocket = () => {
         // 单例
         if (wsRef.current) return Promise.resolve('ok');
@@ -182,6 +201,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 };
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
+                    console.log('result message data :>> ', data);
                     // 过滤一些不需要的数据
                     if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
                         return
@@ -189,12 +209,15 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
 
                     if (data.type === 'begin') {
                         setStop({ show: true, disable: false })
-                    } else if (data.type === 'close' && data.category === 'processing') {
-                        if (!reRunStateRef.current) {
-                            // 重试时阻止关闭stop
-                            setStop({ show: false, disable: false })
+                    } else if (data.type === 'close') {
+                        setStop({ show: false, disable: false })
+                        // 停止会话后,有重启标识会话自动开启会话
+                        if (restartTaskRef.current[data.chat_id]) {
+                            createWebSocket().then(() => {
+                                sendWsMsg(onBeforSend('init_data', {}))
+                            })
+                            restartTaskRef.current[data.chat_id] = false
                         }
-                        reRunStateRef.current = false
                     }
 
                     // const errorMsg = data.category === 'error' ? data.intermediate_steps : ''
@@ -202,6 +225,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     // if (errorMsg) return setInputLock({ locked: true, reason: errorMsg })
                     // // 拦截会话串台
                     if (data.chat_id && currentChatIdRef.current && currentChatIdRef.current !== data.chat_id) return
+                    if (data.category === 'node_run') {
+                        inputNodeIdRef.current = data.message.node_id
+                    }
                     handleWsMessage(data);
                     ['begin', 'close'].includes(data.type) && onLoad()
                     // if ('close' === data.type) {
@@ -210,12 +236,13 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 }
                 ws.onclose = (event) => {
                     console.log('error event :>> ', event);
+                    onLoad()
                     // wsRef.current = null
                     // console.error('链接手动断开 event :>> ', event);
                     // setStop({ show: false, disable: false })
 
                     if ([1005, 1008, 1009].includes(event.code)) {
-                        setInputLock({ locked: true, reason: event.reason })
+                        setInputLock({ locked: true, reason: event.reason || '' })
                     } else {
                         if (event.reason) {
                             toast({
@@ -224,7 +251,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                                 description: event.reason
                             });
                         }
-                        setInputLock({ locked: true, reason: '' })
+                        setInputLock({ locked: false, reason: '' })
                     }
                     event.reason && addNotification({
                         type: 'error',
@@ -245,7 +272,11 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                     //         t('chat.networkErrorList3')
                     //     ]
                     // });
-                    setInputLock({ locked: true, reason: '' })
+                    setTimeout(() => {
+                        createWebSocket().then(() => {
+                            sendWsMsg(onBeforSend('init_data', {}))
+                        })
+                    }, 1000);
                 };
             } catch (err) {
                 console.error('创建链接异常', err);
@@ -260,19 +291,17 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
     const handleWsMessage = (data) => {
         if (data.category === 'error') {
             const { code, message } = data.message
-            setInputLock({ locked: true, reason: '' })
-
-            // 记录
-            const errorMsg = code == 500 ? message : t(`errors.${code}`, { type: message })
-            addNotification({
-                type: 'error',
-                title: '运行异常',
-                description: errorMsg
-            })
-
+            if (10527 === code) {
+                setInputForm(false)
+                return createWebSocket().then(() => {
+                    // 超时重启
+                    const wsMsg = onBeforSend('init_data', {})
+                    sendWsMsg(wsMsg)
+                })
+            }
             return toast({
                 variant: 'error',
-                description: errorMsg
+                description: code == 500 ? message : t(`errors.${code}`, { type: message })
             });
         } else if (data.category === 'node_run') {
             inputNodeIdRef.current = data.message.node_id
@@ -291,18 +320,26 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             messageIdRef.current = data.message_id
             // 限制文件类型
             if (input_schema.tab === 'dialog_input') {
-                const schemaItem = input_schema.value?.find(el => el.key === 'dialog_file_accept')
-                const fileAccept = schemaItem?.value
-                if (fileAccept === 'image') {
-                    setAccepts(FileTypes.IMAGE.join(','))
-                } else if (fileAccept === 'file') {
-                    setAccepts(FileTypes.FILE.join(','))
-                } else {
-                    setAccepts(FileTypes.IMAGE.join(',') + ',' + FileTypes.FILE.join(','))
+                // 以下两行兼容了旧逻辑，旧逻辑中没有dialog_file_accept
+                const schemaItem = input_schema.value?.find(el => el?.key === 'dialog_file_accept')
+                const fileAccept: string[] = schemaItem?.value || ['image', 'file', 'audio'];
+
+                const filesTypes = [];
+                if (fileAccept.includes('image')) {
+                    filesTypes.push(...FileTypes.IMAGE);
                 }
+                if (fileAccept.includes('file')) {
+                    filesTypes.push(...FileTypes.FILE);
+                } 
+                if (fileAccept.includes('audio')) {
+                    filesTypes.push(...FileTypes.AUDIO);
+                }
+                setAccepts(filesTypes.join(','));
             }
             // 待用户输入
-            input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
+            input_schema.tab === 'form_input'
+                ? (setInputForm(input_schema), setFormShow(true))
+                : setInputLock({ locked: false, reason: '' });
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
@@ -316,8 +353,10 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         }
 
         if (data.type === 'close' && data.category === 'processing') {
-            insetSeparator(t('chat.chatEndMessage'))
+            //本轮会话已结束
+            insetSeparator('先不打扰您啦，有问题欢迎再次咨询我哦~')
             setInputLock({ locked: true, reason: '' })
+            setInputForm(null)
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBackRef.current[data.chat_id]) {
                 restartCallBackRef.current[data.chat_id]()
@@ -441,14 +480,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 })
             })
         }
-        // wsRef.current?.close()
-        // wsRef.current = null
-        // stop.show && insetSeparator(t('chat.chatEndMessage'))
-        // setTimeout(() => {
-        //     createWebSocket().then(() => {
-        //         sendWsMsg(onBeforSend('init_data', {}))
-        //     })
-        // }, 300);
         if (stop.show) {
             reRunStateRef.current = true
         }
@@ -475,21 +506,22 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
-                <Tip side='top-right' content={"重新运行"}>
+                <Tip content={"重新运行"}>
                     <Button className="rounded-full" disabled={restarted} variant="ghost" size="icon" onClick={handleRestartClick}><RefreshCw size={18} /></Button>
                 </Tip>
             </div>
             {/* form switch */}
-            <div className="flex absolute left-3 top-4 z-10">
+            <div className="flex absolute left-12 top-4 z-10">
                 {
-                    form && <div
+                    inputForm && !formShow && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
-                    // onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
+                        onClick={() => setFormShow(!formShow)}
+                    ><FormIcon></FormIcon></div>
                 }
             </div>
+            {!inputLock.locked && <SpeechToTextComponent onChange={(text) => {inputRef.current.value += text}}/>}
             {/* 附件 */}
-            {!inputLock.locked && <ChatFiles accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
+            {!inputLock.locked && allowUpload && <ChatFiles accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} preParsing={false} />}
             {/* send */}
             <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
@@ -500,9 +532,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 </div>
             </div>
             {/* stop & 重置 */}
-            <div className="absolute w-full flex justify-center bottom-16">
+            <div className="absolute w-full flex justify-center bottom-16 hidden">
                 {!stop.show && <Button
-                    className="rounded-full bg-[#fff] dark:bg-[#1B1B1B]"
+                    className="rounded-full bg-gray-50"
                     variant="outline"
                     disabled={restarted}
                     onClick={handleRestartClick}>
@@ -520,7 +552,7 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
                 placeholder={placholder}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#131415] text-gray-800" + (form && ' pl-10')}
+                className={"resize-none py-4 pr-20 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();

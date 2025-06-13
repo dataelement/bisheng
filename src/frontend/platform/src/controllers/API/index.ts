@@ -711,6 +711,30 @@ export async function getWorkstationConfigApi(): Promise<any> {
   return await axios.get(`api/v1/workstation/config`);
 }
 
+/**
+ * 记录用户签署承诺
+ */
+export async function signCommitmentApi(data: { business_id: string, business_name: string, promise_id: string, promise_name: string }): Promise<any> {
+  return await axios.post(`/api/v1/promise/business/user`, data)
+}
+
+// 设置应用的承诺书
+export async function setCommitmentApi(business_id: string, promise_id: string): Promise<any> {
+  return await axios.post(`/api/v1/promise/business`, {
+    business_id,
+    promise_id
+  })
+}
+
+// 获取应用的承诺书
+export async function getCommitmentApi(business_id: string): Promise<any> {
+  return await axios.get(`/api/v1/promise/business`, { params: { business_id } }).then(res => {
+    return res.map(item => {
+      item.write = item.promise_id ? item.write : true
+      return item
+    })
+  })
+}
 
 /***************************
  * ************ 溯源 ************ 

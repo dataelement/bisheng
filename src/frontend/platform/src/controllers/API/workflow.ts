@@ -133,6 +133,13 @@ const workflowTemplate = [
                 "name": "全局变量",
                 "params": [
                     {
+                        "key": "user_info",
+                        "global": "key",
+                        "label": "用户信息",
+                        "type": "var",
+                        "value": ""
+                    },
+                    {
                         "key": "current_time",
                         "global": "key",
                         "label": "当前时间",
@@ -206,10 +213,18 @@ const workflowTemplate = [
                         "tab": "dialog_input"
                     },
                     {
+                        "key": "is_allow_upload",
+                        "label": "允许上传文件",
+                        "type": "switch",
+                        "tab": "dialog_input",
+                        "help": "控制会话中是否允许上传文件",
+                        "value": true
+                    },
+                    {
                         "key": "dialog_file_accept",
                         "label": "上传文件类型",
                         "type": "select_fileaccept",
-                        "value": "all",
+                        "value": ['file', 'audio', 'image'],
                         "tab": "dialog_input"
                     },
                     {
@@ -219,6 +234,14 @@ const workflowTemplate = [
                         "type": "var",
                         "tab": "dialog_input",
                         "help": "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
+                    },
+                    {
+                        "key": "dialog_audio_files",
+                        "global": "key",
+                        "label": "上传音频文件",
+                        "type": "var",
+                        "tab": "dialog_input",
+                        "help": "提取上传文件中的音频文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
                     },
                     {
                         "key": "form_input",
@@ -242,6 +265,7 @@ const workflowTemplate = [
             {
                 "params": [
                     {
+                        // TODO： 0522 KEY值改了 这里需要特别注意一下
                         "key": "message",
                         "label": "消息内容",
                         "global": "key",
@@ -264,6 +288,108 @@ const workflowTemplate = [
                             "value": ""
                         },
                         "options": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "tts_xxx",
+        "name": "文字转语音",
+        "description": "调用大模型进行文字转语音。",
+        "type": "tts",
+        "v": "1",
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "batch_variable",
+                        "label": "批处理变量",
+                        "global": "self",
+                        "type": "user_question",
+                        "test": "var",
+                        "value": [],
+                        "required": true,
+                        "linkage": "output",
+                        "placeholder": "请选择批处理变量",
+                        "help": "选择需要批处理的变量，将会多次运行本节点，每次运行时从选择的变量中取一项赋值给batch_variable进行处理。",
+                    }
+                ]
+            },
+            {
+                "name": "模型设置",
+                "params": [
+                    {
+                        "key": "model_id",
+                        "label": "模型",
+                        "type": "tts_model",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "请选择模型"
+                    },
+                ]
+            },
+            {
+                "name": "输出",
+                "params": [
+                    {
+                        "key": "output",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "label": "输出变量",
+                        "help": "模型输出内容将会存储在该变量中。",
+                        "type": "var",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "stt_xxx",
+        "name": "语音转文字",
+        "description": "调用大模型进行语音转文字。",
+        "type": "stt",
+        "v": "1",
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "batch_variable",
+                        "label": "批处理变量",
+                        "global": "self",
+                        "type": "user_question",
+                        "test": "var",
+                        "value": [],
+                        "required": true,
+                        "linkage": "output",
+                        "placeholder": "请选择批处理变量",
+                        "help": "选择需要批处理的变量，将会多次运行本节点，每次运行时从选择的变量中取一项赋值给batch_variable进行处理。",
+                    }
+                ]
+            },
+            {
+                "name": "模型设置",
+                "params": [
+                    {
+                        "key": "model_id",
+                        "label": "模型",
+                        "type": "stt_model",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "请选择模型"
+                    },
+                ]
+            },
+            {
+                "name": "输出",
+                "params": [
+                    {
+                        "key": "output",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "label": "输出变量",
+                        "help": "模型输出内容将会存储在该变量中。",
+                        "type": "var",
+                        "value": []
                     }
                 ]
             }
@@ -327,7 +453,14 @@ const workflowTemplate = [
                         ],
                         "step": 0.1,
                         "value": 0.7
-                    }
+                    },
+                    {
+                        "key": "enable_web_search",
+                        "label": "联网搜索",
+                        "type": "switch",
+                        "help": "",
+                        "value": false
+                    },
                 ]
             },
             {
@@ -425,7 +558,7 @@ const workflowTemplate = [
                         "type": "agent_model",
                         "required": true,
                         "value": "",
-                        "placeholder": "请在系统模型设置中配置助手推理模型"
+                        "placeholder": "请在模型管理-系统模型设置中配置助手推理模型"
                     },
                     {
                         "key": "temperature",
@@ -437,7 +570,14 @@ const workflowTemplate = [
                         ],
                         "step": 0.1,
                         "value": 0.7
-                    }
+                    },
+                    {
+                        "key": "enable_web_search",
+                        "label": "联网搜索",
+                        "type": "switch",
+                        "help": "",
+                        "value": false
+                    },
                 ]
             },
             {
@@ -609,7 +749,7 @@ const workflowTemplate = [
         "name": "文档知识库问答",
         "description": "根据用户问题从知识库中检索相关内容，结合检索结果调用大模型生成最终结果，支持多个问题并行执行。",
         "type": "rag",
-        "v": "1",
+        "v": "2",
         "group_params": [
             {
                 "name": "知识库检索设置",
@@ -695,6 +835,21 @@ const workflowTemplate = [
                         ],
                         "step": 0.1,
                         "value": 0.7
+                    },
+                    {
+                        "key": "enable_web_search",
+                        "label": "联网搜索",
+                        "global": "self",
+                        "type": "switch",
+                        "help": "",
+                        "value": false
+                    },
+                    {
+                        "key": "show_source",
+                        "label": "展示参考来源",
+                        "type": "switch",
+                        "value": true,
+                        "help": "关闭后在会话页面不展示消息参考来源"
                     }
                 ]
             },
@@ -903,9 +1058,39 @@ const workflowTemplateEN = [
             "value": "dialog_input",
             "options": [
                 {
-                    "label": "Dialog Input",
+                    "label": "Enter text content",
                     "key": "dialog_input",
                     "help": "Receive content entered by the user from the dialog box."
+                },
+                {
+                    "key": "dialog_files_content",
+                    "global": "key",
+                    "label": "Upload file content",
+                    "type": "var",
+                    "tab": "dialog_input"
+                },
+                {
+                    "key": "dialog_files_content_size",
+                    "label": "Maximum length of file content (words)",
+                    "type": "number",
+                    "min": 0,
+                    "value": 15000,
+                    "tab": "dialog_input"
+                },
+                {
+                    "key": "dialog_file_accept",
+                    "label": "Upload file type",
+                    "type": "select_fileaccept",
+                    "value": "all",
+                    "tab": "dialog_input"
+                },
+                {
+                    "key": "dialog_image_files",
+                    "global": "key",
+                    "label": "Upload image files",
+                    "type": "var",
+                    "tab": "dialog_input",
+                    "help": "Extract the image file from the uploaded file. When the assistant or large model node uses the MultiModal Machine Learning large model, this image can be passed in."
                 },
                 {
                     "label": "Form Input",
@@ -921,39 +1106,23 @@ const workflowTemplateEN = [
                     {
                         "key": "user_input",
                         "global": "key",
-                        "label": "Enter text content",
+                        "label": "User Input Content",
                         "type": "var",
                         "tab": "dialog_input"
                     },
                     {
                         "key": "dialog_files_content",
                         "global": "key",
-                        "label": "Upload file content",
+                        "label": "Uploaded File Content",
                         "type": "var",
                         "tab": "dialog_input"
                     },
                     {
                         "key": "dialog_files_content_size",
-                        "label": "Maximum length of file content (words)",
+                        "label": "Retrieval Result Length (characters)",
                         "type": "number",
-                        "min": 0,
                         "value": 15000,
                         "tab": "dialog_input"
-                    },
-                    {
-                        "key": "dialog_file_accept",
-                        "label": "Upload file type",
-                        "type": "select_fileaccept",
-                        "value": "all",
-                        "tab": "dialog_input"
-                    },
-                    {
-                        "key": "dialog_image_files",
-                        "global": "key",
-                        "label": "Upload image files",
-                        "type": "var",
-                        "tab": "dialog_input",
-                        "help": "Extract the image file from the uploaded file. When the assistant or large model node uses the MultiModal Machine Learning large model, this image can be passed in."
                     },
                     {
                         "global": "item:form_input",

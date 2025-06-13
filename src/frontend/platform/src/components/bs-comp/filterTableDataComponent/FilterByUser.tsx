@@ -1,15 +1,10 @@
+
+import { useRef, useState } from "react";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getUsersApi } from "@/controllers/API/user";
-import { debounce } from "lodash";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { getUsersApiForUser } from "@/controllers/API/user";
 
-interface UserOption {
-    label: string;
-    value: string;
-}
-
-export default function FilterByUser({ value, onChange }) {
-    const { users, loadUsers, searchUser, loadMoreUsers } = useUsers();
+export default function FilterByUser({ value, onChange, isAudit }) {
+    const { users, loadUsers, searchUser, loadMoreUsers } = useUsers(isAudit);
 
     return (
         <div className="w-[200px] relative">
@@ -18,7 +13,7 @@ export default function FilterByUser({ value, onChange }) {
                 options={users}
                 value={value}
                 placeholder="用户名"
-                onLoad={() => loadUsers("")}
+                onLoad={loadUsers}
                 onSearch={searchUser}
                 onScrollLoad={loadMoreUsers}
                 onChange={onChange}
@@ -27,106 +22,58 @@ export default function FilterByUser({ value, onChange }) {
     );
 }
 
-const useUsers = () => {
-    const [users, setUsers] = useState<UserOption[]>([]);
-    const pageRef = useRef(1);
+const useUsers = (isAudit: boolean) => {
+    const [users, setUsers] = useState<any[]>([]);
+    const [page, setPage] = useState(1);
     const hasMoreRef = useRef(true);
-    const loadLock = useRef(false);
-    const keywordRef = useRef("");
-    const abortControllerRef = useRef<AbortController>();
+    const loadLock = useRef(false); // Prevent multiple simultaneous requests
+    const keyWordRef = useRef("");
 
-    // 通用数据映射
-    const mapUserData = (data: any[]): UserOption[] =>
-        data.map(u => ({ label: u.user_name, value: u.user_id }));
-
-    // 统一请求处理
-    const fetchUsers = async (params: {
-        name: string;
-        page: number;
-        pageSize: number
-    }) => {
-        abortControllerRef.current?.abort();
-        abortControllerRef.current = new AbortController();
-
+    // Load users from the API and store in state
+    const loadUsers = async (name: string) => {
         try {
-            const res = await getUsersApi(
-                {
-                    name: params.name,
-                    page: params.page,
-                    pageSize: params.pageSize
-                },
-                { signal: abortControllerRef.current.signal }
-            );
-            return res.data;
+            const res = await getUsersApiForUser({ name, page: 1, pageSize: 50, isAudit });
+            const options = res.data.map((u: any) => ({
+                label: u.user_name,
+                value: u.user_id,
+            }));
+            keyWordRef.current = name;
+            setUsers(options);
+            setPage(1);
+            hasMoreRef.current = res.data.length > 0;
+
+            setTimeout(() => {
+                loadLock.current = false;
+            }, 500);
         } catch (error) {
-            if (error.name === 'AbortError') return [];
-            throw error;
+            console.error("Error loading users:", error);
+            // Optionally, you can set users to an empty array or show an error message
         }
     };
 
-    // 加载用户（初始/搜索）
-    const loadUsers = useCallback(async (name: string) => {
+    // Load more apps when scrolling
+    const loadMoreUsers = async () => {
+        if (!hasMoreRef.current) return;
         if (loadLock.current) return;
-
-        loadLock.current = true;
-        keywordRef.current = name;
-
         try {
-            const data = await fetchUsers({
-                name,
-                page: 1,
-                pageSize: 20  // 统一分页大小
-            });
-
-            setUsers(mapUserData(data));
-            pageRef.current = 1;
-            hasMoreRef.current = data.length === 20;
+            const nextPage = page + 1;
+            const res = await getUsersApiForUser({ name: keyWordRef.current, page: nextPage, pageSize: 50, isAudit });
+            const options = res.data.map((a: any) => ({
+                label: a.user_name,
+                value: a.user_id,
+            }));
+            setUsers((prevApps) => [...prevApps, ...options]);
+            setPage(nextPage);
+            hasMoreRef.current = res.data.length > 0;
         } catch (error) {
-            console.error("用户加载失败:", error);
-        } finally {
-            loadLock.current = false;
+            console.error("Error loading more apps:", error);
         }
-    }, []);
-
-    // 滚动加载更多
-    const loadMoreUsers = useCallback(async () => {
-        if (!hasMoreRef.current || loadLock.current) return;
-
-        loadLock.current = true;
-
-        try {
-            const nextPage = pageRef.current + 1;
-            const data = await fetchUsers({
-                name: keywordRef.current,
-                page: nextPage,
-                pageSize: 20
-            });
-
-            setUsers(prev => [...prev, ...mapUserData(data)]);
-            pageRef.current = nextPage;
-            hasMoreRef.current = data.length === 20;
-        } catch (error) {
-            console.error("加载更多用户失败:", error);
-        } finally {
-            loadLock.current = false;
-        }
-    }, []);
-
-    // 防抖搜索
-    const searchUser = useCallback(
-        debounce((name: string) => loadUsers(name), 500),
-        [loadUsers]
-    );
-
-    // 组件卸载时取消请求
-    useEffect(() => {
-        return () => abortControllerRef.current?.abort();
-    }, []);
+    };
 
     return {
         users,
         loadUsers,
-        searchUser,
+        searchUser: loadUsers,
         loadMoreUsers
     };
 };

@@ -15,6 +15,7 @@ import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
 import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
+import Watermark from "./Watermark";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -170,10 +171,20 @@ export default function App() {
   const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.split('/')?.[1] || ''
 
+  // 系统管理员(超管、组超管)
+  const isAdmin = useMemo(() => {
+    return user?.role?.includes('admin')
+  }, [user])
+      
+  // 拥有权限管理权限
+  const hasGroupAdminRole = useMemo(() => {
+    return user?.role?.includes('group_admin')
+  }, [user])
+
   // 动态路由根据权限
   const router = useMemo(() => {
     // return getAdminRouter()
-    if (user && ['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
+    if (user && (isAdmin || hasGroupAdminRole)) return getAdminRouter()
     return user?.user_id ? getPrivateRouter(user.web_menu) : null
   }, [user])
 
@@ -218,6 +229,8 @@ export default function App() {
       </div>
       {/* 新弹窗 */}
       <Toaster></Toaster>
+      
+      {user && <Watermark text={user.user_name}/>}
     </div>
   );
 }

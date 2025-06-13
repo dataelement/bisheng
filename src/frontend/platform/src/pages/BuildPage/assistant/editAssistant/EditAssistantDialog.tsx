@@ -1,21 +1,34 @@
+import { useContext, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AssistantIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
 import Avator from "@/components/bs-ui/input/avator";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
+import { getCommitmentApi, setCommitmentApi } from "@/controllers/API";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { SelectCommitment } from "@/pages/ChatAppPage/components/CommitmentDialog";
 
-export default function EditAssistantDialog({ logo, name, desc, onSave }) {
+// TODO 合并到createapp组件
+export default function EditAssistantDialog({ id, logo, online, name, desc, onSave }) {
 
+    const { appConfig } = useContext(locationContext)
     const { t } = useTranslation()
     // State for form fields
     const [formData, setFormData] = useState({ logo: '', name: '', desc: '' });
+    // 承诺书id
+    const [commitmentId, setCommitmentId] = useState<string>('');
 
     useEffect(() => {
         setFormData({ logo, name, desc })
+        // 承诺书
+        if (appConfig.securityCommitment) {
+            getCommitmentApi(id).then(res => {
+                setCommitmentId(res.length ? res[0].promise_id : '');
+            })
+        }
     }, [logo, name, desc])
     // console.log(formData, name, desc);
 
@@ -76,6 +89,7 @@ export default function EditAssistantDialog({ logo, name, desc, onSave }) {
         })
 
         onSave(formData)
+        !online && appConfig.securityCommitment && setCommitmentApi(id, commitmentId)
     };
 
     const uploadAvator = (file) => {
@@ -124,6 +138,10 @@ export default function EditAssistantDialog({ logo, name, desc, onSave }) {
                 />
                 {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
             </div>
+            {appConfig.securityCommitment && <div className="mb-6">
+                <label className="bisheng-label">承诺书:</label>
+                <SelectCommitment value={commitmentId} onChange={setCommitmentId} />
+            </div>}
         </div>
         <DialogFooter>
             <DialogClose>

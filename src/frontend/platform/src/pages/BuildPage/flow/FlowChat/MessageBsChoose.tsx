@@ -1,3 +1,4 @@
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { WordIcon } from "@/components/bs-icons";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
@@ -13,6 +14,9 @@ import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { SourceType } from "@/constants";
+import RichText from "@/components/bs-comp/richText";
+
 // 颜色列表
 const colorList = [
     "#111",
@@ -28,7 +32,7 @@ const colorList = [
     "#95A5A6"
 ]
 
-export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
+export default function MessageBsChoose({ type = 'choose', logo, data, flow = {id: 0, logo: ''} }: { type?: string, logo: string, data: WorkflowMessage, flow: any}) {
     const { t } = useTranslation()
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
@@ -113,6 +117,18 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
         ),
         [data.message]
     )
+    // 输出富文本
+    const richText = useMemo(
+        () => {
+            const message = data.message;
+            // 命中QA了 说明返回的大概率是富文本
+            if (data.source === SourceType.HAS_QA && /<[a-z][\s\S]*>/i.test(message)) {
+                return <RichText msg={message}/>
+            }
+            return ''
+        },
+        [data.message]
+    )
 
     const files = useMemo(() => {
         return typeof data.files === 'string' ? [] : data.files
@@ -131,18 +147,19 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
             </div>
             <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                 <div className="flex gap-2">
-                    {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                    {<TitleLogo url={flow?.logo} className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden" id={flow?.id}></TitleLogo>}
+                    {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                         <img className="w-6 h-6" src={logo} />
                     </div>
                         : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                             <AvatarIcon />
-                        </div>}
+                        </div>} */}
                     <div className="text-sm max-w-[calc(100%-24px)]">
                         {/* message */}
-                        <div>{mkdown}</div>
+                        <div>{richText || mkdown}</div>
                         {/* files */}
                         <div>
-                            {files.map((file) => <div
+                            {files?.map((file) => <div
                                 className="flex gap-2 w-52 border border-gray-200 shadow-sm bg-gray-50 dark:bg-gray-600 px-4 py-2 rounded-sm cursor-pointer"
                                 onClick={() => handleDownloadFile(file)}
                             >
