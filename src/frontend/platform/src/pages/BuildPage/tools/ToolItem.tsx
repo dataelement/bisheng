@@ -37,7 +37,7 @@ export default function ToolItem({
                 <div className="flex-1 min-w-0">
                     <div className="w-full text-sm font-medium leading-none flex items-center gap-2">{data.name}
                         {
-                            ['edit', 'mcp'].includes(type) && <div
+                            ['edit', 'mcp'].includes(type) && data.write && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={(e) => onEdit(data.id)}
                             ><SettingIcon /></div>

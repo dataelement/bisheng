@@ -814,6 +814,8 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
     const formData = new FormData();
     formData.append(fileKey, file);
 
+    let isFinished = false;
+
     const config = {
       headers: { 'Content-Type': 'multipart/form-data;charset=utf-8' },
       onUploadProgress: (progressEvent) => {
@@ -821,12 +823,13 @@ export async function uploadFileApi({ fileKey, file, onProgress, onFinish, onFai
         const progress = Math.min(99.99, (loaded * 100) / total);
         console.log(`Upload progress: ${file.name} ${progress}%`);
         // UI with the progress information here
-        onProgress(progress)
+        !isFinished && onProgress(progress)
       },
       signal: abortCtlr.signal,
     }
     const response = await axios.post('/api/v1/knowledge/upload', formData, config);
     // 处理成功
+    isFinished = true;
     onFinish(response);
   } catch (error) {
     if (error?.code === "ERR_CANCELED") {

@@ -29,7 +29,7 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
                 setProgress(progress)
             },
             onFinish: (res) => {
-                console.log('上传结果 :>> ', res);
+                console.log('上传结果 :>> ', item.fileName, res);
                 setProgress(100)
                 onResulte(item.id, {
                     id: item.id,
@@ -39,6 +39,7 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
                 setRetrying(false)
             },
             onFail: (err) => {
+                console.log('上传失败 :>> ', item.fileName);
                 setProgress(100)
                 onResulte(item.id, {
                     id: item.id,
@@ -55,7 +56,7 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
 
     useEffect(() => {
         if (item.progress === ProgressStatus.Uploading) {
-            console.log('开始上传 :>> ', item.id);
+            console.log('开始上传 :>> ', item.fileName, item.id);
             uploadApi(item)
         }
     }, [item.progress])
@@ -87,15 +88,15 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
         <div className={cn(
             "border border-primary/20 rounded-xl cursor-pointer hover:border-primary/80 hover:shadow-lg relative overflow-hidden",
             // { "border-[#A8A8A8]/40": item.error && !retrying },
-            { "border-red-500": item.reason }
+            { "border-red-500": item.reason },
+            { "hover:border-red-500": item.error && !retrying }
         )}>
             <div className={cn(
                 "absolute h-full",
                 {
-                    "bg-[#A8A8A8]/20": item.error && !retrying,
                     "bg-primary/20": (!item.error || retrying) && progress !== 100,
                     "animate-pulse": progress !== 100 && !item.error,
-                    "bg-red-500/10": item.reason
+                    "bg-red-500/10": item.reason || (item.error && !retrying)
                 }
             )} style={{ width: `${progress}%` }}></div>
             <div className="group flex gap-2 p-2 items-center relative z-10">

@@ -59,7 +59,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                           {...provided.dragHandleProps}
                           className="my-1 border rounded bg-accent text-sm h-8"
                         >
-                          <div className='relative group h-full py-1 px-2 whitespace-nowrap'>
+                          <div className='relative group h-full py-1 px-2 whitespace-nowrap overflow-hidden max-w-96'>
                             {strategy.position === 'before' ? (
                               <>
                                 <span>✂️{strategy.regex}</span>
@@ -71,6 +71,8 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                                 <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
                               </>
                             )}
+                            {/* 右侧渐变遮罩 */}
+                            <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
                             <DelIcon
                               onClick={() => setStrategies(strategies.filter((_, i) => i !== index))}
                               className='absolute right-1 top-0 hidden group-hover:block cursor-pointer'

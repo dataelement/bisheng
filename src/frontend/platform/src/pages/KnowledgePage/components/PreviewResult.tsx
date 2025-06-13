@@ -38,7 +38,21 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         setSelectId(file.id)
     }, [])
     const currentFile = useMemo(() => {  // 当前选择文件
-        return rules.fileList.find(file => file.id === selectId)
+        const _currentFile = rules.fileList.find(file => file.id === selectId)
+        // 触发keydown事件,切换tab
+        if (_currentFile) {
+            const dom = document.getElementById(_currentFile.fileType === 'table' ? 'knowledge_table_tab' : 'knowledge_file_tab')
+            const keydownEvent = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true
+            });
+            dom && dom.dispatchEvent(keydownEvent);
+        }
+        return _currentFile
     }, [selectId, rules])
     const [fileViewUrl, setFileViewUrl] = useState('') // 当前选择文件预览url
 
@@ -46,7 +60,11 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
     const prevPreviewCountMapRef = useRef({})
     useEffect(() => {
         if (!selectId) return
-        setLoading(true)
+        setTimeout(() => {
+            setLoading(true)
+        }, 0);
+        setFileViewUrl('')
+        setChunks([])
         // 合并配置
         const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId
             , retainImages, separator, separatorRule } = rules
@@ -71,10 +89,9 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             force_ocr: forceOcr,
             fileter_page_header_footer: pageHeaderFooter
 
-        }), (error) => {
-            setChunks([])
-        }).then(res => {
+        })).then(res => {
             if (!res) return setLoading(false)
+            if (res === 'canceled') return
             console.log("previewFileSplitApi:", res)
             res && setChunks(res.chunks.map(chunk => ({
                 bbox: chunk.metadata.bbox,
@@ -114,7 +131,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
     }
 
     return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-1/2' : 'w-full')}>
-        {step === 3 && currentFile && < PreviewFile
+        {step === 3 && currentFile && <PreviewFile
             url={fileViewUrl}
             file={currentFile}
             chunks={chunks}
