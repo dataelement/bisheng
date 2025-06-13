@@ -99,6 +99,15 @@ class CeleryConf(BaseModel):
     knowledge_file_time_limit: Optional[int] = Field(default=None, description='知识库文件解析的速率限制，单位为秒')
     task_routers: Optional[dict] = Field(default_factory=dict, description='任务路由配置')
 
+    @field_validator('task_routers', mode='before')
+    def handle_routers(cls, value):
+        if not value:
+            return {
+                "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # 知识库相关任务
+                "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # 工作流执行相关任务
+            }
+        return value
+
 
 class Settings(BaseModel):
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')

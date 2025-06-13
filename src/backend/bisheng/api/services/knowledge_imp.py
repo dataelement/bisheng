@@ -254,24 +254,15 @@ def process_file_task(
         raise e
 
 
-def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
-    """删除知识文件信息"""
-    knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
-
-    knowledge_ids = [file.knowledge_id for file in knowledge_files]
-    knowledges = KnowledgeDao.get_list_by_ids(knowledge_ids)
-    knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
+def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
+    """ 删除知识文件的向量数据和es数据 """
+    if not file_ids:
+        return True
     embeddings = FakeEmbedding()
-    collection_ = set([knowledge.collection_name for knowledge in knowledges])
-
-    if len(collection_) > 1:
-        raise ValueError("不支持多个collection")
-    collection_name = collection_.pop()
-    # 处理vectordb
-    vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
+    vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
     try:
-        if isinstance(vectore_client.col, Collection):
-            pk = vectore_client.col.query(
+        if isinstance(vector_client.col, Collection):
+            pk = vector_client.col.query(
                 expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
             )
         else:
@@ -279,37 +270,66 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     except Exception:
         # 重试一次
         logger.error("timeout_except")
-        vectore_client.close_connection(vectore_client.alias)
-        vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-        pk = vectore_client.col.query(
+        vector_client.close_connection(vector_client.alias)
+        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
+        pk = vector_client.col.query(
             expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
         )
+
     logger.info("query_milvus pk={}", pk)
     if pk:
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
+        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
         logger.info(f"act=delete_vector file_id={file_ids} res={res}")
-    vectore_client.close_connection(vectore_client.alias)
+    vector_client.close_connection(vector_client.alias)
 
-    for file in knowledge_files:
-        # mino
-        if clear_minio:
-            # minio
-            minio_client.delete_minio(str(file.id))
-            if file.object_name:
-                minio_client.delete_minio(str(file.object_name))
-
-        knowledge = knowledgeid_dict.get(file.knowledge_id)
-        # elastic
-        index_name = knowledge.index_name or collection_name
-        esvectore_client = decide_vectorstores(
-            index_name, "ElasticKeywordsSearch", embeddings
+    es_client = decide_vectorstores(
+        knowledge.index_name, "ElasticKeywordsSearch", embeddings
+    )
+    for one in file_ids:
+        res = es_client.client.delete_by_query(
+            index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
         )
+        logger.info(f"act=delete_es file_id={one} res={res}")
+    return True
 
-        if esvectore_client:
-            res = esvectore_client.client.delete_by_query(
-                index=index_name, query={"match": {"metadata.file_id": file.id}}
-            )
-            logger.info(f"act=delete_es file_id={file.id} res={res}")
+
+def delete_minio_files(file: KnowledgeFile):
+    """删除知识库文件在minio上的存储"""
+
+    # 删除源文件
+    if file.object_name:
+        minio_client.delete_minio(file.object_name)
+
+    # 删除bbox文件
+    if file.bbox_object_name:
+        minio_client.delete_minio(file.bbox_object_name)
+
+    # 删除转换后的pdf文件
+    minio_client.delete_minio(f"{file.id}")
+
+    # 删除预览文件
+    preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
+        file.id, file.file_name
+    )
+    if preview_object_name:
+        minio_client.delete_minio(preview_object_name)
+    return True
+
+
+def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
+    """删除知识文件信息"""
+    knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+
+    knowledge_ids = [file.knowledge_id for file in knowledge_files]
+    knowledges = KnowledgeDao.get_list_by_ids(knowledge_ids)
+    if len(knowledges) > 1:
+        raise ValueError("不支持多个知识库的文件同时删除")
+    knowledge = knowledges[0]
+    delete_vector_files(file_ids, knowledge)
+
+    if clear_minio:
+        for file in knowledge_files:
+            delete_minio_files(file)
     return True
 
 

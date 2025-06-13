@@ -6,7 +6,7 @@ from loguru import logger
 from pymilvus import Collection, MilvusException
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
-    KnowledgeUtils
+    KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge_file import (
@@ -270,7 +270,13 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         logger.info(
             f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
         try:
-            _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+            # 入库成功后，再此判断文件信息是否还存在，不存在则删除
+            _, knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+            db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+            if db_file:
+                return
+            # 不存在则可能在解析过程中被删除了，需要删掉向量库的数据
+            delete_vector_files([db_file.id], knowledge)
         except Exception as e:
             logger.error("parse_knowledge_file_celery error: {}", str(e))
 
@@ -310,6 +316,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
                       force_ocr=file_rule.force_ocr,
                       filter_page_header_footer=file_rule.filter_page_header_footer)
     logger.debug("parse_knowledge_file_celery_over", file_id)
+    return db_file, db_knowledge
 
 
 @bisheng_celery.task(time_limit=settings.celery_task.knowledge_file_time_limit)
