@@ -97,6 +97,7 @@ class WorkflowConf(BaseModel):
 
 class CeleryConf(BaseModel):
     knowledge_file_time_limit: Optional[int] = Field(default=None, description='知识库文件解析的速率限制，单位为秒')
+    task_routers: Optional[dict] = Field(default_factory=dict, description='任务路由配置')
 
 
 class Settings(BaseModel):

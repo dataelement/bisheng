@@ -7,3 +7,4 @@ result_serializer = 'json'
 accept_content = ['json']
 timezone = 'Asia/Shanghai'
 enable_utc = False
+task_routes = settings.celery_task.task_routers
