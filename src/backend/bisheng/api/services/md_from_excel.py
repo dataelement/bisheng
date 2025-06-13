@@ -165,11 +165,12 @@ def process_dataframe_to_markdown_files(
         return
 
     header_block_df = pd.DataFrame()
+    start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
+    if start_header_idx >= rows:
+        append_header = False
 
     # --- 核心逻辑修改：根据 append_header 决定如何切分数据 ---
     if append_header:
-        start_header_idx, end_header_idx = num_header_rows[0], num_header_rows[1]
-
         # 根据用户规则处理表头索引越界问题
         if start_header_idx >= rows:
             logger.warning(f"  表头起始行 {start_header_idx} 超出总行数 {rows}。将使用第一行作为表头。")
@@ -243,6 +244,17 @@ def process_dataframe_to_markdown_files(
         except Exception as e:
             logger.debug(f"  保存文件 '{file_path}' 时出错: {e}")
 
+def is_list_of_lists_empty(data_list):
+    """
+    判断一个二维列表是否为空或只包含空值 (None, '')。
+    """
+    if not data_list:
+        return True
+    # 使用 any() 和生成器表达式，高效判断
+    # any(row) 检查是否存在非空行
+    # any(cell is not None and cell != '' for cell in row) 检查行内是否有非空单元格
+    return not any(any(cell is not None and str(cell).strip() != '' for cell in row) for row in data_list)
+
 
 def excel_file_to_markdown(
     excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True
@@ -260,8 +272,9 @@ def excel_file_to_markdown(
         sheet_obj = workbook[sheet_name]
         unmerged_data_list_of_lists = unmerge_and_read_sheet(sheet_obj)
 
-        if not unmerged_data_list_of_lists:
-            logger.debug(f"  工作表 '{sheet_name}' 为空或读取失败，跳过。")
+          # 使用新的判断函数
+        if is_list_of_lists_empty(unmerged_data_list_of_lists):
+            logger.debug(f"  工作表 '{sheet_name}' 为空或无有效数据，跳过。")
             continue
 
         df = pd.DataFrame(unmerged_data_list_of_lists)
@@ -406,9 +419,9 @@ def handler(
 if __name__ == "__main__":
     # 定义测试参数
     test_cache_dir = "/Users/tju/Desktop/"
-    test_file_name = "/Users/tju/Resources/docs/excel/test_excel_v2.xlsx"
+    test_file_name = "/Users/tju/Documents/Resources/bisheng/excel/sequential.xlsx"
     # 测试 append_header=True 且索引越界的情况
-    test_header_rows = [5, 6] # start_header_index 超出范围
+    test_header_rows = [25, 100] # start_header_index 超出范围
     test_data_rows = 5
     test_append_header = True
 
