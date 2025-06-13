@@ -242,3 +242,25 @@ export function getFileExtension(filename) {
     const match = basename.match(/\.([^.]+)$/);
     return (match ? match[1] : '').toUpperCase();
 }
+
+
+/**
+ * 截取字符串并在末尾添加省略号（如果需要）
+ * @param {string} str - 要处理的字符串
+ * @param {number} maxLength - 最大允许长度
+ * @returns {string} 处理后的字符串
+ */
+export function truncateString(str, maxLength) {
+    // 检查输入是否有效
+    if (typeof str !== 'string' || typeof maxLength !== 'number' || maxLength < 0) {
+        return str;
+    }
+
+    // 如果字符串长度不超过最大长度，直接返回原字符串
+    if (str.length <= maxLength) {
+        return str;
+    }
+
+    // 截取字符串并添加省略号
+    return str.substring(0, maxLength) + '...';
+}

@@ -105,3 +105,18 @@ def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: s
     """ 继续执行workflow """
     with logger.contextualize(trace_id=unique_id):
         _continue_workflow(unique_id, workflow_id, chat_id, user_id)
+
+
+@bisheng_celery.task
+def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+    """ 停止workflow """
+    with logger.contextualize(trace_id=unique_id):
+        redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
+        if unique_id not in _global_workflow:
+            logger.warning("stop_workflow called but workflow not found in global cache")
+            return
+        workflow = _global_workflow[unique_id]
+        workflow.stop()
+        redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow stopped by user')
+        _clear_workflow_obj(unique_id)
+        logger.info(f'workflow stopped by user {user_id}')

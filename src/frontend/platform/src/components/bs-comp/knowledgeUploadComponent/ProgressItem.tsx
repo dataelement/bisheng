@@ -61,7 +61,7 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
     }, [item.progress])
 
     const extension = useMemo(() => {
-        return item.fileName.split('.').pop() || 'txt';
+        return item.fileName.split('.').pop().toLowerCase() || 'txt';
     }, [item.fileName])
 
     const handleCancel = () => {
@@ -99,9 +99,9 @@ export default function ProgressItem({ analysis = false, item, onResulte, onDele
                 }
             )} style={{ width: `${progress}%` }}></div>
             <div className="group flex gap-2 p-2 items-center relative z-10">
-                <FileIcon type={extension} className="size-[30px]" />
-                <div className="progress-item__title">
-                    <span className="progress-item__title__name">{item.fileName}</span>
+                <FileIcon type={extension} className="size-[30px] min-w-[30px]" />
+                <div className="progress-item__title flex-grow min-w-0">
+                    <span className="progress-item__title__name truncate block w-full pr-4">{item.fileName}</span>
                 </div>
                 <div className="ml-auto flex opacity-0 group-hover:opacity-100">
                     {item.error && !analysis &&

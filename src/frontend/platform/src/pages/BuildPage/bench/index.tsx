@@ -204,7 +204,7 @@ export default function index() {
                                 />
                             </div>
                             <FormInput
-                                label={<Label className="bisheng-label block pt-2">知识库、联网检索结果最大字符数</Label>}
+                                label={<Label className="bisheng-label block pt-2">知识库/联网检索结果最大字符数</Label>}
                                 type="number"
                                 value={formData.maxTokens}
                                 error={''}
@@ -217,7 +217,7 @@ export default function index() {
                                 isTextarea
                                 value={formData.systemPrompt}
                                 error={errors.systemPrompt}
-                                placeholder=""
+                                placeholder="你是毕昇 AI 助手"
                                 maxLength={30000}
                                 onChange={(val) => setFormData(prev => ({
                                     ...prev,
@@ -364,11 +364,10 @@ const useChatConfig = () => {
 
     useEffect(() => {
         getWorkstationConfigApi().then((res) => {
-            res.webSearch.params = {
-                api_key: '',
-                base_url: 'https://api.bing.microsoft.com/v7.0/search'
-            }
-            res.systemPrompt = ''
+            // res.webSearch.params = {
+            //     api_key: '',
+            //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
+            // }
             res && setFormData(res);
         })
     }, [])
@@ -498,14 +497,14 @@ const useChatConfig = () => {
                     if (!formData.webSearch.params.api_key?.trim()) {
                         webSearchErrors.params = {
                             ...webSearchErrors.params,
-                            api_key: '必填字段'
+                            api_key: '不能为空'
                         };
                         isValid = false;
                     }
                     if (!formData.webSearch.params.base_url?.trim()) {
                         webSearchErrors.params = {
                             ...webSearchErrors.params,
-                            base_url: '必填字段'
+                            base_url: '不能为空'
                         };
                         isValid = false;
                     }
@@ -517,7 +516,7 @@ const useChatConfig = () => {
                     if (!formData.webSearch.params.api_key?.trim()) {
                         webSearchErrors.params = {
                             ...webSearchErrors.params,
-                            api_key: '必填字段'
+                            api_key: '不能为空'
                         };
                         isValid = false;
                     }
@@ -527,14 +526,14 @@ const useChatConfig = () => {
                     if (!formData.webSearch.params.api_key?.trim()) {
                         webSearchErrors.params = {
                             ...webSearchErrors.params,
-                            api_key: '必填字段'
+                            api_key: '不能为空'
                         };
                         isValid = false;
                     }
                     if (!formData.webSearch.params.engine?.trim()) {
                         webSearchErrors.params = {
                             ...webSearchErrors.params,
-                            engine: '必填字段'
+                            engine: '不能为空'
                         };
                         isValid = false;
                     }

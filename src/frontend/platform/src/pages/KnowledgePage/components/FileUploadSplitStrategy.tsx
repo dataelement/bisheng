@@ -109,8 +109,8 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
           <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>
           {i18next.language === 'zh' && <>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '“第X章”前切分,切分章节等')}>{'✂️第.{1, 3}章'}</Button>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '“第X条”前切分,切分条目等')}>{'✂️第.{1, 3}条'}</Button>
+            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '“第X章”前切分，切分章节等')}>{'✂️第.{1, 3}章'}</Button>
+            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '“第X条”前切分，切分条目等')}>{'✂️第.{1, 3}条'}</Button>
           </>}
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after', '中文句号后切分，中文断句')}>。✂️</Button>
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after', '英文句号后切分，英文断句')}>\.✂️</Button>

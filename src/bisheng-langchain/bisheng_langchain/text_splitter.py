@@ -166,10 +166,8 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
     ) -> List[Document]:
         """Create documents from a list of texts."""
         documents = []
-        prev_document = None
         for i, text in enumerate(texts):
             index = -1
-            # metadata = copy.deepcopy(_metadatas[i])
             indexes = metadatas[i].get('indexes', [])
             pages = metadatas[i].get('pages', [])
             types = metadatas[i].get('types', [])
@@ -217,8 +215,6 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
                 #         for elem in box_no_duplicates:
                 #             new_metadata['chunk_bboxes'].append(
                 #                 {'page': elem[0], 'bbox': new_metadata['bboxes'][elem[1]]})
-                if prev_document and self._chunk_overlap > 0:
-                    chunk = f"{prev_document.page_content[-self._chunk_overlap:]}\n{chunk}"
                 new_doc = Document(page_content=chunk, metadata=new_metadata)
                 prev_document = new_doc
                 documents.append(new_doc)

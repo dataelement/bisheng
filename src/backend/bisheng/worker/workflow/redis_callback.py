@@ -222,7 +222,8 @@ class RedisCallback(BaseCallback):
         return ret
 
     def set_workflow_stop(self):
-        self.redis_client.set(self.workflow_stop_key, 1, expiration=self.workflow_expire_time)
+        from bisheng.worker.workflow.tasks import stop_workflow
+        stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
 
     def get_workflow_stop(self) -> bool | None:
         """ 为了可以及时停止workflow，不做内存的缓存 """

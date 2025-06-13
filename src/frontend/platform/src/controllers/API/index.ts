@@ -2,6 +2,7 @@ import { AppNumType, AppType } from "@/types/app";
 import { AppConfig } from "../../types/api/app";
 import { FlowType } from "../../types/flow";
 import axios from "../request";
+import originAxios from "axios";
 import {
   APIClassType,
   BuildStatusTypeAPI,
@@ -237,8 +238,16 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
 /**
  * 查看文件切片
  */
+let cancelTokenSource = originAxios.CancelToken.source();
 export async function previewFileSplitApi(data) {
-  return await axios.post(`/api/v1/knowledge/preview`, data).then(res => {
+  // 取消之前的请求
+  cancelTokenSource.cancel('Operation canceled due to new request');
+
+  // 创建新的取消令牌
+  cancelTokenSource = originAxios.CancelToken.source();
+  return await axios.post(`/api/v1/knowledge/preview`, data, {
+    cancelToken: cancelTokenSource.token
+  }).then(res => {
     return res
   });
 }

@@ -229,6 +229,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             id="name"
                             name="name"
                             maxLength={50}
+                            showCount
                             placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')}
                             className="mt-3"
                             value={formData.name}

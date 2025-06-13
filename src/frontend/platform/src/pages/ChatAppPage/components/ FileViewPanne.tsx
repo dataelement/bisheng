@@ -14,7 +14,7 @@ export default function FileViewPanne({ file }) {
 
     const labels = useMemo(() => {
         const map = {}
-        if (!file.chunks[0].box) {
+        if (!file.chunks[0].box?.[0]) {
             setPositon([0, 0])
             setShowP(false)
             return map
@@ -52,6 +52,7 @@ export default function FileViewPanne({ file }) {
             case 'pptx':
             case 'pdf':
                 return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
+            case 'csv': return <TxtFileViewer filePath={previewFileUrl} />
             case 'txt': return <TxtFileViewer filePath={previewFileUrl} />
             case 'md': return <TxtFileViewer markdown filePath={previewFileUrl} />
             case 'html': return <TxtFileViewer html filePath={previewFileUrl} />
