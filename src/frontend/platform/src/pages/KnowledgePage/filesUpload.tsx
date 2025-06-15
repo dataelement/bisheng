@@ -77,8 +77,8 @@ export default function FilesUpload() {
     }
 
     // 默认配置保存
-    const handleSaveByDefaultConfig = (_config) => {
-        captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+    const handleSaveByDefaultConfig = async (_config) => {
+        await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
             const _repeatFiles = res.filter(e => e.status === 3)
             if (_repeatFiles.length) {
                 setRepeatFiles(_repeatFiles)
