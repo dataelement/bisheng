@@ -23,7 +23,7 @@ import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 import ImagePromptItem from "./component/ImagePromptItem";
-import OnlineSwitchItem from "./component/onlineSwitchItem";
+import OnlineSwitchItem from "./component/OnlineSwitchItem";
 
 // 节点表单项
 export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
