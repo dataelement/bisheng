@@ -429,6 +429,7 @@ class KnowledgeService(KnowledgeUtils):
             req_data.separator_rule,
             req_data.chunk_size,
             req_data.chunk_overlap,
+            knowledge_id=req_data.knowledge_id,
             force_ocr=req_data.force_ocr,
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
