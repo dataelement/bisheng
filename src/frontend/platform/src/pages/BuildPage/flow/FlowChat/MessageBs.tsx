@@ -6,7 +6,7 @@ import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeMathjax from "rehype-mathjax";
 import remarkGfm from "remark-gfm";
@@ -21,6 +21,7 @@ import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
 import { SourceType } from "@/constants";
 import RichText from "@/components/bs-comp/richText";
+import { locationContext } from "@/contexts/locationContext";
 
 // 颜色列表
 const colorList = [
@@ -70,6 +71,8 @@ export default function MessageBs({ debug, operation, audit, mark = false, logo,
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
+    const { appConfig } = useContext(locationContext)
+    const isDisableCopy = !!appConfig?.disableCopyFlowIds?.includes(data?.flow_id);
     const message = useMemo(() => {
         const msg = typeof data.message === 'string' ? data.message : data.message.msg
 
@@ -157,7 +160,16 @@ export default function MessageBs({ debug, operation, audit, mark = false, logo,
                                 <AvatarIcon />
                             </div>} */}
                         {message || data.files.length ?
-                            <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
+                            <div 
+                                ref={messageRef} 
+                                className="text-sm max-w-[calc(100%-24px)]"
+                                style={isDisableCopy ? {
+                                    '-webkit-user-select': 'none', /* Safari */
+                                    '-moz-user-select': 'none', /* Firefox */
+                                    '-ms-user-select': 'none', /* IE10+/Edge */
+                                    'user-select': 'none', /* Standard */
+                                } : {}}
+                            >
                                 {message && (richText || mkdown)}
                                 {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                 {/* @user */}
