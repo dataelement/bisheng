@@ -290,16 +290,21 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def batch_insert_qa(cls, qa_knowledges: List[QAKnowledgeUpsert]) -> List[QAKnowledge]:
+        # DONE merge_check
         with session_getter() as session:
-            qas = []
-            for qa_knowledge in qa_knowledges:
-                qa = QAKnowledge.model_validate(qa_knowledge)
-                qas.append(qa)
-            session.add_all(qas)
-            session.commit()
-            for qa in qas:
-                session.refresh(qa)
-            return qas
+            try:
+                qas = []
+                for qa_knowledge in qa_knowledges:
+                    qa = QAKnowledge.model_validate(qa_knowledge)
+                    qas.append(qa)
+                session.add_all(qas)
+                session.commit()
+                for qa in qas:
+                    session.refresh(qa)
+                return qas
+            except Exception as e:
+                session.rollback()
+                raise e
 
     @classmethod
     def total_count(cls, sql):

@@ -12,7 +12,7 @@ from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, root_validator
 
 
 class CaptchaInput(BaseModel):
@@ -143,6 +143,8 @@ class ChatMessage(BaseModel):
     message: Union[str, None, dict, list] = ''
     type: str = 'human'
     category: str = 'processing'  # system processing answer tool
+    # DONE merge_check
+#<<<<<<< HEAD
     intermediate_steps: Optional[str] = None
     files: Optional[list] = []
     user_id: Optional[int] = None
@@ -154,6 +156,19 @@ class ChatMessage(BaseModel):
     extra: Optional[str | dict] = '{}'
     flow_id: Optional[str] = None
     chat_id: Optional[str] = None
+#=======
+    # intermediate_steps: str = None
+    # files: Optional[list] = []
+    # user_id: int = None
+    # message_id: int | str = None
+    # source: int = 0
+    # sender: str = None
+    # receiver: dict = None
+    # liked: int = 0
+    # extra: Optional[str | dict] = '{}'
+    # flow_id: str = None
+    # chat_id: str = None
+#>>>>>>> feat/zyrs_0527
 
 
 class ChatResponse(ChatMessage):
@@ -266,6 +281,8 @@ class AssistantUpdateReq(BaseModel):
     model_name: Optional[str] = Field('', description='选择的模型名， 为空则不更新')
     temperature: Optional[float] = Field(None, description='模型温度， 不传则不更新')
     max_token: Optional[int] = Field(32000, description='最大token数， 不传则不更新')
+    is_allow_upload: Optional[int] = Field(1, description='')
+    file_max_size: Optional[int] = Field(15000, description='文件最大长度限制')
 
     tool_list: List[int] | None = Field(default=None,
                                         description='助手的工具ID列表,空列表则清空绑定的工具，为None则不更新')
@@ -377,6 +394,7 @@ class LLMModelCreateReq(BaseModel):
     model_name: str = Field(..., description='模型名称')
     model_type: str = Field(..., description='模型类型')
     online: bool = Field(default=True, description='是否在线')
+    check: bool = Field(default=True, description='用于检测是否进行定时校验，1 表示开启，0 表示关闭')
     config: Optional[dict] = Field(default=None, description='模型配置')
 
 
@@ -390,6 +408,23 @@ class LLMServerCreateReq(BaseModel):
     config: Optional[dict] = Field(default=None, description='服务提供方配置')
     models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='服务提供方下的模型列表')
 
+    def merge_config(self, old_config: dict) -> dict:
+        """ update old config secret key """
+        new_config = {}
+        for k, v in old_config.items():
+            # 如果值为空 保留原有的secret key。说明不需要更新
+            if k in ['openai_api_key', 'anthropic_api_key', 'api_key', 'api_secret', 'wenxin_api_key', 'wenxin_secret_key']:
+                new_v = self.config.pop(k)
+                if new_v:
+                    v = new_v
+            else:
+                if k in self.config:
+                    v = self.config.pop(k)
+            new_config[k] = v
+        # 将剩下的key补充到新的config中
+        new_config.update(self.config)
+        return new_config
+
 
 class LLMModelInfo(LLMModelBase):
     id: Optional[int] = None
@@ -399,12 +434,33 @@ class LLMServerInfo(LLMServerBase):
     id: Optional[int] = None
     models: List[LLMModelInfo] = Field(default_factory=list, description='模型列表')
 
+    @root_validator(skip_on_failure=True)
+    def hide_secret_field(cls, values):
+        if not values['config']:
+            return values
+        cls.hide_one_filed(values['config'], 'openai_api_key')
+        cls.hide_one_filed(values['config'], 'anthropic_api_key')
+        cls.hide_one_filed(values['config'], 'api_key')
+        cls.hide_one_filed(values['config'], 'api_secret')
+        cls.hide_one_filed(values['config'], 'wenxin_api_key')
+        cls.hide_one_filed(values['config'], 'wenxin_secret_key')
+        return values
+
+    @staticmethod
+    def hide_one_filed(values: dict, field_key: str):
+        if values.get(field_key):
+            values[field_key] = "******"
+
 
 class KnowledgeLLMConfig(BaseModel):
     embedding_model_id: Optional[int] = Field(None, description='知识库默认embedding模型的ID')
     source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
     extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
     qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
+
+class VoiceLLMConfig(BaseModel):
+    tts_model_id: Optional[int] = Field(description='文字转语音模型')
+    stt_model_id: Optional[int] = Field(description='语音转文字模型')
 
 
 class AssistantLLMItem(BaseModel):

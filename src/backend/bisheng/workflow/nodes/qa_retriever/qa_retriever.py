@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+import loguru
+
 from bisheng.database.models.user import UserDao
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.interface.vector_store.custom import MilvusWithPermissionCheck
@@ -43,6 +45,9 @@ class QARetrieverNode(BaseNode):
         self._init_retriever()
         question = self.get_other_node_variable(self._user_question)
         result = self._retriever.invoke({'query': question})
+
+        loguru.logger.debug(f'jjxx qa_result:{result}')
+
         # qa 结果是document
         if result['result']:
             # 存检索结果的源文档，key左右加上$作为来源文档key去查询

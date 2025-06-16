@@ -20,6 +20,8 @@ class NodeType(Enum):
     RAG = "rag"
     REPORT = "report"
     TOOL = "tool"
+    STT = "stt"
+    TTS = "tts"
 
 
 class NodeParams(BaseModel):
@@ -51,6 +53,9 @@ class BaseNodeData(BaseModel):
     tab: Optional[dict] = Field({}, description="tab config")
     tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
     v: Optional[int] = Field(default=0, description="node version")
+    # v: str = Field(default="", description="node version")
+
+    # DONE merge_check
 
     @field_validator('v', mode='before')
     @classmethod

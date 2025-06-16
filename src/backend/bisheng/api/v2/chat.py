@@ -107,7 +107,7 @@ def sync_message(*,
                  chat_id: str = Body(embed=True),
                  message_list: List[SyncMessage] = Body(embed=True),
                  user_id: int = Body(default=None, embed=True)):
-    flow_id = flow_id.hex
+    flow_id = flow_id.hex  # UUID check done
     user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
 
     batch_message = [

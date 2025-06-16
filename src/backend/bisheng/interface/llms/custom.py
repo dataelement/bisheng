@@ -1,20 +1,26 @@
 import json
-from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable, Iterator, AsyncIterator
+from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable, Iterator, AsyncIterator, ClassVar
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
-from langchain_core.runnables import Runnable
-from langchain_core.tools import BaseTool
-from loguru import logger
-from pydantic import Field
+from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async, \
     wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async
+
+from bisheng.interface.utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun
+from langchain_core.language_models import BaseLanguageModel, BaseChatModel, LanguageModelInput
+from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.outputs import ChatResult
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
+from loguru import logger
+from pydantic import Field
 
 
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
@@ -62,10 +68,15 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['dashscope_api_key'] = server_config.get('openai_api_key', '')
+    enable_web_search = model_config.get('enable_web_search', False)
     params['model_kwargs'] = {
-        'enable_search': model_config.get('enable_web_search', False),
-        'temperature': params.pop('temperature', 0.3),
+        'enable_search': enable_web_search,
+        'search_options': {
+            'forced_search': enable_web_search
+        },
+        'temperature': params.pop('temperature', 0.3)
     }
+
     if params.get('max_tokens'):
         params['model_kwargs']['max_tokens'] = params.get('max_tokens')
     return params
@@ -144,11 +155,36 @@ class BishengLLM(BaseChatModel):
     model_id: int = Field(description="后端服务保存的model唯一ID")
     model_name: Optional[str] = Field(default='', description="后端服务保存的model名称")
     streaming: bool = Field(default=True, description="是否使用流式输出", alias="stream")
+    enable_web_search: bool = Field(default=False, description="开启联网搜索")
     temperature: float = Field(default=0.3, description="模型生成的温度")
     top_p: float = Field(default=1, description="模型生成的top_p")
     cache: bool = Field(default=False, description="是否使用缓存")
 
     llm: Optional[BaseChatModel] = Field(default=None)
+    # DONE merge_check 1.2.0中已删除
+    llm_node_type: ClassVar[Dict[str, str]] = {
+        # 开源推理框架
+        LLMServerType.OLLAMA.value: 'ChatOllama',
+        LLMServerType.XINFERENCE.value: 'ChatOpenAI',
+        LLMServerType.LLAMACPP.value: 'ChatOpenAI',  # 此组件是加载本地的模型文件，待确认是否有api服务提供
+        LLMServerType.VLLM.value: 'ChatOpenAI',
+        LLMServerType.BISHENG_RT.value: "HostChatGLM",
+
+        # 官方api服务
+        LLMServerType.OPENAI.value: 'ChatOpenAI',
+        LLMServerType.AZURE_OPENAI.value: 'AzureChatOpenAI',
+        LLMServerType.QWEN.value: 'ChatTongyi',
+        LLMServerType.QIAN_FAN.value: 'QianfanChatEndpoint',
+        LLMServerType.ZHIPU.value: 'ChatOpenAI',
+        LLMServerType.MINIMAX.value: 'ChatOpenAI',
+        LLMServerType.ANTHROPIC.value: 'ChatAnthropic',
+        LLMServerType.DEEPSEEK.value: 'ChatOpenAI',
+        LLMServerType.SPARK.value: 'ChatOpenAI',
+        LLMServerType.TENCENT.value: 'ChatHunyuanOpenai',
+        LLMServerType.MOONSHOT.value: 'ChatOpenAI',
+        LLMServerType.VOLCENGINE.value: 'ChatHunyuanOpenai',
+        LLMServerType.SILICON.value: 'ChatOpenAI'
+    }
 
     # bisheng强相关的业务参数
     model_info: Optional[LLMModel] = Field(default=None)
@@ -162,6 +198,8 @@ class BishengLLM(BaseChatModel):
         self.temperature = kwargs.get('temperature', 0.3)
         self.top_p = kwargs.get('top_p', 1)
         self.cache = kwargs.get('cache', True)
+        self.enable_web_search = kwargs.get('enable_web_search', False)
+
         # 是否忽略模型是否上线的检查
         ignore_online = kwargs.get('ignore_online', False)
 
@@ -184,8 +222,14 @@ class BishengLLM(BaseChatModel):
 
         class_object, class_name = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
+        class_name2 = self.llm_node_type.get(server_info.type)
         try:
+            # TODO merge_check 2
+            # 1.2.0
             self.llm = instantiate_llm(class_name, class_object, params)
+            # 0527
+            # self.llm = instantiate_llm(class_name2, class_object, params)
+            logger.debug(f'init_bisheng_llm: server_info.type:{server_info.type} class_object:{class_object} class_name:{class_name} class_name2:{class_name2} params:{params} dir:{self.llm.__dir__()}')
         except Exception as e:
             logger.exception('init bisheng llm error')
             raise Exception(f'初始化llm失败，请检查配置或联系管理员。错误信息：{e}')
@@ -195,6 +239,7 @@ class BishengLLM(BaseChatModel):
             raise Exception(f'not support llm type: {server_type}')
         node_type = _llm_node_type[server_type]['client']
         class_object = import_by_type(_type='llms', name=node_type)
+        logger.debug(f'get_llm_class: {class_object}')
         return class_object, node_type
 
     def _get_llm_params(self, server_info: LLMServer, model_info: LLMModel) -> dict:
@@ -203,15 +248,21 @@ class BishengLLM(BaseChatModel):
         default_params = self._get_default_params(server_config, model_config)
 
         params_handler = _llm_node_type[server_info.type]['params_handler']
+
+        model_config['enable_web_search'] = self.get_enable_web_search()
+        if server_info.type == LLMServerType.TENCENT.value:
+            default_params['extra_body'] = {'enable_enhancement': self.get_enable_web_search()}
+
         params = params_handler(default_params, server_config, model_config)
+
         return params
 
         params = {}
         if server_info.config:
             params.update(server_info.config)
-        enable_web_search = False
+        enable_web_search = self.get_enable_web_search()
         if model_info.config:
-            enable_web_search = model_info.config.get('enable_web_search', False)
+            # enable_web_search = model_info.config.get('enable_web_search', False)
             if model_info.config.get('max_tokens'):
                 params['max_tokens'] = model_info.config.get('max_tokens')
 
@@ -242,7 +293,12 @@ class BishengLLM(BaseChatModel):
         elif server_info.type == LLMServerType.QWEN.value:
             params['dashscope_api_key'] = params.pop('openai_api_key')
             params.pop('openai_api_base', None)
-            params['model_kwargs'] = {'enable_search': enable_web_search}
+            params['model_kwargs'] = {
+                'enable_search': enable_web_search,
+                'search_options': {
+                    'forced_search': enable_web_search
+                }
+            }
             if params.get('max_tokens'):
                 params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
         elif server_info.type == LLMServerType.TENCENT.value:
@@ -279,9 +335,13 @@ class BishengLLM(BaseChatModel):
             return self.model_info.config
         return {}
 
+    def get_enable_web_search(self):
+        # self.get_model_info_config().get('enable_web_search')
+        return self.enable_web_search
+
     def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:
-            if self.get_model_info_config().get('enable_web_search'):
+            if self.get_enable_web_search():
                 if 'tools' not in kwargs:
                     kwargs.update({
                         'tools': [{'type': 'web_search'}],
@@ -297,7 +357,7 @@ class BishengLLM(BaseChatModel):
                             'type': 'web_search',
                         })
         elif self.server_info.type == LLMServerType.MOONSHOT.value:
-            if self.get_model_info_config().get('enable_web_search'):
+            if self.get_enable_web_search():
                 if 'tools' not in kwargs:
                     kwargs.update({
                         'tools': [{
@@ -340,7 +400,6 @@ class BishengLLM(BaseChatModel):
             messages: List[BaseMessage],
             stop: Optional[List[str]] = None,
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
-            stream: Optional[bool] = None,
             **kwargs: Any,
     ) -> ChatResult:
         try:

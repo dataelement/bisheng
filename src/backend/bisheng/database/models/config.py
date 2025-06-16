@@ -18,6 +18,9 @@ class ConfigKeyEnum(Enum):
     EVALUATION_LLM = 'evaluation_llm'  # 评测默认模型配置
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
     WORKSTATION = 'workstation'  # 工作台默认模型配置
+    AUDIT_LLM = 'audit_llm'  # 审计默认模型配置
+    REVIEW_SESSION_CONFIG = 'session_config'  # 审计的会话分析策略配置
+    VOICE_LLM = 'voice_llm'
 
 
 class ConfigBase(SQLModelSerializable):
@@ -62,4 +65,16 @@ class ConfigDao(ConfigBase):
             session.add(config)
             session.commit()
             session.refresh(config)
+            return config
+
+    @classmethod
+    def insert_or_update(cls, config: Config) -> Config:
+        with session_getter() as session:
+            tmp = session.exec(select(Config).where(Config.key == config.key)).first()
+            if tmp:
+                tmp.value = config.value
+                session.add(tmp)
+            else:
+                session.add(config)
+            session.commit()
             return config

@@ -1,5 +1,4 @@
 from typing import Any, Dict, Optional, List, Union
-from uuid import UUID
 
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgData, StreamMsgOverData

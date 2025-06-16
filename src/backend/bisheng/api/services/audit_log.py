@@ -1,9 +1,22 @@
 import csv
 from datetime import datetime
+import json
+import time
+from datetime import datetime
+from io import BytesIO
 from tempfile import NamedTemporaryFile
 from typing import Any, List, Optional
+from uuid import UUID
 
+import pandas as pd
+from celery.schedules import crontab
+from langchain_core.language_models import BaseChatModel
 from loguru import logger
+from openpyxl.workbook import Workbook
+from openpyxl.utils import get_column_letter
+from redbeat import RedBeatSchedulerEntry
+from sqlalchemy import or_
+from sqlmodel import select
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.user_service import UserPayload
@@ -23,7 +36,28 @@ from bisheng.database.models.user import UserDao, User
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.settings import settings
 from bisheng.utils import generate_uuid
+from bisheng.api.services.knowledge_imp import extract_code_blocks
+from bisheng.api.services.llm import LLMService
+from bisheng.api.services.user_service import UserPayload
+from bisheng.api.v1.schema.audit import ReviewSessionConfig
+from bisheng.api.v1.schema.chat_schema import AppChatList
+from bisheng.api.v1.schemas import resp_200
+from bisheng.database.base import generate_uuid, session_getter
+from bisheng.database.models.assistant import AssistantDao, Assistant
+from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
+from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
+from bisheng.database.models.flow import FlowDao, Flow, FlowType
+from bisheng.database.models.group import Group, GroupDao
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.database.models.message import MessageDao, ChatMessageDao, ChatMessage
+from bisheng.database.models.role import Role
+from bisheng.database.models.session import MessageSessionDao, ReviewStatus, MessageSession
+from bisheng.database.models.user import UserDao, User
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils.minio_client import MinioClient
+
+# TODO merge_check 2整个文件都要检查，特别是session查询相关
 
 
 class AuditLogService:
@@ -33,7 +67,7 @@ class AuditLogService:
                       system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in UserGroupDao.get_user_power_group(login_user.user_id)]
             # 不是任何用戶组的管理员
             if not groups:
                 return UnAuthorizedError.return_resp()
@@ -50,7 +84,7 @@ class AuditLogService:
     def get_all_operators(cls, login_user: UserPayload) -> Any:
         groups = []
         if not login_user.is_admin():
-            groups = [one.group_id for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [one.group_id for one in UserGroupDao.get_user_power_group(login_user.user_id)]
 
         data = AuditLogDao.get_all_operators(groups)
         res = {}
@@ -80,18 +114,20 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str, assistant_info = None):
         """
         新建助手会话的审计日志
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # 获取助手详情
         assistant_info = AssistantDao.get_one_assistant(assistant_id)
+        if not assistant_info:
+            assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
-    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
+    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info: Flow = None):
         """
         新建技能会话的审计日志
         """
@@ -404,12 +440,42 @@ class AuditLogService:
                         ObjectType.NONE, '', '')
 
     @classmethod
-    def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
-        """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 false: 表示返回空列表"""
-        flow_ids = [one for one in flow_ids]
+    def get_session_config(cls) -> ReviewSessionConfig:
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.REVIEW_SESSION_CONFIG)
+        if config:
+            ret = json.loads(config.value)
+        return ReviewSessionConfig(**ret)
+
+    @classmethod
+    def update_session_config(cls, user: UserPayload, data: ReviewSessionConfig) -> ReviewSessionConfig:
+        from bisheng.worker import bisheng_celery
+        if data.flag:
+            hour, minute = data.get_hour_minute()
+            schedule = {
+                'hour': hour,
+                'minute': minute
+            }
+            if day_of_week := data.get_celery_crontab_week() is not None:
+                schedule['day_of_week'] = day_of_week
+
+            beat_task = RedBeatSchedulerEntry(name='review_session_message',
+                                              task='bisheng.worker.audit.tasks.review_session_message',
+                                              schedule=crontab(**schedule),
+                                              app=bisheng_celery)
+            beat_task.delete()
+            beat_task.save()
+        ConfigDao.insert_or_update(Config(key=ConfigKeyEnum.REVIEW_SESSION_CONFIG.value, value=json.dumps(data.dict())))
+        return data
+
+    @classmethod
+    def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str]) -> (bool, List):
+        """ 通过flow_ids和group_ids获取最终的 技能id筛选条件 """
+        flow_ids = [UUID(one).hex for one in flow_ids]  # UUID check done
         group_admins = []
+        logger.info(f"flow_ids {flow_ids} | group_ids {group_ids}")
         if not user.is_admin():
-            user_groups = UserGroupDao.get_user_admin_group(user.user_id)
+            user_groups = UserGroupDao.get_user_power_group(user.user_id)
             # 不是用户组管理员，没有权限
             if not user_groups:
                 raise UnAuthorizedError.http_exception()
@@ -451,37 +517,93 @@ class AuditLogService:
     @classmethod
     def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
                          start_date: datetime, end_date: datetime,
-                         feedback: str, sensitive_status: int, page: int, page_size: int) -> (list, int):
-        flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
-        if not flag:
-            return [], 0
-        filter_status = []
-        if sensitive_status:
-            filter_status = [SensitiveStatus(sensitive_status)]
+                         feedback: str,
+                         sensitive_status: List[SensitiveStatus] = None,
+                         review_status: List[ReviewStatus] = None,
+                         page: int = 1, page_size: int = 10, keyword=None) -> (list, int):
+        # flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        # if not flag:
+        #    return [], 0
+        # ---
 
-        res = MessageSessionDao.filter_session(sensitive_status=filter_status, feedback=feedback,
-                                               flow_ids=filter_flow_ids, user_ids=user_ids, start_date=start_date,
-                                               end_date=end_date, page=page, limit=page_size)
-        total = MessageSessionDao.filter_session_count(sensitive_status=filter_status, feedback=feedback,
+        filter_flow_ids = flow_ids
+        for one in flow_ids:
+            if one != one.replace("-", ""):
+                filter_flow_ids.append(one.replace("-", ""))
+        all_user = UserGroupDao.get_groups_user(group_ids)
+        logger.info(f"get_session_list user_ids {user_ids} | all_user {all_user}")
+        # user_ids = [str(uid) for uid in user_ids]
+        # all_user = [str(one) for one in all_user]
+        if len(user_ids) == 0:
+            user_ids = all_user
+        else:
+            user_ids = list(set(user_ids) & set(all_user))
+        if len(user_ids) == 0:
+            return [], 0
+        logger.info(f"get_session_list user_ids {user_ids} | group_ids {group_ids}")
+        chat_ids = []
+        if start_date or end_date:
+            chat_ids = cls.get_filter_chat_ids_by_time(flow_ids, start_date, end_date)
+        if keyword:
+            keyword2 = keyword.encode("unicode_escape").decode().replace("\\u", "%")
+            where = select(ChatMessage).where(or_(
+                ChatMessage.message.like(f'%{keyword}%'),
+                ChatMessage.message.like(f'%{keyword2}%')
+            ), ChatMessage.category == 'question')
+            if filter_flow_ids:
+                where = where.where(ChatMessage.flow_id.in_(filter_flow_ids))
+            from sqlalchemy.dialects import mysql
+            print("get_session_list Compiled SQL:",
+                  where.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+            with session_getter() as session:
+                chat_res = session.exec(where).all()
+                chat_ids = set(chat_ids) & set([one.chat_id for one in chat_res])
+                if len(chat_ids) == 0:
+                    chat_ids = [""]
+                chat_ids = list(set(chat_ids))
+        logger.info(f"get_session_list chat_ids {chat_ids}")
+        res = MessageSessionDao.filter_session(chat_ids=chat_ids, sensitive_status=sensitive_status, review_status=review_status, flow_ids=filter_flow_ids,
+                                               user_ids=user_ids, start_date=start_date, end_date=end_date,
+                                               feedback=feedback, page=page, limit=page_size)
+        total = MessageSessionDao.filter_session_count(chat_ids=chat_ids, sensitive_status=sensitive_status, review_status=review_status,
                                                        flow_ids=filter_flow_ids, user_ids=user_ids,
-                                                       start_date=start_date,
-                                                       end_date=end_date)
+                                                       start_date=start_date, end_date=end_date, feedback=feedback)
 
         res_users = []
         for one in res:
             res_users.append(one.user_id)
+            if start_date or end_date:
+                one.like = ChatMessageDao.get_chat_like_num(one.flow_id, one.chat_id, start_date, end_date)
+                one.copied = ChatMessageDao.get_chat_copied_num(one.flow_id, one.chat_id, start_date, end_date)
+                one.dislike = ChatMessageDao.get_chat_dislike_num(one.flow_id, one.chat_id, start_date, end_date)
         user_list = UserDao.get_user_by_ids(res_users)
         user_map = {user.user_id: user.user_name for user in user_list}
+
         result = []
         for one in res:
-            result.append(AppChatList(**one.model_dump(),
+            result.append(AppChatList(chat_id=one.chat_id,
+                                      flow_id=one.flow_id,
+                                      flow_name=one.flow_name,
+                                      flow_type=one.flow_type,
+                                      user_id=one.user_id,
+                                      user_name=user_map.get(one.user_id, one.user_id),
+                                      user_groups=user.get_user_groups(one.user_id),
+                                      review_status=one.review_status,
+                                      create_time=one.create_time,
+                                      update_time=one.update_time,
                                       like_count=one.like,
                                       dislike_count=one.dislike,
-                                      copied_count=one.copied,
-                                      user_name=user_map.get(one.user_id, one.user_id),
-                                      user_groups=user.get_user_groups(one.user_id)))
+                                      copied_count=one.copied))
 
         return result, total
+
+
+    @classmethod
+    def get_filter_chat_ids_by_time(cls,flow_ids:List[str], start_date: datetime = None, end_date: datetime = None):
+        chat_ids = ChatMessageDao.get_chat_id_by_time(flow_ids, start_date, end_date)
+        if len(chat_ids) == 0:
+            chat_ids = [""]
+        return chat_ids
 
     @classmethod
     def get_session_messages(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
@@ -491,8 +613,11 @@ class AuditLogService:
         page_size = 50
         res = []
         while True:
-            result, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
-                                                 sensitive_status, page, page_size)
+            sensitive_status = [SensitiveStatus(sensitive_status)] if sensitive_status else []
+            result, total = cls.get_session_list(user=user, flow_ids=flow_ids, user_ids=user_ids, group_ids=group_ids,
+                                                 start_date=start_date,
+                                                 end_date=end_date, feedback=feedback,
+                                                 sensitive_status=sensitive_status, page=page, page_size=page_size)
             if not result:
                 break
             page += 1
@@ -514,8 +639,10 @@ class AuditLogService:
             excel_data[0].append('是否命中内容安全审查')
 
         while True:
-            result, total = cls.get_session_list(user, flow_ids, user_ids, group_ids, start_date, end_date, feedback,
-                                                 sensitive_status, page, page_size)
+            sensitive_status = [SensitiveStatus(sensitive_status)] if sensitive_status else []
+            result, total = cls.get_session_list(user=user, flow_ids=flow_ids, user_ids=user_ids, group_ids=group_ids,
+                                                 start_date=start_date, end_date=end_date, feedback=feedback,
+                                                 sensitive_status=sensitive_status, page=page, page_size=page_size)
             if not result:
                 break
             page += 1
@@ -544,6 +671,382 @@ class AuditLogService:
             minio_client.upload_minio(tmp_object_name, tmp_file.name,
                                       'application/text',
                                       minio_client.tmp_bucket)
+
+    @classmethod
+    def session_export(cls, all_session: list[AppChatList], export_type: str = ""):
+        excel_data = [["会话ID","应用名称","会话创建时间","用户名称","消息角色","组织架构",
+                    "消息发送时间","用户消息文本内容","消息角色", "是否命中安全审查",  # 移除了第一次出现的点赞等列
+                    "消息发送时间","用户消息文本内容","消息角色","点赞","点踩","点踩反馈","复制","是否命中安全审查"]]
+        for session in all_session:
+            flow_id = str(session.flow_id).replace("-", '')
+            chat_id = session.chat_id
+            where = select(ChatMessage).where(ChatMessage.flow_id == flow_id, ChatMessage.chat_id == chat_id)
+            with session_getter() as query_session:
+                db_message = query_session.exec(where.order_by(ChatMessage.id.asc())).all()
+                c_qa = []
+                for msg in db_message:
+                    if msg.category not in {"question", "stream_msg","output_msg","answer"}:
+                        continue
+                    if msg.category == "question":
+                        if len(c_qa) != 0:
+                            while len(c_qa) > len(excel_data[0]):
+                                excel_data[0].extend(["消息发送时间","用户消息文本内容","消息角色","点赞","点踩","点踩反馈",
+                                                      "复制","是否命中安全审查"])
+                            excel_data.append(c_qa)
+                        c_qa = [session.chat_id,
+                                session.flow_name,
+                                session.create_time,
+                                session.user_name,
+                                "系统",
+                                session.user_groups[-1]["name"],
+                                msg.create_time,  # 直接添加消息发送时间
+                                msg.message,     # 直接添加消息内容
+                                "用户" if msg.category == "question" else "AI"]  # 直接添加角色
+                         # 添加安全审查状态（第一次）
+                        if msg.review_status in {0, 1, 2, 3, 4}:
+                            c_qa.append(["", "未审查", "通过", "违规", "审查失败"][msg.review_status])
+                        else:
+                            c_qa.append("未审查")
+                        continue
+                    
+                    if len(c_qa) == 0:
+                        continue
+                    # 只从第二次开始添加点赞等字段
+                    c_qa.append(msg.create_time) #会话ID
+                    c_qa.append(msg.message)
+                    c_qa.append("用户" if msg.category == "question" else "AI")
+                    c_qa.append("是" if msg.liked == 1 else "否")
+                    c_qa.append("是" if msg.liked == 2 else "否")
+                    c_qa.append(msg.remark)
+                    c_qa.append("是" if msg.copied == 1 else "否")
+                    if msg.review_status in {0, 1, 2, 3, 4}:
+                        c_qa.append(["", "未审查", "通过", "违规", "审查失败"][msg.review_status])
+                    else:
+                        c_qa.append("未审查")
+                if len(c_qa) != 0:
+                    while len(c_qa) > len(excel_data[0]):
+                        excel_data[0].extend(
+                            ["消息发送时间", "用户消息文本内容", "消息角色", "点赞", "点踩", "点踩反馈", "复制",
+                             "是否命中安全审查"])
+                    excel_data.append(c_qa)
+        wb = Workbook()
+        ws = wb.active
+        print(excel_data)
+        for i in range(len(excel_data)):
+            print(excel_data[i])
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        # 根据 export_type 隐藏列
+        if export_type == "audit":
+            # 审计模式：隐藏 "点赞"、"点踩"、"点踩反馈"、"复制" 列
+            columns_to_hide = ["点赞", "点踩", "点踩反馈", "复制"]
+            for col_idx, header in enumerate(excel_data[0], start=1):
+                if header in columns_to_hide:
+                    ws.column_dimensions[get_column_letter(col_idx)].hidden = True
+        elif export_type == "operation":
+            # 运营模式：隐藏 "是否命中安全审查" 列
+            columns_to_hide = ["是否命中安全审查"]
+            for col_idx, header in enumerate(excel_data[0], start=1):
+                if header in columns_to_hide:
+                    ws.column_dimensions[get_column_letter(col_idx)].hidden = True
+                    
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+    @classmethod
+    def review_session_list(cls, user: UserPayload, flow_ids, user_ids, group_ids, start_date, end_date,
+                            feedback, review_status):
+        """ 重新审查符合条件的会话 """
+        page = 1
+        page_size = 10
+        while True:
+            res, total = cls.get_session_list(user=user, flow_ids=flow_ids, user_ids=user_ids, group_ids=group_ids,
+                                              start_date=start_date, end_date=end_date, feedback=feedback,
+                                              review_status=review_status, page=page, page_size=page_size)
+            if len(res) == 0:
+                break
+            for one in res:
+                cls.review_one_session(one.chat_id, True)
+            page += 1
+
+        return cls.get_session_list(user=user, flow_ids=flow_ids, user_ids=user_ids, group_ids=group_ids,
+                                    start_date=start_date, end_date=end_date, feedback=feedback, review_status=review_status,
+                                    page=1, page_size=10)
+
+    @classmethod
+    def review_one_session(cls, chat_id: str, check_all_message: bool = False):
+        """ 重新审查一个会话内的消息
+        params:
+            chat_id: 会话ID
+            check_all_message: 是否审查所有消息，默认为False，会过滤掉已审查过的消息
+        """
+        logger.debug(f"act=review_one_session chat_id={chat_id} all_message={check_all_message}")
+        # 审查配置
+        review_config = cls.get_session_config()
+        if not review_config.flag:
+            logger.info(f"act=review flag is close, skip session:{chat_id}")
+            return
+        # 审查模型
+        review_llm = LLMService.get_audit_llm_object()
+
+        all_message = ChatMessageDao.get_msg_by_chat_id(chat_id)
+        # 审查通过的消息列表 {id: 1}
+        update_pass_messages = []
+        # 违规的消息列表 {id: 1, review_reason: []}
+        update_violations_messages = []
+        old_violations_messages = []
+        # 审查失败的消息列表 {id: 1, review_reason: []}
+        update_failed_messages = []
+        old_failed_messages = []
+
+        message_list = []
+        message_content_len = 0
+        # 大于多少字符则去请求模型审查
+        max_message_len = 500
+        session_status = ReviewStatus.PASS.value
+        chat_flow_id = None
+        chat_flow_type = None
+        chat_flow_name = None
+        chat_user_id = None
+        chat_create_time = None
+        for one in all_message:
+            if chat_flow_id is None:
+                # flow_info = FlowDao.get_flow_by_id(one.flow_id.hex)  # UUID check done
+                flow_info = FlowDao.get_flow_by_id(one.flow_id)
+                assistant_info = AssistantDao.get_one_assistant(one.flow_id)
+                # chat_flow_id = one.flow_id.hex # UUID check done
+                chat_flow_id = one.flow_id
+                chat_user_id = one.user_id
+                chat_create_time = one.create_time
+                if flow_info:
+                    chat_flow_name = flow_info.name
+                    chat_flow_type = flow_info.flow_type
+                elif assistant_info:
+                    chat_flow_name = assistant_info.name
+                    chat_flow_type = FlowType.ASSISTANT.value
+                else:
+                    logger.debug(f'not found flow info: {one.flow_id}')
+                    return
+            # 过滤掉工作流的输入事件
+            if one.category in ['user_input', 'input']:
+                if one.review_status == ReviewStatus.DEFAULT.value:
+                    update_pass_messages.append({'id': one.id})
+                continue
+            if check_all_message or one.review_status == ReviewStatus.DEFAULT.value:
+                # 需要审查的消息, 内容为空的消息默认通过审查
+                message_content = one.message if one.message else one.intermediate_steps
+                if not message_content:
+                    update_pass_messages.append({'id': one.id})
+                    continue
+                message_content_len += message_content.__len__()
+                message_list.append({
+                    'id': one.id,
+                    'message': message_content
+                })
+                if message_content_len > max_message_len:
+                    a, b, c = cls.review_some_message(review_llm, review_config, message_list)
+                    update_pass_messages.extend(a)
+                    update_violations_messages.extend(b)
+                    update_failed_messages.extend(c)
+                    message_list = []
+                    message_content_len = 0
+            else:
+                if one.review_status == ReviewStatus.VIOLATIONS.value:
+                    old_violations_messages.append(one)
+                elif one.review_status == ReviewStatus.FAILED.value:
+                    old_failed_messages.append(one)
+        if message_list:
+            a, b, c = cls.review_some_message(review_llm, review_config, message_list)
+            update_pass_messages.extend(a)
+            update_violations_messages.extend(b)
+            update_failed_messages.extend(c)
+
+        # 更新审查状态
+        if update_pass_messages:
+            ChatMessageDao.update_review_status([one['id'] for one in update_pass_messages],
+                                                session_status, '')
+        if update_violations_messages:
+            for one in update_violations_messages:
+                ChatMessageDao.update_review_status([one['id']], ReviewStatus.VIOLATIONS.value, ','.join(one['reason']))
+        if update_failed_messages:
+            for one in update_failed_messages:
+                ChatMessageDao.update_review_status([one['id']], ReviewStatus.FAILED.value, ','.join(one['reason']))
+
+        # 更新会话的状态
+        if update_violations_messages or old_violations_messages:
+            session_status = ReviewStatus.VIOLATIONS.value
+        elif update_failed_messages or old_failed_messages:
+            session_status = ReviewStatus.FAILED.value
+
+        # 更新会话的状态
+        message_session = MessageSessionDao.filter_session(chat_ids=[chat_id])
+        if message_session.__len__() > 0:
+            message_session = message_session[0]
+            message_session.review_status = session_status
+        else:
+            message_session = MessageSession(chat_id=chat_id,
+                                             flow_id=chat_flow_id,
+                                             flow_type=chat_flow_type,
+                                             flow_name=chat_flow_name,
+                                             user_id=chat_user_id,
+                                             create_time=chat_create_time,
+                                             review_status=session_status)
+        MessageSessionDao.insert_one(message_session)
+        logger.debug(f"act=review_one_session_over chat_id={chat_id} {all_message}")
+        return
+
+    @classmethod
+    def review_some_message(cls, review_llm: BaseChatModel, review_config: ReviewSessionConfig,
+                            message_list: List[dict]) -> (List[int], List[int], List[dict]):
+        logger.debug(f'start review_some_message {message_list}')
+        try:
+            llm_prompt = review_config.prompt
+            llm_prompt += f'\n{json.dumps(message_list, ensure_ascii=False, indent=2)}'
+
+            llm_result = review_llm.invoke(llm_prompt)
+            logger.debug(f'review message result: {llm_result.content}')
+
+            # 解析模型的输出
+            result = extract_code_blocks(llm_result.content)
+            if result:
+                result = json.loads(result[0])
+            else:
+                result = json.loads(llm_result.content)
+
+            # 判断有哪些消息审查失败了
+            reject_messages = {}
+            for one in result.get('messages', []):
+                if one.get('message_id') and one.get('violations'):
+                    reject_messages[one['message_id']] = {
+                        'id': one['message_id'],
+                        'reason': one['violations']
+                    }
+            pass_message = []
+            for one in message_list:
+                if one['id'] not in reject_messages:
+                    pass_message.append({
+                        'id': one['id']
+                    })
+            return pass_message, list(reject_messages.values()), []
+        except Exception as e:
+            logger.exception(f'review_some_message {message_list} error')
+            return [], [], [{'id': one['id'], 'reason': str(e)[-100:]} for one in message_list]
+
+    @classmethod
+    def get_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                          end_date: datetime, order_field: str = None, order_type: str = None, page: int = 0,
+                          page_size: int = 0) -> (List, int):
+
+        """ 获取会话聚合数据 """
+        # flag, filter_flow_ids = cls.get_filter_flow_ids(user, flow_ids, group_ids)
+        # if not flag:
+        #     return [], 0
+
+        filter_flow_ids = flow_ids
+        for one in flow_ids:
+            if one != one.replace('-',''):
+                filter_flow_ids.append(one.replace('-',''))
+        logger.info(f"get_session_chart: filter_flow_ids={filter_flow_ids} group_ids={group_ids}")
+        all_user = UserGroupDao.get_groups_user(group_ids)
+        all_user = [str(one) for one in all_user]
+        if len(all_user) == 0:
+            return [], 0
+        logger.info(f"get_session_list all_user {all_user}")
+        res, total = ChatMessageDao.get_chat_info_group(filter_flow_ids, start_date, end_date, order_field,
+                                                               order_type, page, page_size,all_user)
+
+        logger.info(f"get_session_list total={total} res={res}")
+
+        if len(res) == 0:
+            return res, total
+        flow_ids = [one['flow_id'] for one in res]
+
+        # 获取这些应用所属的分组信息
+        # app_groups = GroupResourceDao.get_resources_group(None, [one.hex for one in flow_ids])  # UUID check done
+        app_groups = GroupResourceDao.get_resources_group(None, flow_ids)  # UUID check done
+        app_groups_map = {}
+        group_ids = []
+        group_info_map = {}
+        for one in app_groups:
+            group_ids.append(int(one.group_id))
+            if one.third_id not in app_groups_map:
+                app_groups_map[one.third_id] = []
+            app_groups_map[one.third_id].append(int(one.group_id))
+        if group_ids:
+            group_info = GroupDao.get_group_by_ids(group_ids)
+            for one in group_info:
+                group_info_map[one.id] = one
+
+        # 获取应用信息
+        flow_list = FlowDao.get_flow_by_ids(flow_ids)
+        assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
+        flow_map = {flow.id: flow for flow in flow_list}
+        assistant_map = {assistant.id: assistant for assistant in assistant_list}
+
+        result = []
+        for one in res:
+            if flow_map.get(one['flow_id']):
+                flow_name = flow_map[one['flow_id']].name
+            elif assistant_map.get(one['flow_id']):
+                flow_name = assistant_map[one['flow_id']].name
+            else:
+                continue
+            # group_ids = app_groups_map.get(one['flow_id'].hex, [])  # UUID check done
+            group_ids = app_groups_map.get(one['flow_id'], [])
+            one['name'] = flow_name
+            # one['group_info'] = [{
+            #     'id': group_id,
+            #     'group_name': group_info_map[group_id].group_name if group_info_map.get(group_id) else group_id
+            # } for group_id in group_ids]
+            one['group_info'] = [ {"id":one['id'],"group_name":one['name']} for one in user.get_user_groups(one['user_id'])]
+            result.append(one)
+
+        return result, total
+
+    @classmethod
+    def export_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [['用户组', '应用名称', '会话数', '用户输入消息数', '应用输出消息数', '违规消息数', "好评数1", "好评数2", "差评数"]]
+        for one in result:
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                one['session_num'],
+                one['input_num'],
+                one['output_num'],
+                one['violations_num'],
+                one['likes'],
+                one['not_dislikes'],
+                one['dislikes'],
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
         share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
         return minio_client.clear_minio_share_host(share_url)
 
@@ -563,3 +1066,83 @@ class AuditLogService:
             chat.messages = [message for message in chat_messages
                              if message.category != WorkflowEventType.UserInput.value]
         return chat_list
+
+    @classmethod
+    def export_audit_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [
+            ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', '会话数(应用在给定时间区间内产生的会话数)',
+             '用户输入消息数(给定时间区间内，某应用所有会话累计的用户输入消息数)', '应用输出消息数(给定时间区间内，某应用所有会话累计的应用输出消息数)',
+             '违规消息数(给定时间区间内，某应用所有会话累计的违规消息数)']]
+        for one in result:
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                one['session_num'],
+                one['input_num'],
+                one['output_num'],
+                one['violations_num']
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)
+
+
+    @classmethod
+    def export_operational_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
+                             end_date: datetime,like_type) -> str:
+        """ 导出用户选择的统计数据 """
+        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        excel_data = [
+            ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', "好评数(用户给予好评的消息数量)","差评数(用户给予差评的消息数量)",
+             "应用满意度(好评数/(好评数+差评数) × 100%)","会话数(应用在给定时间区间内产生的会话数)"]]
+        for one in result:
+            if like_type == 1:
+                like = one['likes']
+                satisfaction = one['satisfaction']
+            else:
+                like = one['not_dislikes']
+                satisfaction = one['not_nosatisfaction']
+            excel_data.append([
+                ','.join([tmp['group_name'] for tmp in one['group_info']]),
+                one['name'],
+                like,
+                one['dislikes'],
+                f"{satisfaction:.2%}",
+                one['session_num']
+            ])
+
+        wb = Workbook()
+        ws = wb.active
+        for i in range(len(excel_data)):
+            for j in range(len(excel_data[i])):
+                ws.cell(i + 1, j + 1, excel_data[i][j])
+
+        minio_client = MinioClient()
+        tmp_object_name = f'tmp/session/export_{generate_uuid()}.docx'
+        with NamedTemporaryFile() as tmp_file:
+            wb.save(tmp_file.name)
+            tmp_file.seek(0)
+            minio_client.upload_minio(tmp_object_name, tmp_file.name,
+                                      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                      minio_client.tmp_bucket)
+
+        share_url = minio_client.get_share_link(tmp_object_name, minio_client.tmp_bucket)
+        return minio_client.clear_minio_share_host(share_url)

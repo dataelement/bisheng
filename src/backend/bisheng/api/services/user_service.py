@@ -16,6 +16,7 @@ from bisheng.database.models.assistant import Assistant, AssistantDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowRead
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeRead
+from bisheng.database.models.role import AdminRole, RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user import User, UserDao
 from bisheng.database.models.user_group import UserGroupDao
@@ -35,7 +36,15 @@ class UserPayload:
         if self.user_role != 'admin':  # 非管理员用户，需要获取他的角色列表
             roles = UserRoleDao.get_user_roles(self.user_id)
             self.user_role = [one.role_id for one in roles]
+        self.role_cache = {}
+        self.bind_role_cache = {}
         self.user_name = kwargs.get('user_name')
+
+        roles = UserRoleDao.get_user_roles(self.user_id)
+        self.user_role = [one.role_id for one in roles]
+        user_groups = UserGroupDao.get_user_group(self.user_id)
+        group_bind_roles = self.get_group_bind_role([one.group_id for one in user_groups])
+        self.user_role.extend([one['id'] for one in group_bind_roles])
 
     def is_admin(self):
         if self.user_role == 'admin':
@@ -126,6 +135,44 @@ class UserPayload:
                 res.append(self.group_cache.get(group_info.id))
         return res
 
+    def get_user_roles(self, user_id: int) -> List[Dict]:
+        """ 查询用户的角色列表 """
+        user_roles = UserRoleDao.get_user_roles(user_id)
+        user_role_ids: List[int] = [one_role.role_id for one_role in user_roles]
+        res = []
+        for i in range(len(user_role_ids) - 1, -1, -1):
+            if self.role_cache.get(user_role_ids[i]):
+                res.append(self.role_cache.get(user_role_ids[i]))
+                del user_role_ids[i]
+        # 将没有缓存的角色信息查询数据库
+        if user_role_ids:
+            role_list = RoleDao.get_role_by_ids(user_role_ids)
+            for role_info in role_list:
+                self.role_cache[role_info.id] = {
+                    "id": role_info.id,
+                    "group_id": role_info.group_id,
+                    "name": role_info.role_name,
+                    "is_bind_all": role_info.is_bind_all
+                }
+                res.append(self.role_cache.get(role_info.id))
+        return res
+
+    def get_group_bind_role(self, groups: list[int]) -> List[Dict]:
+        """ 获取组的绑定角色 """
+        res = {}
+        for group_id in groups:
+            if group_id not in self.bind_role_cache:
+                bind_roles = RoleDao.get_role_by_groups([group_id], None, 0, 0, include_parent=True, only_bind=True)
+                self.bind_role_cache[group_id] = bind_roles
+            for role in self.bind_role_cache[group_id]:
+                res[role.id] = {
+                    'id': role.id,
+                    'name': role.role_name,
+                    'group_id': role.group_id,
+                    'is_bind_all': role.is_bind_all
+                }
+        return list(res.values())
+
 class UserService:
 
     @classmethod
@@ -155,7 +202,7 @@ class UserService:
         for one in req_data.group_roles:
             group_ids.append(one.group_id)
             role_ids.extend(one.role_ids)
-        if not group_ids or not role_ids:
+        if not group_ids:
             raise UserNeedGroupAndRoleError.http_exception()
         user = UserDao.add_user_with_groups_and_roles(user, group_ids, role_ids)
         return user
@@ -177,12 +224,27 @@ def gen_user_role(db_user: User):
         else:
             role_ids.append(user_role.role_id)
     if role != 'admin':
+        user_groups = UserGroupDao.get_user_group(db_user.user_id)
+        if user_groups:
+            groups_roles = RoleDao.get_role_by_groups([one.group_id for one in user_groups], include_parent=True, only_bind=True)
+            role_ids.extend([one.id for one in groups_roles])
         # 判断是否是用户组管理员
-        db_user_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
-        if len(db_user_groups) > 0:
-            role = 'group_admin'
+        db_user_admin_groups = UserGroupDao.get_user_admin_group(db_user.user_id)
+        db_user_audit_groups = UserGroupDao.get_user_audit_group(db_user.user_id)
+        db_user_operation_groups = UserGroupDao.get_user_operation_group(db_user.user_id)
+        gr = []
+        if len(db_user_audit_groups) > 0:
+            gr.append('group_audit')
+        if len(db_user_operation_groups) > 0:
+            gr.append('group_operation')
+        if len(db_user_admin_groups) > 0:
+            gr.append('group_admin')
+        if len(gr) > 0:
+            role = "|".join(gr)
         else:
             role = role_ids
+
+
     # 获取用户的菜单栏权限列表
     web_menu = RoleAccessDao.get_role_access(role_ids, AccessType.WEB_MENU)
     web_menu = list(set([one.third_id for one in web_menu]))

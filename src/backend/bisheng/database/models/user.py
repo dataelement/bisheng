@@ -16,6 +16,7 @@ class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True, unique=True)
     email: Optional[str] = Field(default=None, index=True)
     phone_number: Optional[str] = Field(default=None, index=True)
+    position: Optional[str] = Field(default='', index=False)
     dept_id: Optional[str] = Field(default=None, index=True)
     remark: Optional[str] = Field(default=None, index=False)
     delete: int = Field(default=0, index=False)
@@ -115,7 +116,10 @@ class UserDao(UserBase):
             count_statement = count_statement.where(User.user_name.like(f'%{keyword}%'))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(User.user_id.desc())
+        if keyword:
+            statement = statement.order_by(func.instr(User.user_name, keyword))
+        else:
+            statement = statement.order_by(User.user_id.desc())
         with session_getter() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 

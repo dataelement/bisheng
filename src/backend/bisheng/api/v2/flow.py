@@ -15,7 +15,7 @@ def get_flow(request: Request, flow_id: UUID):
     """
     公开的获取技能信息的接口
     """
-    flow_id = flow_id.hex
+    flow_id = flow_id.hex  # UUID check done
     logger.info(f'public_get_flow  ip: {request.client.host} flow_id:{flow_id}')
     # 判断下配置是否打开
     if not settings.get_from_db("default_operator").get("enable_guest_access"):

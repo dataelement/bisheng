@@ -2,6 +2,8 @@ import json
 import time
 from typing import List, Any
 
+import loguru
+
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
@@ -44,7 +46,9 @@ class RagNode(BaseNode):
 
         self._qa_prompt = None
 
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
+        self._enable_web_search = self.node_params.get('enable_web_search', False)
+
+        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'], enable_web_search=self._enable_web_search,
                                                temperature=self.node_params.get(
                                                    'temperature', 0.3),
                                                cache=False)
@@ -53,6 +57,8 @@ class RagNode(BaseNode):
 
         # 是否输出结果给用户
         self._output_user = self.node_params.get('output_user', False)
+        self._show_source = self.node_params.get('show_source', True)
+        # self._show_source = True
 
         # 运行日志数据
         self._log_source_documents = {}
@@ -72,6 +78,8 @@ class RagNode(BaseNode):
         self.init_qa_prompt()
         self.init_milvus()
         self.init_es()
+
+        loguru.logger.debug(f'jjxx flag1')
 
         retriever = BishengRetrievalQA.from_llm(
             llm=self._llm,
@@ -98,6 +106,10 @@ class RagNode(BaseNode):
 
             result = retriever._call({'query': question}, run_manager=llm_callback)
 
+            if not self._show_source:
+                # 不溯源
+                result['source_documents'] = []
+
             if self._output_user:
                 self.graph_state.save_context(content=result['result'], msg_sender='AI')
                 if llm_callback.output_len == 0:
@@ -106,7 +118,7 @@ class RagNode(BaseNode):
                                       msg=result['result'],
                                       unique_id=unique_id,
                                       output_key=output_key,
-                                      source_documents=result['source_documents']))
+                                      source_documents=result.get('source_documents', [])))
                 else:
                     # 说明有流式输出，则触发流式结束事件, 因为需要source_document所以在此执行流式结束事件
                     self.callback_manager.on_stream_over(StreamMsgOverData(
@@ -114,12 +126,12 @@ class RagNode(BaseNode):
                         msg=result['result'],
                         reasoning_content=llm_callback.reasoning_content,
                         unique_id=unique_id,
-                        source_documents=result['source_documents'],
+                        source_documents=result.get('source_documents', []),
                         output_key=output_key,
                     ))
             ret[output_key] = result[retriever.output_key]
             self._log_reasoning_content[output_key] = llm_callback.reasoning_content
-            self._log_source_documents[output_key] = result['source_documents']
+            self._log_source_documents[output_key] = result.get('source_documents', [])
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
@@ -208,11 +220,19 @@ class RagNode(BaseNode):
                 raise Exception('没有配置默认的embedding模型')
             file_ids = ["0"]
             for one in self._knowledge_value:
+#------
                 file_metadata = self.get_other_node_variable(one)
                 if not file_metadata:
                     # 未找到对应的临时文件数据, 用户未上传文件
                     continue
                 file_ids.append(file_metadata[0]['file_id'])
+                # DONE merge_check 1
+# =======
+#                 file_metadata = self.graph_state.get_variable_by_str(f'{one}')
+#                 if not file_metadata:
+#                     continue
+#                 file_ids.append(file_metadata['file_id'])
+# >>>>>>> feat/zyrs_0527
             self._sort_chunks = len(file_ids) == 1
             node_type = 'Milvus'
             params = {
@@ -238,10 +258,18 @@ class RagNode(BaseNode):
         else:
             file_ids = ["0"]
             for one in self._knowledge_value:
+# ------
                 file_metadata = self.get_other_node_variable(one)
                 if not file_metadata:
                     continue
                 file_ids.append(file_metadata[0]['file_id'])
+                # DONE merge_check 1
+# =======
+#                 file_metadata = self.graph_state.get_variable_by_str(f'{one}')
+#                 if not file_metadata:
+#                     continue
+#                 file_ids.append(file_metadata['file_id'])
+# >>>>>>> feat/zyrs_0527
             node_type = 'ElasticKeywordsSearch'
             params = {
                 'index_name': self.tmp_collection_name,

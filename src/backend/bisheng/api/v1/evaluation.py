@@ -33,7 +33,7 @@ def create_evaluation(*,
                       prompt: str = Form(),
                       exec_type: str = Form(),
                       unique_id: str = Form(),
-                      version: Optional[int] = Form(default=None),
+                      version: Optional[int] = Form(default=0),
                       background_tasks: BackgroundTasks,
                       authorize: AuthJWT = Depends()):
     """ 创建评测任务. """

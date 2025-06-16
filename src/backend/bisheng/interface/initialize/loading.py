@@ -247,6 +247,11 @@ def instantiate_output_parser(node_type, class_object, params):
         raise ValueError(f'Method {method} not found in {class_object}')
     return class_object(**params)
 
+def instantiate_stt(node_type, class_object, params):
+    return class_object(**params)
+
+def instantiate_tts(node_type, class_object, params):
+    return class_object(**params)
 
 def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: bool = True):
     # This is a workaround so JinaChat works until streaming is implemented

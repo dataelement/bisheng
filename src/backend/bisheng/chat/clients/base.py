@@ -2,11 +2,13 @@ import asyncio
 import json
 from abc import abstractmethod, ABC
 from typing import Dict, Callable
+from uuid import uuid4
 from queue import Queue, Empty
 
 from bisheng.utils import generate_uuid
 from loguru import logger
 from fastapi import WebSocket, Request
+import asyncio
 
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse

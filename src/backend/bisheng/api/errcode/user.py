@@ -40,3 +40,7 @@ class UserNeedGroupAndRoleError(BaseErrorCode):
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
     Msg: str = '用户组内还有用户，不能删除'
+
+class UserGroupSubGroupError(BaseErrorCode):
+    Code: int = 10611
+    Msg: str = '用户组下还有子用户组，不能删除'

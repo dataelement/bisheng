@@ -56,6 +56,8 @@ def import_by_type(_type: str, name: str) -> Any:
         'autogen_roles': import_autogenRoles,
         'input_output': import_inputoutput,
         'custom_components': import_custom_component,
+        'stt': import_stt,
+        'tts': import_tts,
     }
     if _type == 'llms':
         key = 'contribute' if name in chat_models.__all__ else 'chat' if 'chat' in name.lower(
@@ -90,6 +92,7 @@ def import_chat_llm(llm: str) -> BaseChatModel:
     """Import chat llm from llm name"""
     from bisheng.interface.llms.base import llm_creator
     if llm in llm_creator.type_to_loader_dict:
+        print(f'import_chat_llm {llm}')
         return llm_creator.type_to_loader_dict[llm]
     return import_class(f'bisheng_langchain.chat_models.{llm}')
 
@@ -188,6 +191,16 @@ def import_embedding(embedding: str) -> Any:
     from bisheng.interface.embeddings.base import embedding_creator
     return next(x for x in embedding_creator.type_to_loader_dict.values()
                 if x.__name__ == embedding)
+
+def import_stt(stt: str) -> Any:
+    from bisheng.interface.stts.base import stt_creator
+    return next(x for x in stt_creator.type_to_loader_dict.values()
+                if x.__name__ == stt)
+
+def import_tts(tts: str) -> Any:
+    from bisheng.interface.ttss.base import tts_creator
+    return next(x for x in tts_creator.type_to_loader_dict.values()
+                if x.__name__ == tts)
 
 
 def import_vectorstore(vectorstore: str) -> Any:

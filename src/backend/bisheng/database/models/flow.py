@@ -19,7 +19,6 @@ from bisheng.utils import generate_uuid
 # if TYPE_CHECKING:
 
 
-
 class FlowStatus(Enum):
     OFFLINE = 1
     ONLINE = 2
@@ -211,7 +210,7 @@ class FlowDao(FlowBase):
             if status is not None:
                 statement = statement.where(Flow.status == status)
             if flow_type is not None:
-                statement = statement.where(Flow.flow_type== flow_type)
+                statement = statement.where(Flow.flow_type == flow_type)
             if flow_ids:
                 statement = statement.where(Flow.id.in_(flow_ids))
             statement = statement.order_by(Flow.update_time.desc())
@@ -347,6 +346,7 @@ class FlowDao(FlowBase):
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
                            sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
+
         count_statement = select(func.count(sub_query.c.id))
         if name:
             statement = statement.where(sub_query.c.name.like(f'%{name}%'))
@@ -369,10 +369,14 @@ class FlowDao(FlowBase):
             else:
                 statement = statement.where(sub_query.c.user_id == user_id)
                 count_statement = count_statement.where(sub_query.c.user_id == user_id)
+        if name:
+            statement = statement.order_by(func.instr(sub_query.c.name, name))
+            statement = statement.order_by(sub_query.c.name)
+        else:
+            statement = statement.order_by(sub_query.c.update_time.desc())
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(sub_query.c.update_time.desc())
-        with (session_getter() as session):
+        with session_getter() as session:
             ret = session.exec(statement).all()
             total = session.scalar(count_statement)
         data = []
