@@ -141,8 +141,8 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                         <div className="">
                             {displayMode === DisplayModeType.Mixed ? (
                                 <TabsList className="">
-                                    <TabsTrigger value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
-                                    <TabsTrigger value="table">{t('customStrategy')}</TabsTrigger>
+                                    <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
+                                    <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
                                 </TabsList>
                             ) : <div className="h-10"></div>}
                         </div>
@@ -193,7 +193,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                 )
             }
         </div >
-        <div className="fixed bottom-2 right-8 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
+        <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
             <Button
                 className="h-8"
                 variant="outline"

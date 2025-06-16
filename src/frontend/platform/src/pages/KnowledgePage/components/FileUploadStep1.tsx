@@ -28,6 +28,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
         setFinish(!failFiles.length)
     }
 
+    const [loading, setLoading] = useState(false)
     const handleSave = async () => {
         const params = {
             knowledge_id: kid,
@@ -50,13 +51,15 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
             fileter_page_header_footer: true
         }
 
-        onSave(params)
+        setLoading(true)
+        await onSave(params)
+        setLoading(false)
     }
 
     return <div className={`relative h-full max-w-[1200px] mx-auto flex flex-col px-10 pt-4 ${hidden ? 'hidden' : ''}`}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
-            progressClassName='max-h-[calc(100vh-744px)]'
+            progressClassName='max-h-[460px]'
             onSelectFile={(count) => {
                 setFileCount(count)
                 setFinish(false)
@@ -64,8 +67,8 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
             onFileChange={handleFileChange}
         />
         <div className="flex justify-end gap-4 mt-8">
-            <Button disabled={!finish} variant="outline" onClick={handleSave}>直接上传</Button>
-            <Button disabled={!finish} onClick={() => onNext(filesRef.current)} >
+            <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>直接上传</Button>
+            <Button disabled={loading || !finish} onClick={() => onNext(filesRef.current)} >
                 {fileCount ? <span>共{fileCount}个文件</span> : null} 下一步</Button>
         </div>
     </div>

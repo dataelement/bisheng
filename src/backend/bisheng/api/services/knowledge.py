@@ -1114,7 +1114,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["user_id"] = login_user.user_id
         knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
         knowldge_dict["name"] = f"{knowledge.name} 副本"
-        knowldge_dict["state"] = KnowledgeState.COPYING.value
+        knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
         target_knowlege = KnowledgeDao.insert_one(knowledge_new)
         # celery 还没ok

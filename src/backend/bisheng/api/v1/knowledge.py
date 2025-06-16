@@ -13,7 +13,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import add_qa, QA_save_knowledge
+from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
@@ -24,6 +24,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
+from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -597,7 +598,7 @@ def post_import_file(*,
 
         # async task add qa into milvus and es
         for one in result:
-            background_tasks.add_task(QA_save_knowledge, db_knowledge, one)
+            insert_qa_celery.delay(one.id)
 
         error_result.append(have_data)
 

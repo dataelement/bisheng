@@ -30,7 +30,13 @@ export default function FilesUpload() {
 
     const _tempConfigRef = useRef({})
     // 保存知识库
+    const submittingRef = useRef(false);
     const handleSave = (_config) => {
+        // 如果正在提交，直接返回
+        if (submittingRef.current) { return; }
+        // 加锁
+        submittingRef.current = true;
+
         captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
             const _repeatFiles = res.filter(e => e.status === 3)
 
@@ -62,14 +68,17 @@ export default function FilesUpload() {
                 fileId: res[index].id
             })
             ))
+        }).finally(() => {
+            // 无论成功失败都要解锁
+            submittingRef.current = false;
         }))
 
         _tempConfigRef.current = _config
     }
 
     // 默认配置保存
-    const handleSaveByDefaultConfig = (_config) => {
-        captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+    const handleSaveByDefaultConfig = async (_config) => {
+        await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
             const _repeatFiles = res.filter(e => e.status === 3)
             if (_repeatFiles.length) {
                 setRepeatFiles(_repeatFiles)

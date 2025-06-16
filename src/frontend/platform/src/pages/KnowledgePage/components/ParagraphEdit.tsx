@@ -265,7 +265,14 @@ const ParagraphEdit = ({
                 className="border"
                 src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
             default:
-                return <div className="flex justify-center items-center h-full text-gray-400">File type not supported</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">
+                    <div className="text-center">
+                        <img
+                            className="size-52 block"
+                            src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
+                        <p>预览失败</p>
+                    </div>
+                </div>
         }
     }
 

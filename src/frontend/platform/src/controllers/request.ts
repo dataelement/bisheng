@@ -70,7 +70,7 @@ export default customAxios
 export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
     return apiFunc.catch(error => {
         if (error === null) return // app error
-        if (error?.code === "ERR_CANCELED") return
+        if (error?.code === "ERR_CANCELED") return 'canceled'
 
         console.log('error :>> ', error);
         iocFunc?.(error)
