@@ -23,6 +23,7 @@ import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 import ImagePromptItem from "./component/ImagePromptItem";
+import OnlineSwitchItem from "./component/onlineSwitchItem";
 
 // 节点表单项
 export default function Parameter({ node, nodeId, item, onOutPutChange, onStatusChange, onFouceUpdate, onVarEvent }
@@ -73,15 +74,21 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
         case 'output_form':
             return <OutputItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} />
         case 'bisheng_model':
-            return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} type='model' />
         case 'agent_model':
-            return <ModelItem agent data={item} onChange={handleOnNewValue} onValidate={bindValidate} />
+            return <ModelItem agent data={item} onChange={handleOnNewValue} onValidate={bindValidate} type='agentModel' />
+        case 'tts_model':
+            return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} type='tts' />
+        case 'stt_model':
+            return <ModelItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} type='stt' />
         case 'slide':
             return <SliderItem data={item} onChange={handleOnNewValue} />
         case 'slide_switch':
             return <SwitchSliderItem data={item} onChange={handleOnNewValue} />
         case 'switch':
             return <SwitchItem data={item} onChange={handleOnNewValue} />;
+        case 'online_switch':
+            return <OnlineSwitchItem data={item} onChange={handleOnNewValue}  node={node} item={item} />;
         case 'var_select':
             return <VarSelectSingleItem
                 nodeId={nodeId}

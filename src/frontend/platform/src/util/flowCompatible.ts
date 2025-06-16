@@ -131,7 +131,7 @@ const comptibleAgent = (node) => {
         node.group_params[1].params.push({
             key: "enable_web_search",
             label: "联网搜索",
-            type: "switch",
+            type: "online_switch",
             help: "",
             value: false
         })
@@ -153,7 +153,7 @@ const comptibleRag = (node) => {
             "key": "enable_web_search",
             "label": "联网搜索",
             "global": "self",
-            "type": "switch",
+            "type": "online_switch",
             "help": "",
             "value": false
         })
@@ -185,7 +185,7 @@ const comptibleLLM = (node) => {
         node.group_params[1].params.push({
             key: "enable_web_search",
             label: "联网搜索",
-            type: "switch",
+            type: "online_switch",
             help: "",
             value: false
         })
