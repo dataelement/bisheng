@@ -672,7 +672,10 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
         # <<<<<<< HEAD 1.2.0
         # 向量存储
         # for vectore_client in vectore_client_list:
-        #     vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        #     result = vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        #     logger.debug(f'jjxx metadata:{metadata} vectore_client.add_texts:{result}')
+        #
+        # QA.status = QAStatus.ENABLED.value
         # =======
         # 向量存储
         texts = [t.page_content for t in docs]
@@ -705,6 +708,7 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             session.commit()
             session.refresh(QA)
     except Exception as e:
+        logger.debug(f'jjxx validation_query:{e} error')
         logger.error(e)
         setattr(QA, 'status', QAStatus.FAILED.value)
         setattr(QA, 'remark', str(e)[:500])

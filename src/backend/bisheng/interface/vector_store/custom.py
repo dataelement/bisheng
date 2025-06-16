@@ -443,10 +443,10 @@ class MilvusWithPermissionCheck(MilvusLangchain):
                 ret.append(pair)
             logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} query: {query} results: {res[0]}')
         ret.sort(key=lambda x: x[1])
-        logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)}')
+        logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)} --- {ret}')
         # milvus是分数越小越好，所以直接取前几位就行
         ret = ret[:finally_k]
-        logger.debug(f'MilvusWithPermissionCheck Search finally results: {len(ret)}')
+        logger.debug(f'MilvusWithPermissionCheck Search finally results: {len(ret)} --- {ret}')
         return ret
 
     @staticmethod
