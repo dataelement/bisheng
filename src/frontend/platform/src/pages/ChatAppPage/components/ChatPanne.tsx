@@ -17,6 +17,7 @@ import { Variable, getFlowApi } from "../../../controllers/API/flow";
 import { FlowType, NodeType } from "../../../types/flow";
 import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
+import CommitmentDialog from "./CommitmentDialog";
 import ForcePrompt from "./ForcePrompt";
 
 export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
@@ -110,11 +111,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
 
             const { data, ...f } = _flow
             const { nodes, edges, viewport } = data
-
+            const newflow = { ...f, nodes, edges, viewport }
+            window.workflow_flow = newflow
+            setWorkflow(newflow)
+            version === 'v2' && setAutoRun(true)
             setTimeout(() => { // holding change autorun
-                setWorkflow({ ...f, nodes, edges, viewport })
                 changeFlowChatId(chatId)
-                version === 'v2' && setAutoRun(true)
             }, 100);
         }
     }
@@ -230,7 +232,6 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}
         > </div>
     }
-
     return <div className="flex-1 min-w-0 min-h-0 bs-chat-bg" >
         {/* 技能会话 */}
         {
@@ -243,6 +244,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                 <ChatComponent
                     form={flowSate.isForm}
                     logo={flow.logo}
+                    flow={flow}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -253,7 +255,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     inputForm={flowSate.isForm ? <ChatReportForm flow={flow} onStart={sendReport} /> : null}
                 />
                 {/* 强制提醒 */}
-                <ForcePrompt id={flow.id} />
+                <CommitmentDialog id={flow.id} name={flow.name} />
             </div>
         }
         {/* 助手会话 */}
@@ -265,7 +267,9 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <span className="text-sm">{assistant.name}</span>
                 </div>
                 <ChatComponent
+                    assistant
                     stop
+                    flow={assistant}
                     logo={assistant.logo}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
@@ -276,7 +280,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     inputForm={null}
                 />
                 {/* 强制提醒 */}
-                <ForcePrompt id={assistant.id} />
+                <CommitmentDialog id={assistant.id} name={assistant.name} />
             </div>
         }
         {/* 工作流会话 */}
@@ -287,6 +291,7 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
                     <span className="text-sm">{workflow.name}</span>
                 </div>
                 <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
+                <CommitmentDialog id={workflow.id} name={workflow.name} />
             </div>
         }
     </div>

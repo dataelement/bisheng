@@ -86,7 +86,7 @@ const ChatFiles = forwardRef(({ v, accepts, onChange, preParsing }, ref) => {
                     return updatedFiles;
                 });
             }, preParsing, v).then(response => {
-                const filePath = response.file_path; // Assuming the response contains the file ID
+                const filePath = response.file_path || response.id; // Assuming the response contains the file ID
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
                         return { ...f, isUploading: false, filePath, progress: 100 }; // Set progress to 100 when uploaded
@@ -172,13 +172,12 @@ const ChatFiles = forwardRef(({ v, accepts, onChange, preParsing }, ref) => {
     useImperativeHandle(ref, () => ({
         getHeight: () => containerHeight,
     }));
-    
     return (
         <div className="relative z-10">
             {/* Displaying files */}
             {!!files.length && <div
                 ref={containerRef}
-                className="absolute bottom-2 left-2 flex flex-wrap gap-2  bg-gray-50 p-2 rounded-xl max-h-96 overflow-y-auto"
+                className="absolute bottom-2 left-2 flex flex-wrap gap-2 bg-gray-50 p-2 rounded-xl max-h-[180px] overflow-y-auto"
             >
                 {files.map((file, index) => (
                     <div key={index} className="group relative flex items-center space-x-3 bg-gray-100 p-2 rounded-xl cursor-default">

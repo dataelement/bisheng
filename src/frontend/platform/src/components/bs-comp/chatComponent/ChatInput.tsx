@@ -100,7 +100,7 @@ export default function ChatInput({flow, assistant, clear, form, questions, inpu
         setFormShow(false)
 
         const [fileIds, fileNames] = getFileIds().reduce((acc, cur) => {
-            acc[0].push(cur.id)
+            acc[0].push(cur.path)
             acc[1].push(cur.name)
             return acc
         }, [[], []])
@@ -307,6 +307,8 @@ export default function ChatInput({flow, assistant, clear, form, questions, inpu
         clearFiles();
     }, [showUpload])
 
+    console.log('flow?.is_allow_upload', flow, assistant);
+    
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* form */}
