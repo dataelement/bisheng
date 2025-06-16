@@ -579,7 +579,7 @@ def add_file_embedding(
         logger.info(
             f"upload_preview_file_to_minio file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
         )
-        if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
+        if minio_client.object_exists(minio_client.tmp_bucket, tmp_preview_file):
             minio_client.copy_object(
                 tmp_preview_file,
                 preview_object_name,
