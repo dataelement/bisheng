@@ -12,22 +12,34 @@ export default function LoginBridge({ onHasLdap }) {
 
     const [ssoUrl, setSsoUrl] = useState<string>('')
     const [wxUrl, setWxUrl] = useState<string>('')
-
+    const [wxList, setWxList] = useState<string>('')
     useEffect(() => {
         getSSOurlApi().then((urls: any) => {
             setSsoUrl(urls.sso)
-            setWxUrl(urls.wx)
+            setWxUrl(urls.wx ? __APP_ENV__.BASE_URL + urls.wx : '')
+            setWxList(urls.wx_list || [])
             urls.ldap && onHasLdap(true)
         })
     }, [])
 
-    if (!ssoUrl && !wxUrl) return null
+    if (!ssoUrl && !wxUrl && wxList.length == 0) return null
 
     return <div>
         <Separator className="my-4" text={t('login.otherMethods')}></Separator>
         <div className="flex justify-center items-center gap-4">
             {ssoUrl && <Button size="icon" className="rounded-full" onClick={() => location.href = ssoUrl}>SSO</Button>}
             {wxUrl && <Button size="icon" variant="ghost" onClick={() => location.href = wxUrl}><Wxpro /></Button>}
+            {wxList.map((wx, index) => (
+                    <Button
+                        key={index}
+                        size="icon"
+                        variant="ghost"
+                        title={wx.name}
+                        onClick={() => (location.href = __APP_ENV__.BASE_URL + wx.url)}
+                    >
+                        <Wxpro />
+                    </Button>
+                ))}
         </div>
     </div>
 };
