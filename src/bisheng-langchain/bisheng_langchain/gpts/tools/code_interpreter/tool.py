@@ -190,7 +190,7 @@ def upload_minio(
         cert_check=param.get('CERT_CHECK'),
     )
     minio_share = minio.Minio(
-        endpoint=param.get('MINIO_SHAREPOIN'),
+        endpoint=param.get('MINIO_SHAREPOINT'),
         access_key=param.get('MINIO_ACCESS_KEY'),
         secret_key=param.get('MINIO_SECRET_KEY'),
         secure=param.get('SCHEMA'),

@@ -66,7 +66,7 @@ services:
       BS_MINIO_SCHEMA: 'false'
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOIN: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
