@@ -1,3 +1,5 @@
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Tabs, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
@@ -13,12 +15,12 @@ import {
     TableRow
 } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { createRole, getGroupResourcesApi, getRolePermissionsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
+import { createRole, getGroupResourcesApi, getRoleDetailApi, getRolePermissionsApi, updateRoleNameApi, updateRolePermissionsApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import SelectUserByGroup from "./SelectUserByGroup";
 
-const SearchPanne = ({ groupId, title, type, children }) => {
+const SearchPanne = ({ groupId, placeholder = '', title, type, children }) => {
     const { page, pageSize, data, total, loading, setPage, search } = useTable({ pageSize: 10 }, (params) => {
         const { page, pageSize, keyword } = params
         const param = {
@@ -44,9 +46,9 @@ const SearchPanne = ({ groupId, title, type, children }) => {
     })
 
     return <>
-        <div className="mt-20 flex justify-between items-center relative">
+        <div className="mt-10 flex justify-between items-center relative">
             <p className="text-xl font-bold">{title}</p>
-            <SearchInput onChange={(e) => search(e.target.value)}></SearchInput>
+            <SearchInput placeholder={placeholder} onChange={(e) => search(e.target.value)}></SearchInput>
         </div>
         <div className="mt-4">
             {loading ?
@@ -70,6 +72,7 @@ const enum MenuType {
 export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
     const { setErrorData, setSuccessData } = useContext(alertContext);
     const { t } = useTranslation()
+    const [tab, setTab] = useState('tab1')
 
     // 使用的权限
     const [form, setForm] = useState({
@@ -80,11 +83,15 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         useFlows: [],
         manageLibs: [],
         useTools: [],
-        useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE]
+        useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
+        bingAll: false,
+        selectGroupKey: {},
+        users: []
     })
+    console.log('form :>> ', form);
     useEffect(() => {
         if (id !== -1) {
-            // 获取详情，初始化选中数据
+            // 获取权限详情，初始化选中数据
             getRolePermissionsApi(id).then(res => {
                 const useSkills = [], useLibs = [], manageLibs = [], useAssistant = [], useFlows = [], useTools = [],
                     useMenu = []
@@ -99,7 +106,14 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
                         case 99: useMenu.push(item.third_id); break;
                     }
                 })
-                setForm({ name, useSkills, useLibs, useAssistant, useFlows, manageLibs, useTools, useMenu })
+                setForm(form => ({
+                    ...form,
+                    name, useSkills, useLibs, useAssistant, useFlows, manageLibs, useTools, useMenu
+                }))
+            })
+            // 详情
+            getRoleDetailApi(id).then(res => {
+                setForm(form => ({ ...form, users: res.user_ids || [], bingAll: res.is_bind_all, selectGroupKey: res.extra || {} }))
             })
         }
     }, [id])
@@ -145,11 +159,21 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         // 没有id时需要走创建流程，否则修改
         let roleId = id
         if (id === -1) {
-            const res = await captureAndAlertRequestErrorHoc(createRole(groupId, form.name))
+            const res = await captureAndAlertRequestErrorHoc(createRole({
+                role_name: form.name,
+                group_id: groupId,
+                is_bind_all: form.bingAll,
+                user_ids: form.users.map(el => el.user_id)
+            }))
             roleId = res.id
         } else {
             // 更新基本信息
-            captureAndAlertRequestErrorHoc(updateRoleNameApi(roleId, form.name))
+            captureAndAlertRequestErrorHoc(updateRoleNameApi(roleId, {
+                role_name: form.name,
+                extra: "",
+                is_bind_all: form.bingAll,
+                user_ids: form.users.map(el => el.user_id)
+            }))
         }
         // 更新角色权限
         const res = await Promise.all([
@@ -174,11 +198,34 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             <p className="text-xl mb-4">{t('system.roleName')}</p>
             <Input placeholder={t('system.roleName')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={60}></Input>
         </div>
-        {/* 菜单授权 */}
+        <div className="font-bold mt-4">
+            <p className="text-xl mb-4">人员范围</p>
+            <div className="mb-4">
+                <Switch checked={form.bingAll} onCheckedChange={(b) => setForm({ ...form, bingAll: b })} />
+                <span className="ml-2 bisheng-label">对本组以及所有子用户组中的用户赋予角色</span>
+            </div>
+            {!form.bingAll && <SelectUserByGroup value={form.users} groupId={groupId} onChange={(users) => setForm({ ...form, users })} />}
+        </div>
         <div>
             <div className="mt-20 flex justify-between items-center relative">
-                <p className="text-xl font-bold">{t('system.menuAuthorization')}</p>
+                <p className="text-xl font-bold">授权管理</p>
             </div>
+            <Tabs value={tab} onValueChange={setTab} className="mt-4">
+                <TabsList className="grid w-full grid-cols-6">
+                    <TabsTrigger value="tab1">菜单</TabsTrigger>
+                    <TabsTrigger value="tab2">助手</TabsTrigger>
+                    <TabsTrigger value="tab3">技能</TabsTrigger>
+                    <TabsTrigger value="tab4">工作流</TabsTrigger>
+                    <TabsTrigger value="tab5">工具</TabsTrigger>
+                    <TabsTrigger value="tab6">知识库</TabsTrigger>
+                </TabsList>
+            </Tabs>
+        </div>
+        {/* 菜单授权 */}
+        <div className={tab === 'tab1' ? 'block' : 'hidden'}>
+            {/* <div className="mt-20 flex justify-between items-center relative">
+                <p className="text-xl font-bold">{t('system.menuAuthorization')}</p>
+            </div> */}
             <div className="mt-4 w-full">
                 <Table>
                     <TableHeader>
@@ -217,8 +264,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </div>
         </div>
         {/* 助手 */}
-        <div className="">
-            <SearchPanne title={t('system.assistantAuthorization')}
+        <div className={tab === 'tab2' ? 'block' : 'hidden'}>
+            <SearchPanne
+                // title={t('system.assistantAuthorization')} 
+                placeholder={'助手名称'}
                 groupId={groupId}
                 role_id={roleId}
                 type={'assistant'}>
@@ -247,9 +296,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </SearchPanne>
         </div>
         {/* 技能 */}
-        <div className="">
+        <div className={tab === 'tab3' ? 'block' : 'hidden'}>
             <SearchPanne
-                title={t('system.skillAuthorization')}
+                // title={t('system.skillAuthorization')}
+                placeholder={'技能名称'}
                 groupId={groupId}
                 role_id={roleId}
                 type={'skill'}>
@@ -278,9 +328,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </SearchPanne>
         </div>
         {/* 工作流 */}
-        <div className="">
+        <div className={tab === 'tab4' ? 'block' : 'hidden'}>
             <SearchPanne
-                title={'工作流授权'}
+                // title={'工作流授权'}
+                placeholder={'工作流名称'}
                 groupId={groupId}
                 role_id={roleId}
                 type={'flow'}>
@@ -309,8 +360,9 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </SearchPanne>
         </div>
         {/* 知识库 */}
-        <div className="mb-20">
-            <SearchPanne title={t('system.knowledgeAuthorization')}
+        <div className={tab === 'tab6' ? 'block' : 'hidden'}>
+            <SearchPanne
+                // title={t('system.knowledgeAuthorization')}
                 groupId={groupId}
                 role_id={roleId}
                 type={'lib'}>
@@ -343,9 +395,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
             </SearchPanne>
         </div>
         {/* 工具 */}
-        <div className="">
+        <div className={tab === 'tab5' ? 'block' : 'hidden'}>
             <SearchPanne
-                title={t('system.toolAuthorization')}
+                // title={t('system.toolAuthorization')}
+                placeholder={'工具名称'}
                 groupId={groupId}
                 role_id={roleId}
                 type={'tool'}>
