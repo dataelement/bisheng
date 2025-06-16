@@ -37,12 +37,13 @@ class ParseType(Enum):
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
-    file_name: str = Field(sa_column=Column(String(length=1000), index=True))
+    file_name: str = Field(sa_column=Column(String(length=1024), index=True), max_length=1000)
     md5: Optional[str] = Field(default=None, index=False)
     parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
                                       index=False,
                                       description='采用什么模式解析的文件')
-    split_rule: Optional[str] = Field(default=None, index=False, description='采用什么模式解析的文件')
+    split_rule: Optional[str] = Field(default=None, sa_column=Column(String(length=1024)), max_length=1000,
+                                      description='采用什么模式解析的文件')
     bbox_object_name: Optional[str] = Field(default='', description='bbox文件在minio存储的对象名称')
     status: Optional[int] = Field(default=KnowledgeFileStatus.PROCESSING.value,
                                   index=False,
