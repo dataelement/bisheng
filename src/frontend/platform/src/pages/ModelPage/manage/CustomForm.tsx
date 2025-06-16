@@ -105,6 +105,14 @@ const modelProviders = {
         },
     ],
     qwen: [
+        // {
+        //     label: "Base URL",
+        //     type: "text",
+        //     default: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        //     placeholder: "",
+        //     required: true,
+        //     key: "openai_api_base",
+        // },
         {
             label: "API Key",
             type: "password",
@@ -169,14 +177,6 @@ const modelProviders = {
         },
     ],
     spark: [
-        // {
-        //     label: "App ID",
-        //     type: "text",
-        //     placeholder: "",
-        //     default: "",
-        //     required: true,
-        //     key: "appid",
-        // },
         {
             label: "API Key",
             type: "password",
@@ -260,6 +260,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
+            placeholder: "https://api.hunyuan.cloud.tencent.com/v1",
             default: "https://api.hunyuan.cloud.tencent.com/v1",
             required: true,
             key: "base_url",
@@ -291,7 +292,7 @@ const modelProviders = {
             key: "api_key",
         },
     ],
-    volcengine: [
+    "火山引擎": [
         {
             label: "Base URL",
             type: "text",
@@ -364,10 +365,11 @@ const CustomForm = forwardRef(({ showDefault, provider, formData }, ref) => {
     useImperativeHandle(ref, () => ({
         getData() {
             const errorObj = fields.find(field => field.required && !form[field.key]);
-            const newForm = fields.reduce((res, field) => {
-                res[field.key] = form[field.key]
-                return res
-            }, {});
+            // 星星转空给后台
+            const newForm = Object.keys(form).reduce((map, key) => {
+                map[key] = form[key].indexOf('******') === -1 ? form[key] : '';
+                return map;
+            }, {})
             return [newForm, errorObj ? errorObj.label : ''];
         }
     }))
