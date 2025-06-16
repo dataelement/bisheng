@@ -29,7 +29,7 @@ class MinioClient:
             secure=settings.get_knowledge().get('minio').get('SCHEMA'),
             cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
         self.minio_share = minio.Minio(
-            endpoint=settings.get_knowledge().get('minio').get('MINIO_SHAREPOIN'),
+            endpoint=settings.get_knowledge().get('minio').get('MINIO_SHAREPOINT'),
             access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
             secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
             secure=settings.get_knowledge().get('minio').get('SCHEMA'),
@@ -125,7 +125,7 @@ class MinioClient:
          TODO 合理方案是部署一个https的minio配合前端使用
          抹去url中的minio share地址， 让前端通过nginx代理去访问资源
         """
-        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
+        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOINT', '')
         return file_url.replace(f'http://{minio_share}', '')
 
     def object_exists(self, bucket_name, object_name, **kwargs):
