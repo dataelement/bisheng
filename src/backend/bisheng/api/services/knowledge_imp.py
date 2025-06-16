@@ -119,7 +119,9 @@ class KnowledgeUtils:
                 mapping[key] = json.dumps(val, ensure_ascii=False)
             redis_client.hset(cache_key, mapping=mapping)
         else:
-            redis_client.hset(cache_key, key=chunk_index, value=json.dumps(value, ensure_ascii=False))
+            redis_client.hset(
+                cache_key, key=chunk_index, value=json.dumps(value, ensure_ascii=False)
+            )
 
     @classmethod
     def delete_preview_cache(cls, cache_key, chunk_index: int = None):
@@ -146,19 +148,47 @@ class KnowledgeUtils:
 
     @classmethod
     def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """ 获取文件图片在minio的存储目录 """
+        """获取文件图片在minio的存储目录"""
         if knowledge_id:
             return f"knowledge/images/{knowledge_id}/{doc_id}"
         else:
             return f"tmp/images/{doc_id}"
 
     @classmethod
-    def get_knowledge_file_preview_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """ 获取预览文件在minio的存储目录 比如pptx需要转为pdf doc需要转为docx"""
-        if knowledge_id:
-            return f"knowledge/preview/{knowledge_id}/{doc_id}"
-        else:
-            return f"tmp/preview/{doc_id}"
+    def get_knowledge_file_object_name(cls, file_id: int, file_name: str) -> str:
+        """获取知识库源文件在minio的存储路径"""
+        file_ext = file_name.split(".")[-1]
+        return f"original/{file_id}.{file_ext}"
+
+    @classmethod
+    def get_knowledge_bbox_file_object_name(cls, file_id: int) -> str:
+        """获取知识库文件对应的bbox文件在minio的存储路径"""
+        return f"partitions/{file_id}.json"
+
+    @classmethod
+    def get_knowledge_preview_file_object_name(
+            cls, file_id: int, file_name: str
+    ) -> Optional[str]:
+        """获取知识库文件对应的预览文件在minio的存储路径 这个路径是存储在正式bucket内"""
+        file_ext = file_name.split(".")[-1]
+        if file_ext == "doc":
+            return f"preview/{file_id}.docx"
+        elif file_ext in ["ppt", "pptx"]:
+            return f"preview/{file_id}.pdf"
+        # 其他类型的文件不需要预览文件
+        return None
+
+    @classmethod
+    def get_tmp_preview_file_object_name(cls, file_path: str) -> Optional[str]:
+        """获取临时预览文件在minio的存储路径 这个路径是存储在临时bucket"""
+        file_name = os.path.basename(file_path)
+        file_name_no_ext, file_ext = file_name.rsplit(".", 1)
+        if file_ext == "doc":
+            return f"preview/{file_name_no_ext}.docx"
+        elif file_ext in ["ppt", "pptx"]:
+            return f"preview/{file_name_no_ext}.pdf"
+        # 其他类型的文件不需要预览文件
+        return None
 
 
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
@@ -224,24 +254,15 @@ def process_file_task(
         raise e
 
 
-def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
-    """删除知识文件信息"""
-    knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
-
-    knowledge_ids = [file.knowledge_id for file in knowledge_files]
-    knowledges = KnowledgeDao.get_list_by_ids(knowledge_ids)
-    knowledgeid_dict = {knowledge.id: knowledge for knowledge in knowledges}
+def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
+    """ 删除知识文件的向量数据和es数据 """
+    if not file_ids:
+        return True
     embeddings = FakeEmbedding()
-    collection_ = set([knowledge.collection_name for knowledge in knowledges])
-
-    if len(collection_) > 1:
-        raise ValueError("不支持多个collection")
-    collection_name = collection_.pop()
-    # 处理vectordb
-    vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
+    vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
     try:
-        if isinstance(vectore_client.col, Collection):
-            pk = vectore_client.col.query(
+        if isinstance(vector_client.col, Collection):
+            pk = vector_client.col.query(
                 expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
             )
         else:
@@ -249,37 +270,66 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     except Exception:
         # 重试一次
         logger.error("timeout_except")
-        vectore_client.close_connection(vectore_client.alias)
-        vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-        pk = vectore_client.col.query(
+        vector_client.close_connection(vector_client.alias)
+        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
+        pk = vector_client.col.query(
             expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
         )
+
     logger.info("query_milvus pk={}", pk)
     if pk:
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
+        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
         logger.info(f"act=delete_vector file_id={file_ids} res={res}")
-    vectore_client.close_connection(vectore_client.alias)
+    vector_client.close_connection(vector_client.alias)
 
-    for file in knowledge_files:
-        # mino
-        if clear_minio:
-            # minio
-            minio_client.delete_minio(str(file.id))
-            if file.object_name:
-                minio_client.delete_minio(str(file.object_name))
-
-        knowledge = knowledgeid_dict.get(file.knowledge_id)
-        # elastic
-        index_name = knowledge.index_name or collection_name
-        esvectore_client = decide_vectorstores(
-            index_name, "ElasticKeywordsSearch", embeddings
+    es_client = decide_vectorstores(
+        knowledge.index_name, "ElasticKeywordsSearch", embeddings
+    )
+    for one in file_ids:
+        res = es_client.client.delete_by_query(
+            index=knowledge.index_name, query={"match": {"metadata.file_id": one}}
         )
+        logger.info(f"act=delete_es file_id={one} res={res}")
+    return True
 
-        if esvectore_client:
-            res = esvectore_client.client.delete_by_query(
-                index=index_name, query={"match": {"metadata.file_id": file.id}}
-            )
-            logger.info(f"act=delete_es file_id={file.id} res={res}")
+
+def delete_minio_files(file: KnowledgeFile):
+    """删除知识库文件在minio上的存储"""
+
+    # 删除源文件
+    if file.object_name:
+        minio_client.delete_minio(file.object_name)
+
+    # 删除bbox文件
+    if file.bbox_object_name:
+        minio_client.delete_minio(file.bbox_object_name)
+
+    # 删除转换后的pdf文件
+    minio_client.delete_minio(f"{file.id}")
+
+    # 删除预览文件
+    preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
+        file.id, file.file_name
+    )
+    if preview_object_name:
+        minio_client.delete_minio(preview_object_name)
+    return True
+
+
+def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True):
+    """删除知识文件信息"""
+    knowledge_files = KnowledgeFileDao.select_list(file_ids=file_ids)
+
+    knowledge_ids = [file.knowledge_id for file in knowledge_files]
+    knowledges = KnowledgeDao.get_list_by_ids(knowledge_ids)
+    if len(knowledges) > 1:
+        raise ValueError("不支持多个知识库的文件同时删除")
+    knowledge = knowledges[0]
+    delete_vector_files(file_ids, knowledge)
+
+    if clear_minio:
+        for file in knowledge_files:
+            delete_minio_files(file)
     return True
 
 
@@ -430,23 +480,9 @@ def add_file_embedding(
     logger.info(
         f"start download original file={db_file.id} file_name={db_file.file_name}"
     )
-    if db_file.object_name.startswith("tmp"):
-        file_url = minio_client.get_share_link(
-            db_file.object_name, minio_client.tmp_bucket
-        )
-        filepath, _ = file_download(file_url)
 
-        # 如果是tmp开头的bucket需要重新保存原始文件到minio的正式bucket
-        file_type = db_file.file_name.rsplit(".", 1)[-1]
-        db_file.object_name = f"original/{db_file.id}.{file_type}"
-        res = minio_client.upload_minio(db_file.object_name, filepath)
-        logger.info(
-            f"upload original file {db_file.id} file_name={db_file.file_name} res={res}"
-        )
-    # 如果是tmp开头的bucket需要重新保存原始文件到minio的正式bucket
-    else:
-        file_url = minio_client.get_share_link(db_file.object_name)
-        filepath, _ = file_download(file_url)
+    file_url = minio_client.get_share_link(db_file.object_name)
+    filepath, _ = file_download(file_url)
 
     if not vector_client:
         raise ValueError("vector db not found, please check your milvus config")
@@ -499,13 +535,15 @@ def add_file_embedding(
     # 存储ocr识别后的partitions结果
     if partitions:
         partition_data = json.dumps(partitions, ensure_ascii=False).encode("utf-8")
+        db_file.bbox_object_name = KnowledgeUtils.get_knowledge_bbox_file_object_name(
+            db_file.id
+        )
         minio_client.upload_minio_data(
-            f"partitions/{db_file.id}.json",
+            db_file.bbox_object_name,
             partition_data,
             len(partition_data),
             "application/json",
         )
-        db_file.bbox_object_name = f"partitions/{db_file.id}.json"
 
     logger.info(
         f"chunk_split file={db_file.id} file_name={db_file.file_name} size={len(texts)}"
@@ -528,21 +566,29 @@ def add_file_embedding(
     es_client.add_texts(texts=texts, metadatas=metadatas)
 
     logger.info(f"add_complete file={db_file.id} file_name={db_file.file_name}")
+
     if preview_cache_key:
         KnowledgeUtils.delete_preview_cache(preview_cache_key)
 
-    if db_file.file_name.endswith('.doc'):
-        preview_object_name = f'preview/{os.path.basename(filepath).split(".")[0]}.docx'
-        logger.info(f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}")
+    if db_file.file_name.endswith((".doc", ".ppt", ".pptx")):
+        tmp_preview_file = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
+
+        preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(
+            db_file.id, db_file.file_name
+        )
+        logger.info(
+            f"upload_preview_file_to_minio file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
+        )
         if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
-            minio_client.copy_object(preview_object_name, f'preview/{db_file.id}.docx',
-                                     minio_client.tmp_bucket, minio_client.bucket)
-    elif db_file.file_name.endswith(('.ppt', '.pptx')):
-        preview_object_name = f'preview/{os.path.basename(filepath).split(".")[0]}.pdf'
-        logger.info(f"upload_preview_file_to_minio file={db_file.id} object_name={preview_object_name}")
-        if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
-            minio_client.copy_object(preview_object_name, f'preview/{db_file.id}.pdf',
-                                     minio_client.tmp_bucket, minio_client.bucket)
+            minio_client.copy_object(
+                tmp_preview_file,
+                preview_object_name,
+                minio_client.tmp_bucket,
+                minio_client.bucket,
+            )
+        logger.info(
+            f"upload_preview_file_over file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
+        )
 
 
 def add_text_into_vector(
@@ -576,15 +622,20 @@ def parse_partitions(partitions: List[Any]) -> Dict:
             if index == len(bboxes) - 1:
                 val = text[indexes[index][0]:]
             else:
-                val = text[indexes[index][0]: indexes[index][1] + 1]
+                val = text[indexes[index][0]:indexes[index][1] + 1]
             res[key] = {"text": val, "type": part["type"], "part_id": part_index}
     return res
 
 
 def upload_preview_file_to_minio(original_file_path: str, preview_file_path: str):
-    if os.path.basename(original_file_path).split('.')[0] != os.path.basename(preview_file_path).split('.')[0]:
-        logger.error(f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}")
-    object_name = f"preview/{os.path.basename(preview_file_path)}"
+    if (
+            os.path.basename(original_file_path).split(".")[0]
+            != os.path.basename(preview_file_path).split(".")[0]
+    ):
+        logger.error(
+            f"原始文件和预览文件路径不匹配: {original_file_path} vs {preview_file_path}"
+        )
+    object_name = KnowledgeUtils.get_tmp_preview_file_object_name(original_file_path)
     with open(preview_file_path, "rb") as file_obj:
         # 上传预览文件到minio
         minio_client.upload_minio_file(
@@ -604,7 +655,7 @@ def parse_document_title(title: str) -> str:
 
     # 如果有符合md 代码快的标记则去除代码块标记
     if final_title := extract_code_blocks(title):
-        title = '\n'.join(final_title)
+        title = "\n".join(final_title)
     return title
 
 
@@ -665,11 +716,10 @@ def read_chunk_text(
             header_rows=[
                 excel_rule.header_start_row - 1,  # convert to 0-based index
                 excel_rule.header_end_row - 1,
-                # excel_rule["header_start_row"] - 1,
-                # excel_rule["header_end_row"],
             ],
             data_rows=excel_rule.slice_length,
             append_header=excel_rule.append_header,
+            retain_images=bool(retain_images),
         )
 
         # skip following processes and return splited values.
@@ -681,10 +731,15 @@ def read_chunk_text(
             # convert doc to docx
             input_file = convert_doc_to_docx(input_doc_path=input_file)
             if not input_file:
-                raise Exception(f"failed to convert {file_name} to docx, please check backend log")
+                raise Exception(
+                    f"failed to convert {file_name} to docx, please check backend log"
+                )
 
         md_file_name, local_image_dir, doc_id = convert_file_to_md(
-            file_name=file_name, input_file_name=input_file, knowledge_id=knowledge_id
+            file_name=file_name,
+            input_file_name=input_file,
+            knowledge_id=knowledge_id,
+            retain_images=bool(retain_images),
         )
 
         if not md_file_name:
@@ -698,12 +753,14 @@ def read_chunk_text(
                 doc_id=doc_id,
             )
         # 将pptx转为预览文件存到
-        if file_extension_name in ['ppt', 'pptx']:
+        if file_extension_name in ["ppt", "pptx"]:
             ppt_pdf_path = convert_ppt_to_pdf(input_path=input_file)
             if ppt_pdf_path:
                 upload_preview_file_to_minio(input_file, ppt_pdf_path)
-        elif file_extension_name == 'doc':
-            upload_preview_file_to_minio(input_file, input_file)
+        elif file_extension_name == "doc":
+            upload_preview_file_to_minio(
+                input_file.replace(".docx", ".doc"), input_file
+            )
 
         # 沿用原来的方法处理md文件
         loader = filetype_load_map["md"](file_path=md_file_name)
@@ -722,6 +779,7 @@ def read_chunk_text(
                 ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
                 force_ocr=bool(force_ocr),
                 enable_formular=bool(enable_formula),
+                timeout=etl4lm_settings.get("timeout", 60),
                 filter_page_header_footer=bool(filter_page_header_footer),
                 knowledge_id=knowledge_id,
             )
@@ -750,7 +808,10 @@ def read_chunk_text(
             one.metadata["title"] = parse_document_title(title)
         logger.info("file_extract_title=success timecost={}", time.time() - t)
 
-    if file_extension_name not in ["xls", "xlsx", "csv"]:
+    if file_extension_name in ["xls", "xlsx", "csv"]:
+        for one in texts:
+            one.metadata["title"] = documents[0].metadata.get("title", "")
+    else:
         logger.info(f"start_split_text file_name={file_name}")
         texts = text_splitter.split_documents(documents)
 
@@ -851,27 +912,33 @@ def text_knowledge(
 
 
 def delete_vector(collection_name: str, partition_key: str):
-    embeddings = FakeEmbedding()
-    vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-    if isinstance(vectore_client.col, Collection):
-        if partition_key:
-            pass
-        else:
-            res = vectore_client.col.drop(timeout=1)
-            logger.info("act=delete_milvus col={} res={}", collection_name, res)
+    try:
+        embeddings = FakeEmbedding()
+        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
+        if isinstance(vectore_client.col, Collection):
+            if partition_key:
+                pass
+            else:
+                res = vectore_client.col.drop(timeout=1)
+                logger.info('act=delete_milvus col={} res={}', collection_name, res)
+    except Exception as e:
+        # 处理集合不存在或其他错误的情况
+        logger.warning(f'act=delete_milvus_failed col={collection_name} error={str(e)}')
+        # 即使出错也视为成功删除，因为目标是确保没有脏数据
 
 
 def delete_es(index_name: str):
-    embeddings = FakeEmbedding()
-    esvectore_client = decide_vectorstores(
-        index_name, "ElasticKeywordsSearch", embeddings
-    )
+    try:
+        embeddings = FakeEmbedding()
+        esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
 
-    if esvectore_client:
-        res = esvectore_client.client.indices.delete(
-            index=index_name, ignore=[400, 404]
-        )
-        logger.info(f"act=delete_es index={index_name} res={res}")
+        if esvectore_client:
+            res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
+            logger.info(f'act=delete_es index={index_name} res={res}')
+    except Exception as e:
+        # 处理索引不存在或其他错误的情况
+        logger.warning(f'act=delete_es_failed index={index_name} error={str(e)}')
+        # 即使出错也视为成功删除，因为目标是确保没有脏数据
 
 
 def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):

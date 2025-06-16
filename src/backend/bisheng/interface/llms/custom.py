@@ -456,7 +456,8 @@ class BishengLLM(BaseChatModel):
             tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
             **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        return self.llm.bind_tools(tools, **kwargs)
+        self.llm.bind_tools(tools, **kwargs)
+        return self
 
     def convert_qwen_result(self, message: BaseMessageChunk | BaseMessage) -> BaseMessageChunk | BaseMessage:
         # ChatTongYi model vl model message.content is list

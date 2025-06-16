@@ -19,7 +19,9 @@ import { locationContext } from "@/contexts/locationContext";
 
 export const MarkdownView = ({ noHead = false, data }) => {
     const text = useMemo(() =>
-        data.text.replace(/(?<![\n\|])\n(?!\n)/g, '\n\n')
+        data.text.replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
+            .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n')
+            .replaceAll('(bisheng/tmp/images', '(/bisheng/tmp/images')
         , [data.text])
 
     return <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
@@ -32,7 +34,7 @@ export const MarkdownView = ({ noHead = false, data }) => {
             remarkPlugins={[remarkGfm, remarkMath]}
             rehypePlugins={[rehypeMathjax]}
             linkTarget="_blank"
-            className="inline-block break-all max-w-full text-sm text-gray-500"
+            className="react-markdown inline-block break-all max-w-full text-sm text-gray-500"
             components={{
                 code: ({ node, inline, className, children, ...props }) => {
                     if (children.length) {
@@ -79,9 +81,11 @@ const AceEditorCom = ({ markdown, hidden, onChange, onBlur }) => {
         enableLiveAutocompletion
         name="CodeEditor"
         onChange={onChange}
-        onBlur={onBlur}
+        onBlur={(e) => onBlur(markdown, () => {
+            // 为空时恢复上一次数据
+        })}
         onValidate={(e) => console.error('ace validate :>> ', e)}
-        className="h-full w-full min-h-40 text-gray-500"
+        className="h-full w-full min-h-80 text-gray-500"
     />
 }
 
@@ -98,7 +102,9 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
 
     useEffect(() => {
         // console.log('markdown :>> ', markdown);
-        const processedMarkdown = defalutValue.replace(/^( {4,})/gm, '   ')
+        const processedMarkdown = defalutValue
+            .replace(/^( {4,})/gm, '   ')
+            .replaceAll('(bisheng/tmp/images', '(/bisheng/tmp/images')
         if (!hidden && vditorRef.current && readyRef.current) {
             vditorRef.current.setValue(processedMarkdown);
         } else {
@@ -130,6 +136,9 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
                     toc: true,
                     mark: true,
                 },
+                math: {
+                    "inlineDigit": true
+                }
             },
             cache: {
                 enable: false,
@@ -166,7 +175,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
     return <div ref={domRef} className={`${hidden ? 'hidden' : ''} overflow-y-auto border-none file-vditor`}></div>;
 });
 
-const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange }) => {
+const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange, onPositionClick }) => {
     const [edit, setEdit] = useState(false); // 编辑原始格式
     const { appConfig } = useContext(locationContext)
 
@@ -196,6 +205,7 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange }) =>
                 description: '分段内容不可为空',
             })
         }
+
         if (data.text === newValue) return // 无需保存
         onChange(data.chunkIndex, newValue)
     }
@@ -204,60 +214,73 @@ const EditMarkdown = ({ data, active, fileSuffix, onClick, onDel, onChange }) =>
         className={cn("group p-4 py-3 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full",
             active && 'border-primary')
         }
-        onClick={() => onClick(data.chunkIndex)}
+        onClick={(e) => {
+            e.stopPropagation()
+            onClick(data.chunkIndex)
+        }}
     >
         <div className="text-sm text-gray-500 flex gap-2 justify-between mb-1">
             <div className="flex gap-2 items-center">
                 <span>分段{data.chunkIndex + 1}</span>
                 <span>-</span>
                 <span>{data.text.length} 字符</span>
-                <div>
+                <div className="flex gap-2 justify-center items-center">
                     {
                         fileSuffix === 'pdf' && appConfig.enableEtl4lm && <Tip content={"点击定位到原文件"} side={"top"}  >
                             <Button
                                 size="icon"
                                 variant="ghost"
-                                className={cn("size-6 text-primary opacity-0 group-hover:opacity-100", active && 'opacity-100')}
+                                className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
+                                onClick={onPositionClick}
                             ><LocateFixed size={18} /></Button>
                         </Tip>
                     }
-                    <Tip content={"点击展示Markdown原文，进行编辑"} side={"top"}  >
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            className={cn("size-6 text-primary opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50', active && 'opacity-100')}
-                            onClick={() => setEdit(!edit)}
-                        ><FileCode size={18} /></Button>
-                    </Tip>
+                    {edit
+                        ? <div
+                            className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50')}
+                            onClick={() => setEdit(!edit)}><FileCode size={18} /></div>
+                        : <Tip content={"点击展示Markdown原文，进行编辑"} side={"top"}  >
+                            <div
+                                className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", edit && 'bg-primary text-gray-50')}
+                                onClick={() => setEdit(!edit)}><FileCode size={18} /></div>
+                        </Tip>}
                 </div>
             </div>
             <Tip content={"点击删除分段"} side={"top"}  >
                 <Button
                     size="icon"
                     variant="ghost"
-                    className={cn("size-6 text-primary opacity-0 group-hover:opacity-100", active && 'opacity-100')}
+                    className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
                     onClick={() => onDel(data.chunkIndex, data.text)}
                 ><CircleX size={18} /></Button>
             </Tip>
         </div>
 
+        {/* 所见即所得Markdown编辑器 */}
         <VditorEditor ref={vditorRef} hidden={edit} defalutValue={value} onChange={setDebounceValue} onBlur={handleBlur} />
+        {/* 普通Markdown编辑器 */}
         <AceEditorCom hidden={!edit} markdown={value} onChange={setDebounceValue} onBlur={handleBlur} />
     </div>
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, edit, fileSuffix, loading, chunks, onDel, onChange }) {
+export default function PreviewParagraph({ fileId, previewCount, edit, fileSuffix, loading, chunks, onDel, onChange }) {
     const containerRef = useRef(null);
-    const [visibleItems, setVisibleItems] = useState(5); // 初始加载数量
+    const [visibleItems, setVisibleItems] = useState(10); // 初始加载数量
     const loadingRef = useRef(false);
     // 选中的分段
-    const [selectedChunkIndex, setSelectedChunkIndex] = useKnowledgeStore((state) => [state.selectedChunkIndex, state.setSelectedChunkIndex]);
+    const [selectedChunkIndex, setSelectedChunkIndex, setSelectedChunkDistanceFactor] = useKnowledgeStore((state) => [state.selectedChunkIndex, state.setSelectedChunkIndex, state.setSelectedChunkDistanceFactor]);
+    useEffect(() => {
+        const fun = () => setSelectedChunkIndex(-1) // 失焦
+        document.addEventListener('click', fun)
+        return () => document.removeEventListener('click', fun)
+    }, [])
 
     // 懒加载逻辑
     useEffect(() => {
         const container = containerRef.current;
         if (!container) return;
+        setVisibleItems(10)
 
         const handleScroll = () => {
             if (
@@ -286,16 +309,19 @@ export default function PreviewParagraph({ fileId, edit, fileSuffix, loading, ch
                 {chunks.slice(0, visibleItems).map((chunk) => (
                     edit
                         ? <EditMarkdown
-                            key={fileId + chunk.chunkIndex}
+                            key={fileId + previewCount + chunk.chunkIndex}
                             data={chunk}
                             fileSuffix={fileSuffix}
                             active={selectedChunkIndex === chunk.chunkIndex}
                             onClick={setSelectedChunkIndex}
+                            onPositionClick={setSelectedChunkDistanceFactor}
                             onDel={onDel}
                             onChange={onChange}
                         />
-                        : <MarkdownView key={chunk.chunkIndex} data={chunk} />
+                        : <MarkdownView key={fileId + previewCount + chunk.chunkIndex} data={chunk} />
                 ))}
+                {!(chunks.length || loading) && <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow text-sm text-gray-500 flex gap-2 mb-1"
+                >文档解析失败</div>}
             </div>
         </div>
     </div>

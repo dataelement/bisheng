@@ -5,10 +5,11 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
-from bisheng.cache.redis import redis_client
+from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
 from bisheng.workflow.nodes.base import BaseNode
@@ -150,8 +151,7 @@ class InputNode(BaseNode):
 
         file_id = md5_hash(f'{file_url}')
         filepath, file_name = file_download(file_url)
-        uuid_file_name = file_name.split(".")[0]
-        file_name = redis_client.get(uuid_file_name)
+        file_name = KnowledgeService.get_upload_file_original_name(file_name)
 
         # save original file path, because uns will convert file to pdf
         original_file_path = os.path.join(tempfile.gettempdir(), f'{file_id}.{file_name.split(".")[-1]}')
@@ -159,9 +159,12 @@ class InputNode(BaseNode):
         texts = []
         metadatas = []
         try:
-            texts, metadatas, _, _ = read_chunk_text(filepath, file_name,
-                                                     ['\n\n', '\n'],
-                                                     ['after', 'after'], 1000, 0)
+            file_rule = FileProcessBase(knowledge_id=0)
+            texts, metadatas, _, _ = read_chunk_text(filepath, file_name, file_rule.separator, file_rule.separator_rule,
+                                                     file_rule.chunk_size, file_rule.chunk_overlap, None,
+                                                     file_rule.retain_images, file_rule.enable_formula,
+                                                     file_rule.force_ocr,
+                                                     file_rule.filter_page_header_footer, file_rule.excel_rule)
             for metadata in metadatas:
                 metadata.update({
                     'file_id': file_id,

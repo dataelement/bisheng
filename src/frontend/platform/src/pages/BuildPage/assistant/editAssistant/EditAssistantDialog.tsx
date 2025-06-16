@@ -105,6 +105,7 @@ export default function EditAssistantDialog({ logo, name, desc, onSave }) {
                     name="name"
                     placeholder={t('build.enterName')}
                     maxLength={50}
+                    showCount
                     className="mt-2"
                     value={formData.name}
                     onChange={handleChange}

@@ -2,6 +2,13 @@ import json
 from typing import List, Optional
 from uuid import UUID, uuid4
 
+from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException,
+                     status)
+from fastapi.params import Depends
+from fastapi.responses import StreamingResponse
+from fastapi_jwt_auth import AuthJWT
+from sqlmodel import select
+
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services import chat_imp
 from bisheng.api.services.audit_log import AuditLogService
@@ -15,7 +22,7 @@ from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (AddChatMessages, BuildStatus, BuiltResponse, ChatInput,
-                                    ChatList, FlowGptsOnlineList, InitResponse, StreamData,
+                                    ChatList, InitResponse, StreamData,
                                     UnifiedResponseModel, resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.chat.manager import ChatManager
@@ -33,13 +40,6 @@ from bisheng.graph.graph.base import Graph
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.util import get_cache_key
-from fastapi import (APIRouter, Body, HTTPException, Query, Request, WebSocket, WebSocketException,
-                     status)
-from fastapi.params import Depends
-from fastapi.responses import StreamingResponse
-from fastapi_jwt_auth import AuthJWT
-from sqlalchemy import func
-from sqlmodel import select
 
 router = APIRouter(tags=['Chat'])
 chat_manager = ChatManager()
@@ -49,7 +49,6 @@ expire = 600  # reids 60s 过期
 
 @router.post('/chat/completions', response_class=StreamingResponse)
 async def chat_completions(request: APIChatCompletion, Authorize: AuthJWT = Depends()):
-
     # messages 为openai 格式。目前不支持openai的复杂多轮，先临时处理
     message = None
     if request.messages:
@@ -257,9 +256,9 @@ def del_chat_id(*,
         # 判断下是助手还是技能, 写审计日志
         flow_info = FlowDao.get_flow_by_id(session_chat.flow_id)
         if flow_info and flow_info.flow_type == FlowType.FLOW.value:
-                AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
+            AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
         elif flow_info:
-                AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
+            AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
 
     # 设置会话的删除状态
     MessageSessionDao.delete_session(chat_id)
@@ -443,7 +442,6 @@ def get_session_list(*,
                      limit: Optional[int] = 10,
                      flow_type: Optional[int] = None,
                      login_user: UserPayload = Depends(get_login_user)):
-
     res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
                                            flow_type=flow_type,
                                            page=page,

@@ -47,7 +47,7 @@ from bisheng.database.models.knowledge import (
     KnowledgeDao,
     KnowledgeRead,
     KnowledgeTypeEnum,
-    KnowledgeUpdate,
+    KnowledgeUpdate, KnowledgeState,
 )
 from bisheng.database.models.knowledge_file import (
     KnowledgeFile,
@@ -362,6 +362,31 @@ class KnowledgeService(KnowledgeUtils):
                     minio_client.delete_minio(file[1])
 
     @classmethod
+    def get_upload_file_original_name(cls, file_name: str) -> str:
+        """
+        通过uuid的文件名，获取上传文件的原始名称
+        """
+        if not file_name:
+            raise ServerError.http_exception("file_name is empty")
+        # 从redis内获取
+        uuid_file_name = file_name.split(".")[0]
+        original_file_name = redis_client.get(f"file_name:{uuid_file_name}") or file_name
+        return original_file_name
+
+    @classmethod
+    def save_upload_file_original_name(cls, original_file_name: str) -> str:
+        """
+        保存上传文件的原始名称到redis，生成一个uuid的文件名
+        """
+        if not original_file_name:
+            raise ServerError.http_exception("original_file_name is empty")
+        file_ext = original_file_name.split(".")[-1]
+        # 生成一个唯一的uuid作为key
+        uuid_file_name = generate_uuid()
+        redis_client.set(f"file_name:{uuid_file_name}", original_file_name, expiration=86400)
+        return f"{uuid_file_name}.{file_ext}"
+
+    @classmethod
     def get_preview_file_chunk(
             cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileProcess
     ) -> (str, str, List[FileChunk], Any):
@@ -394,6 +419,7 @@ class KnowledgeService(KnowledgeUtils):
 
         filepath, file_name = file_download(file_path)
         file_ext = file_name.split(".")[-1].lower()
+        file_name = cls.get_upload_file_original_name(file_name)
 
         # 切分文本
         texts, metadatas, parse_type, partitions = read_chunk_text(
@@ -409,6 +435,8 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule
         )
+        if len(texts) == 0:
+            raise ValueError("文件解析为空")
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
@@ -417,16 +445,9 @@ class KnowledgeService(KnowledgeUtils):
 
         # 默认是源文件的地址
         file_share_url = file_path
-        if file_ext == 'doc':
+        if file_ext in ['doc', 'ppt', 'pptx']:
             file_share_url = ''
-            new_file_name = f"preview/{os.path.basename(filepath).split('.')[0]}.docx"
-            if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
-                file_share_url = minio_client.get_share_link(
-                    new_file_name, minio_client.tmp_bucket
-                )
-        elif file_ext in ['ppt', 'pptx']:
-            file_share_url = ''
-            new_file_name = f"preview/{os.path.basename(filepath).split('.')[0]}.pdf"
+            new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = minio_client.get_share_link(
                     new_file_name, minio_client.tmp_bucket
@@ -590,7 +611,7 @@ class KnowledgeService(KnowledgeUtils):
 
             if file.object_name.startswith('tmp'):
                 # 把临时文件移动到正式目录
-                new_object_name = f"original/{file.id}.{file.object_name.split('.')[-1]}"
+                new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
                 minio_client.copy_object(file.object_name, new_object_name,
                                          bucket_name=minio_client.tmp_bucket,
                                          target_bucket_name=minio_client.bucket)
@@ -646,9 +667,8 @@ class KnowledgeService(KnowledgeUtils):
         filepath, file_name = file_download(file_info.file_path)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
 
-        uuid_file_name = file_name.split(".")[0]
         file_extension_name = file_name.split(".")[-1]
-        original_file_name = redis_client.get(uuid_file_name) or file_name
+        original_file_name = cls.get_upload_file_original_name(file_name)
         # 是否包含重复文件
         content_repeat = KnowledgeFileDao.get_file_by_condition(
             md5_=md5_, knowledge_id=knowledge.id
@@ -656,6 +676,12 @@ class KnowledgeService(KnowledgeUtils):
         name_repeat = KnowledgeFileDao.get_file_by_condition(
             file_name=original_file_name, knowledge_id=knowledge.id
         )
+
+        if not file_info.excel_rule:
+            file_info.excel_rule = ExcelRule()
+        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
+        str_split_rule = json.dumps(split_rule)
+
         if content_repeat or name_repeat:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
             old_name = db_file.file_name
@@ -667,12 +693,9 @@ class KnowledgeService(KnowledgeUtils):
             with open(filepath, "rb") as file:
                 minio_client.upload_tmp(db_file.object_name, file.read())
             db_file.status = KnowledgeFileStatus.FAILED.value
+            db_file.split_rule = str_split_rule
             return db_file
 
-        if file_extension_name in ['xls', 'xlsx', 'csv'] and not file_info.excel_rule:
-            file_info.excel_rule = ExcelRule()
-        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
-        str_split_rule = json.dumps(split_rule)
         # 插入新的数据，把原始文件上传到minio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
@@ -683,8 +706,7 @@ class KnowledgeService(KnowledgeUtils):
         )
         db_file = KnowledgeFileDao.add_file(db_file)
         # 原始文件保存
-        file_type = db_file.file_name.rsplit(".", 1)[-1]
-        db_file.object_name = f"original/{db_file.id}.{file_type}"
+        db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         res = minio_client.upload_minio(db_file.object_name, filepath)
         logger.info("upload_original_file path={} res={}", db_file.object_name, res)
         KnowledgeFileDao.update(db_file)
@@ -1028,9 +1050,7 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def get_file_share_url(
-            cls, request: Request, login_user: UserPayload, file_id: int
-    ) -> str:
+    def get_file_share_url(cls, file_id: int) -> str:
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
             raise NotFoundError.http_exception()
@@ -1040,10 +1060,9 @@ class KnowledgeService(KnowledgeUtils):
             download_url = minio_client.get_share_link(str(file_id))
         else:
             # 130版本以后的文件解析逻辑，只有源文件和预览文件，不再都转pdf了
-            if file.file_name.endswith(".doc"):
-                download_url = cls.get_file_share_url_with_empty(f"preview/{file.id}.docx")
-            elif file.file_name.endswith(('.ppt', '.pptx')):
-                download_url = cls.get_file_share_url_with_empty(f"preview/{file.id}.pdf")
+            if file.file_name.endswith(('.doc', '.ppt', '.pptx')):
+                preview_object_name = KnowledgeUtils.get_knowledge_preview_file_object_name(file.id, file.file_name)
+                download_url = cls.get_file_share_url_with_empty(preview_object_name)
             else:
                 download_url = cls.get_file_share_url_with_empty(file.object_name)
         return download_url
@@ -1086,7 +1105,7 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge: Knowledge,
     ) -> Any:
-        knowledge.state = 2
+        knowledge.state = KnowledgeState.COPYING.value
         KnowledgeDao.update_one(knowledge)
         knowldge_dict = knowledge.model_dump()
         knowldge_dict.pop("id")
@@ -1095,7 +1114,7 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict["user_id"] = login_user.user_id
         knowldge_dict["index_name"] = f"col_{int(time.time())}_{generate_uuid()[:8]}"
         knowldge_dict["name"] = f"{knowledge.name} 副本"
-        knowldge_dict["state"] = 0
+        knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
         target_knowlege = KnowledgeDao.insert_one(knowledge_new)
         # celery 还没ok

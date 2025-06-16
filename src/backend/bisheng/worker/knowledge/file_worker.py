@@ -5,7 +5,8 @@ from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors
+from bisheng.api.services.knowledge_imp import decide_vectorstores, process_file_task, delete_knowledge_file_vectors, \
+    KnowledgeUtils, delete_vector_files
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.database.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.knowledge_file import (
@@ -100,6 +101,7 @@ def copy_normal(
 
     source_file_pdf = one.id
     source_file = one.object_name
+    source_file_ext = one.object_name.split('.')[-1]
     bbox_file = one.bbox_object_name
 
     knowledge_new = KnowledgeFile(**one_dict)
@@ -107,21 +109,35 @@ def copy_normal(
 
     # 迁移 file
     try:
-        source_type = source_file.rsplit(".", 1)[-1]
-        source_path = source_file.split("/")[0]
-        target_source_file = f"{source_path}/{knowledge_new.id}.{source_type}"
-        minio_client.copy_object(source_file, target_source_file)
+        target_source_file = KnowledgeUtils.get_knowledge_file_object_name(knowledge_new.id, knowledge_new.file_name)
+        # 拷贝源文件
+        if minio_client.object_exists(minio_client.bucket, source_file):
+            minio_client.copy_object(source_file, target_source_file)
         knowledge_new.object_name = target_source_file
 
-        target_file_pdf = f"{knowledge_new.id}"
-        minio_client.copy_object(f"{source_file_pdf}", target_file_pdf)
+        # 拷贝生成的pdf文件
+        if minio_client.object_exists(minio_client.bucket, f"{source_file_pdf}"):
+            minio_client.copy_object(source_file, f"{knowledge_new.id}")
 
+        # 拷贝bbox文件
         if minio_client.object_exists("bisheng", bbox_file):
-            target_bbox_file = f"partitions/{knowledge_new.id}.json"
+            target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
             minio_client.copy_object(bbox_file, target_bbox_file)
             knowledge_new.bbox_object_name = target_bbox_file
+
+        preview_file = None
+        target_preview_file = None
+        # 拷贝预览文件
+        if source_file_ext in ['doc', 'ppt', 'pptx']:
+            preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(one.id, one.file_name)
+            target_preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(knowledge_new.id,
+                                                                                        knowledge_new.file_name)
+        if preview_file and target_preview_file:
+            if minio_client.object_exists(minio_client.bucket, preview_file):
+                minio_client.copy_object(preview_file, target_preview_file)
+
     except Exception as e:
-        logger.error("copy_file_error file_id={} e={}", knowledge_new.id, str(e))
+        logger.exception(f"copy_file_error file_id={knowledge_new.id}")
         knowledge_new.remark = str(e)[:500]
         knowledge_new.status = KnowledgeFileStatus.FAILED.value
         KnowledgeFileDao.update(knowledge_new)
@@ -254,7 +270,13 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         logger.info(
             f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
         try:
-            _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+            # 入库成功后，再此判断文件信息是否还存在，不存在则删除
+            _, knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+            db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+            if db_file:
+                return
+            # 不存在则可能在解析过程中被删除了，需要删掉向量库的数据
+            delete_vector_files([db_file.id], knowledge)
         except Exception as e:
             logger.error("parse_knowledge_file_celery error: {}", str(e))
 
@@ -294,6 +316,7 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
                       force_ocr=file_rule.force_ocr,
                       filter_page_header_footer=file_rule.filter_page_header_footer)
     logger.debug("parse_knowledge_file_celery_over", file_id)
+    return db_file, db_knowledge
 
 
 @bisheng_celery.task(time_limit=settings.celery_task.knowledge_file_time_limit)

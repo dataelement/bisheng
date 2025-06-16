@@ -77,19 +77,17 @@ export default function RuleFile({
                         </div>
                     </div>
                     {/* 新增的勾选框字段 - 左下方 */}
-                    {
-                        appConfig.enableEtl4lm && <div className="flex items-center gap-2 pt-2">
-                            <Checkbox
-                                id="retain"
-                                checked={rules.retainImages}
-                                onCheckedChange={(checked) => handleSettingChange('retainImages', checked)}
-                            />
-                            <Label htmlFor="keepImages" className="text-sm text-gray-700 flex items-center">
-                                {t('keepImages')}
-                                <QuestionTooltip content="解析时将保留文档中的图片内容， 以支持问答时图文并茂的回复。" />
-                            </Label>
-                        </div>
-                    }
+                    <div className="flex items-center gap-2 pt-2">
+                        <Checkbox
+                            id="retain"
+                            checked={rules.retainImages}
+                            onCheckedChange={(checked) => handleSettingChange('retainImages', checked)}
+                        />
+                        <Label htmlFor="keepImages" className="text-sm text-gray-700 flex items-center">
+                            {t('keepImages')}
+                            <QuestionTooltip content="解析时将保留文档中的图片内容， 以支持问答时图文并茂的回复。" />
+                        </Label>
+                    </div>
                 </div>
                 <div className=" p-4 border rounded-lg">
                     <Label htmlFor="splitMethod" className="flex justify-start text-md text-left font-bold text-gray-800">

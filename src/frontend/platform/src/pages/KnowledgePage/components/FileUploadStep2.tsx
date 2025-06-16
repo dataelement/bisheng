@@ -1,14 +1,15 @@
 import { Button } from "@/components/bs-ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { cn } from "@/util/utils";
 import { SearchCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
-import useKnowledgeStore from "../useKnowledgeStore";
 
 export interface FileItem {
     id: string;
@@ -62,9 +63,30 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
         setStrategies
     } = useFileProcessingRules(initialStrategies, resultFiles, kid);
 
+    // 起始行不能大于结束行校验
+    const vildateCell = () => {
+        if (applyEachCell
+            ? rules.fileList.some(file => file.excelRule.header_start_row > file.excelRule.header_end_row)
+            : cellGeneralConfig.header_start_row > cellGeneralConfig.header_end_row) {
+            return toast({
+                variant: 'warning',
+                description: '最小行不能大于最大行'
+            })
+        }
+        return false
+    }
+
+    const { toast } = useToast()
     const handleNext = () => {
         const nextStep = step + 1
         if (step === 2) {
+            if (vildateCell()) return
+
+            setApplyRule({
+                applyEachCell,
+                cellGeneralConfig,
+                rules
+            })
             setSelectedChunkIndex(-1) // 清空选中块
             return onNext(nextStep);
         }
@@ -87,8 +109,22 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
             force_ocr: forceOcr,
             fileter_page_header_footer: pageHeaderFooter
         }
+
         onNext(nextStep, params);
     };
+
+    // 预览
+    const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
+    const handlePreview = () => {
+        if (vildateCell()) return
+        setShowPreview(true)
+        setPreviewCount(c => c + 1) // 刷新分段
+        setApplyRule({
+            applyEachCell,
+            cellGeneralConfig,
+            rules
+        })
+    }
 
     if (![2, 3].includes(step)) return null
 
@@ -105,8 +141,8 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                         <div className="">
                             {displayMode === DisplayModeType.Mixed ? (
                                 <TabsList className="">
-                                    <TabsTrigger value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
-                                    <TabsTrigger value="table">{t('customStrategy')}</TabsTrigger>
+                                    <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
+                                    <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
                                 </TabsList>
                             ) : <div className="h-10"></div>}
                         </div>
@@ -134,10 +170,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                         <div className="mt-4">
                             <Button
                                 className="h-8"
-                                onClick={() => {
-                                    setShowPreview(true)
-                                    setPreviewCount(c => c + 1) // 刷新分段
-                                }}
+                                onClick={handlePreview}
                                 disabled={strategies.length === 0}
                             >
                                 <SearchCheck size={16} />
@@ -153,14 +186,14 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                     <PreviewResult
                         step={step}
                         previewCount={previewCount}
-                        rules={rules}
-                        applyEachCell={applyEachCell}
-                        cellGeneralConfig={cellGeneralConfig}
+                        rules={applyRule.rules}
+                        applyEachCell={applyRule.applyEachCell}
+                        cellGeneralConfig={applyRule.cellGeneralConfig}
                     />
                 )
             }
         </div >
-        <div className="fixed bottom-2 right-8 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
+        <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
             <Button
                 className="h-8"
                 variant="outline"

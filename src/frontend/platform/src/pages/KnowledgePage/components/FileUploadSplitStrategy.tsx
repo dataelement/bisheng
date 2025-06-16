@@ -59,7 +59,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                           {...provided.dragHandleProps}
                           className="my-1 border rounded bg-accent text-sm h-8"
                         >
-                          <div className='relative group h-full py-1 px-2 whitespace-nowrap'>
+                          <div className='relative group h-full py-1 px-2 whitespace-nowrap overflow-hidden max-w-96'>
                             {strategy.position === 'before' ? (
                               <>
                                 <span>✂️{strategy.regex}</span>
@@ -71,6 +71,8 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                                 <span className='ml-3 text-xs text-gray-500'>{strategy.rule}</span>
                               </>
                             )}
+                            {/* 右侧渐变遮罩 */}
+                            <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-accent to-transparent pointer-events-none"></div>
                             <DelIcon
                               onClick={() => setStrategies(strategies.filter((_, i) => i !== index))}
                               className='absolute right-1 top-0 hidden group-hover:block cursor-pointer'
@@ -109,8 +111,8 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\n', 'after', '单换行后切分，用于分隔普通换行')}>\n✂️</Button>
           <Button className="px-2 h-6" variant="secondary" onClick={() => handleRegexClick('\\n\\n', 'after', '双换行后切分，用于分隔段落')}>\n\n✂️</Button>
           {i18next.language === 'zh' && <>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '“第X章”前切分,切分章节等')}>{'✂️第.{1, 3}章'}</Button>
-            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '“第X条”前切分,切分条目等')}>{'✂️第.{1, 3}条'}</Button>
+            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}章', 'before', '“第X章”前切分，切分章节等')}>{'✂️第.{1, 3}章'}</Button>
+            <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('第.{1,3}条', 'before', '“第X条”前切分，切分条目等')}>{'✂️第.{1, 3}条'}</Button>
           </>}
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('。', 'after', '中文句号后切分，中文断句')}>。✂️</Button>
           <Button className="px-2 h-6" variant='secondary' onClick={() => handleRegexClick('\\.', 'after', '英文句号后切分，英文断句')}>\.✂️</Button>

@@ -3,7 +3,6 @@ import urllib.parse
 from datetime import datetime
 from io import BytesIO
 from typing import List, Optional, Any
-from uuid import uuid4
 
 import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
@@ -14,11 +13,10 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import add_qa, QA_save_knowledge
+from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
-from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -26,6 +24,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
+from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -36,14 +35,11 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        file_ext = file_name.split(".")[-1]
-        uuid = str(uuid4())
-        uuid_file_name = f"{uuid}.{file_ext}"
-        redis_client.set(uuid, file_name)
+        uuid_file_name = KnowledgeService.save_upload_file_original_name(file_name)
         file_path = save_uploaded_file(file.file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
-        return resp_200(UploadFileResponse(file_path=file_path, file_name=uuid))
+        return resp_200(UploadFileResponse(file_path=file_path))
     except Exception as exc:
         logger.exception(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -65,9 +61,12 @@ async def preview_file_chunk(*,
                 'chunks': res,
                 'partitions': partitions
             })
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        # productor hope raise this tips
         logger.exception('preview_file_chunk_error')
-        return resp_500(data=str(e))
+        return resp_500(message="文档解析失败")
 
 
 @router.put('/preview')
@@ -306,7 +305,7 @@ async def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(get_login_user),
                              file_id: int = Query(description='文件唯一ID')):
-    url = KnowledgeService.get_file_share_url(request, login_user, file_id)
+    url = KnowledgeService.get_file_share_url(file_id)
     return resp_200(data=url)
 
 
@@ -599,7 +598,7 @@ def post_import_file(*,
 
         # async task add qa into milvus and es
         for one in result:
-            background_tasks.add_task(QA_save_knowledge, db_knowledge, one)
+            insert_qa_celery.delay(one.id)
 
         error_result.append(have_data)
 
