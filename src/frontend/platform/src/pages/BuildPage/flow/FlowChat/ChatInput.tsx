@@ -69,6 +69,9 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
      * 记录会话切换状态，等待消息加载完成时，控制表单在新会话自动展开
      */
     const changeChatedRef = useRef(false)
+
+    const chatFilesRef = useRef(null); // 用于访问 ChatFiles 的方法
+
     useEffect(() => {
         //根据当前节点 去flow中去寻找allowUpload配置
         if (!inputNodeIdRef.current) return;
@@ -503,6 +506,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
                 ref={questionsRef}
                 locked={inputLock.locked}
                 onClick={handleClickGuideWord}
+                bottom={chatFilesRef?.current?.getHeight() || 0} //有文件 则给引导问题顶上去
             />
             {/* restart */}
             <div className="flex absolute left-0 top-3 z-10">
@@ -521,7 +525,7 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
             </div>
             {!inputLock.locked && <SpeechToTextComponent onChange={(text) => {inputRef.current.value += text}}/>}
             {/* 附件 */}
-            {!inputLock.locked && allowUpload && <ChatFiles accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} preParsing={false} />}
+            {!inputLock.locked && allowUpload && <ChatFiles ref={chatFilesRef} accepts={accepts} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} preParsing={false} />}
             {/* send */}
             <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
