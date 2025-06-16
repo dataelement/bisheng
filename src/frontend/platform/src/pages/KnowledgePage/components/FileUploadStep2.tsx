@@ -65,14 +65,16 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
 
     // 起始行不能大于结束行校验
     const vildateCell = () => {
-        if (applyEachCell
-            ? rules.fileList.some(file => file.excelRule.header_start_row > file.excelRule.header_end_row)
-            : cellGeneralConfig.header_start_row > cellGeneralConfig.header_end_row) {
+        if (cellGeneralConfig.append_header && Number(cellGeneralConfig.header_start_row) > Number(cellGeneralConfig.header_end_row)) {
             return toast({
                 variant: 'warning',
                 description: '最小行不能大于最大行'
             })
         }
+        // if (applyEachCell
+        //     ? rules.fileList.some(file => file.excelRule.header_start_row > file.excelRule.header_end_row)
+        //     : cellGeneralConfig.header_start_row > cellGeneralConfig.header_end_row) {
+        // }
         return false
     }
 
@@ -221,7 +223,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
     const [rules, setRules] = useState(null);
     const [applyEachCell, setApplyEachCell] = useState(false); // 为每个表格单独设置
     const [cellGeneralConfig, setCellGeneralConfig] = useState({
-        slice_length: 15,
+        slice_length: 10,
         append_header: true,
         header_start_row: 1,
         header_end_row: 1

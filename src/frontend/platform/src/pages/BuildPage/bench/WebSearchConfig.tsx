@@ -37,7 +37,7 @@ export const WebSearchConfig = ({
                 [config.tool]: { ...prev[config.tool], ...config.params }
             }));
         }
-    }, []);
+    }, [config]);
 
     // Handle parameter changes for the current tool
     const handleParamChange = (field: string, value: string) => {

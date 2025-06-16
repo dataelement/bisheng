@@ -99,7 +99,7 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
                 <Button variant="outline" className="px-11" type="button" onClick={handleCancel}>取消</Button>
                 <Button disabled={false} type="submit" className="px-11" onClick={() => {
                     modifyNotSavedRef.current = false
-                    onSave()
+                    onSave(textValue)
                     setOpen(false)
                     onChange(textValue)
                 }}>
@@ -168,10 +168,10 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         setSaveLoad(false)
     };
 
-    const handleSavePrompt = () => {
+    const handleSavePrompt = (prompt) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig({
             ...lastSaveFormDataRef.current,
-            abstract_prompt: form.abstractPrompt
+            abstract_prompt: prompt ?? form.abstractPrompt
         }).then(res => {
             message({ variant: 'success', description: '提示词已保存' })
         }))
