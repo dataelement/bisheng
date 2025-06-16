@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
 import { cname, useDebounce } from "../utils"
+import { generateUUID } from "@/utils"
 
 const MultiItem: React.FC<
     { active: boolean; children: React.ReactNode; value: string; onClick: (value: string, label: string) => void }
@@ -94,6 +95,7 @@ const MultiSelect = ({
     const [optionFilter, setOptionFilter] = React.useState(options)
     const [created, creatInput] = useState(false)
     const inputRef = useRef(null)
+    const idRef = useRef(generateUUID(4))
 
     useEffect(() => {
         setValues(value)
@@ -211,7 +213,28 @@ const MultiSelect = ({
     >
         <SelectTrigger className={cname(`group min-h-9 py-1 ${error && 'border-red-500'} ${scroll ? 'h-9 overflow-y-auto items-start pt-1.5' : 'h-auto'}`, className)} ref={triggerRef}>
             {
-                !multiple && (values.length ? <span className="text-foreground">{onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}</span> : placeholder)
+                !multiple && (values.length ? (
+                    <div className="text-foreground inline-flex flex-1 flex-row justify-between items-center overflow-hidden">
+                      <span className="truncate flex-1 min-w-0 mr-2 text-left">
+                        {onScrollLoad ? (values[0] as Option).label : options.find(op => op.value === values[0])?.label}
+                      </span>
+                      <X
+                        className="
+                          h-3.5 w-3.5 min-w-3.5 
+                          opacity-0 group-hover:opacity-100
+                          transition-opacity duration-200
+                          bg-black rounded-full
+                          flex items-center justify-center
+                          flex-shrink-0
+                        "
+                        color="#ffffff"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => {
+                          handleDelete(values[0]?.value);
+                        }}
+                      />
+                    </div>
+                  ) : placeholder)
             }
             {
                 multiple && (values.length ? (
@@ -247,6 +270,7 @@ const MultiSelect = ({
             />}
         </SelectTrigger>
         <SelectContent
+            id={idRef.current}
             className={contentClassName + ' overflow-visible'}
             headNode={
                 <div className="p-2">
