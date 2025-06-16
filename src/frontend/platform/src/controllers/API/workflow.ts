@@ -400,7 +400,7 @@ const workflowTemplate = [
         "name": "大模型",
         "description": "调用大模型回答用户问题或者处理任务。",
         "type": "llm",
-        "v": "2",
+        "v": "3",
         "tab": {
             "value": "single",
             "options": [
@@ -517,7 +517,7 @@ const workflowTemplate = [
         "name": "助手",
         "description": "AI 自主进行任务规划，选择合适的知识库、数据库或工具进行调用。",
         "type": "agent",
-        "v": "2",
+        "v": "3",
         "tab": {
             "value": "single",
             "options": [
