@@ -88,7 +88,7 @@ export function getUserGroupsProApi({ name = '', page, pageSize, groupId, roleId
 // GET sso URL
 export function getSSOurlApi() {
     // return Promise.resolve(url)
-    return axios.get(`/api/oauth2/list`)
+    return axios.get(`/api/oauth2/list_v2`)
 }
 
 export async function getKeyApi() {
