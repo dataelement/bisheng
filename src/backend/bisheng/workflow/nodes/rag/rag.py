@@ -2,6 +2,10 @@ import json
 import time
 from typing import List, Any
 
+from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
+from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
+                                    SystemMessagePromptTemplate)
+
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.types import IgnoreException
 from bisheng.database.models.user import UserDao
@@ -12,9 +16,6 @@ from bisheng.workflow.callback.event import OutputMsgData, StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
-from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
-from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
-                                    SystemMessagePromptTemplate)
 
 
 class RagNode(BaseNode):
@@ -156,9 +157,10 @@ class RagNode(BaseNode):
         return ret
 
     def init_user_question(self) -> List[str]:
+        # 默认把用户问题都转为字符串
         ret = []
         for one in self.node_params['user_question']:
-            ret.append(self.get_other_node_variable(one))
+            ret.append(f"{self.get_other_node_variable(one)}")
         return ret
 
     def init_qa_prompt(self):
