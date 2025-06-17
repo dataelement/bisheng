@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 // import Separator from "./Separator";
 import Separator from "@/components/bs-comp/chatComponent/Separator";
 import MessageBs from "./MessageBs";
+import InputForm from "./InputForm";
 import MessageBsChoose from "./MessageBsChoose";
 import MessageNodeRun from "./MessageNodeRun";
 import { useMessageStore } from "./messageStore";
