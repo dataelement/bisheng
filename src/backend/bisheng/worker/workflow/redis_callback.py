@@ -25,6 +25,7 @@ from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInpu
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 
+
 class RedisCallback(BaseCallback):
 
     def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: str):

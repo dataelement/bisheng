@@ -3,6 +3,7 @@ import json
 from typing import BinaryIO
 
 import minio
+from bisheng.settings import settings
 from loguru import logger
 from minio.commonconfig import Filter, CopySource
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
@@ -172,7 +173,7 @@ class MinioClient:
     @classmethod
     def clear_minio_share_host(cls, file_url: str):
         """
-         TODO maybe 合理方案是部署一个支持https的minio配合前端使用
+         TODO 合理方案是部署一个https的minio配合前端使用
          抹去url中的minio share地址， 让前端通过nginx代理去访问资源
         """
         share_host = cls.get_minio_share_host()
