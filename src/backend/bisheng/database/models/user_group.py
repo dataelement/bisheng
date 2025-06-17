@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, delete, text
-from sqlmodel import Field, select
+from sqlmodel import Field, select, update, func, Column, DateTime, delete, text
 
 from bisheng.database.base import session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.group import DefaultGroup
+from bisheng.database.models.role import RoleDao
+from bisheng.database.models.user_role import UserRoleDao
+from bisheng.utils.constants import GROUP_USER_TYPE_ADMIN, GROUP_USER_TYPE_AUDIT, GROUP_USER_TYPE_OPERATION
 
 
 class UserGroupBase(SQLModelSerializable):
@@ -14,6 +16,7 @@ class UserGroupBase(SQLModelSerializable):
     group_id: int = Field(index=True, description='组id')
     is_group_admin: bool = Field(default=False, index=False, description='是否是组管理员')  # 管理员不属于此用户组
     remark: Optional[str] = Field(default=None, index=False)
+    user_type: int = Field(default=0, description='用户类型，0：未知，1：admin，2：运营，3：审计')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -51,6 +54,15 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    def get_users_group(cls, user_id: List[int]) -> List[UserGroup]:
+        """
+        批量获取用户所在的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id.in_(user_id)).where(UserGroup.is_group_admin == 0)
+            return session.exec(statement).all()
+
+    @classmethod
     def get_user_admin_group(cls, user_id: int) -> List[UserGroup]:
         """
         获取用户是管理员的用户组
@@ -58,6 +70,36 @@ class UserGroupDao(UserGroupBase):
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
             return session.exec(statement).all()
+
+    @classmethod
+    def get_user_audit_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是审计的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0,UserGroup.user_type==GROUP_USER_TYPE_AUDIT)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_operation_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是审计的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0,UserGroup.user_type==GROUP_USER_TYPE_OPERATION)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_power_group(cls, user_id: int) -> List[UserGroup]:
+        return cls.get_user_admin_group(user_id) + cls.get_user_operation_group(user_id) + cls.get_user_audit_group(user_id)
+
+    @classmethod
+    def get_user_audit_or_admin_group(cls, user_id: int) -> List[UserGroup]:
+        return cls.get_user_admin_group(user_id) + cls.get_user_audit_group(user_id)
+
+    @classmethod
+    def get_user_operation_or_admin_group(cls, user_id: int) -> List[UserGroup]:
+        return cls.get_user_admin_group(user_id) + cls.get_user_operation_group(user_id)
 
     @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:
@@ -74,7 +116,31 @@ class UserGroupDao(UserGroupBase):
         将用户设置为组管理员
         """
         with session_getter() as session:
-            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=True)
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=True,user_type=GROUP_USER_TYPE_ADMIN)
+            session.add(user_group)
+            session.commit()
+            session.refresh(user_group)
+            return user_group
+
+    @classmethod
+    def insert_user_group_operation(cls, user_id: int, group_id: int) -> UserGroup:
+        """
+        将用户设置为组管理员
+        """
+        with session_getter() as session:
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=False,user_type=GROUP_USER_TYPE_OPERATION)
+            session.add(user_group)
+            session.commit()
+            session.refresh(user_group)
+            return user_group
+
+    @classmethod
+    def insert_user_group_audit(cls, user_id: int, group_id: int) -> UserGroup:
+        """
+        将用户设置为组管理员
+        """
+        with session_getter() as session:
+            user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=False, user_type=GROUP_USER_TYPE_AUDIT)
             session.add(user_group)
             session.commit()
             session.refresh(user_group)
@@ -94,6 +160,10 @@ class UserGroupDao(UserGroupBase):
         """
         将用户从某些组中移除
         """
+        #取消将用户和组下角色的关联关系
+        group_roles = RoleDao.get_role_by_groups(group_ids)
+        if group_roles:
+            UserRoleDao.delete_user_roles(user_id, [one.id for one in group_roles])
         with session_getter() as session:
             # 先把旧的用户组全部清空
             statement = delete(UserGroup).where(
@@ -118,8 +188,8 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def get_group_user(cls,
                        group_id: int,
-                       page_size: str = None,
-                       page_num: str = None) -> List[UserGroup]:
+                       page_size: int = None,
+                       page_num: int = None) -> List[UserGroup]:
         """
         获取分组下的所有用户，不包含管理员
         """
@@ -134,16 +204,38 @@ class UserGroupDao(UserGroupBase):
     def get_groups_user(cls,
                         group_ids: List[int],
                         page: int = 0,
-                        limit: int = 0) -> List[UserGroup]:
+                        limit: int = 0) -> List[int]:
         """
         批量获取分组下的用户
         """
+        with session_getter() as session:
+            statement = select(UserGroup.user_id).where(UserGroup.group_id.in_(group_ids)).where(
+                UserGroup.is_group_admin == 0)
+            if page and limit:
+                statement = statement.offset((page - 1) * limit).limit(limit)
+            # DONE merge_check 2 这里为什么会进行排序？
+            statement = statement.group_by(UserGroup.user_id).order_by(UserGroup.user_id.asc())
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_groups_users(cls, group_ids: List[int], page: int = 0, limit: int = 0):
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids)).where(
                 UserGroup.is_group_admin == 0)
             if page and limit:
                 statement = statement.offset((page - 1) * limit).limit(limit)
+            statement = statement.order_by(UserGroup.id.asc())
             return session.exec(statement).all()
+
+    @classmethod
+    def count_groups_user(cls, group_ids: List[int]) -> int:
+        """
+        统计用户组下的用户数量
+        """
+        with session_getter() as session:
+            statement = select(func.count(func.distinct(UserGroup.user_id))).where(UserGroup.group_id.in_(group_ids)).where(
+                UserGroup.is_group_admin == 0)
+            return session.scalar(statement)
 
     @classmethod
     def is_users_in_group(cls, group_id: int, user_ids: List[int]) -> List[UserGroup]:
@@ -157,6 +249,45 @@ class UserGroupDao(UserGroupBase):
         with session_getter() as session:
             statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
                                                 UserGroup.is_group_admin == 1)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_groups_audits(cls, group_ids: List[int]) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
+                                                UserGroup.is_group_admin == 0, UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_groups_operations(cls, group_ids: List[int]) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids),
+                                                UserGroup.is_group_admin == 0,UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_operation_groups(cls, user_id: int) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id,
+                                                UserGroup.is_group_admin == 0,
+                                                UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_audit_groups(cls, user_id: int) -> List[UserGroup]:
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id,
+                                                UserGroup.is_group_admin == 0,
+                                                UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
+            return session.exec(statement).all()
+
+    @classmethod
+    def get_user_admin_groups(cls, user_id: int) -> List[UserGroup]:
+        """
+        获取用户是管理员的用户组
+        """
+        with session_getter() as session:
+            statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
             return session.exec(statement).all()
 
     @classmethod
@@ -186,6 +317,34 @@ class UserGroupDao(UserGroupBase):
                 UserGroup.group_id == group_id).where(
                 UserGroup.user_id.in_(admin_ids)).where(
                 UserGroup.is_group_admin == 1)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def delete_group_operations(cls, group_id: int, operation_ids: List[int]) -> None:
+        """
+        批量删除用户组的operations
+        """
+        with session_getter() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id).where(
+                UserGroup.user_id.in_(operation_ids)).where(
+                UserGroup.is_group_admin == 0).where(
+                UserGroup.user_type == GROUP_USER_TYPE_OPERATION)
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def delete_group_audits(cls, group_id: int, audit_ids: List[int]) -> None:
+        """
+        批量删除用户组的audits
+        """
+        with session_getter() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id).where(
+                UserGroup.user_id.in_(audit_ids)).where(
+                UserGroup.is_group_admin == 0).where(
+                UserGroup.user_type == GROUP_USER_TYPE_AUDIT)
             session.exec(statement)
             session.commit()
 

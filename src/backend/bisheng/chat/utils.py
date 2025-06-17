@@ -27,6 +27,17 @@ class SourceType(Enum):
     LINK = 3  # 带链接的chunk内容
     QA = 4  # 命中了QA知识库
 
+class SourceType(Enum):
+    """
+    source type
+    """
+    NOT_SUPPORT = 0  # 不支持溯源
+    FILE = 1  # 通过源文件溯源，支持bbox那种形式
+    NO_PERMISSION = 2  # 无权限访问溯源信息
+    LINK = 3  # 带链接的chunk内容
+    QA = 4  # 命中了QA知识库
+
+
 async def process_graph(langchain_object,
                         chat_inputs: ChatMessage,
                         websocket: WebSocket,

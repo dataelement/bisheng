@@ -22,6 +22,7 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.settings import settings
 from bisheng.utils.threadpool import thread_pool
 
+from bisheng.cache.redis import redis_client
 
 class ChatClient:
     def __init__(self, request: Request, client_key: str, client_id: str, chat_id: str, user_id: int,
@@ -115,7 +116,7 @@ class ChatClient:
                 flow_type=FlowType.ASSISTANT.value,
                 user_id=self.user_id,
             ))
-            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
+            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id, self.db_assistant)
         return msg
 
     async def send_response(self, category: str, msg_type: str, message: str, intermediate_steps: str = '',
@@ -254,6 +255,30 @@ class ChatClient:
         while not self.stream_queue.empty():
             self.stream_queue.get()
 
+    def parse_dialog_files(self, file_ids: List) -> str:
+        """ 获取对话框里上传的文件内容 """
+        logger.debug(
+            f"parse_dialog_files is_allow_upload:{self.gpts_agent.assistant.is_allow_upload} file_max_size:{self.gpts_agent.assistant.file_max_size} file_ids:{file_ids}")
+
+        _dialog_files_length = self.gpts_agent.assistant.file_max_size
+        file_length = 0
+        dialog_files_content = ""
+
+        if not file_ids:
+            return dialog_files_content
+        for file_id in file_ids:
+            file_info = redis_client.get(f'workflow:dialog_file:{file_id}')
+            if not file_info:
+                continue
+            if file_length >= _dialog_files_length:
+                break
+            file_info = json.loads(file_info)
+            file_info['content'] = file_info['content'][:_dialog_files_length - file_length]
+            file_length += len(file_info['content'])
+
+            dialog_files_content += f"[file name]: {file_info['name']}\n[file content begin]\n{file_info['content']}\n[file content end]\n"
+        return dialog_files_content
+
     async def handle_gpts_message(self, message: Dict[any, any]):
         if not message:
             return
@@ -281,6 +306,13 @@ class ChatClient:
 
             # 初始化agent
             await self.init_gpts_agent()
+
+            # 追加文件内容
+            file_ids = inputs.get('file_ids', [])
+            file_contents = self.parse_dialog_files(file_ids=file_ids)
+            if file_contents:
+                input_msg = f'{file_contents}\n{input_msg}'
+                inputs['input'] = input_msg
 
             # 将用户问题写入到数据库
             await self.add_message('human', json.dumps(inputs, ensure_ascii=False), 'question')

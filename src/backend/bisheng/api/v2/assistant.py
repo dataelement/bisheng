@@ -30,7 +30,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     兼容openai接口格式，所有的错误必须返回非http200的状态码
     和助手进行聊天
     """
-    assistant_id = UUID(req_data.model).hex
+    assistant_id = UUID(req_data.model).hex  # UUID check done
     logger.info(
         f'act=assistant_chat_completions assistant_id={req_data.model}, ip={get_request_ip(request)}'
     )
@@ -110,7 +110,7 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
     """
     获取助手信息, 用系统配置里的default_operator.user的用户信息来做权限校验
     """
-    assistant_id = assistant_id.hex
+    assistant_id = assistant_id.hex  # UUID check done
     logger.info(f'act=get_default_operator assistant_id={assistant_id}, ip={get_request_ip(request)}')
     # 判断下配置是否打开
     if not settings.get_from_db("default_operator").get("enable_guest_access"):

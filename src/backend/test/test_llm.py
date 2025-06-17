@@ -9,3 +9,6 @@ def auto_gen():
 
 
 test(str)
+
+from bisheng.interface.stts.custom import BishengSTT
+from bisheng.interface.ttss.custom import BishengTTS

@@ -36,6 +36,8 @@ class LLMModelType(Enum):
     LLM = 'llm'
     EMBEDDING = 'embedding'
     RERANK = 'rerank'
+    TTS = 'tts'
+    STT = 'stt'
 
 
 class LLMServerBase(SQLModelSerializable):
@@ -62,6 +64,7 @@ class LLMModelBase(SQLModelSerializable):
     status: int = Field(default=2, description='模型状态。0：正常，1：异常, 2: 未知')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='异常原因')
     online: bool = Field(default=True, description='是否在线')
+    check: bool = Field(default=True, description='用于检测是否进行定时校验，1 表示开启，0 表示关闭')
     user_id: int = Field(default=0, description='创建人ID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -209,6 +212,13 @@ class LLMDao:
         """ 更新模型在线状态 """
         with session_getter() as session:
             session.exec(update(LLMModel).where(LLMModel.id == model_id).values(online=online))
+            session.commit()
+
+    @classmethod
+    def update_model_check(cls, model_id: int, check: bool):
+        """ 更新模型在线状态 """
+        with session_getter() as session:
+            session.exec(update(LLMModel).where(LLMModel.id == model_id).values(check=check))
             session.commit()
 
     @classmethod

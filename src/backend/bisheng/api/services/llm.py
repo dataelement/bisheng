@@ -10,11 +10,20 @@ from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, VoiceLLMConfig
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
+from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding, instantiate_stt, \
+    instantiate_tts
+from fastapi import Request
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseChatModel
+from loguru import logger
+
+from bisheng.interface.stts.custom import BishengSTT
+from bisheng.interface.ttss.custom import BishengTTS
 
 
 class LLMService:
@@ -219,8 +228,8 @@ class LLMService:
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        exist_server.config = server.config
-
+        # 需要判断下敏感的key是否需要更新
+        exist_server.config = server.merge_config(exist_server.config)
         db_server = LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
         new_server_info = cls.get_one_llm(request, login_user, db_server.id)
 
@@ -241,6 +250,17 @@ class LLMService:
             raise NotFoundError.http_exception()
         exist_model.online = online
         LLMDao.update_model_online(exist_model.id, online)
+        return LLMModelInfo(**exist_model.dict())
+
+    @classmethod
+    def update_model_check(cls, request: Request, login_user: UserPayload, model_id: int,
+                           check: bool) -> LLMModelInfo:
+        """ 更新模型是否上线 """
+        exist_model = LLMDao.get_model_by_id(model_id)
+        if not exist_model:
+            raise NotFoundError.http_exception()
+        exist_model.check = check
+        LLMDao.update_model_check(exist_model.id, check)
         return LLMModelInfo(**exist_model.dict())
 
     @classmethod
@@ -329,10 +349,29 @@ class LLMService:
         return cls.get_bisheng_llm(model_id=evaluation_llm.model_id)
 
     @classmethod
+    def get_audit_llm_object(cls) -> BaseChatModel:
+        audit_llm = cls.get_audit_llm()
+        if not audit_llm.model_id:
+            raise Exception('未配置审计模型')
+        return cls.get_bisheng_llm(model_id=audit_llm.model_id)
+
+    @classmethod
     def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
         """ 获取评测功能的默认模型配置 """
         class_object = import_by_type(_type='llms', name='BishengLLM')
         return instantiate_llm('BishengLLM', class_object, kwargs)
+
+    @classmethod
+    def get_bisheng_stt(cls, **kwargs) -> BishengSTT:
+        """ 获取评测功能的默认模型配置 """
+        class_object = import_by_type(_type='stt', name='BishengSTT')
+        return instantiate_stt('BishengSTT', class_object, kwargs)
+
+    @classmethod
+    def get_bisheng_tts(cls, **kwargs) -> BishengTTS:
+        """ 获取评测功能的默认模型配置 """
+        class_object = import_by_type(_type='tts', name='BishengTTS')
+        return instantiate_tts('BishengTTS', class_object, kwargs)
 
     @classmethod
     def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
@@ -369,6 +408,58 @@ class LLMService:
         """ 获取评测功能的默认模型配置 """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.WORKFLOW_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return EvaluationLLMConfig(**ret)
+
+    @classmethod
+    def get_voice_llm(cls) -> VoiceLLMConfig:
+        """ 获取评测功能的默认模型配置 """
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.VOICE_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return VoiceLLMConfig(**ret)
+
+    @classmethod
+    def get_default_tts_model_id(cls):
+        conf = cls.get_voice_llm()
+        return conf.tts_model_id
+
+    @classmethod
+    def get_default_stt_model_id(cls):
+        conf = cls.get_voice_llm()
+        return conf.stt_model_id
+
+    @classmethod
+    def update_voice_llm(cls, request: Request, login_user: UserPayload, data: VoiceLLMConfig) \
+            -> VoiceLLMConfig:
+        """ 更新知识库相关的默认模型配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.VOICE_LLM)
+        if config:
+            config.value = json.dumps(data.dict())
+        else:
+            config = Config(key=ConfigKeyEnum.VOICE_LLM.value, value=json.dumps(data.dict()))
+        ConfigDao.insert_config(config)
+        return data
+
+    @classmethod
+    def update_audit_llm(cls, request: Request, login_user: UserPayload, data: EvaluationLLMConfig) \
+            -> EvaluationLLMConfig:
+        """ 更新审计的默认模型配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_LLM)
+        if config:
+            config.value = json.dumps(data.dict())
+        else:
+            config = Config(key=ConfigKeyEnum.AUDIT_LLM.value, value=json.dumps(data.dict()))
+        ConfigDao.insert_config(config)
+        return data
+
+    @classmethod
+    def get_audit_llm(cls) -> EvaluationLLMConfig:
+        """ 获取审计的默认模型配置 """
+        ret = {}
+        config = ConfigDao.get_config(ConfigKeyEnum.AUDIT_LLM)
         if config:
             ret = json.loads(config.value)
         return EvaluationLLMConfig(**ret)

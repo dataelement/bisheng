@@ -6,9 +6,31 @@ from typing import List, Optional, Any
 
 import numpy as np
 import pandas as pd
+from typing import List, Optional
+
+import numpy as np
+
+from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
+from bisheng.api.services import knowledge_imp
+from bisheng.api.services.knowledge import KnowledgeService
+from bisheng.api.services.knowledge_imp import add_qa,add_qa_batch
+from bisheng.api.services.user_service import UserPayload, get_login_user
+from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UnifiedResponseModel,
+                                    UpdatePreviewFileChunk, UploadFileResponse, resp_200, resp_500)
+from bisheng.cache.utils import save_uploaded_file
+from bisheng.database.base import session_getter
+from bisheng.database.models.knowledge import (Knowledge, KnowledgeCreate, KnowledgeDao,
+                                               KnowledgeRead, KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
+                                                    QAKnoweldgeDao, QAKnowledgeUpsert, QAKnowledge)
+from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.user import UserDao
+from bisheng.utils.logger import logger
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
+import pandas as pd
 
 from bisheng.api.errcode.base import UnAuthorizedError, ServerError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
@@ -404,7 +426,7 @@ def qa_auto_question(
 
 
 @router.get('/qa/export/template', status_code=200)
-def get_export_url():
+def get_export_template_url():
     data = [{"问题": "", "答案": "", "相似问题1": "", "相似问题2": ""}]
     df = pd.DataFrame(data)
     bio = BytesIO()
@@ -424,8 +446,18 @@ def get_export_url(*,
                    status: Optional[int] = None,
                    max_lines: Optional[int] = 10000,
                    login_user: UserPayload = Depends(get_login_user)):
+
     # 查询当前知识库，是否有写入权限
-    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
+    with session_getter() as session:
+        db_knowledge: Knowledge = session.get(Knowledge, qa_knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+    if not login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                   AccessType.KNOWLEDGE):
+        return UnAuthorizedError.return_resp()
+
+    if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库为普通知识库')
 
     if keyword:
         question = keyword
@@ -471,6 +503,7 @@ def get_export_url(*,
                 # "创建者":user_map.get(qa['user_id'], qa['user_id']),
                 # "状态":get_status(qa['status']),
             })
+
             for index, question in enumerate(qa['questions']):
                 if index == 0:
                     continue
@@ -495,7 +528,6 @@ def get_export_url(*,
             break
 
     return resp_200({"file_list": file_list})
-
 
 def convert_excel_value(value: Any):
     if value is None or value == "":
@@ -540,7 +572,6 @@ def post_import_file(*,
         raise HTTPException(status_code=500, detail=e)
     return resp_200({"result": insert_data})
 
-
 @router.post('/qa/import/{qa_knowledge_id}', status_code=200)
 def post_import_file(*,
                      qa_knowledge_id: int,
@@ -548,7 +579,21 @@ def post_import_file(*,
                      background_tasks: BackgroundTasks,
                      login_user: UserPayload = Depends(get_login_user)):
     # 查询当前知识库，是否有写入权限
-    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
+    # TODO merge_check 2
+    # 1.2.0
+    # db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
+    # 查询当前知识库，是否有写入权限 0527
+    with session_getter() as session:
+        db_knowledge: Knowledge = session.get(Knowledge, qa_knowledge_id)
+    # -----
+    if not db_knowledge:
+        raise HTTPException(status_code=500, detail='当前知识库不可用，返回上级目录')
+    if not login_user.access_check(db_knowledge.user_id, str(qa_knowledge_id),
+                                   AccessType.KNOWLEDGE):
+        return UnAuthorizedError.return_resp()
+
+    if db_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        return HTTPException(status_code=500, detail='知识库为普通知识库')
 
     insert_result = []
     error_result = []
@@ -563,6 +608,8 @@ def post_import_file(*,
         insert_data = []
         have_data = []
         all_questions = set()
+# <<<<<<< HEAD
+        # DONE merge_check 2
         for index, dd in enumerate(data):
             tmp_questions = set()
             dd_question = convert_excel_value(dd['问题'])
@@ -584,10 +631,33 @@ def post_import_file(*,
 
             db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
             if (db_q and not QACreate.id) or len(tmp_questions & all_questions) > 0 or not dd_question or not dd_answer:
+# =======
+#         for index,dd in enumerate(data):
+#             tmp_questions = set()
+#             QACreate = QAKnowledgeUpsert(
+#             user_id = login_user.user_id,
+#             knowledge_id = qa_knowledge_id,
+#             answers = [dd['答案']],
+#             questions = [dd['问题']],
+#             source = 4,
+#             status = 1)
+#             tmp_questions.add(QACreate.questions[0])
+#             for key,value in dd.items():
+#                 if key.startswith('相似问题'):
+#                     if value is not np.nan and value and value is not None and str(value) != 'nan' and str(value) != 'null':
+#                         if value not in tmp_questions:
+#                             QACreate.questions.append(value)
+#                             tmp_questions.add(value)
+#
+#             db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id)
+#             if db_q and not QACreate.id or len(tmp_questions & all_questions) > 0:
+# >>>>>>> feat/zyrs_0527
                 have_data.append(index)
             else:
                 insert_data.append(QACreate)
                 all_questions = all_questions | tmp_questions
+# <<<<<<< DONE
+        # TODO merge_check 2
         result = QAKnoweldgeDao.batch_insert_qa(insert_data)
 
         # async task add qa into milvus and es
@@ -597,3 +667,14 @@ def post_import_file(*,
         error_result.append(have_data)
 
     return resp_200({"errors": error_result})
+# =======
+#         db_knowledge = KnowledgeDao.query_by_id(qa_knowledge_id)
+#         result = add_qa_batch(db_knowledge,insert_data)
+#         insert_result.append(result)
+#         error_result.append(have_data)
+#
+#     return resp_200({"result": insert_result,"errors": error_result})
+#
+#
+#
+# >>>>>>> feat/zyrs_0527

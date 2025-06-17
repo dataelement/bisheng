@@ -16,7 +16,7 @@ from bisheng.api.v1.schemas import ChatResponse
 from bisheng.cache.redis import redis_client
 from bisheng.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.database.models.message import ChatMessageDao, ChatMessage
+from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.settings import settings
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -153,7 +153,12 @@ class RedisCallback(BaseCallback):
                         break
                     yield chat_response
                 break
+
+            # DONE merge_check 1
+            # 0616
             elif status_info['status'] in [WorkflowStatus.WAITING.value, WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
+            # 0527
+            # elif status_info['status'] == WorkflowStatus.WAITING.value and time.time() - status_info['time'] > 10:
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
@@ -201,8 +206,10 @@ class RedisCallback(BaseCallback):
                 for key_info in old_message['input_schema']['value']:
                     user_input_message += f"{key_info['value']}:{user_input.get(key_info['key'], '')}\n"
             else:
+                # DONE merge_check
                 # 说明对话框输入, 需要加下上传的文件信息, 和输入节点的数据结构有关
                 user_input_message = user_input[old_message['input_schema']['key']]
+                # 以下3行在0527中没有，这里加上
                 dialog_files_content = user_input.get('dialog_files_content', [])
                 for one in dialog_files_content:
                     user_input_message += f"\n{os.path.basename(one).split('?')[0]}"

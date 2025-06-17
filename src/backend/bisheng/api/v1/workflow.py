@@ -3,6 +3,10 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, status as http_status
+from bisheng_langchain.utils.requests import Requests
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, WebSocket, WebSocketException, Request, UploadFile, \
+    File
+from fastapi import status as http_status
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sqlmodel import select
@@ -92,6 +96,12 @@ async def upload_report_file(
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
     return {'error': 0}
 
+@router.post('/input/file', status_code=200)
+async def process_input_file(request: Request, login_user: UserPayload = Depends(get_login_user),
+                             file: UploadFile = File(...)):
+    """ 处理对话框的文件上传, 将文件解析为对应的chunk """
+    res = await WorkFlowService.process_input_file(login_user, file)
+    return resp_200(data=res)
 
 @router.post('/run_once', status_code=200)
 async def run_once(request: Request, login_user: UserPayload = Depends(get_login_user),

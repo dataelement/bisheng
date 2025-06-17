@@ -39,7 +39,7 @@ rsa = "4.9"
 pydantic = "^2.7.2"
 numexpr = "^2.8.6"
 pypinyin = "0.50.0"
-celery = { extras = ["redis"], version = "^5.3.6" }
+celery = { extras = ["redis"], version = "^5.0.0" }
 redis = "^5.0.0"
 jieba = "^0.42.1"
 PyMuPDF = "^1.23.8"
@@ -99,6 +99,8 @@ mcp = "^1.6.0"
 numpy = "^1.26.2"
 pyjwt = "^1.7.1"
 tencentcloud-sdk-python = "^3.0.1373"
+celery-redbeat = "2.2.0"
+schedule = "^1.2.2"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"

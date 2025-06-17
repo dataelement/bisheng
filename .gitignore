@@ -260,3 +260,10 @@ sftp-config.json
 
 /tmp/*
 sftp-config.json
+
+
+/docker_*
+/src/backend/poetry.toml
+/src/backend/bisheng/config.yaml
+/src/backend/build.sh
+/DEV.md

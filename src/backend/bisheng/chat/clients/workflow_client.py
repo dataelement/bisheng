@@ -9,14 +9,15 @@ from loguru import logger
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
+from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowStatus
-from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
+from bisheng.database.models.message import ChatMessageDao, ChatMessage, ChatMessageType
 
 
 class WorkflowClient(BaseClient):
@@ -31,8 +32,7 @@ class WorkflowClient(BaseClient):
         self.latest_history: Optional[ChatMessage] = None
         self.ws_closed = False
 
-    async def close(self, force_stop=False):
-        # 不是用户主动停止的话，设置ws关闭标志，但是不需要中止workflow的执行
+    async def close(self, force_stop=True):
         if not force_stop:
             self.ws_closed = True
         # 非会话模式关闭workflow执行, 会话模式判断是否是用户主动关闭的
@@ -41,6 +41,32 @@ class WorkflowClient(BaseClient):
                 self.workflow.set_workflow_stop()
         else:
             await self.send_response('processing', 'close', '')
+
+    async def save_chat_message(self, chat_response: ChatResponse) -> int | None:
+        if not self.chat_id:
+            return
+
+        message = ChatMessageDao.insert_one(ChatMessage(**{
+            'user_id': self.user_id,
+            'chat_id': self.chat_id,
+            'flow_id': self.client_id,
+            'type': ChatMessageType.WORKFLOW.value,
+
+            'is_bot': chat_response.is_bot,
+            'source': chat_response.source,
+            'message': chat_response.message if isinstance(chat_response.message, str) else json.dumps(
+                chat_response.message, ensure_ascii=False
+            ),
+            'extra': chat_response.extra,
+            'category': chat_response.category,
+        }))
+        return message.id
+
+    async def update_chat_message(self, message_id: int, message: dict | str):
+        db_message = ChatMessageDao.get_message_by_id(message_id)
+        if db_message:
+            db_message.message = message if isinstance(message, str) else json.dumps(message)
+            ChatMessageDao.update_message_model(db_message)
 
     async def _handle_message(self, message: Dict[any, any]):
         logger.debug('----------------------------- start handle message -----------------------')
@@ -101,6 +127,10 @@ class WorkflowClient(BaseClient):
                 # 让前端终止上一次的运行
                 await self.send_response('processing', 'close', '')
             return True, unique_id
+
+        # 每次建立链接，都重新运行workflow
+        return True, unique_id
+
         # 说明会话还在运行中
         if status_info['status'] == WorkflowStatus.INPUT.value and self.latest_history:
             # 如果是等待用户输入状态，需要将上一次的输入消息重新发送给前端
@@ -111,6 +141,9 @@ class WorkflowClient(BaseClient):
                 send_message['message'] = json.loads(send_message['message'])
                 send_message['message_id'] = send_message.pop('id')
                 await self.send_json(send_message)
+        elif status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
+            # 说明workflow已经运行完成, 直接运行新的工作流即可
+            return True, unique_id
 
         await self.send_response('processing', 'begin', '')
         logger.debug('init workflow over, continue run workflow')
@@ -161,6 +194,8 @@ class WorkflowClient(BaseClient):
 
         status_info = self.workflow.get_workflow_status()
         if not status_info or status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
+        # DONE merge_check
+        # if status_info['status'] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
             await self.send_response('processing', 'close', '')
             self.workflow.clear_workflow_status()
             self.workflow = None
@@ -183,7 +218,7 @@ class WorkflowClient(BaseClient):
             user_input = {}
             message_id = None
             new_message = None
-            # 目前支持一个输入节点
+            # 目前只支持一个输入节点
             for node_id, node_info in data.items():
                 user_input[node_id] = node_info['data']
                 message_id = node_info.get('message_id')

@@ -4,6 +4,7 @@ from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
 from sqlmodel import Session
+import uuid
 
 db_service: 'DatabaseService' = DatabaseService(settings.database_url)
 
@@ -20,3 +21,9 @@ def session_getter() -> Session:
         raise
     finally:
         session.close()
+
+def generate_uuid() -> str:
+    """
+    生成uuid的字符串
+    """
+    return uuid.uuid4().hex

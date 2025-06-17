@@ -17,6 +17,9 @@ from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.flow import Flow, FlowType
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
@@ -156,7 +159,7 @@ async def process_flow(
     """
     if inputs and isinstance(inputs, dict) and 'id' in inputs:
         inputs.pop('id')
-    flow_id = flow_id.hex
+    flow_id = flow_id.hex  # UUID check done
     logger.info(
         f'act=api_call sessionid={session_id} flow_id={flow_id} inputs={inputs} tweaks={tweaks}')
 
@@ -288,7 +291,7 @@ def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[
     if file_supports and file_ext not in file_supports:
         raise HTTPException(status_code=500, detail='仅支持 JPEG 和 PNG 格式的图片')
     try:
-        object_name = f'{object_name_prefix}/{generate_uuid()}.png'
+        object_name = f'{object_name_prefix}/{generate_uuid()}.{file_ext}'
         file_path = upload_file_to_minio(file, object_name=object_name, bucket_name=bucket_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)

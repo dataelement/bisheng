@@ -32,7 +32,7 @@ class WorkflowOutputSchema(BaseModel):
 class WorkflowInputItem(BaseModel):
     key: str = Field(default=None, description='Unique key corresponding to user input')
     type: str = Field(default=None, description='The input type, select or dialog or file')
-    value: Any = Field(default=None, description='The input default value')
+    value: str = Field(default=None, description='The input default value')
     label: str = Field(default=None, description='The key label')
     multiple: bool = Field(default=False, description='The input is multi select')
     required: bool = Field(default=False, description='The input is required')
@@ -60,7 +60,6 @@ class WorkflowEvent(BaseModel):
         if isinstance(v, str) or v is None:
             return v
         return str(v)
-
 
 class WorkflowStream(BaseModel):
     session_id: str = Field(default=None, description='The session id')

@@ -1,9 +1,12 @@
+from typing import List
 from fastapi import APIRouter, Request, Depends, Body, Query
 
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import resp_200, KnowledgeLLMConfig, \
     AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq
+from bisheng.api.v1.schemas import UnifiedResponseModel, LLMServerInfo, resp_200, KnowledgeLLMConfig, \
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, LLMModelInfo,VoiceLLMConfig
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -49,6 +52,16 @@ def update_model_online(request: Request, login_user: UserPayload = Depends(get_
     ret = LLMService.update_model_online(request, login_user, model_id, online)
     return resp_200(data=ret)
 
+@router.post('/check', response_model=UnifiedResponseModel[LLMModelInfo])
+def update_model_check(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        model_id: int = Body(..., embed=True, description="模型的唯一ID"),
+        check: bool = Body(..., embed=True, description="是否校验模型状态"),
+) -> UnifiedResponseModel[LLMModelInfo]:
+    ret = LLMService.update_model_check(request, login_user, model_id, check)
+    return resp_200(data=ret)
+
 
 @router.get('/knowledge')
 def get_knowledge_llm(request: Request, login_user: UserPayload = Depends(get_login_user)):
@@ -61,6 +74,25 @@ def update_knowledge_llm(request: Request, login_user: UserPayload = Depends(get
                          data: KnowledgeLLMConfig = Body(..., description="知识库默认模型配置")):
     """ 更新知识库相关的默认模型配置 """
     ret = LLMService.update_knowledge_llm(request, login_user, data)
+    return resp_200(data=ret)
+
+@router.get('/voice', response_model=UnifiedResponseModel[VoiceLLMConfig])
+def get_knowledge_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[VoiceLLMConfig]:
+    ret = LLMService.get_voice_llm()
+    return resp_200(data=ret)
+
+
+@router.post('/voice', response_model=UnifiedResponseModel[VoiceLLMConfig])
+def update_voice_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        data: VoiceLLMConfig = Body(..., description="语音模型配置"),
+) -> UnifiedResponseModel[VoiceLLMConfig]:
+    """ 更新知识库相关的默认模型配置 """
+    ret = LLMService.update_voice_llm(request, login_user, data)
     return resp_200(data=ret)
 
 
@@ -94,23 +126,52 @@ def update_evaluation_llm(request: Request, login_user: UserPayload = Depends(ge
     return resp_200(data=ret)
 
 
-@router.get('/workflow')
-def get_workflow_llm(request: Request, login_user: UserPayload = Depends(get_login_user)):
-    """ 获取评价相关的模型配置 """
+
+@router.get('/workflow', response_model=UnifiedResponseModel[EvaluationLLMConfig])
+def get_workflow_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[EvaluationLLMConfig]:
+    """ 获取工作流相关的模型配置 """
     ret = LLMService.get_workflow_llm()
     return resp_200(data=ret)
 
 
-@router.post('/workflow')
-def update_workflow_llm(request: Request, login_user: UserPayload = Depends(get_admin_user),
-                        data: EvaluationLLMConfig = Body(..., description="工作流默认模型配置")):
-    """ 更新评价相关的模型配置 """
+@router.post('/workflow', response_model=UnifiedResponseModel[EvaluationLLMConfig])
+def update_workflow_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        data: EvaluationLLMConfig = Body(..., description="工作流默认模型配置"),
+) -> UnifiedResponseModel[EvaluationLLMConfig]:
+    """ 更新工作流相关的模型配置 """
     ret = LLMService.update_workflow_llm(request, login_user, data)
     return resp_200(data=ret)
 
+@router.get('/audit', response_model=UnifiedResponseModel[EvaluationLLMConfig])
+def get_audit_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[EvaluationLLMConfig]:
+    """ 获取审计相关的模型配置 """
+    ret = LLMService.get_audit_llm()
+    return resp_200(data=ret)
 
-@router.get('/assistant/llm_list')
-async def get_assistant_llm_list(request: Request, login_user: UserPayload = Depends(get_login_user)):
+
+@router.post('/audit', response_model=UnifiedResponseModel[EvaluationLLMConfig])
+def update_audit_llm(
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        data: EvaluationLLMConfig = Body(..., description="审计默认模型配置"),
+) -> UnifiedResponseModel[EvaluationLLMConfig]:
+    """ 更新审计相关的模型配置 """
+    ret = LLMService.update_audit_llm(request, login_user, data)
+    return resp_200(data=ret)
+
+@router.get('/assistant/llm_list', response_model=UnifiedResponseModel[List[LLMServerInfo]])
+async def get_assistant_llm_list(
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
+) -> UnifiedResponseModel[List[LLMServerInfo]]:
     """ 获取助手可选的模型列表 """
     ret = LLMService.get_assistant_llm_list(request, login_user)
     return resp_200(data=ret)

@@ -50,7 +50,9 @@ class AgentNode(BaseNode):
         self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
-        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'],
+        self._enable_web_search = self.node_params.get('enable_web_search', False)
+
+        self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'], enable_web_search=self._enable_web_search,
                                                temperature=self.node_params.get(
                                                    'temperature', 0.3),
                                                cache=False)

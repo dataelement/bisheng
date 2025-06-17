@@ -668,16 +668,47 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             'extra': json.dumps(doc.metadata, ensure_ascii=False)
         } for index, doc in enumerate(docs)]
 
+        # DONE merge_check 1
+        # <<<<<<< HEAD 1.2.0
         # 向量存储
+        # for vectore_client in vectore_client_list:
+        #     result = vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+        #     logger.debug(f'jjxx metadata:{metadata} vectore_client.add_texts:{result}')
+        #
+        # QA.status = QAStatus.ENABLED.value
+        # =======
+        # 向量存储
+        texts = [t.page_content for t in docs]
         for vectore_client in vectore_client_list:
-            vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
-
-        QA.status = QAStatus.ENABLED.value
+            # vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
+            max_attempts = 5
+            success = False
+            for attempt in range(max_attempts):
+                try:
+                    vectore_client.add_texts(texts=texts, metadatas=metadata)
+                    validation_query = texts[0]
+                    search_results = vectore_client.search(query=validation_query, search_type="similarity", k=100)
+                    matched = any(
+                        result.metadata.get('file_id') == QA.id and
+                        result.metadata.get('knowledge_id') == f'{db_knowledge.id}'
+                        for result in search_results
+                    )
+                    if matched:
+                        success = True
+                        logger.debug(f'jjxx validation_query:{validation_query} success')
+                        break  # 验证成功，跳出重试循环
+                except Exception as e:
+                    raise e
+            if not success:
+                raise ValueError("插入向量库失败")
+        QA.status = 1
+        # >>>>>>> feat/zyrs_0527
         with session_getter() as session:
             session.add(QA)
             session.commit()
             session.refresh(QA)
     except Exception as e:
+        logger.debug(f'jjxx validation_query:{e} error')
         logger.error(e)
         setattr(QA, 'status', QAStatus.FAILED.value)
         setattr(QA, 'remark', str(e)[:500])
@@ -713,6 +744,13 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
     except Exception as e:
         logger.exception(e)
         raise e
+
+def add_qa_batch(db_knowledge: Knowledge, data_list: List[QAKnowledgeUpsert]) -> List[QAKnowledge]:
+    result = []
+    for data in data_list:
+        QA = add_qa(db_knowledge, data)
+        result.append(QA)
+    return result
 
 
 def qa_status_change(qa_id: int, target_status: int):

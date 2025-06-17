@@ -31,6 +31,9 @@ class AssistantBase(SQLModelSerializable):
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
     user_id: int = Field(default=0, description='创建用户ID')
     is_delete: int = Field(default=0, description='删除标志')
+
+    is_allow_upload: int = Field(default=1, description='是否允许上传文件')
+    file_max_size: int = Field(default=15000, description='文件大小限制')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None,

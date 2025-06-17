@@ -4,7 +4,7 @@ services:
     image: mysql:8.0
     
     ports:
-      - "3306:3306"
+      - "4306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
       MYSQL_DATABASE: bisheng
@@ -53,7 +53,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v1.2.0
+    image: bisheng-backend:zy.25.6.16
     ports:
       - "7860:7860"
     environment:
@@ -69,6 +69,7 @@ services:
       BS_MINIO_SHAREPOIN: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
+      BISHENG_PRO: 'true'
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
@@ -93,7 +94,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v1.2.0
+    image: bisheng-frontend:zy.25.6.16
     ports:
       - "3001:3001"
     environment:
