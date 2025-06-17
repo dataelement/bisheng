@@ -203,10 +203,13 @@ class Etl4lmLoader(BasePDFLoader):
             ocr_sdk_url=self.ocr_sdk_url,
             parameters=parameters,
         )
-
-        resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
-        )
+        try:
+            resp = requests.post(
+                self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
+            )
+        except requests.Timeout as e:
+            logger.error(f"Request to etl4lm API timed out: {e}")
+            raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
         if resp.status_code != 200:
             raise Exception(
                 f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}"
