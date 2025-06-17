@@ -771,11 +771,30 @@ def read_chunk_text(
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
-            # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
-            if file_extension_name not in filetype_load_map:
-                raise Exception("类型不支持")
-            loader = filetype_load_map[file_extension_name](file_path=input_file)
-            documents = loader.load()
+            if file_extension_name in ['pdf']:
+                md_file_name, local_image_dir, doc_id = convert_file_to_md(
+                    file_name=file_name,
+                    input_file_name=input_file,
+                    knowledge_id=knowledge_id,
+                    retain_images=bool(retain_images),
+                )
+                if not md_file_name: raise Exception(f"failed to parse {file_name}, please check backend log")
+
+                # save images to minio
+                if local_image_dir and retain_images == 1:
+                    put_images_to_minio(
+                        local_image_dir=local_image_dir,
+                        knowledge_id=knowledge_id,
+                        doc_id=doc_id,
+                    ) 
+                # 沿用原来的方法处理md文件
+                loader = filetype_load_map["md"](file_path=md_file_name)
+                documents = loader.load()
+            else:
+                if file_extension_name not in filetype_load_map:
+                    raise Exception("类型不支持")
+                loader = filetype_load_map[file_extension_name](file_path=input_file)
+                documents = loader.load()
 
     logger.info(f"start_extract_title file_name={file_name}")
     if llm:
