@@ -18,6 +18,8 @@ export default function FileViewPanne({ file }) {
             setPositon([0, 0])
             setShowP(false)
             return map
+        }else {
+            setShowP(true)
         }
         file.chunks.forEach(chunk => {
             chunk.box.forEach(el => {
@@ -47,7 +49,7 @@ export default function FileViewPanne({ file }) {
         const previewFileUrl = file.fileUrl
         const newVersion = ['etl4lm', 'un_etl4lm'].includes(file.parse_type)
         if (!newVersion) {
-            if (suffix === 'pdf') {
+            if (suffix === 'pdf' || file.parse_type === 'uns') {
                 return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
             } else {
                 return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>
@@ -57,11 +59,12 @@ export default function FileViewPanne({ file }) {
             case 'ppt':
             case 'pptx':
             case 'pdf':
-                return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
+                return previewFileUrl && <MemoizedFileView startIndex={0} scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
             case 'csv': return <TxtFileViewer filePath={previewFileUrl} />
             case 'txt': return <TxtFileViewer filePath={previewFileUrl} />
             case 'md': return <TxtFileViewer markdown filePath={previewFileUrl} />
             case 'html': return <TxtFileViewer html filePath={previewFileUrl} />
+            case 'doc':
             case 'docx': return <DocxPreview filePath={previewFileUrl} />
             case 'png':
             case 'jpg':
@@ -70,12 +73,14 @@ export default function FileViewPanne({ file }) {
                 className="border"
                 src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
             default:
-                return <div className="flex justify-center items-center h-full text-gray-400">File type not supported</div>
+                return <div className="flex justify-center items-center h-full text-gray-400">该类型文件不支持预览</div>
         }
     }
 
     return <div className="flex-1 bg-gray-100 rounded-md py-4 px-2 relative" onContextMenu={(e) => e.preventDefault()}>
+        <div className="h-full overflow-auto">
         {fileView()}
+        </div>
         {/* chunk menu */}
         {showP && <div className="absolute left-[0px] rounded-sm p-4 px-0 top-[50%] translate-y-[-50%] max-2xl:scale-75 origin-top-left">
             <p className="mb-1 text-sm font-bold text-center rounded-sm bg-[rgb(186,210,249)] text-blue-600">{t('chat.sourceTooltip')}</p>
