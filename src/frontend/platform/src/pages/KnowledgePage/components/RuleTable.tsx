@@ -28,12 +28,13 @@ const ItemForm = ({ data, setData }) => {
           <Input
             type="number"
             min={1}
-            max={1000}
+            // max={1000}
+            maxLength={6}
             value={data.slice_length}
             onChange={e => setData('slice_length', e.target.value)}
             className="w-28 h-8"
             onBlur={(e) => {
-              !e.target.value && setData('slice_length', 15);
+              !e.target.value && setData('slice_length', 10);
             }}
           />
           <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
@@ -58,6 +59,7 @@ const ItemForm = ({ data, setData }) => {
             type="number"
             min={1}
             max={1000}
+            maxLength={4}
             value={data.header_start_row}
             onChange={e => setData('header_start_row', e.target.value)}
             onBlur={(e) => {
@@ -73,6 +75,7 @@ const ItemForm = ({ data, setData }) => {
             type="number"
             min={1}
             max={1000}
+            maxLength={4}
             value={data.header_end_row}
             onChange={e => setData('header_end_row', e.target.value)}
             onBlur={(e) => {
@@ -132,9 +135,9 @@ export default function RuleTable({
                       type="number"
                       value={cellGeneralConfig.slice_length}
                       disabled={true}
-                      className="w-16 h-8"
+                      className="w-[106px] h-8"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+                    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
                   </div>
                   <span className="whitespace-nowrap text-gray-500">{t('segemnt')}</span>
                 </div>
@@ -146,9 +149,9 @@ export default function RuleTable({
                       type="number"
                       value={cellGeneralConfig.header_start_row}
                       disabled={true}
-                      className="w-16 h-8"
+                      className="w-24 h-8"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+                    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
                   </div>
                   <span className="whitespace-nowrap text-gray-500">{t('arrive')}</span>
                   <div className="relative">
@@ -157,9 +160,9 @@ export default function RuleTable({
                       type="number"
                       value={cellGeneralConfig.header_end_row}
                       disabled={true}
-                      className="w-16 h-8"
+                      className="w-24 h-8"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
+                    <span className="absolute right-7 top-1/2 -translate-y-1/2 text-gray-400">{t('row')}</span>
                   </div>
                   <span className="whitespace-nowrap text-gray-500">{t('gauge')}</span>
                 </div> : <div className="flex items-center gap-2">
@@ -174,7 +177,7 @@ export default function RuleTable({
               <h3 className="text-md font-bold text-gray-800 text-left">
                 {t('splitMethod')}
               </h3>
-              <div className="relative mt-2 pr-2 overflow-y-auto max-h-[calc(100vh-298px)]">
+              <div className="relative mt-2 pr-2 overflow-y-auto max-h-[440px]">
                 <Accordion
                   type="single"
                   collapsible

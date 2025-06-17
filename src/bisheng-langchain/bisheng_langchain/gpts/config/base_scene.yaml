@@ -22,7 +22,7 @@ assistant:
     - type: "bisheng_code_interpreter"
       minio:
         MINIO_ENDPOINT: "110.16.193.170:50061"
-        MINIO_SHAREPOIN: "110.16.193.170:50061"
+        MINIO_SHAREPOINT: "110.16.193.170:50061"
         MINIO_ACCESS_KEY: "minioadmin"
         MINIO_SECRET_KEY: "minioadmin"
         SCHEMA: False

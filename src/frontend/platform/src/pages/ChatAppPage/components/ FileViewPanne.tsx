@@ -45,8 +45,14 @@ export default function FileViewPanne({ file }) {
 
     const fileView = () => {
         const previewFileUrl = file.fileUrl
-        // const newVersion = ['etl4lm', 'un_etl4lm'].includes(parseType)
-        // if (!newVersion) return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
+        const newVersion = ['etl4lm', 'un_etl4lm'].includes(file.parse_type)
+        if (!newVersion) {
+            if (suffix === 'pdf') {
+                return previewFileUrl && <MemoizedFileView scrollTo={postion} fileUrl={file.fileUrl} labels={labels} />
+            } else {
+                return <div className="flex justify-center items-center h-full text-gray-400">旧版文件格式暂不支持预览</div>
+            }
+        }
         switch (suffix) {
             case 'ppt':
             case 'pptx':

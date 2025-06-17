@@ -26,7 +26,7 @@ export const MarkdownView = ({ noHead = false, data }) => {
 
     return <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
         {!noHead && <p className="text-sm text-gray-500 flex gap-2 mb-1">
-            <span>切片{data.chunkIndex + 1}</span>
+            <span>分段{data.chunkIndex + 1}</span>
             <span>-</span>
             <span>{data.text.length} 字符</span>
         </p>}
@@ -92,7 +92,7 @@ const AceEditorCom = ({ markdown, hidden, onChange, onBlur }) => {
 // 预览编辑
 const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref) => {
     const vditorRef = useRef(null);
-    const readyRef = useRef(false);
+    const readyRef = useRef(false); // 保证vditor初始化完成后,再调用实例方法,否则报错 Cannot read properties of undefined (reading 'currentMode')
     const valurCacheRef = useRef('');
     const domRef = useRef(null);
 
@@ -115,7 +115,12 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
     useImperativeHandle(ref, () => ({
         setValue(val) {
             const processedMarkdown = val.replace(/^( {4,})/gm, '   ')
-            vditorRef.current.setValue(processedMarkdown)
+                .replaceAll('(bisheng/tmp/images', '(/bisheng/tmp/images')
+            if (readyRef.current) {
+                vditorRef.current?.setValue(processedMarkdown)
+            } else {
+                valurCacheRef.current = processedMarkdown;
+            }
         }
     }))
 
@@ -148,19 +153,19 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
                 readyRef.current = true;
 
                 if (valurCacheRef.current) {
-                    vditorRef.current.setValue(valurCacheRef.current);
+                    vditorRef.current?.setValue(valurCacheRef.current);
                 }
                 // vditorRef.current.disabled();
             },
             // input: onChange, // 有延时
             blur: () => {
-                const value = vditorRef.current.getValue()
+                const value = vditorRef.current?.getValue()
                 blurRef.current(
                     value,
                     () => {
                         // 还原
                         const processedMarkdown = defalutValue.replace(/^( {4,})/gm, '   ')
-                        vditorRef.current.setValue(processedMarkdown);
+                        vditorRef.current?.setValue(processedMarkdown);
                     }
                 );
                 onChange(value);

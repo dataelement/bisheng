@@ -38,7 +38,7 @@ def configure(logger_conf: LoggerConf):
         'sink':
         RichHandler(console=Console(width=300),
                     markup=True,
-                    log_time_format='[%Y-%m-%d %H:%M:%S.%f]',
+                    log_time_format='',
                     show_path=False,
                     show_level=False),
         'format':

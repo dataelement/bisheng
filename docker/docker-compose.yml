@@ -66,7 +66,7 @@ services:
       BS_MINIO_SCHEMA: 'false'
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOIN: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
@@ -104,7 +104,7 @@ services:
       BS_MINIO_SCHEMA: 'false'
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOIN: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
@@ -157,7 +157,7 @@ services:
     restart: on-failure
 
   etcd:
-    container_name: milvus-etcd
+    container_name: bisheng-milvus-etcd
     image: quay.io/coreos/etcd:v3.5.5
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
@@ -176,7 +176,7 @@ services:
       retries: 3
 
   minio:
-    container_name: milvus-minio
+    container_name: bisheng-milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
@@ -196,7 +196,7 @@ services:
       retries: 3
 
   milvus:
-    container_name: milvus-standalone
+    container_name: bisheng-milvus-standalone
     image: milvusdb/milvus:v2.5.10
     command: ["milvus", "run", "standalone"]
     security_opt:

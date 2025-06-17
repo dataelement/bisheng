@@ -76,10 +76,12 @@ const KnowledgeUploadComponent = ({
         // 校验超大小文件
         const sizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024;
         const [bigFiles, files] = acceptedFiles.reduce(
-            ([big, small], file) =>
-                file.size < sizeLimit
+            ([big, small], file) => {
+                if (progressList.some(pros => pros.fileName === file.name)) return [big, small] // 过滤重复文件
+                return file.size < sizeLimit
                     ? [big, [...small, file]]
-                    : [[...big, file.name], small],
+                    : [[...big, file.name], small]
+            },
             [[], []]
         );
         bigFiles.length && message({

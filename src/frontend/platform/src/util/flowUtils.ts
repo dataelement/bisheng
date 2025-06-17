@@ -280,7 +280,7 @@ export function importFlow() {
                         delete flow.source
 
                         flow.nodes.forEach(node => {
-                            if (['rag', 'llm', 'agent'].includes(node.data.type)) {
+                            if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
                                 node.data.group_params.forEach(group =>
                                     group.params.forEach(param => {
                                         if (param.type === 'bisheng_model') {
@@ -289,6 +289,8 @@ export function importFlow() {
                                             param.value = assistantModelId
                                         } else if (param.type === 'knowledge_select_multi') {
                                             param.value.value = []
+                                        } else if (param.type === 'qa_select_multi') {
+                                            param.value = []
                                         } else if (param.type === 'add_tool') {
                                             param.value = []
                                         }

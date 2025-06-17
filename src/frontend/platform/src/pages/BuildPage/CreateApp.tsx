@@ -177,7 +177,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 delete tempDataRef.current.data.source
 
                 tempDataRef.current.data.nodes.forEach(node => {
-                    if (['rag', 'llm', 'agent'].includes(node.data.type)) {
+                    if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
                         node.data.group_params.forEach(group =>
                             group.params.forEach(param => {
                                 if (param.type === 'bisheng_model') {
@@ -186,6 +186,8 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                                     param.value = assistantModelId
                                 } else if (param.type === 'knowledge_select_multi') {
                                     param.value.value = []
+                                } else if (param.type === 'qa_select_multi') {
+                                    param.value = []
                                 } else if (param.type === 'add_tool') {
                                     param.value = []
                                 }

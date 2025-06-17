@@ -14,8 +14,8 @@ import TxtFileViewer from "./TxtFileViewer";
  * 选中label -> 更新labelsMap
  * 覆盖chunk -> labelsMap + partitions = string -> store -> update markdown
  */
-export default function PreviewFile({ url, file, partitions, chunks }
-    : { file: any, partitions: Partition, chunks: any }) {
+export default function PreviewFile({ urlState, file, partitions, chunks, setChunks }
+    : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
     const { t } = useTranslation('knowledge')
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
     const selectedChunkDistanceFactor = useKnowledgeStore((state) => state.selectedChunkDistanceFactor);
@@ -54,9 +54,17 @@ export default function PreviewFile({ url, file, partitions, chunks }
                 const id = [label.page, ...label.bbox].join('-');
                 const existing = labelsMap.get(id);
 
-                // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
-                if (isActive || !existing) {
-                    const obj = labelsMapRef.current.get(id);
+                const activeded = chunk.activeLabels?.[id];
+                if (activeded !== undefined) {
+                    labelsMap.set(id, {
+                        id,
+                        page: label.page,
+                        label: label.bbox,
+                        active: activeded,
+                        txt: chunk.text
+                    });
+                } else if (isActive || !existing) {
+                    // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
                     labelsMap.set(id, {
                         id,
                         page: label.page,
@@ -66,6 +74,7 @@ export default function PreviewFile({ url, file, partitions, chunks }
                         txt: chunk.text
                     });
                 }
+
 
                 // 初始定位到第一个激活的标签
                 if (isActive && !setPostioned) {
@@ -131,6 +140,9 @@ export default function PreviewFile({ url, file, partitions, chunks }
     }
 
     const render = (type) => {
+        const { url, load } = urlState
+
+        if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">解析失败...</div>
         if (!url) return <div className="flex justify-center items-center h-full text-gray-400">加载中...</div>
         switch (type) {
             case 'ppt':
@@ -167,9 +179,12 @@ export default function PreviewFile({ url, file, partitions, chunks }
         let prevType = ''
         let prevPartId = ''
         let str = ''
+        const activeMap = {}
         // 标注块拼接段落
         labelsMap.forEach((item, key) => {
             if (item.active) {
+                activeMap[item.id] = true
+
                 const { text, type, part_id } = partitions[item.id]
                 if (str === '') {
                     // 第一个块, title类型，末尾加单换行
@@ -189,11 +204,13 @@ export default function PreviewFile({ url, file, partitions, chunks }
 
                 prevType = type
                 prevPartId = part_id
+            } else {
+                activeMap[item.id] = false
             }
         })
         console.log('JSON. :>> ', JSON.stringify(str));
         setNeedCoverData({ index: selectedChunkIndex, txt: str })
-
+        setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === selectedChunkIndex ? { ...chunk, activeLabels: activeMap } : chunk))
     }
 
     if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null
