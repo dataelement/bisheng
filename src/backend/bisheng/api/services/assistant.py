@@ -280,6 +280,8 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.temperature = req.temperature
         assistant.update_time = datetime.now()
         assistant.max_token = req.max_token
+        assistant.is_allow_upload = req.is_allow_upload
+        assistant.file_max_size = req.file_max_size
         AssistantDao.update_assistant(assistant)
 
         # 更新助手关联信息
@@ -376,9 +378,8 @@ class AssistantService(BaseService, AssistantUtils):
         tool_type_ids_extra = []
         if is_preset != ToolPresetType.PRESET.value:
             # 获取自定义工具列表时，需要包含用户可用的工具列表
-            user_role = UserRoleDao.get_user_roles(user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
+            role_ids = user.user_role
+            if role_ids:
                 role_access = RoleAccessDao.get_role_access(role_ids, AccessType.GPTS_TOOL_READ)
                 if role_access:
                     tool_type_ids_extra = [int(access.third_id) for access in role_access]

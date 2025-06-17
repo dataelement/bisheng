@@ -1,0 +1,4 @@
+node_modules
+
+client/build
+platform/build

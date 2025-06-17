@@ -118,7 +118,7 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def delete_group_resource_by_third_id(cls, third_id: str, resource_type: ResourceTypeEnum) -> None:
-        with (session_getter() as session):
+        with session_getter() as session:
             statement = delete(GroupResource).where(
                 GroupResource.third_id == third_id).where(
                 GroupResource.type == resource_type.value)
@@ -127,7 +127,7 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def delete_group_resource_by_group_id(cls, group_id: int):
-        with (session_getter() as session):
+        with session_getter() as session:
             statement = delete(GroupResource).where(GroupResource.group_id == group_id)
             session.exec(statement)
             session.commit()
@@ -143,7 +143,7 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     def update_group_resource(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
-        with (session_getter() as session):
+        with session_getter() as session:
             session.add_all(group_resources)
             session.commit()
         return group_resources

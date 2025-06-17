@@ -26,7 +26,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - name: bisheng-cache
         path: /app/build # 将应用打包好的Jar和执行脚本挂载出来
     environment:
-      RELEASE_VERSION: 99.99.99
+      RELEASE_VERSION: 99.99.98
       NEXUS_USER:
         from_secret: NEXUS_USER
       NEXUS_PASSWORD:
@@ -46,7 +46,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     pull: if-not-exists
     image: golang
     environment:
-      RELEASE_VERSION: 99.99.99
+      RELEASE_VERSION: 99.99.98
       NEXUS_PUBLIC:
         from_secret: NEXUS_PUBLIC
       NEXUS_PUBLIC_PASSWORD:
@@ -87,7 +87,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       https_proxy:
         from_secret: PROXY
       no_proxy: 192.168.106.8
-      version: release
+      version: ${DRONE_BRANCH}
       docker_registry: http://192.168.106.8:6082
       docker_repo: 192.168.106.8:6082/dataelement/bisheng-backend
       docker_user:
@@ -95,6 +95,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       docker_password:
         from_secret: NEXUS_PASSWORD
     commands:
+      - echo "old tag is $version"
+      - version=$(echo $version | sed 's/\\//_/g')
+      - echo "build image tag is $version"
       - cd ./src/backend/
       - docker login -u $docker_user -p $docker_password $docker_registry
       - docker build -t $docker_repo:$version .
@@ -115,7 +118,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       https_proxy:
         from_secret: PROXY
       no_proxy: 192.168.106.8
-      version: release
+      version: ${DRONE_BRANCH}
       docker_registry: http://192.168.106.8:6082
       docker_repo: 192.168.106.8:6082/dataelement/bisheng-frontend
       docker_user:
@@ -123,6 +126,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       docker_password:
         from_secret: NEXUS_PASSWORD
     commands:
+      - echo "old tag is $version"
+      - version=$(echo $version | sed 's/\\//_/g')
+      - echo "build image tag is $version"
       - cd ./src/frontend/
       - docker login -u $docker_user -p $docker_password $docker_registry
       - docker build -t $docker_repo:$version .
@@ -367,6 +373,8 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 trigger:
   branch:
   - add_some_branch_you_need
+  - feat/0.3.7rc
+  - feat/zyrs_*
   event:
   - push
    

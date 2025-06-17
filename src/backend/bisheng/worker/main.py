@@ -1,4 +1,6 @@
 from celery import Celery
+from redbeat import RedBeatSchedulerEntry
+from celery.schedules import crontab
 
 from bisheng.settings import settings
 from bisheng.utils.logger import configure

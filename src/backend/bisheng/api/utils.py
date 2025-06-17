@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import xml.dom.minidom
 from pathlib import Path
 from typing import Dict, List
@@ -437,3 +438,19 @@ def md5_hash(original_string: str):
     md5 = hashlib.md5()
     md5.update(original_string.encode('utf-8'))
     return md5.hexdigest()
+
+def format_text_for_tts(text):
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = text.lower()
+    punctuation_pattern = r'[^\w\s]'
+    text = re.sub(punctuation_pattern, ' ', text,flags=re.U)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def tts_text_md5_hash(text: str):
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = text.lower()
+    punctuation_pattern = r'[^\w\s]'
+    text = re.sub(punctuation_pattern, ' ', text,flags=re.U)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return md5_hash(text)

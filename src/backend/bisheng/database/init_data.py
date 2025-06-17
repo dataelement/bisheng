@@ -51,7 +51,7 @@ def init_default_data():
                 # 添加默认用户组
                 group = session.exec(select(Group).limit(1)).all()
                 if not group:
-                    group = Group(id=DefaultGroup, group_name='默认用户组', create_user=1, update_user=1)
+                    group = Group(id=DefaultGroup, group_name='默认用户组', create_user=1, update_user=1, code='001')
                     session.add(group)
                     session.commit()
                     session.refresh(group)

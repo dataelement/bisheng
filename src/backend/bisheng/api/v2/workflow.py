@@ -2,6 +2,9 @@ import uuid
 from uuid import UUID
 from typing import Optional, List
 
+from fastapi import APIRouter, Request, Body, UploadFile, File, Path, WebSocket, WebSocketException, status as http_status
+from loguru import logger
+
 from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
@@ -27,7 +30,11 @@ async def invoke_workflow(request: Request,
                           workflow_id: UUID = Body(..., description='工作流唯一ID'),
                           stream: Optional[bool] = Body(default=True, description='是否流式调用'),
                           user_input: Optional[dict] = Body(default=None, description='用户输入', alias='input'),
+                          # DONE merge_check 1
+                          # 1.2.0
                           message_id: Optional[int] = Body(default=None, description='消息ID'),
+                          # 0527
+                          # message_id: Optional[str] = Body(default=None, description='消息ID'),
                           session_id: Optional[str] = Body(default=None, description='会话ID,一次workflow调用的唯一标识')):
     login_user = get_default_operator()
     workflow_id = workflow_id.hex
@@ -100,6 +107,18 @@ async def invoke_workflow(request: Request,
         logger.exception(f'invoke_workflow error: {str(exc)}')
         return ORJSONResponse(status_code=500, content=str(exc))
 
+@router.post('/stop')
+async def stop_workflow(request: Request,
+                        workflow_id: UUID = Body(..., description='工作流唯一ID'),
+                        session_id: str = Body(description='会话ID,一次workflow调用的唯一标识')):
+    workflow_id = workflow_id.hex
+    login_user = get_default_operator()
+    chat_id = session_id.split('_', 1)[0]
+    unique_id = session_id
+    workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
+    workflow.set_workflow_stop()
+    return resp_200()
+
 
 @router.post('/stop')
 async def stop_workflow(request: Request,
@@ -131,3 +150,11 @@ async def workflow_ws(*,
     except Exception as e:
         logger.error(f'Websocket handle error: {str(e)}')
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(e))
+
+
+@router.post('/input/file', status_code=200)
+async def process_input_file(request: Request, file: UploadFile = File(...)):
+    """ 处理对话框的文件上传, 将文件解析为对应的chunk """
+    login_user = get_default_operator()
+    res = await WorkFlowService.process_input_file(login_user, file)
+    return resp_200(data=res)

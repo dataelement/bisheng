@@ -109,8 +109,6 @@ class BishengEmbedding(BaseModel, Embeddings):
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
         try:
-            if server_info.type == LLMServerType.OLLAMA.value:
-                params['query_instruction'] = 'passage: '
             self.embeddings = instantiate_embedding(class_object, params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
@@ -119,7 +117,7 @@ class BishengEmbedding(BaseModel, Embeddings):
     def _get_embedding_class(self, server_type: str) -> Embeddings:
         node_type = self.llm_node_type.get(server_type)
         if not node_type:
-            raise Exception(f'{server_type}类型的服务提供方暂不支持embedding')
+            raise Exception(f'{server_type}类型的模型接口格式暂不支持embedding')
         class_object = import_by_type(_type='embeddings', name=node_type)
         return class_object
 
@@ -148,6 +146,10 @@ class BishengEmbedding(BaseModel, Embeddings):
                 LLMServerType.VLLM.value
         ]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
+        elif server_info.type == LLMServerType.TENCENT.value:
+            params['check_embedding_ctx_length'] = False
+        elif server_info.type == LLMServerType.OLLAMA.value:
+            params['query_instruction'] = 'passage: '
         return params
 
     @wrapper_bisheng_model_limit_check

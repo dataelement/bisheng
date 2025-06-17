@@ -123,9 +123,9 @@ async def mark(data: MarkData,
     flow_type flow assistant
     """
 
-    # record = MarkRecordDao.get_record(data.task_id,data.session_id)
-    # if record:
-    #     return resp_500(data="已经标注过了")
+    session_info = MessageSessionDao.get_one(data.session_id)
+    if session_info:
+        data.flow_type = session_info.flow_type
 
     session_info = MessageSessionDao.get_one(data.session_id)
     if session_info:
@@ -203,7 +203,13 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
             logger.info("top_queue={} bottom_queue={}", top_queue, bottom_queue)
             if len(top_queue) == 0 and len(bottom_queue) == 0:
                 return resp_200()
+#<<<<<<< HEAD 1.2.0
+            # DONE merge_check 1
             record = bottom_queue.popleft() if len(bottom_queue) else top_queue.popleft()
+#=======
+#            record = queue.pop()
+#            logger.info("queue={} record={}", queue, record)
+#>>>>>>> feat/zyrs_0527
             chat = MessageSessionDao.get_one(record.session_id)
             result["chat_id"] = chat.chat_id
             result["flow_type"] = chat.flow_type
@@ -214,7 +220,7 @@ async def pre_or_next(chat_id: str, action: str, task_id: int, login_user: UserP
         record = MarkRecordDao.get_list_by_taskid(task_id)
         chat_list = [r.session_id for r in record]
 
-        msg = MessageSessionDao.filter_session(flow_ids=task.app_id.split(","), exclude_chats=chat_list)
+        msg = MessageSessionDao.filter_session(flow_ids=task.app_id.split(","), exclude_chats=chat_list) #
         linked = DoubleLinkList()
         k_list = {}
         for m in msg:

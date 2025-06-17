@@ -84,11 +84,41 @@ class UserRoleDao(UserRoleBase):
             return user_roles
 
     @classmethod
+    def add_role_users(cls, role_id: int, user_ids: List[int]) -> List[UserRole]:
+        """
+        给角色批量添加用户
+        """
+        with session_getter() as session:
+            user_roles = [UserRole(user_id=user_id, role_id=role_id) for user_id in user_ids]
+            session.add_all(user_roles)
+            session.commit()
+            return user_roles
+
+    @classmethod
     def delete_user_roles(cls, user_id: int, role_ids: List[int]) -> None:
         """
         将用户从某些角色中移除
         """
         with session_getter() as session:
             statement = delete(UserRole).where(UserRole.user_id == user_id).where(UserRole.role_id.in_(role_ids))
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def delete_users_roles(cls, user_ids: List[int], role_ids: List[int]):
+        """ 将批量用户移除批量的角色 """
+        with session_getter() as session:
+            statement = delete(UserRole).where(UserRole.user_id.in_(user_ids)).where(UserRole.role_id.in_(role_ids))
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    def delete_role_users(cls, role_id: int, user_ids: List[int] = None):
+        """ 删除此角色绑定的用户 """
+        statement = delete(UserRole).where(UserRole.role_id == role_id)
+        if user_ids:
+            statement = statement.where(UserRole.user_id.in_(user_ids))
+
+        with session_getter() as session:
             session.exec(statement)
             session.commit()

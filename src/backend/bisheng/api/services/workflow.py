@@ -1,16 +1,29 @@
 from typing import Dict, Optional
 
 from bisheng.utils import generate_uuid
+import json
+import os
+from tempfile import TemporaryDirectory
+from typing import Dict, Optional
+from uuid import UUID
+
+from fastapi import UploadFile
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
 
 from bisheng.api.errcode.base import NotFoundError, UnAuthorizedError
 from bisheng.api.errcode.flow import WorkFlowInitError
 from bisheng.api.services.base import BaseService
+from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
+from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowOutputSchema, WorkflowInputSchema, \
+    WorkflowInputItem
+from bisheng.api.v1.schemas import ChatResponse
+from bisheng.cache.redis import redis_client
+from bisheng.cache.utils import save_uploaded_file
 from bisheng.chat.utils import SourceType
 from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -19,11 +32,13 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
+from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
+from loguru import logger
 
 
 class WorkFlowService(BaseService):
@@ -48,8 +63,13 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, page, page_size)
         else:
-            user_role = UserRoleDao.get_user_roles(user.user_id)
-            role_ids = [role.role_id for role in user_role]
+#<<<<<<< HEAD
+            # user_role = UserRoleDao.get_user_roles(user.user_id)
+            # role_ids = [role.role_id for role in user_role]
+# DONE merge_check 用下方
+#=======
+            role_ids = user.user_role
+#>>>>>>> feat/zyrs_0527
             role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.FLOW, AccessType.WORK_FLOW,
                                                                          AccessType.ASSISTANT_READ])
             flow_id_extra = []
@@ -190,6 +210,39 @@ class WorkFlowService(BaseService):
         return
 
     @classmethod
+    async def process_input_file(cls, login_user: UserPayload, upload_file: UploadFile):
+        """
+        处理工作流对话框输入的文件
+        """
+        file_id = generate_uuid()
+        # 保存文件内容到本地，并解析出文件内容
+        texts = []
+        with TemporaryDirectory() as tmp_dir:
+            file_path = os.path.join(tmp_dir, upload_file.filename)
+            with open(file_path, 'wb') as tmp_file:
+                tmp_file.write(upload_file.file.read())
+            texts, _, _, _ = read_chunk_text(file_path, upload_file.filename,
+                                             ['\n\n', '\n'], ['after', 'after'], 1000, 500)
+            if len(texts) == 0:
+                raise ValueError('文件解析为空')
+        upload_file.file.seek(0)
+        # 文件上传到minio
+        file_path = save_uploaded_file(upload_file.file, 'tmp', file_id)
+
+        # 数据存储到redis内
+        redis_client.set(f"workflow:dialog_file:{file_id}", json.dumps({
+            "path": file_path,
+            "content": "\n".join(texts),
+            "name": upload_file.filename
+        }, ensure_ascii=False))
+        return {
+            'id': file_id,
+            'name': upload_file.filename,
+            'size': upload_file.size,
+        }
+
+
+    @classmethod
     def convert_chat_response_to_workflow_event(cls, chat_response: ChatResponse) -> WorkflowEvent:
         workflow_event = WorkflowEvent(
             event=chat_response.category,
@@ -259,6 +312,10 @@ class WorkFlowService(BaseService):
                     type='text',
                     required=True,
                     value=''
+                ),
+                WorkflowInputItem(
+                    key='dialog_files_content',
+                    type='dialog_file',
                 )
             ]
             for one in event_input_schema.get('value', []):
@@ -269,6 +326,7 @@ class WorkFlowService(BaseService):
                 elif tmp.key == 'dialog_file_accept':
                     tmp.type = 'dialog_file_accept'
                 input_schema.value.append(tmp)
+
         workflow_event.input_schema = input_schema
         return workflow_event
 

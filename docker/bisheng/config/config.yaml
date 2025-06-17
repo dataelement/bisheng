@@ -75,3 +75,13 @@ logger_conf:
       rotation: "00:00"
       retention: "3 Days"
       enqueue: ture
+
+syslog_conf:
+  host: "172.22.64.206"
+  port: 514
+  name: "bisheng-backend"
+  log_format: "%(asctime)s %(levelname)s %(name)s: %(message)s"
+  date_format: "%b %d %H:%M:%S"
+
+domain:
+  web_domain: "123.57.174.112:3001"

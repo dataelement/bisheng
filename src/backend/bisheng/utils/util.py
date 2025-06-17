@@ -3,13 +3,14 @@ import inspect
 import re
 from functools import wraps
 from typing import Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from pydantic import BaseModel
 
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
 from bisheng.utils import constants
 from docstring_parser import parse  # type: ignore
+from datetime import datetime, timedelta
 
 
 def build_template_from_function(name: str, type_to_loader_dict: Dict, add_function: bool = False):
@@ -356,3 +357,68 @@ def _is_valid_url(url: str) -> bool:
     """Check if the url is valid."""
     parsed = urlparse(url)
     return bool(parsed.netloc) and bool(parsed.scheme)
+
+
+def replace_domain(url: str, new_domain: str) -> str:
+    """
+    替换URL中的域名（包括子域名和端口）
+
+    参数:
+        url (str): 原始URL
+        new_domain (str): 新域名（可包含端口，如 "example.com:8080"）
+
+    返回:
+        str: 替换域名后的新URL
+    """
+    # 解析URL
+    parsed = urlparse(url)
+
+    # 提取协议和路径等其他部分
+    scheme = parsed.scheme
+    path = parsed.path
+    params = parsed.params
+    query = parsed.query
+    fragment = parsed.fragment
+    netloc = new_domain
+
+    # 构建新URL
+    return urlunparse((scheme, netloc, path, params, query, fragment))
+
+
+
+
+
+def validate_date_range(
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        days_delta: int = 60
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """
+    处理日期范围参数，根据不同情况生成合理的起止日期。
+
+    参数:
+        start_date: 开始日期，默认为None
+        end_date: 结束日期，默认为None
+        days_delta: 时间间隔天数，默认为60天
+
+    返回:
+        处理后的 (start_date, end_date) 元组
+    """
+    if start_date and end_date:
+        # 情况1: 两个参数都有值，原样返回
+        return start_date, end_date
+
+    if start_date and not end_date:
+        # 情况2: 只有start_date，end_date为start_date + days_delta天
+        end_date = start_date + timedelta(days=days_delta)
+        return start_date, end_date
+
+    if end_date and not start_date:
+        # 情况3: 只有end_date，start_date为end_date - days_delta天
+        start_date = end_date - timedelta(days=days_delta)
+        return start_date, end_date
+
+    # 情况4: 都没有参数，end_date为当前时间，start_date为end_date - days_delta天
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days_delta)
+    return start_date, end_date
