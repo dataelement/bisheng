@@ -110,6 +110,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
   
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build backend and push
         id: docker_build_backend
         run: |
@@ -157,6 +163,12 @@ jobs:
       
       - name: Set Environment Variable
         run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       # 登录 docker hub
       - name: Login to DockerHub
