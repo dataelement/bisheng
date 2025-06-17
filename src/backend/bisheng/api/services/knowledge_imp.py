@@ -258,29 +258,12 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     """ 删除知识文件的向量数据和es数据 """
     if not file_ids:
         return True
+    logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     embeddings = FakeEmbedding()
     vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-    try:
-        if isinstance(vector_client.col, Collection):
-            pk = vector_client.col.query(
-                expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-            )
-        else:
-            pk = []
-    except Exception:
-        # 重试一次
-        logger.error("timeout_except")
-        vector_client.close_connection(vector_client.alias)
-        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-        pk = vector_client.col.query(
-            expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-        )
-
-    logger.info("query_milvus pk={}", pk)
-    if pk:
-        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
-        logger.info(f"act=delete_vector file_id={file_ids} res={res}")
+    vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
     vector_client.close_connection(vector_client.alias)
+    logger.info(f"delete_milvus file_ids={file_ids}")
 
     es_client = decide_vectorstores(
         knowledge.index_name, "ElasticKeywordsSearch", embeddings
