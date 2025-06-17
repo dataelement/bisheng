@@ -11,7 +11,7 @@ import { useContext, useEffect, useMemo, useState } from 'react';
 
 const loadCommitments = async () => {
     try {
-        const response = await fetch('/statement/data.json');
+        const response = await fetch(__APP_ENV__.BASE_URL + '/models/data.json');
         if (!response.ok) {
             throw new Error('Failed to fetch data');
         }
