@@ -169,13 +169,17 @@ def process_dataframe_to_markdown_files(
     if start_header_idx >= rows:
         append_header = False
 
+    # --- 核心逻辑修改：根据 append_header 决定如何切分数据 ---
     if append_header:
         # 根据用户规则处理表头索引越界问题
         if start_header_idx >= rows:
+            logger.warning(f"  表头起始行 {start_header_idx} 超出总行数 {rows}。将使用第一行作为表头。")
             start_header_idx, end_header_idx = 0, 0
         elif end_header_idx >= rows:
+            logger.warning(f"  表头结束行 {end_header_idx} 超出总行数 {rows}。将截断至最后一行。")
             end_header_idx = rows - 1
         
+        # 确保索引合法
         if start_header_idx < 0: start_header_idx = 0
         if end_header_idx < start_header_idx: end_header_idx = start_header_idx
 
@@ -198,7 +202,8 @@ def process_dataframe_to_markdown_files(
             markdown_content = generate_markdown_table_string(
                 header_rows_as_lists, [], num_columns
             )
-            file_name = f"{str(sheet_index)[:4].ljust(4, '0')}.md"
+            # BUG FIX: Use zfill for proper padding. This is file '000' for the sheet.
+            file_name = f"{str(sheet_index).zfill(2)}000.md"
             file_path = os.path.join(output_dir, file_name)
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
@@ -228,7 +233,8 @@ def process_dataframe_to_markdown_files(
             final_header_for_chunk, final_data_for_chunk, num_columns
         )
 
-        file_name = f"{sheet_index+str(i)[:4].ljust(4, '0')}.md"
+        # BUG FIX: Use zfill for proper 2-digit sheet and 3-digit file padding.
+        file_name = f"{str(sheet_index).zfill(2)}{str(i).zfill(3)}.md"
         file_path = os.path.join(output_dir, file_name)
 
         try:
@@ -415,10 +421,10 @@ def handler(
 if __name__ == "__main__":
     # 定义测试参数
     test_cache_dir = "/Users/tju/Desktop/"
-    test_file_name = "/Users/tju/Documents/Resources/bisheng/excel/sequential.xlsx"
+    test_file_name = "/Users/tju/Downloads/bug1.xlsx"
     # 测试 append_header=True 且索引越界的情况
-    test_header_rows = [25, 100] # start_header_index 超出范围
-    test_data_rows = 5
+    test_header_rows = [0, 0] # start_header_index 超出范围
+    test_data_rows = 2
     test_append_header = True
 
     # 调用 handler 函数
@@ -430,4 +436,3 @@ if __name__ == "__main__":
         data_rows=test_data_rows,
         append_header=test_append_header,
     )
-    
