@@ -413,6 +413,10 @@ class KnowledgeService(KnowledgeUtils):
                 file_share_url = redis_client.get(f"{cache_key}_file_path")
                 partitions = redis_client.get(f"{cache_key}_partitions")
                 res = []
+
+                # 根据分段顺序排序
+                cache_value = dict(sorted(cache_value.items()))
+
                 for key, val in cache_value.items():
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
@@ -1030,7 +1034,7 @@ class KnowledgeService(KnowledgeUtils):
             timeout=10,
         )
         logger.info(f"act=delete_vector_over {res}")
-        
+
         logger.info(
             f"act=delete_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index} res={res}"
         )
