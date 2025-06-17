@@ -1025,14 +1025,12 @@ class KnowledgeService(KnowledgeUtils):
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
         )
-        pk = vector_client.col.query(
+        res = vector_client.col.delete(
             expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
-            output_fields=["pk"],
             timeout=10,
         )
-        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
         logger.info(f"act=delete_vector_over {res}")
-
+        
         logger.info(
             f"act=delete_es knowledge_id={knowledge_id} file_id={file_id} chunk_index={chunk_index} res={res}"
         )
