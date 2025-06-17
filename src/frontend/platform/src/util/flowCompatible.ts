@@ -32,14 +32,7 @@ const comptibleStart = (node) => {
     }
     
     if (node.v == 1) {
-        node.group_params[1].params.shift({
-            "key": "current_time",
-            "global": "key",
-            "label": "当前时间",
-            "type": "var",
-            "value": ""
-        })
-        node.group_params[1].params.shift({
+        node.group_params[1].params.unshift({
             "key": "user_info",
             "global": "key",
             "label": "用户信息",
