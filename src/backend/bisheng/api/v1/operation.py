@@ -107,10 +107,11 @@ async def get_session_chart(request: Request, login_user: UserPayload = Depends(
         group_ids = list(set(group_ids) & set(all_group))
     if len(group_ids) == 0:
         return UnAuthorizedError.return_resp()
-    data, total = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date,
+    data, total, total_session_num = AuditLogService.get_session_chart(login_user, flow_ids, group_ids, start_date, end_date,
                                                     order_field, order_type, page, page_size)
     return resp_200(data={
         'data': data,
+        'total_session_num': total_session_num,
         'total': total
     })
 

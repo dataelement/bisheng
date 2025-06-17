@@ -960,15 +960,18 @@ class AuditLogService:
         all_user = UserGroupDao.get_groups_user(group_ids)
         all_user = [str(one) for one in all_user]
         if len(all_user) == 0:
-            return [], 0
+            return [], 0, 0
         logger.info(f"get_session_list all_user {all_user}")
-        res, total = ChatMessageDao.get_chat_info_group(filter_flow_ids, start_date, end_date, order_field,
+        result = ChatMessageDao.get_chat_info_group(filter_flow_ids, start_date, end_date, order_field,
                                                                order_type, page, page_size,all_user)
 
-        logger.info(f"get_session_list total={total} res={res}")
+        res = result['data']
+        total = result['total']
+        total_session_num = result['total_session_num']  # 新增的总会话数
+        logger.info(f"get_session_list total={total} res={res} total_session_num={total_session_num}")
 
         if len(res) == 0:
-            return res, total
+            return res, total, total_session_num
         flow_ids = [one['flow_id'] for one in res]
 
         # 获取这些应用所属的分组信息
@@ -1011,13 +1014,14 @@ class AuditLogService:
             one['group_info'] = [ {"id":one['id'],"group_name":one['name']} for one in user.get_user_groups(one['user_id'])]
             result.append(one)
 
-        return result, total
+        logger.info(f"get_session_chart result {result} {total} {total_session_num}")
+        return result, total, total_session_num
 
     @classmethod
     def export_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
                              end_date: datetime) -> str:
         """ 导出用户选择的统计数据 """
-        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        result, *_ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
         excel_data = [['用户组', '应用名称', '会话数', '用户输入消息数', '应用输出消息数', '违规消息数', "好评数1", "好评数2", "差评数"]]
         for one in result:
             excel_data.append([
@@ -1071,7 +1075,7 @@ class AuditLogService:
     def export_audit_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
                              end_date: datetime) -> str:
         """ 导出用户选择的统计数据 """
-        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        result, *_ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
         excel_data = [
             ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', '会话数(应用在给定时间区间内产生的会话数)',
              '用户输入消息数(给定时间区间内，某应用所有会话累计的用户输入消息数)', '应用输出消息数(给定时间区间内，某应用所有会话累计的应用输出消息数)',
@@ -1109,7 +1113,7 @@ class AuditLogService:
     def export_operational_session_chart(cls, user: UserPayload, flow_ids: List[str], group_ids: List[str], start_date: datetime,
                              end_date: datetime,like_type) -> str:
         """ 导出用户选择的统计数据 """
-        result, _ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
+        result, *_ = cls.get_session_chart(user, flow_ids, group_ids, start_date, end_date, 0, 0)
         excel_data = [
             ['用户组(用户所在部门名称)', '应用名称(用户所使用的应用名称)', "好评数(用户给予好评的消息数量)","差评数(用户给予差评的消息数量)",
              "应用满意度(好评数/(好评数+差评数) × 100%)","会话数(应用在给定时间区间内产生的会话数)"]]

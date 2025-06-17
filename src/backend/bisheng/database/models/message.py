@@ -538,6 +538,13 @@ class ChatMessageDao(MessageBase):
         """ 获取会话的一些信息，根据技能来聚合 """
         count_stat = select(func.count(func.distinct(func.concat(ChatMessage.flow_id,UserGroup.group_id)))).select_from(ChatMessage
             ).join(UserGroup, ChatMessage.user_id == UserGroup.user_id)
+        total_session_stat = select(
+            func.count(func.distinct(ChatMessage.chat_id))
+        ).select_from(
+            ChatMessage
+        ).join(
+            UserGroup, ChatMessage.user_id == UserGroup.user_id
+        )
         # 构建主查询，明确指定连接的起始表和连接条件
         sql = select(
             ChatMessage.flow_id,
@@ -582,15 +589,19 @@ class ChatMessageDao(MessageBase):
         if flow_ids:
             sql = sql.where(ChatMessage.flow_id.in_(flow_ids))
             count_stat = count_stat.where(ChatMessage.flow_id.in_(flow_ids))
+            total_session_stat = total_session_stat.where(ChatMessage.flow_id.in_(flow_ids))
         if start_date:
             sql = sql.where(ChatMessage.create_time >= start_date)
             count_stat = count_stat.where(ChatMessage.create_time >= start_date)
+            total_session_stat = total_session_stat.where(ChatMessage.create_time >= start_date)
         if end_date:
             sql = sql.where(ChatMessage.create_time <= end_date)
             count_stat = count_stat.where(ChatMessage.create_time <= end_date)
+            total_session_stat = total_session_stat.where(ChatMessage.create_time <= end_date)
         if user_ids:
             sql = sql.where(ChatMessage.user_id.in_(user_ids))
             count_stat = count_stat.where(ChatMessage.user_id.in_(user_ids))
+            total_session_stat = total_session_stat.where(ChatMessage.user_id.in_(user_ids))
 
         sql = sql.group_by(ChatMessage.flow_id,UserGroup.group_id)
         if order_field and order_type:
@@ -608,6 +619,7 @@ class ChatMessageDao(MessageBase):
         with session_getter() as session:
             res_list = session.exec(sql).all()
             total = session.scalar(count_stat)
+            total_session_num = session.scalar(total_session_stat)
         res = [
             {
                 'flow_id': one[0],
@@ -625,4 +637,11 @@ class ChatMessageDao(MessageBase):
                 'not_nosatisfaction':one[9] / one[4] if one[4]!=0 and one[9] != 0 else 1,
             } for one in res_list
         ]
-        return res, total
+        
+        # 返回结果，包含总session_num
+        return {
+            'data': res,
+            'total': total or 0,
+            'total_session_num': total_session_num or 0  # 处理可能的None值
+        }
+        

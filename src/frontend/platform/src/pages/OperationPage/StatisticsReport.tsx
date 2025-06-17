@@ -32,7 +32,7 @@ export default function StatisticsReport({ onBack, onJump }) {
 
 
     const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
-    const { page, pageSize, data: datalist, loading, total, setPage, reload, filterData } = useTable({}, (param) => {
+    const { page, pageSize, originData, data: datalist, loading, total, setPage, reload, filterData } = useTable({}, (param) => {
         const [start_date, end_date] = getStrTime(filters.dateRange)
         return getOperationChatStatisticsApi({
             flow_ids: filters.appName.map(el => el.value),
@@ -207,7 +207,7 @@ export default function StatisticsReport({ onBack, onJump }) {
 
                 {/* 分页 */}
                 <div className="bisheng-table-footer px-6 bg-background-login">
-                    <p className="desc"></p>
+                    <p className="desc">{`会话总数：${originData.total_session_num}`}</p>
                     <div>
                         <AutoPagination
                             page={page}

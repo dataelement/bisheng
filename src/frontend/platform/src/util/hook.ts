@@ -70,6 +70,7 @@ export function useTable<T extends object>(param, apiFun) {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState<T[]>([]);
+    const [originData, setOriginData] = useState<T[]>([]);
     const [loaded, setLoaded] = useState(false);
 
     const paramRef = useRef({});
@@ -82,6 +83,7 @@ export function useTable<T extends object>(param, apiFun) {
             console.log('res :>> ', res);
             if (requestId !== requestIdRef.current) return
             if (!("total" in res)) return console.error('该接口不支持分页，无法正常使用 useTable')
+            setOriginData(res);
             setData(res.data);
             setTotal(res.total);
             setLoading(false);
@@ -106,6 +108,7 @@ export function useTable<T extends object>(param, apiFun) {
     return {
         page: page.page,
         pageSize: page.pageSize,
+        originData,
         total,
         loaded,
         loading,
