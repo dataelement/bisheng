@@ -27,6 +27,7 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.database.models.variable_value import VariableDao
 from bisheng.processing.process import process_graph_cached, process_tweaks
+from bisheng.database.models.assistant import AssistantDao
 
 
 class FlowService(BaseService):
@@ -197,6 +198,14 @@ class FlowService(BaseService):
                 pass
         cls.update_flow_hook(request, user, flow_info)
         return resp_200(data=flow_version)
+
+    @classmethod
+    def judge_name_repeat(cls, name: str, flow_id: Optional[str] = None) -> bool:
+        """ 判断助手名字是否重复 """
+        flow = AssistantDao.get_assistant_by_name_filter_self(name, flow_id) or FlowDao.get_flow_by_name_filter_self(name, flow_id)
+        if flow:
+            return True
+        return False
 
     @classmethod
     def get_one_flow(cls, login_user: UserPayload, flow_id: str) -> UnifiedResponseModel[Flow]:

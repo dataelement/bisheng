@@ -143,7 +143,7 @@ class AssistantService(BaseService, AssistantUtils):
             -> UnifiedResponseModel[AssistantInfo]:
 
         # 检查下是否有重名
-        if cls.judge_name_repeat(assistant.name, assistant.user_id):
+        if cls.judge_name_repeat(assistant.name, assistant.id):
             return AssistantNameRepeatError.return_resp()
 
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
@@ -268,7 +268,7 @@ class AssistantService(BaseService, AssistantUtils):
         # 更新助手数据
         if req.name and req.name != assistant.name:
             # 检查下是否有重名
-            if cls.judge_name_repeat(req.name, assistant.user_id):
+            if cls.judge_name_repeat(req.name, assistant.id):
                 return AssistantNameRepeatError.return_resp()
             assistant.name = req.name
         assistant.desc = req.desc
@@ -630,9 +630,9 @@ class AssistantService(BaseService, AssistantUtils):
         return user.user_name
 
     @classmethod
-    def judge_name_repeat(cls, name: str, user_id: int) -> bool:
+    def judge_name_repeat(cls, name: str, flow_id: Optional[str] = None) -> bool:
         """ 判断助手名字是否重复 """
-        assistant = AssistantDao.get_assistant_by_name_user_id(name, user_id)
+        assistant = AssistantDao.get_assistant_by_name_filter_self(name, flow_id) or FlowDao.get_flow_by_name_filter_self(name, flow_id)
         if assistant:
             return True
         return False

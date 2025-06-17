@@ -111,6 +111,14 @@ class AssistantDao(AssistantBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_assistant_by_name_filter_self(cls, name: str, flow_id: Optional[str] = None) -> Assistant:
+        with session_getter() as session:
+            statement = select(Assistant).filter(Assistant.name == name,
+                                                 Assistant.id != flow_id,
+                                                 Assistant.is_delete == 0)
+            return session.exec(statement).first()
+
+    @classmethod
     def get_assistants(cls, user_id: int, name: str, assistant_ids_extra: List[str],
                        status: Optional[int], page: int, limit: int, assistant_ids: List[str] = None) -> (
             List[Assistant], int):

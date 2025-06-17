@@ -156,6 +156,12 @@ class FlowDao(FlowBase):
             return session.exec(statement).first()
 
     @classmethod
+    def get_flow_by_name_filter_self(cls, name: str, flow_id: Optional[str] = None) -> Optional[Flow]:
+        with session_getter() as session:
+            statement = select(Flow).where(Flow.id != flow_id, Flow.name == name)
+            return session.exec(statement).first()
+
+    @classmethod
     def get_flow_list_by_name(cls, name: str) -> List[Flow]:
         with session_getter() as session:
             statement = select(Flow).where(Flow.name.like('%{}%'.format(name)))

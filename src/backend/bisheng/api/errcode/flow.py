@@ -54,7 +54,7 @@ class WorkFlowNodeRunMaxTimesError(BaseErrorCode):
 
 class WorkflowNameExistsError(BaseErrorCode):
     Code: int = 10529
-    Msg: str = '工作流名称重复'
+    Msg: str = '应用名称重复'
 
 
 class FlowTemplateNameError(BaseErrorCode):

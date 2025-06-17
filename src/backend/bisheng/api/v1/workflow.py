@@ -134,11 +134,8 @@ async def workflow_ws(*,
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(get_login_user)):
     """Create a new flow."""
     # 判断用户是否重复技能名
-    with session_getter() as session:
-        if session.exec(
-                select(Flow).where(Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value,
-                                   Flow.user_id == login_user.user_id)).first():
-            raise WorkflowNameExistsError.http_exception()
+    if FlowService.judge_name_repeat(flow.name):
+        raise WorkflowNameExistsError.http_exception()
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     db_flow.create_time = None
@@ -248,6 +245,8 @@ async def update_flow(*,
 
     flow_data = flow.model_dump(exclude_unset=True)
 
+    if FlowService.judge_name_repeat(flow.name):
+        raise WorkflowNameExistsError.http_exception()
     # TODO:  验证工作流是否可以使用
 
     if db_flow.status == FlowStatus.ONLINE.value and (
