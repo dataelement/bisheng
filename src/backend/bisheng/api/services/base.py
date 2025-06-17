@@ -27,7 +27,7 @@ class BaseService:
         share_url = minio_client.get_share_link(logo_path)
         # 去除前缀通过nginx访问，防止访问不到文件
         # TODO 去掉此解决方案，改为minio生成的share_link就是可访问的https或者http的
-        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
+        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOINT', '')
         share_url = share_url.replace(f"http://{minio_share}", "")
 
         # 缓存5天， 临时链接有效期为7天

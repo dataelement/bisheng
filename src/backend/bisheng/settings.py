@@ -221,7 +221,7 @@ class Settings(BaseModel):
                 "SCHEMA": self.object_storage.minio.minio_schema,
                 "CERT_CHECK": self.object_storage.minio.cert_check,
                 "MINIO_ENDPOINT": self.object_storage.minio.endpoint,
-                "MINIO_SHAREPOIN": self.object_storage.minio.sharepoint,  # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
+                "MINIO_SHAREPOINT": self.object_storage.minio.sharepoint,  # 确保和nginx的代理地址一致。同一个docker-compose启动可以直接使用默认值
                 "MINIO_ACCESS_KEY": self.object_storage.minio.access_key,
                 "MINIO_SECRET_KEY": self.object_storage.minio.secret_key,
             }

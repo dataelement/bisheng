@@ -41,7 +41,7 @@ object_storage:
     schema: !env ${BS_MINIO_SCHEMA}
     cert_check: !env ${BS_MINIO_CERT_CHECK}
     endpoint: !env ${BS_MINIO_ENDPOINT}
-    sharepoint: !env ${BS_MINIO_SHAREPOIN}
+    sharepoint: !env ${BS_MINIO_SHAREPOINT}
     access_key: !env ${BS_MINIO_ACCESS_KEY}
     secret_key: !env ${BS_MINIO_SECRET_KEY}
 
