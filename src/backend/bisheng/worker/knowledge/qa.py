@@ -18,7 +18,7 @@ def insert_qa_celery(qa_id: int):
         if not qa_info:
             logger.error(f"QA with id {qa_id} not found.")
             return
-        knowledge_info = KnowledgeDao.get_by_id(qa_info.knowledge_id)
+        knowledge_info = KnowledgeDao.query_by_id(qa_info.knowledge_id)
         if not knowledge_info:
             logger.error(f"Knowledge with id {qa_info.knowledge_id} not found.")
             return
