@@ -2,6 +2,7 @@ import os
 from uuid import uuid4
 
 import fitz  # PyMuPDF
+from loguru import logger
 
 
 def convert_pdf_to_md(output_dir, pdf_path, doc_id):
@@ -105,7 +106,8 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
 
     except Exception as e:
-        raise e
+        logger.exception(f"Error processing pdf: {e}")
+        raise Exception("文档解析失败")
     finally:
         if doc:
             doc.close()
