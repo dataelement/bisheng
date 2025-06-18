@@ -40,7 +40,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                 serverItem.children = server.models.reduce((res, model) => {
                     if (model.model_type !== 'embedding' || !model.online) return res
                     const modelItem = { value: model.id, label: model.model_name }
-                    models[model.id] = model.model_name
+                    models[model.id] = server.name + '/' + model.model_name
                     // 找到默认值
                     if (model.id === embedding_model_id) {
                         _model = [serverItem, modelItem]

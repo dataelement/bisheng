@@ -1,7 +1,7 @@
 services:
   bisheng-unstructured:
     container_name: bisheng-unstructured
-    image: dataelement/bisheng-unstructured:v0.0.3.11
+    image: dataelement/bisheng-unstructured:v0.0.3.14
     ports:
       - "10001:10001"
     environment:

@@ -252,7 +252,14 @@
 	padding: 2px 4px !important;
 	word-break: break-all !important;
 }
-
+.file-vditor .vditor-reset{
+	font-size: 14px;
+	color: #6b7280;
+	padding: 0 !important;
+}
+.file-vditor .vditor-content{
+	min-height: 20px;
+}
 
 /* .react-flow.theme-attribution {
 	animation: scrollBackground 10s linear infinite;
@@ -306,3 +313,27 @@
 	text-align: center;
 	opacity: 0.2;
 }
+
+
+
+/* react-markdown 表格样式 */
+.react-markdown table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.react-markdown th, .react-markdown td {
+	border: 1px solid #dfe2e5;
+	padding: 2px 4px;
+}
+
+.react-markdown th {
+	background-color: #fafbfc;
+	text-align: left;
+}
+.react-markdown tr:nth-child(even) {
+	background-color: #f9f9f9;
+}
+.react-markdown tr:hover {
+	background-color: #f1f1f1;
+  }

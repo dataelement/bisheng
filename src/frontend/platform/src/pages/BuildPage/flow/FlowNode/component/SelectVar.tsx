@@ -343,7 +343,7 @@ const SelectVar = forwardRef(({
         <SelectContent position="popper" avoidCollisions={false}>
             <div className="flex max-h-[360px] ">
                 {/* 三级级联菜单 */}
-                <div className="w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
+                <div className="w-36 min-w-36 border-l first:border-none overflow-y-auto  scrollbar-hide">
                     {nodeTemps.map(item =>
                         <div
                             className={`${select[0] === item.id && 'bg-[#EBF0FF]'} relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`}
@@ -361,7 +361,7 @@ const SelectVar = forwardRef(({
                         </div>
                     )}
                 </div>
-                {!!vars.length && <div className="w-36 border-l first:border-none overflow-y-auto scrollbar-hide">
+                {!!vars.length && <div className="w-36 min-w-36 border-l first:border-none overflow-y-auto scrollbar-hide">
                     {vars.map(v =>
                         <div
                             className={`${select[1] === v.value && 'bg-[#EBF0FF]'} relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`}
@@ -387,7 +387,7 @@ const SelectVar = forwardRef(({
                     )}
                 </div>}
                 {
-                    !!questions.length && <div className="w-44 border-l first:border-none">
+                    !!questions.length && <div className="w-44 min-w-36 border-l first:border-none">
                         {questions.map(q =>
                             <div
                                 className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"

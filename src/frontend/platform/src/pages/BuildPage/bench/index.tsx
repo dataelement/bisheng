@@ -5,17 +5,17 @@ import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
+import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
-import { userContext } from "@/contexts/userContext";
-import { useNavigate } from "react-router-dom";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -24,12 +24,14 @@ export interface FormErrors {
     inputPlaceholder: string;
     modelNames: string[] | string[][];
     webSearch?: Record<string, string>; // 新增动态错误存储
+    systemPrompt: string;
     model: string;
     kownledgeBase: string;
 }
 
 export interface ChatConfigForm {
     menuShow: boolean;
+    systemPrompt: string;
     sidebarIcon: {
         enabled: boolean;
         image: string;
@@ -53,8 +55,11 @@ export interface ChatConfigForm {
     webSearch: {
         enabled: boolean;
         tool: string;
-        bingKey: string;
-        bingUrl: string;
+        params: {
+            api_key?: string;
+            base_url?: string;
+            engine?: string;
+        },
         prompt: string;
     };
     knowledgeBase: {
@@ -181,29 +186,43 @@ export default function index() {
                         {/* Model Management */}
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">对话模型管理</p>
-                            <ModelManagement
-                                models={formData.models}
-                                errors={errors.modelNames}
-                                error={errors.model}
-                                onAdd={addModel}
-                                onRemove={(index) => {
-                                    const newModels = [...formData.models];
-                                    newModels.splice(index, 1);
-                                    setFormData(prev => ({ ...prev, models: newModels }));
-                                }}
-                                onModelChange={handleModelChange}
-                                onNameChange={(index, name) => {
-                                    handleModelNameChange(index, name);
-                                }}
-                            />
+                            <div className="mb-6">
+                                <ModelManagement
+                                    models={formData.models}
+                                    errors={errors.modelNames}
+                                    error={errors.model}
+                                    onAdd={addModel}
+                                    onRemove={(index) => {
+                                        const newModels = [...formData.models];
+                                        newModels.splice(index, 1);
+                                        setFormData(prev => ({ ...prev, models: newModels }));
+                                    }}
+                                    onModelChange={handleModelChange}
+                                    onNameChange={(index, name) => {
+                                        handleModelNameChange(index, name);
+                                    }}
+                                />
+                            </div>
                             <FormInput
-                                label={<Label className="bisheng-label block pt-2">最大字符数</Label>}
+                                label={<Label className="bisheng-label block pt-2">知识库/联网检索结果最大字符数</Label>}
                                 type="number"
                                 value={formData.maxTokens}
                                 error={''}
                                 placeholder="模型支持的最大字符数"
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('maxTokens', v, 100)}
+                            />
+                            <FormInput
+                                label={<Label className="bisheng-label">系统提示词</Label>}
+                                isTextarea
+                                value={formData.systemPrompt}
+                                error={errors.systemPrompt}
+                                placeholder="你是毕昇 AI 助手"
+                                maxLength={30000}
+                                onChange={(val) => setFormData(prev => ({
+                                    ...prev,
+                                    systemPrompt: val
+                                }))}
                             />
                         </div>
 
@@ -299,6 +318,7 @@ export default function index() {
 const useChatConfig = () => {
     const [formData, setFormData] = useState<ChatConfigForm>({
         menuShow: true,
+        systemPrompt: '你是毕昇 AI 助手',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
@@ -311,8 +331,10 @@ const useChatConfig = () => {
         webSearch: {
             enabled: true,
             tool: 'bing',
-            bingKey: '',
-            bingUrl: 'https://api.bing.microsoft.com/v7.0/search',
+            params: {
+                api_key: '',
+                base_url: 'https://api.bing.microsoft.com/v7.0/search'
+            },
             prompt: `# 以下内容是基于用户发送的消息的搜索结果:
 {search_results}
 在我给你的搜索结果中，每个结果都是[webpage X begin]...[webpage X end]格式的，X代表每篇文章的数字索引。请在适当的情况下在句子末尾引用上下文。请按照引用编号[citation:X]的格式在答案中对应部分引用上下文。如果一句话源自多个上下文，请列出所有相关的引用编号，例如[citation:3][citation:5]，切记不要将引用集中在最后返回引用编号，而是在答案对应部分列出。
@@ -342,12 +364,17 @@ const useChatConfig = () => {
 
     useEffect(() => {
         getWorkstationConfigApi().then((res) => {
+            // res.webSearch.params = {
+            //     api_key: '',
+            //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
+            // }
             res && setFormData(res);
         })
     }, [])
 
     const [errors, setErrors] = useState<FormErrors>({
         sidebarSlogan: '',
+        systemPrompt: '',
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
@@ -355,6 +382,7 @@ const useChatConfig = () => {
         model: '',
         modelNames: [],
     });
+    console.log('errors :>> ', errors);
 
     const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -461,21 +489,57 @@ const useChatConfig = () => {
 
         // Validate web search
         if (formData.webSearch.enabled) {
-            const webSearchErrors: Record<string, string> = {};
+            const webSearchErrors: any = {};
 
             // 根据当前工具动态校验
             switch (formData.webSearch.tool) {
                 case 'bing':
-                    if (!formData.webSearch.bingKey.trim()) {
-                        webSearchErrors.bingKey = '必填字段';
+                    if (!formData.webSearch.params.api_key?.trim()) {
+                        webSearchErrors.params = {
+                            ...webSearchErrors.params,
+                            api_key: '不能为空'
+                        };
                         isValid = false;
                     }
-                    if (!formData.webSearch.bingUrl.trim()) {
-                        webSearchErrors.bingUrl = '必填字段';
+                    if (!formData.webSearch.params.base_url?.trim()) {
+                        webSearchErrors.params = {
+                            ...webSearchErrors.params,
+                            base_url: '不能为空'
+                        };
                         isValid = false;
                     }
                     break;
-                // 未来其他工具的校验可以在这里扩展
+
+                case 'bocha':
+                case 'jina':
+                case 'tavily':
+                    if (!formData.webSearch.params.api_key?.trim()) {
+                        webSearchErrors.params = {
+                            ...webSearchErrors.params,
+                            api_key: '不能为空'
+                        };
+                        isValid = false;
+                    }
+                    break;
+
+                case 'serp':
+                    if (!formData.webSearch.params.api_key?.trim()) {
+                        webSearchErrors.params = {
+                            ...webSearchErrors.params,
+                            api_key: '不能为空'
+                        };
+                        isValid = false;
+                    }
+                    if (!formData.webSearch.params.engine?.trim()) {
+                        webSearchErrors.params = {
+                            ...webSearchErrors.params,
+                            engine: '不能为空'
+                        };
+                        isValid = false;
+                    }
+                    break;
+
+                // 其他工具的校验可以在这里添加
             }
 
             if (Object.keys(webSearchErrors).length) {

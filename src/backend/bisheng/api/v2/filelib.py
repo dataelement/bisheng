@@ -7,7 +7,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
-                                    UnifiedResponseModel, resp_200, resp_500)
+                                    UnifiedResponseModel, resp_200, resp_500, ExcelRule)
 from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.cache.utils import file_download, save_download_file
@@ -77,19 +77,26 @@ def clear_knowledge_files(*, request: Request, knowledge_id: int):
 
 
 @router.post('/file/{knowledge_id}')
-async def upload_file(request: Request,
-                      knowledge_id: int,
-                      separator: Optional[List[str]] = Form(default=None,
-                                                            description='切分文本规则, 不传则为默认'),
-                      separator_rule: Optional[List[str]] = Form(
-                          default=None, description='切分规则前还是后进行切分；before/after'),
-                      chunk_size: Optional[int] = Form(default=None, description='切分文本长度，不传则为默认'),
-                      chunk_overlap: Optional[int] = Form(default=None,
-                                                          description='切分文本重叠长度，不传则为默认'),
-                      callback_url: Optional[str] = Form(default=None, description='回调地址'),
-                      file_url: Optional[str] = Form(default=None, description='文件地址'),
-                      file: Optional[UploadFile] = File(default=None, description='上传文件'),
-                      background_tasks: BackgroundTasks = None):
+async def upload_file(
+        request: Request,
+        knowledge_id: int,
+        separator: Optional[List[str]] = Form(default=None,
+                                            description='切分文本规则, 不传则为默认'),
+        separator_rule: Optional[List[str]] = Form(
+          default=None, description='切分规则前还是后进行切分；before/after'),
+        chunk_size: Optional[int] = Form(default=None, description='切分文本长度，不传则为默认'),
+        chunk_overlap: Optional[int] = Form(default=None,
+                                          description='切分文本重叠长度，不传则为默认'),
+        callback_url: Optional[str] = Form(default=None, description='回调地址'),
+        file_url: Optional[str] = Form(default=None, description='文件地址'),
+        file: Optional[UploadFile] = File(default=None, description='上传文件'),
+        background_tasks: BackgroundTasks = None,
+        retain_images: Optional[int] = Form(default=1, description='保留文档图片'),
+        force_ocr: Optional[int] = Form(default=0, description='启用OCR'),
+        enable_formula: Optional[int] = Form(default=1, description='latex公式识别'),
+        filter_page_header_footer: Optional[int] = Form(default=0, description='过滤页眉页脚'),
+        excel_rule: Optional[ExcelRule] = Form(default={}, description="excel rule"),
+):
     if file:
         file_name = file.filename
         if not file_name:
@@ -106,8 +113,13 @@ async def upload_file(request: Request,
                                     separator_rule=separator_rule,
                                     chunk_size=chunk_size,
                                     chunk_overlap=chunk_overlap,
+                                    retain_images=retain_images,
+                                    force_ocr=force_ocr,
+                                    enable_formula=enable_formula,
+                                    filter_page_header_footer=filter_page_header_footer,
                                     callback_url=callback_url,
-                                    file_list=[KnowledgeFileOne(file_path=file_path)])
+                                    file_list=[KnowledgeFileOne(file_path=file_path, excel_rule=excel_rule)])
+
     res = KnowledgeService.process_knowledge_file(request=request,
                                                   login_user=loging_user,
                                                   background_tasks=background_tasks,

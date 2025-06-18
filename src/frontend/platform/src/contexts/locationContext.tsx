@@ -66,7 +66,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [appConfig, setAppConfig] = useState<any>({
     libAccepts: [],
     noFace: true,
+<<<<<<< HEAD
     disableCopyFlowIds: [],
+=======
+>>>>>>> eba9e31
   })
 
   const loadConfig = () => {
@@ -87,6 +90,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           register: !!res.enable_registration,
           disableCopyFlowIds: res.disable_copy_flow_ids || [],
           uploadFileMaxSize: res.uploaded_files_maximum_size || 50,
+          enableEtl4lm: res.enable_etl4lm
         });
 
         // backend version

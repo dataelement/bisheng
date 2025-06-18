@@ -49,6 +49,7 @@ export const EditFlowSettings: React.FC<InputProps> = ({
           placeholder="File name"
           id="name"
           maxLength={maxLength}
+          showCount
         />
       </Label>
       <Label>

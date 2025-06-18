@@ -341,7 +341,7 @@ class ChatClient:
             # 获取minio的share地址，把share域名去掉, 为毕昇的部署方案特殊处理下
             for one in self.gpts_agent.tools:
                 if one.name == "bisheng_code_interpreter":
-                    minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
+                    minio_share = settings.get_minio_conf().sharepoint
                     answer = answer.replace(f"http://{minio_share}", "")
             answer_end_type = 'end'
             # 如果是流式的llm则用end_cover结束, 覆盖之前流式的输出

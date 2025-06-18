@@ -16,13 +16,11 @@ import requests
 from appdirs import user_cache_dir
 from fastapi import UploadFile
 
-from bisheng.settings import settings
-from bisheng.utils.minio_client import MinioClient, tmp_bucket
+from bisheng.utils.minio_client import tmp_bucket, minio_client
 
 CACHE: Dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
-
 
 def create_cache_folder(func):
     def wrapper(*args, **kwargs):
@@ -171,10 +169,6 @@ def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
 
 
 def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str = tmp_bucket) -> str:
-    if not settings.get_knowledge().get('minio'):
-        raise ValueError('未找到minio的配置')
-
-    minio_client = MinioClient()
     minio_client.upload_minio_file(object_name, file.file, bucket_name, file.size)
     return minio_client.get_share_link(object_name, bucket_name)
 
@@ -221,17 +215,10 @@ def save_uploaded_file(file, folder_name, file_name, bucket_name: str = tmp_buck
         output_file = BytesIO()
         output_file = convert_encoding_cchardet(file, output_file)
 
-    if settings.get_knowledge().get('minio'):
-        minio_client = MinioClient()
-        # 存储oss
-        file_byte = output_file.read()
-        minio_client.upload_tmp(file_name, file_byte)
-        file_path = minio_client.get_share_link(file_name, bucket_name)
-    else:
-        file_path = folder_path / f'{md5_name}_{file_name}'
-        with open(file_path, 'wb') as new_file:
-            while chunk := output_file.read(8192):
-                new_file.write(chunk)
+    # 存储到minio
+    file_byte = output_file.read()
+    minio_client.upload_tmp(file_name, file_byte)
+    file_path = minio_client.get_share_link(file_name, bucket_name)
     output_file.close()
     return file_path
 

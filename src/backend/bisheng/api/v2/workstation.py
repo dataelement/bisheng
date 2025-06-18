@@ -1,10 +1,11 @@
+from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
+
 from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, resp_200
+from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, resp_200, ExcelRule
 from bisheng.cache.utils import save_download_file
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
-from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
 
 router = APIRouter(prefix='/workstation', tags=['OpenAPI', 'Chat'])
 
@@ -87,10 +88,11 @@ async def parseFileContent(file: UploadFile = File(...)):
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
         file_path,
         file.filename,
-        ['\n\n\n\n\n'],
-        [],
-        102400,
+        ['\n\n', '\n'],
+        ['after', 'after'],
+        1000,
         0,
+        excel_rule=ExcelRule()
     )
 
     return resp_200(' '.join(raw_texts))

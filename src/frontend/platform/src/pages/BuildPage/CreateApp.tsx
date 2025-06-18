@@ -10,6 +10,7 @@ import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
 import { getCommitmentApi, readTempsDatabase, setCommitmentApi } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant"; // 假设有对应的接口
+import { getAssistantModelConfig, getLlmDefaultModel } from "@/controllers/API/finetune";
 import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflow";
 // import { createWorkflowApi, getWorkflowApi, updateWorkflowApi } from "@/controllers/API/workflow"; // 假设有对应的接口
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -182,6 +183,32 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     const node = tempDataRef.current.data.nodes[i];
                     await copyReportTemplate(node.data)
                 }
+
+                // 使用默认模型 清空知识库和工具
+                const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
+                const workflowModelId = workflow.model_id
+                const assistantModelId = assistant.llm_list.find(item => item.default).model_id
+                delete tempDataRef.current.data.source
+
+                tempDataRef.current.data.nodes.forEach(node => {
+                    if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
+                        node.data.group_params.forEach(group =>
+                            group.params.forEach(param => {
+                                if (param.type === 'bisheng_model') {
+                                    param.value = workflowModelId
+                                } else if (param.type === 'agent_model') {
+                                    param.value = assistantModelId
+                                } else if (param.type === 'knowledge_select_multi') {
+                                    param.value.value = []
+                                } else if (param.type === 'qa_select_multi') {
+                                    param.value = []
+                                } else if (param.type === 'add_tool') {
+                                    param.value = []
+                                }
+                            })
+                        )
+                    }
+                })
                 const res = await captureAndAlertRequestErrorHoc(createWorkflowApi(formData.name, formData.desc, formData.url, tempDataRef.current))
                 appConfig.securityCommitment && setCommitmentApi(res.id, commitmentId)
                 if (res) navigate('/flow/' + res.id)
@@ -246,6 +273,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             id="name"
                             name="name"
                             maxLength={50}
+                            showCount
                             placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')}
                             className="mt-3"
                             value={formData.name}

@@ -37,15 +37,19 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     useImperativeHandle(ref, () => ({
         load(data, files) {
+            console.log(111, data, files);
+
             paramsRef.current = data
             fileCachesRef.current = {}
 
             allFilesRef.current = files.map(el => ({
                 label: el.name,
-                value: el.path
+                value: el.file_path
             }))
             setFiles([...allFilesRef.current])
-            loadchunks(fileValueRef.current || files[0].path) // default first 
+            console.log(files[0].file_path, fileValueRef.current);
+
+            loadchunks(fileValueRef.current || files[0].file_path) // default first 
         }
     }))
 
@@ -53,8 +57,13 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
     const [previewFileUrl, setFileUrl] = useState('')
     const [isUns, setIsUns] = useState(false)
     const [partitions, setPartitions] = useState<any>([])
+
+
+
     // 加载文件分段结果
     const loadchunks = async (fileValue) => {
+        console.log(fileValue, '5555');
+
         if (!fileValue) return
         setLoading(true)
         setFileValue(fileValue)
@@ -106,7 +115,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
         </div>
     )
 
-    return <div className="h-full overflow-y-auto p-2">
+
+    return {/* 原预览页面，暂时无用
         <div className="flex gap-2">
             <SelectSearch value={fileValue} options={files}
                 selectPlaceholder=''
@@ -157,8 +167,8 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
                     }
                 />
             </DialogContent>
-        </Dialog>
-    </div>
+        </Dialog> */}
+
 });
 
 export default FileUploadParagraphs

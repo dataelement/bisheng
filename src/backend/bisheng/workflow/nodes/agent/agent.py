@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
+from langgraph.prebuilt import create_react_agent
 from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
@@ -103,12 +104,15 @@ class AgentNode(BaseNode):
         sql_agent_tools = self.init_sql_agent_tool()
         func_tools.extend(knowledge_tools)
         func_tools.extend(sql_agent_tools)
-        self._agent = ConfigurableAssistant(
-            agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
-            tools=func_tools,
-            llm=self._llm,
-            assistant_message=system_prompt,
-        )
+        if self._agent_executor_type == 'ReAct':
+            self._agent = ConfigurableAssistant(
+                agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
+                tools=func_tools,
+                llm=self._llm,
+                assistant_message=system_prompt,
+            )
+        else:
+            self._agent = create_react_agent(self._llm, func_tools, prompt=system_prompt, checkpointer=False)
 
     def _init_tools(self):
         if self._tools:
@@ -370,5 +374,6 @@ class AgentNode(BaseNode):
                 output = list(output.values())[0]
             return output, llm_callback.reasoning_content
         else:
-            result = self._agent.invoke(chat_history, config=config)
+            result = self._agent.invoke({'messages': chat_history}, config=config)
+            result = result['messages']
             return result[-1].content, llm_callback.reasoning_content

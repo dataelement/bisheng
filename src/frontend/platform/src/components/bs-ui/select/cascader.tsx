@@ -37,10 +37,11 @@ const Item = (props: {
     isAsync: boolean,
     value: string,
     option: Option,
+    isHovered: boolean,
     onHover: (o: Option, isLeaf: boolean) => void,
     onClick: (o: Option, isLeaf: boolean) => void
 }) => {
-    const { isAsync, value, option, onHover, onClick } = props
+    const { isAsync, value, option, isHovered, onHover, onClick } = props
     const [loading, setLoading] = useState(false)
     const isLeaf = option.isLeaf === false ? option.isLeaf : !option.children || option.children.length === 0
 
@@ -56,7 +57,8 @@ const Item = (props: {
 
     return <div
         data-focus={value === option.value}
-        className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+        data-hovered={isHovered}
+        className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] data-[hovered=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 dark:data-[hovered=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
         onMouseEnter={() => onHover(option, isLeaf)}
         onClick={handleClick}>
         <span className="w-28 overflow-hidden text-ellipsis">{option.label}</span>
@@ -71,13 +73,29 @@ const Col = (props: {
     onHover: (o: Option, isLeaf: boolean) => void,
     onClick: (o: Option, isLeaf: boolean) => void
 }) => {
-    const { options, ...opros } = props
+    const { options, value, ...opros } = props
+    const [hoveredOption, setHoveredOption] = useState<Option | null>(null)
+
+    const handleHover = (option: Option, isLeaf: boolean) => {
+        setHoveredOption(option)
+        props.onHover(option, isLeaf)
+    }
+
     return <div className="w-36 border-l first:border-none max-h-80 overflow-y-auto">
         {
-            options.map(option => <Item {...opros} option={option} key={option.value} />)
+            options.map(option => (
+                <Item
+                    {...opros}
+                    option={option}
+                    key={option.value}
+                    isHovered={hoveredOption?.value === option.value}
+                    onHover={handleHover}
+                />
+            ))
         }
     </div>
 }
+
 
 const resetCols = (values, options) => {
     const vals = [options]

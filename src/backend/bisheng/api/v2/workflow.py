@@ -1,6 +1,12 @@
 import uuid
-from uuid import UUID
 from typing import Optional, List
+from uuid import UUID
+
+from fastapi import APIRouter, Request, Body, Path, WebSocket, WebSocketException
+from fastapi import status as http_status
+from fastapi.responses import ORJSONResponse
+from loguru import logger
+from starlette.responses import StreamingResponse
 
 from fastapi import APIRouter, Request, Body, UploadFile, File, Path, WebSocket, WebSocketException, status as http_status
 from loguru import logger
@@ -14,13 +20,8 @@ from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.worker.workflow.redis_callback import RedisCallback
-from bisheng.worker.workflow.tasks import execute_workflow
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
-from fastapi import APIRouter, Request, Body, Path, WebSocket, WebSocketException
-from fastapi import status as http_status
-from fastapi.responses import ORJSONResponse
-from loguru import logger
-from starlette.responses import StreamingResponse
 
 router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
 
@@ -33,9 +34,14 @@ async def invoke_workflow(request: Request,
                           # DONE merge_check 1
                           # 1.2.0
                           message_id: Optional[int] = Body(default=None, description='消息ID'),
+<<<<<<< HEAD
                           # 0527
                           # message_id: Optional[str] = Body(default=None, description='消息ID'),
                           session_id: Optional[str] = Body(default=None, description='会话ID,一次workflow调用的唯一标识')):
+=======
+                          session_id: Optional[str] = Body(default=None,
+                                                           description='会话ID,一次workflow调用的唯一标识')):
+>>>>>>> eba9e31
     login_user = get_default_operator()
     workflow_id = workflow_id.hex
 
@@ -70,8 +76,10 @@ async def invoke_workflow(request: Request,
         if status_info['status'] == WorkflowStatus.INPUT.value and user_input:
             workflow.set_user_input(user_input, message_id)
             workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+            continue_workflow.delay(unique_id, workflow_id, chat_id, str(login_user.user_id))
 
     logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
+
     async def handle_workflow_event(event_list: List):
         async for event in workflow.get_response_until_break():
             if event.category == WorkflowEventType.NodeRun.value:
@@ -131,6 +139,7 @@ async def stop_workflow(request: Request,
     workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
     workflow.set_workflow_stop()
     return resp_200()
+
 
 @router.websocket('/chat/{workflow_id}')
 async def workflow_ws(*,

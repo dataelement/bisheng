@@ -261,9 +261,16 @@ sftp-config.json
 /tmp/*
 sftp-config.json
 
+<<<<<<< HEAD
 
 /docker_*
 /src/backend/poetry.toml
 /src/backend/bisheng/config.yaml
 /src/backend/build.sh
 /DEV.md
+=======
+# Docker local files
+docker/data/*
+docker/mysql/data/*
+docker/office/bisheng/*.gz
+>>>>>>> eba9e31

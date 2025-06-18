@@ -1,14 +1,18 @@
 import io
-from datetime import timedelta
+import json
 from typing import BinaryIO
 
 import minio
 from bisheng.settings import settings
 from loguru import logger
-from minio.commonconfig import CopySource
+from minio.commonconfig import Filter, CopySource
+from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
 
-bucket = 'bisheng'
-tmp_bucket = 'tmp-dir'
+from bisheng.settings import settings
+
+_MinioConf = settings.get_minio_conf()
+bucket = _MinioConf.public_bucket
+tmp_bucket = _MinioConf.tmp_bucket
 
 
 class MinioClient:
@@ -19,22 +23,74 @@ class MinioClient:
     bucket = bucket
 
     def __init__(self) -> None:
-        if 'minio' not in settings.get_knowledge(
-        ) or not settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'):
-            raise Exception('请配置minio地址等相关配置')
         self.minio_client = minio.Minio(
-            endpoint=settings.get_knowledge().get('minio').get('MINIO_ENDPOINT'),
-            access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
-            secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
-            secure=settings.get_knowledge().get('minio').get('SCHEMA'),
-            cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
+            endpoint=_MinioConf.endpoint,
+            access_key=_MinioConf.access_key,
+            secret_key=_MinioConf.secret_key,
+            secure=_MinioConf.schema,
+            cert_check=_MinioConf.cert_check)
         self.minio_share = minio.Minio(
-            endpoint=settings.get_knowledge().get('minio').get('MINIO_SHAREPOIN'),
-            access_key=settings.get_knowledge().get('minio').get('MINIO_ACCESS_KEY'),
-            secret_key=settings.get_knowledge().get('minio').get('MINIO_SECRET_KEY'),
-            secure=settings.get_knowledge().get('minio').get('SCHEMA'),
-            cert_check=settings.get_knowledge().get('minio').get('CERT_CHECK'))
-        self.mkdir(new_bucket=bucket)
+            endpoint=_MinioConf.sharepoint,
+            access_key=_MinioConf.access_key,
+            secret_key=_MinioConf.secret_key,
+            secure=_MinioConf.schema,
+            cert_check=_MinioConf.cert_check)
+
+        self._init_bucket_conf()
+
+    def _init_bucket_conf(self):
+        # create need bucket
+        self.mkdir(new_bucket=self.bucket)
+        self.mkdir(new_bucket=self.tmp_bucket)
+
+        anonymous_read_policy = {
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": ["*"]
+                },
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{self.bucket}/**"]
+            }]
+        }
+        tmp_policy = {
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": {
+                    "AWS": ["*"]
+                },
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{self.tmp_bucket}/**"]
+            }]
+        }
+
+        try:
+            policy = self.minio_client.get_bucket_policy(self.bucket)
+        except Exception as e:
+            if str(e).find('NoSuchBucketPolicy') == -1:
+                raise e
+            self.minio_client.set_bucket_policy(self.bucket, json.dumps(anonymous_read_policy))
+
+        try:
+            policy = self.minio_client.get_bucket_policy(self.tmp_bucket)
+        except Exception as e:
+            if str(e).find('NoSuchBucketPolicy') == -1:
+                raise e
+            self.minio_client.set_bucket_policy(self.tmp_bucket, json.dumps(tmp_policy))
+
+        # set tmp bucket lifecycle
+        if not self.minio_client.get_bucket_lifecycle(self.tmp_bucket):
+            lifecycle_conf = LifecycleConfig([
+                Rule(
+                    'Enabled',
+                    rule_filter=Filter(prefix='documents/'),
+                    rule_id='rule1',
+                    expiration=Expiration(days=1),
+                ),
+            ], )
+            self.minio_client.set_bucket_lifecycle(self.tmp_bucket, lifecycle_conf)
 
     def upload_minio(self,
                      object_name: str,
@@ -68,26 +124,11 @@ class MinioClient:
         # filepath "/" 开头会有nginx问题
         if object_name[0] == '/':
             object_name = object_name[1:]
-        return self.minio_share.presigned_get_object(bucket_name=bucket,
-                                                     object_name=object_name,
-                                                     expires=timedelta(days=7))
+        # 因为bucket都允许公开访问了，所以不再需要生成有期限的url
+        share_host = self.get_minio_share_host()
+        return f'{share_host}/{bucket}/{object_name}'
 
     def upload_tmp(self, object_name, data):
-        self.mkdir(tmp_bucket)
-        from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
-        from minio.commonconfig import Filter
-
-        if not self.minio_client.get_bucket_lifecycle(tmp_bucket):
-            lifecycle_conf = LifecycleConfig([
-                Rule(
-                    'Enabled',
-                    rule_filter=Filter(prefix='documents/'),
-                    rule_id='rule1',
-                    expiration=Expiration(days=1),
-                ),
-            ], )
-            self.minio_client.set_bucket_lifecycle(tmp_bucket, lifecycle_conf)
-
         self.minio_client.put_object(bucket_name=tmp_bucket,
                                      object_name=object_name,
                                      data=io.BytesIO(data),
@@ -120,15 +161,28 @@ class MinioClient:
         return self.minio_client.get_object(bucket_name=bucket, object_name=object_name)
 
     @classmethod
+    def get_minio_share_host(cls) -> str:
+        """
+        获取minio share host
+        """
+        minio_share = _MinioConf.sharepoint
+        if _MinioConf.schema:
+            return f'https://{minio_share}'
+        return f'http://{minio_share}'
+
+    @classmethod
     def clear_minio_share_host(cls, file_url: str):
         """
          TODO 合理方案是部署一个https的minio配合前端使用
          抹去url中的minio share地址， 让前端通过nginx代理去访问资源
         """
-        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
-        return file_url.replace(f'http://{minio_share}', '')
+        share_host = cls.get_minio_share_host()
+
+        return file_url.replace(share_host, '')
 
     def object_exists(self, bucket_name, object_name, **kwargs):
+        if not object_name:
+            return False
         try:
             self.minio_client.stat_object(bucket_name, object_name, **kwargs)
             return True
@@ -148,14 +202,17 @@ class MinioClient:
                 response.release_conn()
 
     def copy_object(
-        self,
-        source_object_name,
-        target_object_name,
-        bucket_name=bucket,
+            self,
+            source_object_name,
+            target_object_name,
+            bucket_name=bucket,
+            target_bucket_name=None
     ):
-        try:
-            copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
-            response = self.minio_client.copy_object(bucket_name, target_object_name, copy_source)
-            return response
-        except Exception as e:
-            logger.error('{} {} {}', source_object_name, target_object_name, e)
+        if target_bucket_name is None:
+            target_bucket_name = bucket_name
+        copy_source = CopySource(bucket_name=bucket_name, object_name=source_object_name)
+        response = self.minio_client.copy_object(target_bucket_name, target_object_name, copy_source)
+        return response
+
+
+minio_client = MinioClient()

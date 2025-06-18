@@ -45,7 +45,7 @@ export default function RunLog({ data }) {
         + assistantState.flow_list.length === 0) return null
 
     return <div className="py-1">
-        <div className="rounded-sm border">
+        <div className="rounded-sm border max-w-[90%]">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 <div className="flex items-center font-bold gap-2 text-sm">
                     {

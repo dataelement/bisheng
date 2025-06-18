@@ -45,7 +45,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
     name: str = Field(default='', sa_column=Column(String(length=1024), index=True), description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
-    extra: Optional[str] = Field(default='', sa_column=Column(String(length=2048)),
+    extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
                                  description="工具类别的配置信息，用来存储工具类别所需的配置信息")
     description: str = Field(default='', description="工具类别的描述")
     server_host: Optional[str] = Field(default='', description="自定义工具的访问根地址，必须以http或者https开头")
@@ -68,7 +68,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
-    extra: Optional[str] = Field(default=None, sa_column=Column(String(length=2048), index=False),
+    extra: Optional[str] = Field(default=None, sa_column=Column(Text, index=False),
                                  description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
                                              '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -217,7 +217,7 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
         statement = statement.order_by(func.field(GptsToolsType.is_preset,
-                                                  ToolPresetType.PRESET.value).desc() ,GptsToolsType.update_time.desc())
+                                                  ToolPresetType.PRESET.value).desc(), GptsToolsType.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 

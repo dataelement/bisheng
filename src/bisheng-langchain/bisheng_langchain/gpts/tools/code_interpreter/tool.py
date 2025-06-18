@@ -183,19 +183,20 @@ def upload_minio(
     import minio
 
     minio_client = minio.Minio(
-        endpoint=param.get('MINIO_ENDPOINT'),
-        access_key=param.get('MINIO_ACCESS_KEY'),
-        secret_key=param.get('MINIO_SECRET_KEY'),
-        secure=param.get('SCHEMA'),
-        cert_check=param.get('CERT_CHECK'),
+        endpoint=param.get('endpoint'),
+        access_key=param.get('access_key'),
+        secret_key=param.get('secret_key'),
+        secure=param.get('schema'),
+        cert_check=param.get('cert_check'),
     )
     minio_share = minio.Minio(
-        endpoint=param.get('MINIO_SHAREPOIN'),
-        access_key=param.get('MINIO_ACCESS_KEY'),
-        secret_key=param.get('MINIO_SECRET_KEY'),
-        secure=param.get('SCHEMA'),
-        cert_check=param.get('CERT_CHECK'),
+        endpoint=param.get('sharepoint'),
+        access_key=param.get('access_key'),
+        secret_key=param.get('secret_key'),
+        secure=param.get('schema'),
+        cert_check=param.get('cert_check'),
     )
+    bucket = param.get('tmp_bucket', 'tmp-dir')
     logger.debug(
         'upload_file obj={} bucket={} file_paht={}',
         object_name,

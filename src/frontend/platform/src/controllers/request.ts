@@ -52,7 +52,7 @@ customAxios.interceptors.response.use(function (response) {
         infoStr && location.reload()
         return Promise.reject('登录过期,请重新登录');
     }
-    if (error.code === "ERR_CANCELED") return Promise.reject(null);
+    if (error.code === "ERR_CANCELED") return Promise.reject(error);
     // app 弹窗
     toast({
         title: `${i18next.t('prompt')}`,
@@ -70,6 +70,7 @@ export default customAxios
 export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
     return apiFunc.catch(error => {
         if (error === null) return // app error
+        if (error?.code === "ERR_CANCELED") return 'canceled'
 
         console.log('error :>> ', error);
         iocFunc?.(error)

@@ -1,6 +1,6 @@
-import os
 import asyncio
 import json
+import os
 import time
 import uuid
 from typing import AsyncIterator
@@ -153,12 +153,17 @@ class RedisCallback(BaseCallback):
                         break
                     yield chat_response
                 break
+<<<<<<< HEAD
 
             # DONE merge_check 1
             # 0616
             elif status_info['status'] in [WorkflowStatus.WAITING.value, WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
             # 0527
             # elif status_info['status'] == WorkflowStatus.WAITING.value and time.time() - status_info['time'] > 10:
+=======
+            elif status_info['status'] in [WorkflowStatus.WAITING.value,
+                                           WorkflowStatus.INPUT_OVER.value] and time.time() - status_info['time'] > 10:
+>>>>>>> eba9e31
                 # 10秒内没有收到状态更新，说明workflow没有启动，可能是celery worker线程数已满
                 self.set_workflow_status(WorkflowStatus.FAILED.value, 'workflow task execute busy')
                 yield self.build_chat_response(WorkflowEventType.Error.value, 'over',
@@ -229,7 +234,8 @@ class RedisCallback(BaseCallback):
         return ret
 
     def set_workflow_stop(self):
-        self.redis_client.set(self.workflow_stop_key, 1, expiration=self.workflow_expire_time)
+        from bisheng.worker.workflow.tasks import stop_workflow
+        stop_workflow.delay(self.unique_id, self.workflow_id, self.chat_id, self.user_id)
 
     def get_workflow_stop(self) -> bool | None:
         """ 为了可以及时停止workflow，不做内存的缓存 """
@@ -378,7 +384,7 @@ class RedisCallback(BaseCallback):
     def on_stream_over(self, data: StreamMsgOverData):
         logger.debug(f'stream over: {data}')
         # 替换掉minio的share前缀，通过nginx转发  ugly solve
-        minio_share = settings.get_knowledge().get('minio', {}).get('MINIO_SHAREPOIN', '')
+        minio_share = settings.get_minio_conf().sharepoint
         data.msg = data.msg.replace(f"http://{minio_share}", "")
         chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
                                      category=WorkflowEventType.StreamMsg.value,

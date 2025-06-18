@@ -84,3 +84,6 @@ class Workflow:
 
     def status(self):
         return self.graph_engine.status
+
+    def reason(self):
+        return self.graph_engine.reason

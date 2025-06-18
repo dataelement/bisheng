@@ -33,14 +33,14 @@ class SessionService(Service):
 
     def build_key(self, session_id, data_graph):
         json_hash = compute_dict_hash(data_graph)
-        return f"{session_id}{':' if session_id else ''}{json_hash}"
+        return f"{session_id}{'_' if session_id else ''}{json_hash}"
 
     def generate_key(self, session_id, data_graph):
         # Hash the JSON and combine it with the session_id to create a unique key
         if session_id is None:
             # generate a 5 char session_id to concatenate with the json_hash
             session_id = session_id_generator()
-        return self.build_key(session_id, data_graph=data_graph)
+        return self.build_key(session_id, data_graph=data_graph).lower()
 
     def update_session(self, session_id, value):
         self.cache_service.set(session_id, value)

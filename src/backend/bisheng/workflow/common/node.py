@@ -23,6 +23,8 @@ class NodeType(Enum):
     STT = "stt"
     TTS = "tts"
 
+    NOTE = 'note'  # 备注节点 知识用来显示注释，非实际执行节点
+
 
 class NodeParams(BaseModel):
     key: str = Field(default="", description="变量的key")

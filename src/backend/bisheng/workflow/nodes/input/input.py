@@ -5,9 +5,11 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
 from bisheng.api.services.llm import LLMService
 from bisheng.api.utils import md5_hash
+from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
 from bisheng.workflow.nodes.base import BaseNode
@@ -96,14 +98,22 @@ class InputNode(BaseNode):
             return res
 
         ret = {}
+        human_input = ""
         # 表单形式的需要去处理对应的文件上传
         for key, value in self.node_params.items():
             ret[key] = value
             key_info = self._node_params_map[key]
+            label, _ = self.parse_msg_with_variables(key_info.get('value')) if key_info.get('value') else key
             if key_info['type'] == 'file':
                 new_params = self.parse_upload_file(key, key_info, value)
                 ret.update(new_params)
-
+                content = ""
+                for one in new_params[key_info['key']]:
+                    content += f"{one.get('source')},"
+                human_input += f"{label}: {content.rstrip(',')}\n"
+            else:
+                human_input += f"{label}: {value}\n"
+        self.graph_state.save_context(content=f'{human_input}', msg_sender='human')
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
@@ -165,6 +175,7 @@ class InputNode(BaseNode):
 
         file_id = md5_hash(f'{file_url}')
         filepath, file_name = file_download(file_url)
+        file_name = KnowledgeService.get_upload_file_original_name(file_name)
 
         # save original file path, because uns will convert file to pdf
         original_file_path = os.path.join(tempfile.gettempdir(), f'{file_id}.{file_name.split(".")[-1]}')
@@ -177,9 +188,12 @@ class InputNode(BaseNode):
             metadatas = [{'file_id': file_id, 'knowledge_id': self.workflow_id, 'extra': '', 'bbox': ''}]
             return file_name, original_file_path, texts, metadatas
         try:
-            texts, metadatas, _, _ = read_chunk_text(filepath, file_name,
-                                                     ['\n\n', '\n'],
-                                                     ['after', 'after'], 1000, 500)
+            file_rule = FileProcessBase(knowledge_id=0)
+            texts, metadatas, _, _ = read_chunk_text(filepath, file_name, file_rule.separator, file_rule.separator_rule,
+                                                     file_rule.chunk_size, file_rule.chunk_overlap, None,
+                                                     file_rule.retain_images, file_rule.enable_formula,
+                                                     file_rule.force_ocr,
+                                                     file_rule.filter_page_header_footer, file_rule.excel_rule)
             for metadata in metadatas:
                 metadata.update({
                     'file_id': file_id,

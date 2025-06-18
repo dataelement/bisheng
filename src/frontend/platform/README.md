@@ -19,12 +19,6 @@ npm install
 # 或者使用 yarn
 # yarn install
 ```
-### 代理配置
-
-开发环境下，以下代理已配置：
-- `target` 代理到 后端接口
-- `/bisheng` 代理到 文件服务器地址
-- `/custom_base/api` 开启子路由时需要配置此代理，并重写路径 `/custom_base/api` 为 `/api`
 
 ### 启动开发服务器
 
@@ -38,6 +32,12 @@ npm run start
 
 开发服务器将会运行在 [http://localhost:3001](http://localhost:3001)。
 
+### 代理配置
+
+开发环境下，以下代理已配置：
+- `target` 代理到 后端接口
+- `/bisheng` 代理到 文件服务器地址
+- `/custom_base/api` 开启子路由时需要配置此代理，并重写路径 `/custom_base/api` 为 `/api`
 
 ## 正式环境部署
 

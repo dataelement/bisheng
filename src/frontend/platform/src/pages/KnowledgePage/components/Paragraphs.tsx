@@ -104,6 +104,7 @@ export default function Paragraphs({ fileId }) {
     const [paragraph, setParagraph] = useState<any>({
         fileId: '',
         chunkId: '',
+        parseType: '',
         isUns: false,
         show: false
     })
@@ -139,6 +140,7 @@ export default function Paragraphs({ fileId }) {
                                 fileId: item.metadata.file_id,
                                 chunkId: item.metadata.chunk_index,
                                 isUns: item.parse_type === 'uns',
+                                parseType: item.parse_type,
                                 show: true
                             })}
                             onDeled={handleDeleteChunk}
@@ -168,7 +170,8 @@ export default function Paragraphs({ fileId }) {
                     edit={isEditable}
                     fileId={paragraph.fileId}
                     chunkId={paragraph.chunkId}
-                    isUns={paragraph.isUns}
+                    isUns={paragraph.isUns || ['etl4lm', 'un_etl4lm'].includes(paragraph.parseType)}
+                    parseType={paragraph.parseType}
                     onClose={() => setParagraph({ ...paragraph, show: false })}
                     onChange={(value) => refreshData((item) => item.metadata.chunk_index === paragraph.chunkId, { text: value })}
                 />
