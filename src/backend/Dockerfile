@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-FROM cr.dataelem.com/canglan/bisheng-backend:zyrs-base-0616
-=======
-FROM dataelement/bisheng-backend:base.v3
->>>>>>> eba9e31
+FROM cr.dataelem.com/canglan/bisheng-backend:zyrs-base-0630
 
 WORKDIR /app
 

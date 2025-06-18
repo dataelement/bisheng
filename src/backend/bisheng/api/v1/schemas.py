@@ -14,12 +14,9 @@ from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.llm_server import LLMModelBase, LLMServerBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
-<<<<<<< HEAD
 from langchain.docstore.document import Document
 from orjson import orjson
 from pydantic import BaseModel, Field, model_validator, field_validator, root_validator
-=======
->>>>>>> eba9e31
 
 
 class CaptchaInput(BaseModel):

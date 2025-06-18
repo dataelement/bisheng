@@ -946,58 +946,6 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}"
         )
         # 统一document
-<<<<<<< HEAD
-        metadata = [{
-            'file_id': QA.id,
-            'knowledge_id': f'{db_knowledge.id}',
-            'page': doc.metadata.pop('page', 1),
-            'source': doc.metadata.pop('source', ''),
-            'bbox': doc.metadata.pop('bbox', ''),
-            'title': doc.metadata.pop('title', ''),
-            'chunk_index': index,
-            'extra': json.dumps(doc.metadata, ensure_ascii=False)
-        } for index, doc in enumerate(docs)]
-
-        # DONE merge_check 1
-        # <<<<<<< HEAD 1.2.0
-        # 向量存储
-        # for vectore_client in vectore_client_list:
-        #     result = vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
-        #     logger.debug(f'jjxx metadata:{metadata} vectore_client.add_texts:{result}')
-        #
-        # QA.status = QAStatus.ENABLED.value
-        # =======
-        # 向量存储
-        texts = [t.page_content for t in docs]
-        for vectore_client in vectore_client_list:
-            # vectore_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
-            max_attempts = 5
-            success = False
-            for attempt in range(max_attempts):
-                try:
-                    vectore_client.add_texts(texts=texts, metadatas=metadata)
-                    validation_query = texts[0]
-                    search_results = vectore_client.search(query=validation_query, search_type="similarity", k=100)
-                    matched = any(
-                        result.metadata.get('file_id') == QA.id and
-                        result.metadata.get('knowledge_id') == f'{db_knowledge.id}'
-                        for result in search_results
-                    )
-                    if matched:
-                        success = True
-                        logger.debug(f'jjxx validation_query:{validation_query} success')
-                        break  # 验证成功，跳出重试循环
-                except Exception as e:
-                    raise e
-            if not success:
-                raise ValueError("插入向量库失败")
-        QA.status = 1
-        # >>>>>>> feat/zyrs_0527
-        with session_getter() as session:
-            session.add(QA)
-            session.commit()
-            session.refresh(QA)
-=======
         metadata = [
             {
                 "file_id": QA.id,
@@ -1011,16 +959,39 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
             }
             for index, doc in enumerate(docs)
         ]
-        vector_client.add_texts(
-            texts=[t.page_content for t in docs], metadatas=metadata
-        )
+
+        # vector_client.add_texts(
+        #     texts=[t.page_content for t in docs], metadatas=metadata
+        # )
+
+        texts = [t.page_content for t in docs]
+
+        max_attempts = 5
+        success = False
+        for attempt in range(max_attempts):
+            try:
+                vector_client.add_texts(texts=texts, metadatas=metadata)
+                validation_query = texts[0]
+                search_results = vector_client.search(query=validation_query, search_type="similarity", k=100)
+                matched = any(
+                    result.metadata.get('file_id') == QA.id and
+                    result.metadata.get('knowledge_id') == f'{db_knowledge.id}'
+                    for result in search_results
+                )
+                if matched:
+                    success = True
+                    logger.debug(f'jjxx validation_query:{validation_query} success')
+                    break  # 验证成功，跳出重试循环
+            except Exception as e:
+                raise e
+        if not success:
+            raise ValueError("插入向量库失败")
+
         logger.info(f"qa_save_knowledge add vector over")
         es_client.add_texts(texts=[t.page_content for t in docs], metadatas=metadata)
         logger.info(f"qa_save_knowledge add es over")
-
         QA.status = QAStatus.ENABLED.value
         KnowledgeFileDao.update(QA)
->>>>>>> eba9e31
     except Exception as e:
         logger.debug(f'jjxx validation_query:{e} error')
         logger.error(e)

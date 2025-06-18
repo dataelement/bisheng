@@ -95,7 +95,6 @@ class WorkflowConf(BaseModel):
     timeout: int = Field(default=720, description="节点超时时间（min）")
 
 
-<<<<<<< HEAD
 class SYSLogConf(BaseModel):
     host: str = Field(default='127.0.0.1', description="Syslog服务器的主机地址")
     port: int = Field(default=514, description="Syslog服务器的端口号")
@@ -106,7 +105,8 @@ class SYSLogConf(BaseModel):
 
 class DoMain(BaseModel):
     web_domain: str = Field(default='127.0.0.1', description="网站的域名")
-=======
+
+
 class CeleryConf(BaseModel):
     knowledge_file_time_limit: Optional[int] = Field(default=None, description='知识库文件解析的速率限制，单位为秒')
     task_routers: Optional[dict] = Field(default_factory=dict, description='任务路由配置')
@@ -119,7 +119,6 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # 工作流执行相关任务
             }
         return value
->>>>>>> eba9e31
 
 
 class Settings(BaseModel):
@@ -164,12 +163,9 @@ class Settings(BaseModel):
     vector_stores: VectorStores = {}
     object_storage: ObjectStore = {}
     workflow_conf: WorkflowConf = WorkflowConf()
-<<<<<<< HEAD
     syslog_conf: SYSLogConf = SYSLogConf()
     domain: DoMain = DoMain()
-=======
     celery_task: CeleryConf = CeleryConf()
->>>>>>> eba9e31
 
     @field_validator('database_url')
     @classmethod

@@ -13,11 +13,8 @@ from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowStatus
-<<<<<<< HEAD
-=======
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.utils import generate_uuid
->>>>>>> eba9e31
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus

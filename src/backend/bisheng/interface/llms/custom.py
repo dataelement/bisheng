@@ -258,60 +258,57 @@ class BishengLLM(BaseChatModel):
 
         return params
 
-<<<<<<< HEAD
-        params = {}
-        if server_info.config:
-            params.update(server_info.config)
-        enable_web_search = self.get_enable_web_search()
-        if model_info.config:
-            # enable_web_search = model_info.config.get('enable_web_search', False)
-            if model_info.config.get('max_tokens'):
-                params['max_tokens'] = model_info.config.get('max_tokens')
+        # params = {}
+        # if server_info.config:
+        #     params.update(server_info.config)
+        # enable_web_search = self.get_enable_web_search()
+        # if model_info.config:
+        #     # enable_web_search = model_info.config.get('enable_web_search', False)
+        #     if model_info.config.get('max_tokens'):
+        #         params['max_tokens'] = model_info.config.get('max_tokens')
+        #
+        # params.update({
+        #     'model_name': model_info.model_name,
+        #     'streaming': self.streaming,
+        #     'temperature': self.temperature,
+        #     'top_p': self.top_p,
+        #     'cache': self.cache
+        # })
+        # if server_info.type == LLMServerType.OLLAMA.value:
+        #     params['model'] = params.pop('model_name')
+        #     if params.get('max_tokens'):
+        #         params['num_ctx'] = params.pop('max_tokens')
+        # elif server_info.type == LLMServerType.AZURE_OPENAI.value:
+        #     params['azure_deployment'] = params.pop('model_name')
+        # elif server_info.type == LLMServerType.QIAN_FAN.value:
+        #     params['model'] = params.pop('model_name')
+        #     params['qianfan_ak'] = params.pop('wenxin_api_key')
+        #     params['qianfan_sk'] = params.pop('wenxin_secret_key')
+        #     if params.get('max_tokens'):
+        #         params['model_kwargs'] = {"max_output_tokens": params.pop('max_tokens')}
+        # elif server_info.type == LLMServerType.SPARK.value:
+        #     params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
+        # elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
+        #                           LLMServerType.VLLM.value]:
+        #     params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
+        # elif server_info.type == LLMServerType.QWEN.value:
+        #     params['dashscope_api_key'] = params.pop('openai_api_key')
+        #     params.pop('openai_api_base', None)
+        #     params['model_kwargs'] = {
+        #         'enable_search': enable_web_search,
+        #         'search_options': {
+        #             'forced_search': enable_web_search
+        #         }
+        #     }
+        #     if params.get('max_tokens'):
+        #         params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
+        # elif server_info.type == LLMServerType.TENCENT.value:
+        #     params['extra_body'] = {'enable_enhancement': enable_web_search}
+        # elif server_info.type == LLMServerType.MINIMAX.value:
+        #     params['api_key'] = params.pop('openai_api_key', None)
+        #     params.pop('openai_api_base', None)
+        # return params
 
-        params.update({
-            'model_name': model_info.model_name,
-            'streaming': self.streaming,
-            'temperature': self.temperature,
-            'top_p': self.top_p,
-            'cache': self.cache
-        })
-        if server_info.type == LLMServerType.OLLAMA.value:
-            params['model'] = params.pop('model_name')
-            if params.get('max_tokens'):
-                params['num_ctx'] = params.pop('max_tokens')
-        elif server_info.type == LLMServerType.AZURE_OPENAI.value:
-            params['azure_deployment'] = params.pop('model_name')
-        elif server_info.type == LLMServerType.QIAN_FAN.value:
-            params['model'] = params.pop('model_name')
-            params['qianfan_ak'] = params.pop('wenxin_api_key')
-            params['qianfan_sk'] = params.pop('wenxin_secret_key')
-            if params.get('max_tokens'):
-                params['model_kwargs'] = {"max_output_tokens": params.pop('max_tokens')}
-        elif server_info.type == LLMServerType.SPARK.value:
-            params['openai_api_key'] = f'{params.pop("api_key")}:{params.pop("api_secret")}'
-        elif server_info.type in [LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
-                                  LLMServerType.VLLM.value]:
-            params['openai_api_key'] = params.pop('openai_api_key', None) or "EMPTY"
-        elif server_info.type == LLMServerType.QWEN.value:
-            params['dashscope_api_key'] = params.pop('openai_api_key')
-            params.pop('openai_api_base', None)
-            params['model_kwargs'] = {
-                'enable_search': enable_web_search,
-                'search_options': {
-                    'forced_search': enable_web_search
-                }
-            }
-            if params.get('max_tokens'):
-                params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
-        elif server_info.type == LLMServerType.TENCENT.value:
-            params['extra_body'] = {'enable_enhancement': enable_web_search}
-        elif server_info.type == LLMServerType.MINIMAX.value:
-            params['api_key'] = params.pop('openai_api_key', None)
-            params.pop('openai_api_base', None)
-        return params
-
-=======
->>>>>>> eba9e31
     def _get_default_params(self, server_config: dict, model_config: dict) -> dict:
         default_params = {
             'model': self.model_info.model_name,

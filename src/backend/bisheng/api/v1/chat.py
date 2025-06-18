@@ -451,21 +451,12 @@ def comment_resp(*, data: ChatInput):
     return resp_200(message='操作成功')
 
 
-<<<<<<< HEAD
-@router.get('/chat/list', response_model=UnifiedResponseModel[List[ChatList]], status_code=200)
-def get_chatlist_list(*,
-                      page: Optional[int] = 1,
-                      limit: Optional[int] = 10,
-                      flow_type: Optional[int] = None,
-                      login_user: UserPayload = Depends(get_login_user)):
-=======
 @router.get('/chat/list')
 def get_session_list(*,
                      page: Optional[int] = 1,
                      limit: Optional[int] = 10,
                      flow_type: Optional[int] = None,
                      login_user: UserPayload = Depends(get_login_user)):
->>>>>>> eba9e31
     res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
                                            flow_type=flow_type,
                                            page=page,

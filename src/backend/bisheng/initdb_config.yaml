@@ -49,13 +49,10 @@ env:
   show_github_and_help: true
   # 是否开启注册
   enable_registration: true
-<<<<<<< HEAD
   # 是否开启安全承诺书功能，默认关闭，开启后在应用构建页面设置用户第一次使用时签署承诺书
   enable_security_commitment: false
-=======
   # 前端上传文件的最大限制，单位MB
   uploaded_files_maximum_size: 50
->>>>>>> eba9e31
 
 workflow:
   # 节点运行最大步数

@@ -53,11 +53,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-<<<<<<< HEAD
-    image: bisheng-backend:zy.25.6.16
-=======
-    image: dataelement/bisheng-backend:v1.3.0
->>>>>>> eba9e31
+    image: cr.dataelem.com/canglan/bisheng-backend:zy.25.6.30
     ports:
       - "7860:7860"
     environment:
@@ -98,7 +94,7 @@ services:
   
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v1.3.0
+    image: cr.dataelem.com/canglan/bisheng-backend:zy.25.6.30
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
@@ -136,11 +132,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-<<<<<<< HEAD
-    image: bisheng-frontend:zy.25.6.16
-=======
-    image: dataelement/bisheng-frontend:v1.3.0
->>>>>>> eba9e31
+    image: cr.dataelem.com/canglan/bisheng-frontend:zy.25.6.30
     ports:
       - "3001:3001"
     environment:

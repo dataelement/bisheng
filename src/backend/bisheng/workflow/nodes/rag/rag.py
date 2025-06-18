@@ -2,13 +2,10 @@ import json
 import time
 from typing import List, Any
 
-<<<<<<< HEAD
 import loguru
-=======
 from bisheng_langchain.rag.bisheng_rag_chain import BishengRetrievalQA
 from langchain_core.prompts import (ChatPromptTemplate, HumanMessagePromptTemplate,
                                     SystemMessagePromptTemplate)
->>>>>>> eba9e31
 
 from bisheng.api.services.llm import LLMService
 from bisheng.chat.types import IgnoreException
