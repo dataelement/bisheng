@@ -233,6 +233,7 @@ const DragPanne = ({ onMouseEnd }) => {
     );
 };
 export default function FileView({
+    startIndex = 1,
     drawfont = false,
     select = false,
     scrollTo,
@@ -293,7 +294,7 @@ export default function FileView({
     }, [fileUrl])
 
     const scrollToFunc = (() => {
-        const pageY = (scrollTo[0] - 1) * (boxSize.width / pageScale)
+        const pageY = (scrollTo[0] - startIndex) * (boxSize.width / pageScale)
         const offsetY = scrollTo[1] * (boxSize.width / fileWidthRef.current) - 100
         listRef.current.scrollTo(pageY + offsetY);
     })
@@ -330,7 +331,7 @@ export default function FileView({
             const pagelabels = labels[key]
             pagelabels.forEach(item => {
                 const [sx, sy, ex, ey] = item.label
-                const pageH = (key - 1) * (boxSize.width / pageScale * scale)
+                const pageH = (key - startIndex) * (boxSize.width / pageScale * scale)
                 if (x <= sx && y <= sy + pageH && x1 >= ex && y1 >= ey + pageH) {
                     console.log('item.id :>> ', item.id);
                     selects.push({ id: item.id, active: !item.active })
@@ -352,7 +353,7 @@ export default function FileView({
         drawfont={drawfont}
         pdf={pdf}
         size={boxSize.width}
-        labels={labels[props.index + 1]}
+        labels={labels[props.index + startIndex]}
         onLoad={handleLoadPage}
         onSelectLabel={val => select && onSelectLabel([val])}
     ></Row>, [pdf, drawfont, select, labels, boxSize]);

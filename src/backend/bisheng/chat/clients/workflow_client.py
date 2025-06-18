@@ -2,7 +2,6 @@ import asyncio
 import json
 from typing import Dict, Optional
 
-from bisheng.utils import generate_uuid
 from fastapi import Request, WebSocket, status
 from loguru import logger
 
@@ -14,8 +13,9 @@ from bisheng.chat.clients.base import BaseClient
 from bisheng.chat.types import WorkType
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
+from bisheng.utils import generate_uuid
 from bisheng.worker.workflow.redis_callback import RedisCallback
-from bisheng.worker.workflow.tasks import execute_workflow
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 
@@ -39,6 +39,12 @@ class WorkflowClient(BaseClient):
         if self.workflow:
             if force_stop or not self.chat_id:
                 self.workflow.set_workflow_stop()
+                workflow_over = await self._workflow_run()
+                while not workflow_over:
+                    if self.ws_closed:
+                        break
+                    workflow_over = await self._workflow_run()
+                    await asyncio.sleep(0.5)
         else:
             await self.send_response('processing', 'close', '')
 
@@ -143,12 +149,13 @@ class WorkflowClient(BaseClient):
             return
 
     async def workflow_run(self):
-        workflow_over = False
-        while not workflow_over:
-            if self.ws_closed:
-                break
-            workflow_over = await self._workflow_run()
-            await asyncio.sleep(0.5)
+        await self._workflow_run()
+        # workflow_over = False
+        # while not workflow_over:
+        #     if self.ws_closed:
+        #         break
+        #     workflow_over = await self._workflow_run()
+        #     await asyncio.sleep(0.5)
 
     async def _workflow_run(self):
         # 需要不断从redis中获取workflow返回的消息
@@ -191,4 +198,7 @@ class WorkflowClient(BaseClient):
                 break
             self.workflow.set_user_input(user_input, message_id=message_id, message_content=new_message)
             self.workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+            continue_workflow.delay(self.workflow.unique_id, self.workflow.workflow_id, self.workflow.chat_id,
+                                    self.workflow.user_id)
+            await self.workflow_run()
         # await self.workflow_run()

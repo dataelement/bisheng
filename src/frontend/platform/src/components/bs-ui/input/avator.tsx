@@ -37,7 +37,7 @@ export default function Avator({
     return <div className={cname("flex w-full rounded-md gap-4", className)}>
         <div className="relative group">
             {
-                value ? <img src={value} className="max-w-24 max-h-24 min-w-8 min-h-8 rounded-md object-cover" alt="" /> : children
+                value ? <img src={value} className="max-w-24 max-h-24 min-w-8 min-h-8 rounded-md object-cover border" alt="" /> : children
             }
             <div className="absolute left-0 top-0 w-full h-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/50 flex items-center justify-center rounded-md">
                 <input

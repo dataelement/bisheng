@@ -4,27 +4,26 @@ from datetime import datetime
 from urllib.parse import unquote
 from uuid import uuid4
 
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
+from fastapi.responses import StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from loguru import logger
+
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
-                                              WorkstationMessage, WorkStationService)
+                                              WorkstationMessage, WorkStationService, SearchTool)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
-from bisheng.api.v1.schemas import UnifiedResponseModel, WorkstationConfig, resp_200, resp_500
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
-from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
-from fastapi.responses import StreamingResponse
-from langchain_community.utilities.bing_search import BingSearchAPIWrapper
-from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
-from loguru import logger
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -105,8 +104,8 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
 
 @router.get('/config')
 def get_config(
-    request: Request,
-    login_user: UserPayload = Depends(get_login_user),
+        request: Request,
+        login_user: UserPayload = Depends(get_login_user),
 ):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
@@ -115,9 +114,9 @@ def get_config(
 
 @router.post('/config')
 def update_config(
-    request: Request,
-    login_user: UserPayload = Depends(get_admin_user),
-    data: WorkstationConfig = Body(..., description='默认模型配置'),
+        request: Request,
+        login_user: UserPayload = Depends(get_admin_user),
+        data: WorkstationConfig = Body(..., description='默认模型配置'),
 ):
     """ 更新评价相关的模型配置 """
     ret = WorkStationService.update_config(request, login_user, data)
@@ -235,28 +234,17 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
         MessageSessionDao.insert_one(session)
 
 
-async def webSearch(query: str, bingKey: str, bingUrl: str):
+async def webSearch(query: str, web_search_config: WSPrompt):
     """
     联网搜索
     """
-    bingtool = BingSearchResults(api_wrapper=BingSearchAPIWrapper(bing_subscription_key=bingKey,
-                                                                  bing_search_url=bingUrl),
-                                 num_results=10)
-    res = await bingtool.ainvoke({'query': query})
-    if isinstance(res, str):
-        res = eval(res)
-    search_res = ''
-    web_list = []
-    for index, result in enumerate(res):
-        # 处理搜索结果
-        snippet = result.get('snippet')
-        search_res += f'[webpage ${index} begin]\n${snippet}\n[webpage ${index} end]\n\n'
-        web_list.append({
-            'title': result.get('title'),
-            'url': result.get('link'),
-            'snippet': snippet
-        })
-    return search_res, web_list
+    if web_search_config.params:
+        tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.params)
+    else:
+        # 兼容旧版的配置
+        tool = SearchTool.init_search_tool('bing', api_key=web_search_config.bingKey,
+                                           base_url=web_search_config.bingUrl)
+    return tool.invoke(query)
 
 
 def getFileContent(filepath):
@@ -267,10 +255,11 @@ def getFileContent(filepath):
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
         filepath_local,
         file_name,
-        ['\n\n\n\n\n'],
-        [],
-        102400,
+        ['\n\n', '\n'],
+        ['after', 'after'],
+        1000,
         0,
+        excel_rule=ExcelRule()
     )
     return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 
@@ -357,8 +346,7 @@ async def chat_completions(
                 if searchRes.content == '1':
                     logger.info(f'需要联网搜索, prompt={data.text}')
                     # 如果需要联网搜索，则调用搜索接口
-                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch.bingKey,
-                                                           wsConfig.webSearch.bingUrl)
+                    search_res, web_list = await webSearch(data.text, wsConfig.webSearch)
                     content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
                     yield SSEResponse(event='on_search_result',
                                       data=delta(id=stepId, delta=content)).toString()
@@ -391,6 +379,8 @@ async def chat_completions(
         if not error:
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
+            if wsConfig.systemPrompt:
+                inputs.insert(0, SystemMessage(content=wsConfig.systemPrompt))
             task = asyncio.create_task(
                 bishengllm.ainvoke(
                     inputs,

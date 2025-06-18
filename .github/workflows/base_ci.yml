@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_bisheng:
+  build_bisheng_arm:
     runs-on: ubuntu-latest
     # if: startsWith(github.event.ref, 'refs/tags')
     steps:
@@ -38,13 +38,6 @@ jobs:
           # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # - name: Login to DockerHub
-      #   uses: docker/login-action@v1
-      #   with:
-      #     registry: https://cr.dataelem.com/
-      #     username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
           
       # 构建 backend 并推送到 Docker hub
       - name: Set up QEMU
@@ -53,29 +46,70 @@ jobs:
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: install poetry
-        uses: snok/install-poetry@v1
-        with:
-          installer-parallel: true
-
-      - name: Build backend and push
+      - name: Build backend arm64 and push
         id: docker_build_backend
-        uses: docker/build-push-action@v2
+        run: |
+          docker buildx build --build-arg PANDOC_ARCH=arm64 --file ./src/backend/base.Dockerfile --platform linux/arm64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 --push ./src/backend/
+  
+  build_bisheng_amd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      
+      - name: Set Environment Variable
+        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
         with:
-          # backend 的context目录
-          context: "./src/backend/"
-          file: ./src/backend/base.Dockerfile
-          # 是否 docker push
-          push: true
-          # docker build arg, 注入 APP_NAME/APP_VERSION
-          platforms: linux/amd64,linux/arm64
-          build-args: |
-            APP_NAME="bisheng-backend"
-            APP_VERSION=${{ steps.get_version.outputs.VERSION }}
-          # 生成两个 docker tag: ${APP_VERSION} 和 latest
-          tags: |
-            ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
-      # 构建 Docker frontend 并推送到 Docker hub
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Build backend amd64 and push
+        id: docker_build_backend
+        run: |
+          docker buildx build --build-arg PANDOC_ARCH=amd64 --file ./src/backend/base.Dockerfile --platform linux/amd64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64 --push ./src/backend/
+  
+  
+  combine_two_images:
+    runs-on: ubuntu-latest
+    needs: 
+      - build_bisheng_amd
+      - build_bisheng_arm
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      
+      - name: Set Environment Variable
+        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Combine Two images
+        run: |
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }} ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+      
+      # 获取提交信息
       - name: Process git message
         id: process_message
         run: |
@@ -84,6 +118,7 @@ jobs:
           echo "message=${value}" >> $GITHUB_ENV
         shell: bash
 
+      # 飞书通知
       - name: notify feishu
         uses: fjogeleit/http-request-action@v1
         with:

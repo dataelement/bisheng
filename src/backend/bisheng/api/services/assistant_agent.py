@@ -127,7 +127,7 @@ class AssistantAgent(AssistantUtils):
         """
         # 特殊处理下bisheng_code_interpreter的参数
         if tool.tool_key == 'bisheng_code_interpreter':
-            return {'minio': settings.get_knowledge().get('minio', {})}
+            return {'minio': settings.get_minio_conf().model_dump()}
         if not tool.extra:
             return {}
         params = json.loads(tool.extra)

@@ -1,6 +1,12 @@
 import operator
 from typing import Annotated, Any, Dict
 
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.constants import END, START
+from langgraph.graph import StateGraph
+from loguru import logger
+from typing_extensions import TypedDict
+
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
@@ -11,11 +17,6 @@ from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from bisheng.workflow.nodes.output.output_fake import OutputFakeNode
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import END, START
-from langgraph.graph import StateGraph
-from loguru import logger
-from typing_extensions import TypedDict
 
 
 class TempState(TypedDict):
@@ -203,6 +204,8 @@ class GraphEngine:
             node_data = BaseNodeData(**node.get('data', {}))
             if not node_data.id:
                 raise Exception('node must have attribute id')
+            if node_data.type == NodeType.NOTE.value:
+                continue
 
             node_instance = NodeFactory.instance_node(node_type=node_data.type,
                                                       node_data=node_data,

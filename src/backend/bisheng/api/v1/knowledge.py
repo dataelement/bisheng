@@ -4,19 +4,18 @@ from datetime import datetime
 from io import BytesIO
 from typing import List, Optional, Any
 
-import numpy as np
 import pandas as pd
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request,
                      UploadFile)
 from fastapi.encoders import jsonable_encoder
 
-from bisheng.api.errcode.base import UnAuthorizedError, ServerError
+from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.knowledge import KnowledgeCPError, KnowledgeQAError
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import add_qa, QA_save_knowledge
+from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
-from bisheng.api.v1.schemas import (KnowledgeFileProcess, PreviewFileChunk, UpdatePreviewFileChunk, UploadFileResponse,
+from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     resp_200, resp_500)
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
@@ -25,6 +24,7 @@ from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeF
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
+from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -35,7 +35,8 @@ async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
         # 缓存本地
-        file_path = save_uploaded_file(file.file, 'bisheng', file_name)
+        uuid_file_name = KnowledgeService.save_upload_file_original_name(file_name)
+        file_path = save_uploaded_file(file.file, 'bisheng', uuid_file_name)
         if not isinstance(file_path, str):
             file_path = str(file_path)
         return resp_200(UploadFileResponse(file_path=file_path))
@@ -48,7 +49,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 async def preview_file_chunk(*,
                              request: Request,
                              login_user: UserPayload = Depends(get_login_user),
-                             req_data: PreviewFileChunk):
+                             req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
     try:
         parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(
@@ -60,9 +61,12 @@ async def preview_file_chunk(*,
                 'chunks': res,
                 'partitions': partitions
             })
+    except HTTPException as e:
+        raise e
     except Exception as e:
+        # productor hope raise this tips
         logger.exception('preview_file_chunk_error')
-        return resp_500(data=str(e))
+        return resp_500(message="文档解析失败")
 
 
 @router.put('/preview')
@@ -181,6 +185,7 @@ def get_filelist(*,
                  request: Request,
                  login_user: UserPayload = Depends(get_login_user),
                  file_name: str = None,
+                 file_ids: list[int] = None,
                  knowledge_id: int = 0,
                  page_size: int = 10,
                  page_num: int = 1,
@@ -188,7 +193,7 @@ def get_filelist(*,
     """ 获取知识库文件信息. """
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
                                                              file_name, status, page_num,
-                                                             page_size)
+                                                             page_size, file_ids)
 
     return resp_200({
         'data': data,
@@ -300,7 +305,7 @@ async def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(get_login_user),
                              file_id: int = Query(description='文件唯一ID')):
-    url = KnowledgeService.get_file_share_url(request, login_user, file_id)
+    url = KnowledgeService.get_file_share_url(file_id)
     return resp_200(data=url)
 
 
@@ -504,6 +509,7 @@ def convert_excel_value(value: Any):
         return ''
     return str(value)
 
+
 @router.post('/qa/preview/{qa_knowledge_id}', status_code=200)
 def post_import_file(*,
                      qa_knowledge_id: int,
@@ -592,7 +598,7 @@ def post_import_file(*,
 
         # async task add qa into milvus and es
         for one in result:
-            background_tasks.add_task(QA_save_knowledge, db_knowledge, one)
+            insert_qa_celery.delay(one.id)
 
         error_result.append(have_data)
 

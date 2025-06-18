@@ -1,0 +1,112 @@
+name: PublishRelease
+
+# 在github上新建release发行版时触发此CICD，主要是把预发布镜像的tag改为正式镜像的tag，并同步到私有镜像仓库
+on:
+  release:
+    types: [published]
+
+env:
+  DOCKERHUB_REPO: dataelement/
+  
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  combine_publish_images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      - name: Echo version
+        id: echo_version
+        run: |
+          echo "this release is link version: ${{ steps.get_version.outputs.VERSION }}"
+
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Combine two images
+        id: combine_two_images
+        run: |
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }} ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+  
+  sync_dataelem_repos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      - name: Echo version
+        id: echo_version
+        run: |
+          echo "this release is link version: ${{ steps.get_version.outputs.VERSION }}"
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+
+      - name: Sync images
+        id: sync_images
+        run: |
+          echo "sync backend images"
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
+          
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+          
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+
+          echo "sync frontend images"
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
+
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
+          echo "--- sync over ---"
+
+  notify_feishu:
+      needs:
+        - combine_publish_images
+        - sync_dataelem_repos
+      runs-on: ubuntu-latest
+      steps:
+        - name: Get version
+          id: get_version
+          run: |
+            echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        
+        - name: Process git message
+          id: process_message
+          run: |
+            value=$(echo "${{ github.event.head_commit.message }}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/%0A/g')
+            value=$(echo "${value}" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\r/%0A/g')
+            echo "message=${value}" >> $GITHUB_ENV
+          shell: bash
+
+        - name: notify feishu
+          uses: fjogeleit/http-request-action@v1
+          with:
+            url: ${{ secrets.FEISHU_WEBHOOK }}
+            method: 'POST'
+            data: '{"msg_type":"post","content":{"post":{"zh_cn":{"title": "${{ steps.get_version.outputs.VERSION }}镜像发布成功",  "content": [[{"tag":"text","text":"发布功能："},{"tag":"text","text":"${{ env.message }}"}]]}}}}'

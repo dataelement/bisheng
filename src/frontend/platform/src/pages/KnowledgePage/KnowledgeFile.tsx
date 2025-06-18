@@ -48,7 +48,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                 serverItem.children = server.models.reduce((res, model) => {
                     if (model.model_type !== 'embedding' || !model.online) return res
                     const modelItem = { value: model.id, label: model.model_name }
-                    models[model.id] = model.model_name
+                    models[model.id] = server.name + '/' + model.model_name
                     // 找到默认值
                     if (model.id === embedding_model_id) {
                         _model = [serverItem, modelItem]
@@ -71,7 +71,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
     const { toast } = useToast()
     const [error, setError] = useState({ name: false, desc: false })
 
-    const handleCreate = async () => {
+    const handleCreate = async (e, isImport = false) => {
         const name = nameRef.current.value
         const desc = descRef.current.value
         const errorlist = []
@@ -96,7 +96,10 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
         }).then(res => {
             // @ts-ignore
             window.libname = [name, desc]
-            navigate("/filelib/" + res.id);
+            navigate(isImport
+                ? `/filelib/upload/${res.id}`  // 导入模式
+                : `/filelib/${res.id}`         // 普通模式
+            );
             setOpen(false)
             setIsSubmitting(false)
         }))
@@ -118,14 +121,21 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             <div className="flex flex-col gap-4 py-2">
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
+                    <span className="text-red-500">*</span>
                     <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">{t('lib.description')}</label>
-                    <Textarea id="desc" ref={descRef} placeholder={t('lib.description')} className={`col-span-3 ${error.desc && 'border-red-400'}`} />
+                    <label htmlFor="name" className="bisheng-label">知识库描述</label>
+                    <Textarea
+                        id="desc"
+                        ref={descRef}
+                        placeholder="请输入知识库的描述"
+                        rows={8}
+                        className={`col-span-3 ${error.desc && 'border-red-400'}`}
+                    />
                 </div>
                 <div className="">
-                    <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.model')}</label>
+                    <label htmlFor="roleAndTasks" className="bisheng-label">知识库embedding模型选择</label>
                     {
                         modal && <Cascader
                             defaultValue={modal}
@@ -138,16 +148,25 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11">{t('cancel')}</Button>
+                    <Button variant="outline" className="px-8 h-8">{t('cancel')}</Button>
                 </DialogClose>
                 <Button
-                    type="submit"
-                    className="px-11 flex"
-                    onClick={handleCreate}
+                    variant="outline"
+                    className="px-8 h-8 flex"
+                    onClick={(e) => handleCreate(e, false)}
                     disabled={isSubmitting}
                 >
                     {isSubmitting && <LoadIcon className="mr-1" />}
-                    {t('create')}
+                    完成创建
+                </Button>
+                <Button
+                    type="submit"
+                    className="px-8 h-8 flex"
+                    onClick={(e) => handleCreate(e, true)}
+                    disabled={isSubmitting}
+                >
+                    {isSubmitting && <LoadIcon className="mr-1" />}
+                    {t('createImport')}
                 </Button>
             </DialogFooter>
         </DialogContent>

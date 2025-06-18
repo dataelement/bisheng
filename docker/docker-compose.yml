@@ -53,7 +53,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v1.2.0
+    image: dataelement/bisheng-backend:v1.3.0
     ports:
       - "7860:7860"
     environment:
@@ -75,7 +75,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
       - seccomp:unconfined
-    command: sh entrypoint.sh # --workers 表示使用几个进程，提高并发度
+    command: sh entrypoint.sh api  # 启动api服务
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
@@ -90,10 +90,42 @@ services:
         condition: service_healthy
       office:
         condition: service_started
+  
+  backend_worker:
+    container_name: bisheng-backend-worker
+    image: dataelement/bisheng-backend:v1.3.0
+    environment:
+      TZ: Asia/Shanghai
+      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
+      BS_MILVUS_IS_PARTITION: 'true'
+      BS_MILVUS_PARTITION_SUFFIX: '1'
+      BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
+      BS_ELASTICSEARCH_SSL_VERIFY: '{}'  # 可根据自己部署的密码进行配置 '{"basic_auth": ("elastic", "elastic")}'
+      BS_MINIO_SCHEMA: 'false'
+      BS_MINIO_CERT_CHECK: 'false'
+      BS_MINIO_ENDPOINT: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
+      BS_MINIO_ACCESS_KEY: 'minioadmin'
+      BS_MINIO_SECRET_KEY: 'minioadmin'
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
+    security_opt:
+      - seccomp:unconfined
+    command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
+    restart: on-failure
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      office:
+        condition: service_started
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v1.2.0
+    image: dataelement/bisheng-frontend:v1.3.0
     ports:
       - "3001:3001"
     environment:
@@ -159,7 +191,7 @@ services:
 
   milvus:
     container_name: bisheng-milvus-standalone
-    image: milvusdb/milvus:v2.3.3
+    image: milvusdb/milvus:v2.5.10
     command: ["milvus", "run", "standalone"]
     security_opt:
     - seccomp:unconfined

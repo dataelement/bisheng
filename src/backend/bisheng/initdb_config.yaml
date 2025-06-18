@@ -1,5 +1,10 @@
 knowledges: # 知识库相关配置
-  unstructured_api_url: ""  # 非必填，若要开启溯源能力则必填。使用毕昇官网提供的测试服务，可以填入地址：https://bisheng.dataelem.com/api/v1/etl4llm/predict，如果在私有环境部署了bisheng-unstructured服务，可以填入地址：http://ip:port/v1/etl4llm/predict。注意：添加地址后，需要手动刷新页面后在知识库中上传文档。
+  etl4lm:
+    # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
+    url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
+    timeout: 600
+    # OCR SDK服务地址，默认为空则使用ETL4LM自带的轻量OCR模型（速度快，对于困难场景效果一般），若填写OCR SDK服务地址则使用高精度的OCR模型。
+    ocr_sdk_url: ""
 
 llm_request:
   # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值
@@ -44,6 +49,8 @@ env:
   show_github_and_help: true
   # 是否开启注册
   enable_registration: true
+  # 前端上传文件的最大限制，单位MB
+  uploaded_files_maximum_size: 50
 
 workflow:
   # 节点运行最大步数

@@ -1,18 +1,17 @@
+import { LoadIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
-import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
-// import { createMcpServer, deleteMcpServer, getMcpTools, testMcpTool, updateMcpServer } from "@/controllers/API/mcp";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 // 测试对话框组件
 const TestDialog = forwardRef((props, ref) => {
@@ -91,11 +90,11 @@ const TestDialog = forwardRef((props, ref) => {
                                     <TableRow key={name}>
                                         <TableCell>
                                             {name}
-                                            {toolData?.inputSchema.required.includes(name) && <span className="text-red-500">*</span>}
+                                            {toolData?.inputSchema.required?.includes(name) && <span className="text-red-500">*</span>}
                                         </TableCell>
                                         <TableCell>
                                             <Input
-                                                placeholder={`输入${schema.type}类型值`}
+                                                placeholder={`输入${schema.type || 'string'}类型值`}
                                                 onChange={(e) => setParams(prev => ({
                                                     ...prev,
                                                     [name]: e.target.value
@@ -137,6 +136,14 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const testToolDialogRef = useRef(null);
     const { user } = useContext(userContext);
     const [isSelf, setIsSelf] = useState(false);
+    // 解析标记
+    const textareaRef = useRef(null);
+    const [isLoading, setIsLoading] = useState(false); // 加载状态
+    const latestFormData = useRef(initialFormState); // 存储最新表单数据
+    const parseBeforeSaveRef = useRef(false); // 保存前需要解析
+    useEffect(() => {
+        latestFormData.current = formData;
+    }, [formData]);
 
     // 示例配置
     const exampleConfigs = {
@@ -155,10 +162,12 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     useImperativeHandle(ref, () => ({
         open: (serverData = null) => {
             if (serverData) {
-                setFormData({
+                const newFormData = {
                     ...serverData,
                     openapiSchema: serverData.openapi_schema
-                });
+                };
+                setFormData(newFormData);
+                latestFormData.current = newFormData;
                 serverRef.current = serverData;
                 setIsSelf(serverData.user_id === user.user_id);
                 originalName.current = serverData.name;
@@ -169,6 +178,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setIsEditMode(false);
             }
             setIsDialogOpen(true);
+            setIsLoading(false);
         }
     }));
 
@@ -176,6 +186,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     // 重置表单
     const resetFormState = () => {
         setFormData(initialFormState);
+        latestFormData.current = initialFormState;
         serverRef.current = initialFormState;
         setAvailableTools([]);
     };
@@ -191,28 +202,39 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             });
         }
 
-        const tools = await captureAndAlertRequestErrorHoc(
-            getMcpServeByConfig({ file_content: schemaContent }),
-            (res) => {
-                serverRef.current.children = []
-                setAvailableTools([])
+        // setIsLoading(true);
+        try {
+            const tools = await captureAndAlertRequestErrorHoc(
+                getMcpServeByConfig({ file_content: schemaContent }),
+                (res) => {
+                    serverRef.current.children = [];
+                    setAvailableTools([]);
+                }
+            );
+
+            if (tools) {
+                serverRef.current = tools;
+                const parsedApis = tools.children.map(item => JSON.parse(item.extra));
+                setAvailableTools(parsedApis);
+
+                // 更新表单数据和ref
+                const newFormData = {
+                    ...latestFormData.current,
+                    children: tools.children
+                };
+                setFormData(newFormData);
+                latestFormData.current = newFormData;
             }
-        );
-        if (tools) {
-            serverRef.current = tools;
-            const parsedApis = tools.children.map(item => JSON.parse(item.extra));
-            setAvailableTools(parsedApis);
-            setFormData(prev => ({
-                ...prev,
-                children: tools.children
-            }))
+        } finally {
+            // setIsLoading(false);
+            parseBeforeSaveRef.current = false;
         }
     };
 
     const validateForm = () => {
         const errors = [];
-        const name = formData.name.trim();
-        const schema = formData.openapiSchema.trim();
+        const name = latestFormData.current.name.trim();
+        const schema = latestFormData.current.openapiSchema.trim();
 
         // 名称校验
         if (!name) {
@@ -237,8 +259,17 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     };
 
     // 表单提交
-    const handleSubmit = () => {
-        // 校验逻辑
+    const handleSubmit = async () => {
+        if (parseBeforeSaveRef.current) {
+            setIsLoading(true);
+            await loadToolsFromSchema(textareaRef.current.value)
+            parseBeforeSaveRef.current = false
+            setTimeout(() => {
+                handleSubmit()
+            }, 0);
+        }
+
+        // 使用latestFormData.current获取最新数据
         const validationErrors = validateForm();
         if (validationErrors.length > 0) {
             return message({
@@ -247,24 +278,29 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             });
         }
 
-        // 提交数据
-        const apiMethod = isEditMode ? updateTool : createTool;
-        const { openapiSchema, ...other } = formData;
-        captureAndAlertRequestErrorHoc(apiMethod({
-            ...serverRef.current,
-            ...other,
-            description: serverRef.current.description,
-            openapi_schema: openapiSchema,
-            is_preset: 2
-        })).then((res) => {
-            if (!res) return;
-            message({ description: "保存成功", variant: "success" });
-            setIsDialogOpen(false);
-            onReload()
-        });
+        setIsLoading(true);
+        try {
+            const apiMethod = isEditMode ? updateTool : createTool;
+            const { openapiSchema, ...other } = latestFormData.current;
+
+            await captureAndAlertRequestErrorHoc(apiMethod({
+                ...serverRef.current,
+                ...other,
+                description: serverRef.current.description,
+                openapi_schema: openapiSchema,
+                is_preset: 2
+            })).then((res) => {
+                if (!res) return;
+                message({ description: "保存成功", variant: "success" });
+                setIsDialogOpen(false);
+                onReload();
+            });
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    // 删除服务器
+    // 删除服务器（保持不变）
     const handleServerDelete = () => {
         bsConfirm({
             title: "提示",
@@ -328,13 +364,17 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                 </Select>
                             </div>
                             <Textarea
+                                ref={textareaRef}
                                 value={formData.openapiSchema}
                                 placeholder="输入您的 MCP 服务器配置 json"
                                 className="min-h-[200px] font-mono"
-                                onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    openapiSchema: e.target.value
-                                }))}
+                                onChange={(e) => {
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        openapiSchema: e.target.value
+                                    }))
+                                    parseBeforeSaveRef.current = true;
+                                }}
                                 onBlur={() => loadToolsFromSchema(formData.openapiSchema)}
                             />
                         </div>
@@ -343,7 +383,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label>可用工具</label>
-                                <Button variant="outline" onClick={() => loadToolsFromSchema(formData.openapiSchema)}>
+                                <Button variant="outline" disabled={isLoading} onClick={() => loadToolsFromSchema(formData.openapiSchema)}>
                                     刷新
                                 </Button>
                             </div>
@@ -393,7 +433,10 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                             取消
                         </Button>
-                        <Button onClick={handleSubmit}>保存</Button>
+                        <Button disabled={isLoading} onClick={handleSubmit}>
+                            {isLoading && <LoadIcon className="mr-1" />}
+                            保存
+                        </Button>
                     </SheetFooter>
                 </SheetContent>
             </Sheet>

@@ -22,6 +22,13 @@ redis_url: "redis://redis:6379/1"
 
 # celery的broken地址
 celery_redis_url: "redis://redis:6379/2"
+celery_task:
+  # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行只能在一个进程内！！！
+  task_routers:
+    bisheng.worker.knowledge.*: # 知识库文件处理相关任务
+      queue: knowledge_celery
+    bisheng.worker.workflow.*: # 工作流相关任务
+      queue: workflow_celery
 
 # 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
 vector_stores:
@@ -44,6 +51,8 @@ object_storage:
     sharepoint: !env ${BS_MINIO_SHAREPOINT}
     access_key: !env ${BS_MINIO_ACCESS_KEY}
     secret_key: !env ${BS_MINIO_SECRET_KEY}
+    public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
+    tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
 
 environment:
   env: dev

@@ -406,6 +406,7 @@ class AssistantService(BaseService, AssistantUtils):
             tool_type_children[one.type].append(one)
 
         for one in res:
+            one['write'] = one['id'] not in tool_type_ids_extra or one['user_id'] == user.user_id
             if not user.is_admin():
                 one['extra'] = ''
             one["children"] = tool_type_children.get(one["id"], [])

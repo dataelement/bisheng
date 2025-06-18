@@ -2,6 +2,10 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
+from langchain.docstore.document import Document
+from orjson import orjson
+from pydantic import BaseModel, Field, model_validator, field_validator
+
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.finetune import TrainMethod
 from bisheng.database.models.flow import FlowCreate, FlowRead
@@ -10,9 +14,6 @@ from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.llm_server import LLMModelBase, LLMServerBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
-from langchain.docstore.document import Document
-from orjson import orjson
-from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class CaptchaInput(BaseModel):
@@ -405,6 +406,7 @@ class KnowledgeLLMConfig(BaseModel):
     source_model_id: Optional[int] = Field(None, description='知识库溯源模型的ID')
     extract_title_model_id: Optional[int] = Field(None, description='文档知识库提取标题模型的ID')
     qa_similar_model_id: Optional[int] = Field(None, description='QA知识库相似问模型的ID')
+    abstract_prompt: Optional[str] = Field(None, description='摘要提示词')
 
 
 class AssistantLLMItem(BaseModel):
@@ -443,7 +445,8 @@ class WSPrompt(BaseModel):
     enabled: bool
     prompt: Optional[str] = None
     model: Optional[str] = None
-    tool: Optional[str] = None
+    tool: Optional[str] = None  # 工具的枚举
+    params: Optional[dict] = None  # 工具的入参
     bingKey: Optional[str] = None
     bingUrl: Optional[str] = None
 
@@ -462,6 +465,14 @@ class WorkstationConfig(BaseModel):
     webSearch: Optional[WSPrompt] = None
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
+    systemPrompt: Optional[str] = None
+
+
+class ExcelRule(BaseModel):
+    slice_length: Optional[int] = Field(default=10, description='数据行')
+    header_start_row: Optional[int] = Field(default=1, description='表头开始')
+    header_end_row: Optional[int] = Field(default=1, description='表头结束')
+    append_header: Optional[int] = Field(default=1, description='是否添加表头')
 
 
 # 文件切分请求基础参数
@@ -472,6 +483,12 @@ class FileProcessBase(BaseModel):
                                                 description='切分规则前还是后进行切分；before/after')
     chunk_size: Optional[int] = Field(default=1000, description='切分文本长度，不传则为默认')
     chunk_overlap: Optional[int] = Field(default=100, description='切分文本重叠长度，不传则为默认')
+    retain_images: Optional[int] = Field(default=1, description='保留文档图片')
+    force_ocr: Optional[int] = Field(default=0, description='启用OCR')
+    enable_formula: Optional[int] = Field(default=1, description='latex公式识别')
+    filter_page_header_footer: Optional[int] = Field(default=0, description='过滤页眉页脚')
+    excel_rule: Optional[ExcelRule] = Field(default=None, description="excel rule")
+    cache: Optional[bool] = Field(default=True, description='预览文档时，是否从缓存获取数据')
 
     @model_validator(mode='before')
     @classmethod
@@ -484,6 +501,17 @@ class FileProcessBase(BaseModel):
             values['chunk_size'] = 1000
         if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
+        if values.get('filter_page_header_footer') is None:
+            values['filter_page_header_footer'] = 0
+        if values.get('force_ocr') is None:
+            values['force_ocr'] = 1
+        if values.get('enable_formula') is None:
+            values['enable_formula'] = 1
+        if values.get("retain_images") is None:
+            values['retain_images'] = 1
+        if values.get("excel_rules") is None:
+            values['excel_rules'] = ExcelRule()
+
         return values
 
 
@@ -508,6 +536,7 @@ class FileChunk(BaseModel):
 class PreviewFileChunk(FileProcessBase):
     file_path: str = Field(..., description='文件路径')
     cache: bool = Field(default=True, description='是否从缓存获取')
+    excel_rule: Optional[ExcelRule] = Field(default=None, description="excel rule")
 
 
 class UpdatePreviewFileChunk(BaseModel):
@@ -520,6 +549,7 @@ class UpdatePreviewFileChunk(BaseModel):
 
 class KnowledgeFileOne(BaseModel):
     file_path: str = Field(..., description='文件路径')
+    excel_rule: Optional[ExcelRule] = Field(default=None, description="Excel rules")
 
 
 # 知识库文件处理

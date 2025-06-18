@@ -60,8 +60,17 @@ export const downloadToolSchema = async (data: { download_url: string } | { file
 /**
  * 解析mcp服务器配置接口
  */
+let getMcpServeByConfigController: AbortController | null = null;
 export const getMcpServeByConfig = async (data: { file_content: string }): Promise<any> => {
-    return await axios.post(`/api/v1/assistant/mcp/tool_schema`, data);
+    if (getMcpServeByConfigController) {
+        getMcpServeByConfigController.abort();
+    }
+    getMcpServeByConfigController = new AbortController();
+    const promise = await axios.post(`/api/v1/assistant/mcp/tool_schema`, data, {
+        signal: getMcpServeByConfigController.signal, // 绑定取消信号
+    });
+    getMcpServeByConfigController = null;
+    return promise;
 }
 
 /**

@@ -8,8 +8,10 @@ import { Crosshair, Info, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
+import DocxPreview from "./DocxFileViewer";
 import Guide from "./Guide";
 import Markdown from './Markdown';
+import TxtFileViewer from "./TxtFileViewer";
 
 // 上传预览时携带chunks
 const ParagraphEdit = ({
@@ -19,6 +21,7 @@ const ParagraphEdit = ({
     oriFilePath = '',
     isUns = true,
     filePath = '',
+    parseType = '',
     fileId,
     chunkId,
     onClose,
@@ -37,6 +40,10 @@ const ParagraphEdit = ({
     }, [fileId, filePath, chunks])
 
     const [fileName, setFileName] = useState('')
+    const suffix = useMemo(() => {
+        return fileName.split('.').pop().toLowerCase()
+    }, [fileName])
+
     const initData = (res) => {
         let labelsData = []
         let value = ''
@@ -225,6 +232,52 @@ const ParagraphEdit = ({
         }))
     }
 
+    const fileView = () => {
+        const newVersion = ['etl4lm', 'un_etl4lm'].includes(parseType)
+        if (!newVersion) return previewFileUrl && <FileView
+            select
+            fileUrl={previewFileUrl}
+            labels={labels}
+            scrollTo={postion}
+            onSelectLabel={handleSelectLabels}
+            onPageChange={handlePageChange}
+        />
+        switch (suffix) {
+            case 'ppt':
+            case 'pptx':
+            case 'pdf':
+                return previewFileUrl && <FileView
+                    select
+                    startIndex={0} 
+                    fileUrl={previewFileUrl}
+                    labels={labels}
+                    scrollTo={postion}
+                    onSelectLabel={handleSelectLabels}
+                    onPageChange={handlePageChange}
+                />
+            case 'txt': return <TxtFileViewer filePath={previewFileUrl} />
+            case 'md': return <TxtFileViewer markdown filePath={previewFileUrl} />
+            case 'html': return <TxtFileViewer html filePath={previewFileUrl} />
+            case 'doc': 
+            case 'docx': return <DocxPreview filePath={previewFileUrl} />
+            case 'png':
+            case 'jpg':
+            case 'jpeg':
+            case 'bmp': return <img
+                className="border"
+                src={previewFileUrl.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+            default:
+                return <div className="flex justify-center items-center h-full text-gray-400">
+                    <div className="text-center">
+                        <img
+                            className="size-52 block"
+                            src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
+                        <p>预览失败</p>
+                    </div>
+                </div>
+        }
+    }
+
     return (
         <div className="flex px-4 py-2 select-none">
             {/* left */}
@@ -262,16 +315,11 @@ const ParagraphEdit = ({
                     </div>
                     {/* file view */}
                     <div className="bg-gray-100 relative">
-                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair className="mr-1" />{t('backToPosition')}</Button>}
-                        <div className="h-[calc(100vh-104px)]">
-                            {previewFileUrl && <FileView
-                                select
-                                fileUrl={previewFileUrl}
-                                labels={labels}
-                                scrollTo={postion}
-                                onSelectLabel={handleSelectLabels}
-                                onPageChange={handlePageChange}
-                            />}
+                        {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair className="mr-1" size={16} />{t('backToPosition')}</Button>}
+                        <div className="h-[calc(100vh-104px)] overflow-auto">
+                            {
+                                fileView()
+                            }
                         </div>
                     </div>
                 </div>

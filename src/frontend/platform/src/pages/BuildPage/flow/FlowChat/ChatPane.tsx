@@ -12,9 +12,9 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
 
     const getMessage = (action, { nodeId, msg, category, extra, files, source, message_id }) => {
         if (action === 'refresh_flow') {
-            return getFlowApi(flow.id, 'v1').then(f => {
-                const { data, ...other } = f
-                const { edges, nodes, viewport } = data
+            // return getFlowApi(flow.id, 'v1').then(f => {
+                const { data, ...other } = flow
+                const { edges, nodes, viewport } = other
                 return {
                     action: 'init_data',
                     chat_id: chatId.startsWith('test') ? undefined : chatId,
@@ -26,7 +26,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
                         viewport
                     }
                 }
-            })
+            // })
         }
         if (action === 'flowInfo') {
             return {

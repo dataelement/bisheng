@@ -4,11 +4,12 @@ from typing import Annotated, List, Optional, Union
 from uuid import UUID
 
 import yaml
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
+
 from bisheng import __version__, settings
-from bisheng.api.services.knowledge_imp import filetype_load_map
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.utils import get_request_ip
-from bisheng.api.v1.schemas import (ProcessResponse, UnifiedResponseModel, UploadFileResponse,
+from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
                                     resp_200)
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_uploaded_file, upload_file_to_minio
@@ -21,10 +22,10 @@ from bisheng.interface.types import get_all_types_dict
 from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.services.deps import get_session_service, get_task_service
 from bisheng.services.task.service import TaskService
+from bisheng.settings import settings as bisheng_settings
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 
 try:
     from bisheng.worker import process_graph_cached_task
@@ -32,7 +33,6 @@ except ImportError:
 
     def process_graph_cached_task(*args, **kwargs):
         raise NotImplementedError('Celery is not installed')
-
 
 # build router
 router = APIRouter(tags=['Base'])
@@ -48,20 +48,20 @@ def get_all():
 @router.get('/env')
 def get_env():
     """获取环境变量参数"""
-    uns_support = [
-        'png', 'jpg', 'jpeg', 'bmp', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md',
-        'html', 'pdf'
-    ]
+    uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv']
+
+    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
+    etl_for_lm_url = etl4lm_settings.get("url", None)
+    if etl_for_lm_url:
+        uns_support.extend(['png', 'jpg', 'jpeg', 'bmp'])
+
     env = {}
     if isinstance(settings.settings.environment, str):
         env['env'] = settings.settings.environment
     else:
         env = copy.deepcopy(settings.settings.environment)
-    if settings.settings.get_knowledge().get('unstructured_api_url'):
-        if not env.get('uns_support'):
-            env['uns_support'] = uns_support
-    else:
-        env['uns_support'] = list(filetype_load_map.keys())
+
+    env['uns_support'] = uns_support
     if settings.settings.get_from_db('office_url'):
         env['office_url'] = settings.settings.get_from_db('office_url')
     # add tips from settings
@@ -70,6 +70,7 @@ def get_env():
     env.update(settings.settings.get_from_db('env') or {})
     env['pro'] = settings.settings.get_system_login_method().bisheng_pro
     env['version'] = __version__
+    env['enable_etl4lm'] = etl_for_lm_url is not None
     return resp_200(env)
 
 
@@ -124,14 +125,14 @@ async def update_web_config(request: Request,
 
 @router.post('/process/{flow_id}')
 async def process_flow_old(
-    flow_id: UUID,
-    inputs: Optional[dict] = None,
-    tweaks: Optional[dict] = None,
-    history_count: Annotated[int, Body(embed=True)] = 10,
-    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-    task_service: 'TaskService' = Depends(get_task_service),
-    sync: Annotated[bool, Body(embed=True)] = True,
+        flow_id: UUID,
+        inputs: Optional[dict] = None,
+        tweaks: Optional[dict] = None,
+        history_count: Annotated[int, Body(embed=True)] = 10,
+        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+        task_service: 'TaskService' = Depends(get_task_service),
+        sync: Annotated[bool, Body(embed=True)] = True,
 ):
     return await process_flow(flow_id, inputs, tweaks, history_count, clear_cache, session_id,
                               task_service, sync)
@@ -141,15 +142,15 @@ async def process_flow_old(
 # @router.post('/predict/{flow_id}')
 @router.post('/process')
 async def process_flow(
-    flow_id: Annotated[UUID, Body(embed=True)],
-    inputs: Optional[dict] = None,
-    tweaks: Optional[dict] = None,
-    history_count: Annotated[int, Body(embed=True)] = 10,
-    clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
-    session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
-    task_service: 'TaskService' = Depends(get_task_service),
-    sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
-    sse: Annotated[bool, Body(embed=True)] = False,
+        flow_id: Annotated[UUID, Body(embed=True)],
+        inputs: Optional[dict] = None,
+        tweaks: Optional[dict] = None,
+        history_count: Annotated[int, Body(embed=True)] = 10,
+        clear_cache: Annotated[bool, Body(embed=True)] = False,  # noqa: F821
+        session_id: Annotated[Union[None, str], Body(embed=True)] = None,  # noqa: F821
+        task_service: 'TaskService' = Depends(get_task_service),
+        sync: Annotated[bool, Body(embed=True)] = True,  # noqa: F821
+        sse: Annotated[bool, Body(embed=True)] = False,
 ):
     """
     Endpoint to process an input with a given flow_id.
@@ -254,7 +255,7 @@ async def process_flow(
                 await process_source_document(source_documents, session_id, message.id, answer)
                 extra.update({
                     'source_url':
-                    'resouce/{chat_id}/{msg_id}'.format(chat_id=session_id, msg_id=message.id)
+                        'resouce/{chat_id}/{msg_id}'.format(chat_id=session_id, msg_id=message.id)
                 })
             elif source == 4:
                 # QA

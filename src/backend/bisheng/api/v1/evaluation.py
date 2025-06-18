@@ -33,13 +33,15 @@ def create_evaluation(*,
                       prompt: str = Form(),
                       exec_type: str = Form(),
                       unique_id: str = Form(),
-                      version: Optional[int] = Form(default=None),
+                      version: Optional[int | str] = Form(default=None),
                       background_tasks: BackgroundTasks,
                       authorize: AuthJWT = Depends()):
     """ 创建评测任务. """
     authorize.jwt_required()
     payload = json.loads(authorize.get_jwt_subject())
     user_id = payload.get('user_id')
+    if not version:
+        version = 0
 
     try:
         # 尝试做下转码操作

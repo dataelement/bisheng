@@ -5,27 +5,57 @@ import { SearchIcon } from "../../bs-icons/search"
 import { cname, generateUUID } from "../utils"
 
 export interface InputProps
-    extends React.InputHTMLAttributes<HTMLInputElement> { }
+    extends React.InputHTMLAttributes<HTMLInputElement> {
+    boxClassName?: string;    // 外层容器的 className
+    showCount?: boolean;
+}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-    ({ className, boxClassName, type, maxLength, value, defaultValue, onChange, ...props }, ref) => {
-        // 用于存储当前的输入值
+    ({ className, boxClassName, type, maxLength, showCount, value, defaultValue, onChange, ...props }, ref) => {
         const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
 
-        // 处理 onChange 事件，更新 currentValue
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            setCurrentValue(e.target.value);
+            const { value } = e.target;
+            if (type === "number") {
+                // 使用正则表达式精确阻止负数（包括粘贴操作）
+                if (/-/.test(value)) return;
+
+                // 阻止单独的0
+                if (props.min > 0 && value === "0") return;
+
+                // 最大长度限制
+                if (maxLength && value.length > maxLength) return;
+                // 最大值限制
+                if (props.max && value > props.max) return
+            }
+
+            setCurrentValue(value);
             if (onChange) {
-                onChange(e); // 如果外部有 onChange，依然需要调用它
+                onChange(e);
             }
         };
 
-        // 当 value 或 defaultValue 改变时更新 currentValue
+        // 处理粘贴事件
+        const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+            if (type === "number") {
+                const pasteData = e.clipboardData.getData('text/plain');
+                // 阻止包含负数的粘贴
+                if (/-/.test(pasteData)) {
+                    e.preventDefault();
+                }
+            }
+        };
+
         React.useEffect(() => {
             if (value !== undefined) {
-                setCurrentValue(value);
+                // 处理外部传入值为0的情况
+                if (type === "number" && (value === 0 || value === "0")) {
+                    setCurrentValue('');
+                } else {
+                    setCurrentValue(value);
+                }
             }
-        }, [value]);
+        }, [value, type]);
 
         const noEmptyProps =
             value === undefined ? {} : { value: currentValue }
@@ -36,20 +66,29 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                     type={type}
                     className={cname(
                         "flex h-9 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                        type === 'number' ? 'number-input-arrows' : '',
                         className
                     )}
                     defaultValue={defaultValue}
-                    onChange={handleChange}
+                    onInput={handleChange}
+                    onPaste={handlePaste} // 添加粘贴事件处理
                     maxLength={maxLength}
                     ref={ref}
                     {...noEmptyProps}
                     {...props}
                 />
-                {maxLength && (
+                {showCount && maxLength && (
                     <div className="absolute right-1 bottom-1 text-xs text-gray-400 dark:text-gray-500">
                         {currentValue.length}/{maxLength}
                     </div>
                 )}
+
+                <style jsx>{`
+                    .number-input-arrows::-webkit-inner-spin-button,
+                    .number-input-arrows::-webkit-outer-spin-button {
+                        opacity: 1;
+                    }
+                `}</style>
             </div>
         );
     }

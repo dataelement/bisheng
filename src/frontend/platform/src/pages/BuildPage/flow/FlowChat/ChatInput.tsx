@@ -16,8 +16,9 @@ import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 
 export const FileTypes = {
+    ALL: ['.PNG', '.JPEG', '.JPG', '.BMP', '.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
     IMAGE: ['.PNG', '.JPEG', '.JPG', '.BMP'],
-    FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.DOC', '.DOCX', '.PPT', '.PPTX'],
+    FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
 
 export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, onLoad }) {
@@ -303,6 +304,9 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
             }
             // 待用户输入
             input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
+            setTimeout(() => {
+                inputRef.current.focus()
+            }, 60);
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))
@@ -436,9 +440,8 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         restartCallBackRef.current[chatId] = () => {
             createWebSocket().then(() => {
                 setRestarted(false)
-                onBeforSend('refresh_flow', {}).then((data) => {
-                    sendWsMsg(data)
-                })
+                const data = onBeforSend('refresh_flow', {})
+                sendWsMsg(data)
             })
         }
         // wsRef.current?.close()
