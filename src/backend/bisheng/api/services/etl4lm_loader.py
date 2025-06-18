@@ -82,7 +82,7 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
                 pdf_image_file_name, item, cropped_image_base_dir
             )
             result[item["element_id"]] = (
-                f"{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+                f"/{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
             )
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result

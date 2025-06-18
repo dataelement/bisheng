@@ -1,8 +1,10 @@
 # import logging
 
 import xlrd
-from bisheng.api.services.handler.base_parse_table_handle import BaseParseTableHandle
 from loguru import logger as max_kb
+
+from bisheng.api.services.handler.base_parse_table_handle import BaseParseTableHandle
+
 
 # from common.handle.base_parse_table_handle import BaseParseTableHandle
 
@@ -27,7 +29,6 @@ class XlsSplitHandle(BaseParseTableHandle):
             for sheet in sheets:
                 # 获取合并单元格的范围信息
                 merged_cells = sheet.merged_cells
-                print(merged_cells)
                 data = []
                 paragraphs = []
                 # 获取第一行作为标题行

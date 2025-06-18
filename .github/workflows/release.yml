@@ -91,6 +91,11 @@ jobs:
         - sync_dataelem_repos
       runs-on: ubuntu-latest
       steps:
+        - name: Get version
+          id: get_version
+          run: |
+            echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        
         - name: Process git message
           id: process_message
           run: |
