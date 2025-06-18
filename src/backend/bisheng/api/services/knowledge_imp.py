@@ -258,29 +258,12 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     """ 删除知识文件的向量数据和es数据 """
     if not file_ids:
         return True
+    logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     embeddings = FakeEmbedding()
     vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-    try:
-        if isinstance(vector_client.col, Collection):
-            pk = vector_client.col.query(
-                expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-            )
-        else:
-            pk = []
-    except Exception:
-        # 重试一次
-        logger.error("timeout_except")
-        vector_client.close_connection(vector_client.alias)
-        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-        pk = vector_client.col.query(
-            expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-        )
-
-    logger.info("query_milvus pk={}", pk)
-    if pk:
-        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
-        logger.info(f"act=delete_vector file_id={file_ids} res={res}")
+    vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
     vector_client.close_connection(vector_client.alias)
+    logger.info(f"delete_milvus file_ids={file_ids}")
 
     es_client = decide_vectorstores(
         knowledge.index_name, "ElasticKeywordsSearch", embeddings
@@ -788,11 +771,30 @@ def read_chunk_text(
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
-            # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
-            if file_extension_name not in filetype_load_map:
-                raise Exception("类型不支持")
-            loader = filetype_load_map[file_extension_name](file_path=input_file)
-            documents = loader.load()
+            if file_extension_name in ['pdf']:
+                md_file_name, local_image_dir, doc_id = convert_file_to_md(
+                    file_name=file_name,
+                    input_file_name=input_file,
+                    knowledge_id=knowledge_id,
+                    retain_images=bool(retain_images),
+                )
+                if not md_file_name: raise Exception(f"failed to parse {file_name}, please check backend log")
+
+                # save images to minio
+                if local_image_dir and retain_images == 1:
+                    put_images_to_minio(
+                        local_image_dir=local_image_dir,
+                        knowledge_id=knowledge_id,
+                        doc_id=doc_id,
+                    ) 
+                # 沿用原来的方法处理md文件
+                loader = filetype_load_map["md"](file_path=md_file_name)
+                documents = loader.load()
+            else:
+                if file_extension_name not in filetype_load_map:
+                    raise Exception("类型不支持")
+                loader = filetype_load_map[file_extension_name](file_path=input_file)
+                documents = loader.load()
 
     logger.info(f"start_extract_title file_name={file_name}")
     if llm:
