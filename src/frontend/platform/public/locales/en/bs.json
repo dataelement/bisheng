@@ -1,9 +1,9 @@
 {
-  "title": "BISHENG",
+  "title": "Aviva-Cofco Intelligence",
   "prompt": "Confirmation",
   "login": {
     "slogen": "Convenient, Flexible, Reliable Enterprise-Level Large Model Application Development Platform",
-    "account": "Email",
+    "account": "Account",
     "password": "Password",
     "confirmPassword": "Confirm Password",
     "noAccountRegister": "Don't have an account? Register",
@@ -189,7 +189,7 @@
     "chooseOne": "Choose a ",
     "dialogue": "Conversation ",
     "start": "to start with ",
-    "wenqingruijian": "Wen Qingrui Jian",
+    "wenqingruijian": "Aviva-Cofco Intelligence",
     "inputPlaceholder": "Enter your question",
     "uploadFileTooltip": "Upload File",
     "sendTooltip": "Send",
@@ -238,8 +238,7 @@
     "searchLabels": "Search labels",
     "confirmed": "Confirmed",
     "confirm": "Confirm",
-    "runNewWorkflow": "Run New Chat",
-    "chatEndMessage": "This chat has ended"
+    "runNewWorkflow": "Run New Workflow"
   },
   "model": {
     "modelManagement": "Model Management",
@@ -393,8 +392,9 @@
     "complete": "Complete",
     "setSplitSize": "Please set the file split size",
     "selectFileToUpload": "Please select a file to upload first",
+    "fileSizeExceedsLimit": "File size cannot exceed 50MB,removed",
     "file": "File",
-    "sizeExceedsLimit": "Size exceeds {{size}}MB",
+    "sizeExceedsLimit": "Size exceeds 50MB",
     "editDictionary": "Edit Dictionary",
     "exportCodeDialogTip": "Generate code to integrate the workflow into an external application (please make sure to build the skill before opening this page).",
     "chunkOverlap": "Chunk Overlap"
@@ -904,6 +904,8 @@
     "10910": "Current knowledge base version does not support segment modification. Please create a new knowledge base to modify segments.",
     "10800": "Service provider name already exists, please modify",
     "10801": "Model cannot be duplicated",
+    "10802": "Failed to add service provider, all models failed to initialize",
+    "10803": "Failed to add service provider, some models failed to initialize",
     "10700": "Tag already exists",
     "10701": "Tag not found",
     "10600": "Incorrect username or password",
@@ -925,7 +927,7 @@
   "all": "All",
   "confirmButton": "Confirm",
   "add": "Add",
-  "back": "Return",
+  "back": "Back",
   "create": "Create",
   "delete": "Delete",
   "deleteSuccess": "Delete successful",
