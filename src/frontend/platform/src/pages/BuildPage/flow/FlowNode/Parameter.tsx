@@ -151,7 +151,11 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
                 const imageFileItem = node.group_params[0].params.find(param => {
                     if (param.key === 'dialog_image_files') return true
                 })
-                imageFileItem.hidden = val === 'file'
+                const audioFileItem = node.group_params[0].params.find(param => {
+                    if (param.key === 'dialog_audio_files') return true
+                })
+                imageFileItem.hidden = !val.includes('image')
+                audioFileItem.hidden = !val.includes('audio')
                 handleOnNewValue(val)
                 onFouceUpdate()
             }} />;

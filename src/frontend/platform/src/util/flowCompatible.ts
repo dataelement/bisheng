@@ -112,9 +112,10 @@ const comptibleInput = (node) => {
         const formInput = node.group_params[0].params.find(item => item.key === 'form_input')
         formInput.value = formInput.value.map((item, index) => {
             if (item.type === 'file') {
-                item.file_type = ['file', 'image', 'audio']
+                item.file_types = ['file', 'image', 'audio']
                 item.file_content_size = 15000
                 item.image_file = 'image_file' + (index || '')
+                item.audio_file = 'audio_file' + (index || '')
                 return item
             }
             return item

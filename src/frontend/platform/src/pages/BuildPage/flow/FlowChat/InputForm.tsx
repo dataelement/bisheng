@@ -126,6 +126,17 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                     </Select>
                                             )
                                         case FormItemType.File:
+                                            const fileAccept = item.file_types;
+                                            const filesTypes = [];
+                                            if (fileAccept.includes('image')) {
+                                                filesTypes.push(...FileTypes.IMAGE);
+                                            }
+                                            if (fileAccept.includes('file')) {
+                                                filesTypes.push(...FileTypes.FILE);
+                                            } 
+                                            if (fileAccept.includes('audio')) {
+                                                filesTypes.push(...FileTypes.AUDIO);
+                                            }
                                             return (
                                                 <InputFileComponent
                                                     isSSO
@@ -135,7 +146,7 @@ const InputForm = ({ data }: { data: WorkflowNodeParam }) => {
                                                     multiple={item.multiple}
                                                     onChange={(name) => updataFileName(item, name)}
                                                     // fileTypes={FileTypes[item.file_type.toUpperCase()]}
-                                                    suffixes={FileTypes[item.file_type.toUpperCase()]}
+                                                    suffixes={filesTypes}
                                                     onFileChange={(val) => handleChange(item, val)}
                                                 />
                                             )

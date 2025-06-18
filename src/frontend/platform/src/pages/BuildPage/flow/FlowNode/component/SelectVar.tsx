@@ -35,8 +35,8 @@ const getSpecialVar = (obj, type, onlyImg = false) => {
                         res.push({ label: item.file_content, value: item.file_content })
                         res.push({ label: item.file_path, value: item.file_path })
                     }
-                    //TODO: 检查这里的file_type
-                    item.file_type !== 'file' && res.push({ label: item.image_file, value: item.image_file })
+                    item.file_types.includes('image') && res.push({ label: item.image_file, value: item.image_file })
+                    item.file_types.includes('audio') && res.push({ label: item.audio_file, value: item.audio_file })
                 } else if (!onlyImg) {
                     res.push({ label: item.key, value: item.key })
                 }
