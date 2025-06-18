@@ -130,7 +130,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
             height: '100%',
             toolbarConfig: {
                 hide: true,
-                pin: true,
+                pin: true, 
             },
             mode: 'ir',  // 'sv' for split view, 'ir' for instant rendering
             preview: {
