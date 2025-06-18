@@ -357,7 +357,7 @@
     "promptLabel": "评测指令文本：",
     "enterExecType": "请选择要评测的技能或助手",
     "enterUniqueId": "请选择技能或助手ID",
-    "enterVersion": "请选择技能的版本",
+    "enterVersion": "请选择技能或工作流的版本",
     "enterFile": "请选择测试集数据",
     "fileSizeLimit": "文件大小限制在10M以内",
     "enterPrompt": "评测指令不能为空",

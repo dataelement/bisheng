@@ -18,6 +18,14 @@ export const enum VariableType {
     /** 文件 */
     File = "file"
 }
+
+export const enum FLOW_TYPE {
+    FLOW = 1,
+    ASSISTANT = 5,
+    WORKFLOW = 10,
+    WORKSTATION = 15,
+}
+
 export interface Variable {
     id: string | number;
     update: boolean;
@@ -149,9 +157,10 @@ export async function saveFlowToDatabase(newFlow: {
 * @returns {Promise<any>} The flows data.
 * @throws Will throw an error if reading fails.
 */
-export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string, tag_id = -1) {
+export async function readFlowsFromDatabase(page: number = 1, pageSize: number = 20, search: string, tag_id = -1, flowType: number = FLOW_TYPE.FLOW) {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}&name=${search}${tagIdStr}`);
+    const flow_type = flowType === FLOW_TYPE.FLOW ?  '' : `&flow_type=${flowType}`
+    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/flows/?page_num=${page}&page_size=${pageSize}${flow_type}&name=${search}${tagIdStr}`);
     return { data, total };
 }
 
