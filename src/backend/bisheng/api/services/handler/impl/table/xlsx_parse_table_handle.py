@@ -1,11 +1,9 @@
 import io
 
-from loguru import logger
-from openpyxl import load_workbook
-
 from bisheng.api.services.handler.base_parse_table_handle import BaseParseTableHandle
 from bisheng.api.services.handler.impl.tools import xlsx_embed_cells_images
-
+from loguru import logger
+from openpyxl import load_workbook
 
 # from common.handle.base_parse_table_handle import BaseParseTableHandle
 # from common.handle.impl.tools import xlsx_embed_cells_images
@@ -92,6 +90,7 @@ class XlsxSplitHandle(BaseParseTableHandle):
                 if len(image_dict) > 0:
                     save_image(image_dict.values())
             except Exception as e:
+                print(f'{e}')
                 image_dict = {}
             md_tables = ''
             # 如果未指定 sheet_name，则使用第一个工作表

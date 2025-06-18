@@ -248,7 +248,6 @@ const ParagraphEdit = ({
             case 'pdf':
                 return previewFileUrl && <FileView
                     select
-                    startIndex={0} 
                     fileUrl={previewFileUrl}
                     labels={labels}
                     scrollTo={postion}

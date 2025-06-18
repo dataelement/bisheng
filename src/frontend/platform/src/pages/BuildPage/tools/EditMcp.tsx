@@ -178,7 +178,6 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 setIsEditMode(false);
             }
             setIsDialogOpen(true);
-            setIsLoading(false);
         }
     }));
 
@@ -267,6 +266,9 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
             setTimeout(() => {
                 handleSubmit()
             }, 0);
+        }
+        if (isLoading) {
+            return;
         }
 
         // 使用latestFormData.current获取最新数据

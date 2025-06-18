@@ -413,10 +413,6 @@ class KnowledgeService(KnowledgeUtils):
                 file_share_url = redis_client.get(f"{cache_key}_file_path")
                 partitions = redis_client.get(f"{cache_key}_partitions")
                 res = []
-
-                # 根据分段顺序排序
-                cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
-
                 for key, val in cache_value.items():
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
@@ -1029,10 +1025,12 @@ class KnowledgeService(KnowledgeUtils):
         vector_client = decide_vectorstores(
             db_knowledge.collection_name, "Milvus", embeddings
         )
-        res = vector_client.col.delete(
+        pk = vector_client.col.query(
             expr=f"file_id == {file_id} && chunk_index == {chunk_index}",
+            output_fields=["pk"],
             timeout=10,
         )
+        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
         logger.info(f"act=delete_vector_over {res}")
 
         logger.info(

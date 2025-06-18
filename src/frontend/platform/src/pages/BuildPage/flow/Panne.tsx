@@ -479,14 +479,10 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         const pos = _reactFlowInstance.screenToFlowPosition({
             x: reactflowBounds.width * 0.2, y: reactflowBounds.height * 0.9
         });
-        const position = calculatePosition(nodes, {
-            x: pos.x + 50,
-            y: pos.y + 50,
-        })
         // 增加节点
         setNodes((nds) => {
             return nds.concat({
-                id: nodeId, type: 'noteNode', position, data: {
+                id: nodeId, type: 'noteNode', position: pos, data: {
                     id: nodeId,
                     group_params: [],
                     type: 'note',

@@ -14,8 +14,6 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
     useEffect(() => {
         // console.log('markdown :>> ', markdown);
         const processedMarkdown = markdown.replace(/^( {4,})/gm, '   ')
-        .replaceAll('(bisheng/', '(/bisheng/')
-
         if (!hidden && vditorRef.current && readyRef.current) {
             vditorRef.current.setValue(processedMarkdown);
         } else {
@@ -43,9 +41,6 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
                     toc: true,
                     mark: true,
                 },
-                math: {
-                    "inlineDigit": true
-                }
             },
             cache: {
                 enable: false,
