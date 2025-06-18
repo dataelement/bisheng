@@ -5,8 +5,8 @@ from langchain_core.documents import Document
 from bisheng.api.services.md_from_docx import handler as docx_handler
 from bisheng.api.services.md_from_excel import handler as excel_handler
 from bisheng.api.services.md_from_html import handler as html_handler
-from bisheng.api.services.md_from_pptx import handler as pptx_handler
 from bisheng.api.services.md_from_pdf import handler as pdf_handler
+from bisheng.api.services.md_from_pptx import handler as pptx_handler
 from bisheng.api.services.md_post_processing import post_processing
 from bisheng.cache.utils import CACHE_DIR
 from bisheng.utils.minio_client import minio_client
@@ -76,6 +76,7 @@ def convert_file_to_md(
             CACHE_DIR, input_file_name, header_rows, data_rows, append_header
         )
         local_image_dir = None
+        return md_file_name, local_image_dir, doc_id
     elif (
             file_name.endswith(".html")
             or file_name.endswith(".htm")
@@ -90,7 +91,6 @@ def convert_file_to_md(
     elif file_name.endswith("pdf"):
         md_file_name, local_image_dir, doc_id = pdf_handler(CACHE_DIR, input_file_name)
         include_cache_dir = True
-
 
     return replace_image_url(
         md_file_name,
