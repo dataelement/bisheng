@@ -11,10 +11,11 @@ from io import BytesIO
 from xml.etree.ElementTree import fromstring
 from zipfile import ZipFile
 
+from PIL import Image as PILImage
 from openpyxl.drawing.image import Image as openpyxl_Image
 from openpyxl.packaging.relationship import get_dependents, get_rels_path
 from openpyxl.xml.constants import REL_NS, SHEET_DRAWING_NS, SHEET_MAIN_NS
-from PIL import Image as PILImage
+
 
 # from common.handle.base_parse_qa_handle import get_title_row_index_dict, get_row_value
 # from dataset.models import Image
@@ -71,7 +72,6 @@ def handle_images(deps, archive: ZipFile) -> []:
             image_io = archive.read(dep.target)
             image = openpyxl_Image(BytesIO(image_io))
         except Exception as e:
-            print(e)
             continue
         image.embed = dep.id  # 文件rId
         image.target = dep.target  # 文件地址

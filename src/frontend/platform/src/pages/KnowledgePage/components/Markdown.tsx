@@ -43,6 +43,9 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
                     toc: true,
                     mark: true,
                 },
+                math: {
+                    "inlineDigit": true
+                }
             },
             cache: {
                 enable: false,

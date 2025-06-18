@@ -169,7 +169,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
             case 'pdf':
                 return <FileView
                     startIndex={0}
-                    select={selectedChunkIndex !== -1}
+                    select={false} // selectedChunkIndex !== -1}
                     fileUrl={url}
                     labels={pageLabels}
                     scrollTo={postion}
