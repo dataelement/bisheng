@@ -263,7 +263,7 @@ def insert_es(li: List, target: ElasticKeywordsSearch):
     logger.info("copy_es_done pk_size={}", len(res_list))
 
 
-@bisheng_celery.task(time_limit=settings.celery_task.knowledge_file_time_limit)
+@bisheng_celery.task()
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
     """ 异步解析一个入库成功的文件 """
     with logger.contextualize(trace_id=f'parse_file_{file_id}'):
