@@ -7,6 +7,7 @@ from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, Base
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from loguru import logger
 from pydantic import Field
 
@@ -409,8 +410,8 @@ class BishengLLM(BaseChatModel):
             tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
             **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        self.llm.bind_tools(tools, **kwargs)
-        return self
+        formatted_tools = [convert_to_openai_tool(tool) for tool in tools]
+        return super().bind(tools=formatted_tools, **kwargs)
 
     def convert_qwen_result(self, message: BaseMessageChunk | BaseMessage) -> BaseMessageChunk | BaseMessage:
         # ChatTongYi model vl model message.content is list
