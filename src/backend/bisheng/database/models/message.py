@@ -539,7 +539,7 @@ class ChatMessageDao(MessageBase):
         count_stat = select(func.count(func.distinct(func.concat(ChatMessage.flow_id,UserGroup.group_id)))).select_from(ChatMessage
             ).join(UserGroup, ChatMessage.user_id == UserGroup.user_id)
         total_session_stat = select(
-            func.count(func.distinct(ChatMessage.chat_id))
+            func.count(func.distinct(func.concat(ChatMessage.chat_id, "-", ChatMessage.flow_id)))
         ).select_from(
             ChatMessage
         ).join(
