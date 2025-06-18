@@ -113,6 +113,25 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
             doc.close()
 
 
+def is_pdf_damaged(pdf_path: str) -> bool:
+    """
+    检查 PDF 文件是否损坏。
+
+    Args:
+        pdf_path (str): PDF 文件的路径。
+
+    Returns:
+        bool: 如果文件损坏，返回 True；否则返回 False。
+    """
+    try:
+        doc = fitz.open(pdf_path)
+        doc.close()
+        return False
+    except Exception as e:
+        logger.error(f"PDF file is damaged: {e}")
+        return True
+
+
 def handler(cache_dir, file_or_url: str):
     doc_id = uuid4()
     ouput_dir = f"{cache_dir}/{doc_id}"

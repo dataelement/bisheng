@@ -32,6 +32,7 @@ from bisheng.api.services.libreoffice_converter import (
     convert_ppt_to_pdf,
 )
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
@@ -754,6 +755,10 @@ def read_chunk_text(
         documents = loader.load()
     else:
         if etl_for_lm_url:
+            if file_extension_name in ["pdf"]:
+                # 判断文件是否损坏
+                if is_pdf_damaged(input_file):
+                    raise Exception('The file is damaged.')
             etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
             loader = Etl4lmLoader(
                 file_name,
@@ -786,8 +791,8 @@ def read_chunk_text(
                         local_image_dir=local_image_dir,
                         knowledge_id=knowledge_id,
                         doc_id=doc_id,
-                    ) 
-                # 沿用原来的方法处理md文件
+                    )
+                    # 沿用原来的方法处理md文件
                 loader = filetype_load_map["md"](file_path=md_file_name)
                 documents = loader.load()
             else:
