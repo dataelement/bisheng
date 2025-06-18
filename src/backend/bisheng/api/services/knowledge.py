@@ -415,7 +415,7 @@ class KnowledgeService(KnowledgeUtils):
                 res = []
 
                 # 根据分段顺序排序
-                cache_value = dict(sorted(cache_value.items()))
+                cache_value = dict(sorted(cache_value.items(), key=lambda x: int(x[0])))
 
                 for key, val in cache_value.items():
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
