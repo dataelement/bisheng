@@ -63,7 +63,7 @@ class AzureDallEWrapper(DallEAPIWrapper):
         # Check OPENAI_KEY for backwards compatibility.
         # TODO: Remove OPENAI_API_KEY support to avoid possible conflict when using
         # other forms of azure credentials.
-        openai_api_key = (values['openai_api_key'] or os.getenv('AZURE_OPENAI_API_KEY')
+        openai_api_key = (values.get('openai_api_key') or values.get('api_key') or os.getenv('AZURE_OPENAI_API_KEY')
                           or os.getenv('OPENAI_API_KEY'))
         values['openai_api_key'] = (convert_to_secret_str(openai_api_key)
                                     if openai_api_key else None)
