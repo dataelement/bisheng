@@ -5,6 +5,7 @@ import json
 from typing import List
 
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.workflow import WorkFlowService
 from bisheng.utils import generate_uuid
 from fastapi import UploadFile, HTTPException
 import pandas as pd
@@ -281,6 +282,13 @@ def add_evaluation_task(evaluation_id: int):
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
 
+        if evaluation.exec_type == ExecType.WORK_FLOW.value:
+            for index, one in enumerate(csv_data):
+                answer = asyncio.run(WorkFlowService.run_workflow_1Q1A(evaluation.unique_id,evaluation.version,one.get('question')))
+                one["answer"] = answer
+                current_progress += progress_increment
+                redis_client.set(redis_key, round(current_progress))
+
         _llm = LLMService.get_evaluation_llm_object()
         llm = LangchainLLM(_llm)
         data_samples = {
@@ -288,7 +296,6 @@ def add_evaluation_task(evaluation_id: int):
             "answer": [one.get('answer') for one in csv_data],
             "ground_truths": [[one.get('ground_truth')] for one in csv_data]
         }
-
         dataset = Dataset.from_dict(data_samples)
         answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm)
         score = evaluate(dataset, metrics=[answer_correctness_bisheng])

@@ -1,5 +1,8 @@
+import asyncio
+import uuid
 from typing import Dict, Optional, List
-
+from bisheng.worker.workflow.tasks import execute_workflow
+from bisheng.api.v2.utils import get_default_operator
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils import generate_uuid
@@ -20,7 +23,7 @@ from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
-    WorkflowOutputSchema
+    WorkflowOutputSchema, WorkflowStream
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowOutputSchema, WorkflowInputSchema, \
     WorkflowInputItem
 from bisheng.api.v1.schemas import ChatResponse
@@ -35,8 +38,10 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
+from bisheng.worker import RedisCallback
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
+from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
@@ -387,3 +392,105 @@ class WorkFlowService(BaseService):
             )]
         )
         return workflow_event
+
+    @classmethod
+    async def invoke_workflow(cls,workflow_id: UUID,
+                              version:str,
+                          user_input: Optional[dict],
+                          message_id: Optional[int],
+                          session_id: Optional[str],
+                          stream: Optional[bool] = False):
+        login_user = get_default_operator()
+        workflow_id = workflow_id.hex
+
+        # 解析出chat_id和unique_id
+        if not session_id:
+            chat_id = uuid.uuid4().hex
+            unique_id = f'{chat_id}_async_task_id'
+            session_id = unique_id
+        else:
+            chat_id = session_id.split('_', 1)[0]
+            unique_id = session_id
+        logger.debug(f'invoke_workflow: {workflow_id}, {session_id}')
+        workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
+
+        # 查询工作流信息
+        workflow_info = FlowVersionDao.get_version_by_name(workflow_id,version)
+        if not workflow_info:
+            raise NotFoundError.http_exception()
+        if workflow_info.flow_type != FlowType.WORKFLOW.value:
+            raise NotFoundError.http_exception()
+
+        # 查询工作流状态
+        status_info = workflow.get_workflow_status()
+        if not status_info:
+            # 初始化工作流
+            workflow.set_workflow_data(workflow_info.data)
+            workflow.set_workflow_status(WorkflowStatus.WAITING.value)
+            # 发起异步任务
+            execute_workflow.delay(unique_id, workflow_id, chat_id, str(login_user.user_id))
+        else:
+            # 设置用户的输入
+            if status_info['status'] == WorkflowStatus.INPUT.value and user_input:
+                workflow.set_user_input(user_input, message_id)
+                workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+
+        logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
+
+        async def handle_workflow_event(event_list: List):
+            async for event in workflow.get_response_until_break():
+                if event.category == WorkflowEventType.NodeRun.value:
+                    continue
+                logger.debug(f'handle_workflow_event workflow event: {event}')
+                # 非流式请求，过滤掉节点产生的流式输出事件
+                if not stream and event.category == WorkflowEventType.StreamMsg.value and event.type == 'stream':
+                    continue
+                workflow_stream = WorkflowStream(session_id=session_id,
+                                                 data=WorkFlowService.convert_chat_response_to_workflow_event(event))
+                event_list.append(workflow_stream.data)
+                yield workflow_stream
+            tmp_status_info = workflow.get_workflow_status()
+            if tmp_status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
+                workflow.clear_workflow_status()
+            if tmp_status_info['status'] == WorkflowStatus.SUCCESS.value:
+                workflow_stream = WorkflowStream(session_id=session_id,
+                                                 data=WorkflowEvent(event=WorkflowEventType.Close.value))
+                event_list.append(workflow_stream.data)
+                yield workflow_stream
+
+        res = []
+        # 非流式返回累计的事件列表
+        if not stream:
+            async for _ in handle_workflow_event(res):
+                pass
+            return {
+                'session_id': session_id,
+                'events': res
+            }
+
+    # 仅处理一问一答的workflow
+    @classmethod
+    async def run_workflow_1Q1A(cls, workflow_id: UUID, version: str, input: str) -> str:
+        events = await cls.invoke_workflow(workflow_id, version, None, None, None, False)
+        session_id = events['session_id']
+        message_id = None
+        node_id = None
+        evens = events['events']
+        for even in evens:
+            if even.event != WorkflowEventType.UserInput.value:
+                continue
+            message_id = even.message_id
+            node_id = even.node_id
+            break
+        out_put = ""
+        if node_id and message_id:
+            result = await cls.invoke_workflow(workflow_id, version, {node_id:{"user_input": input}}, message_id, session_id, False)
+            for even in result['events']:
+                if even.event!= WorkflowEventType.OutputMsg.value:
+                    continue
+                out_put = even.output_schema.message
+                break
+        return out_put
+
+
+
