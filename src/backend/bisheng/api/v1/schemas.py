@@ -466,6 +466,10 @@ class WorkstationConfig(BaseModel):
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
+    applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
+                                                         description='应用中心欢迎消息')
+    applicationCenterDescription: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
+                                                         description='应用中心描述')
 
 
 class ExcelRule(BaseModel):
@@ -557,3 +561,7 @@ class KnowledgeFileProcess(FileProcessBase):
     file_list: List[KnowledgeFileOne] = Field(..., description='文件列表')
     callback_url: Optional[str] = Field(default=None, description='异步任务回调地址')
     extra: Optional[str] = Field(default=None, description='附加信息')
+
+class FrequentlyUsedChat(BaseModel):
+    user_link_tag: str = Field(..., description='用户相关tag')
+    tag_detail: str = Field(..., description='用户相关tagID')
