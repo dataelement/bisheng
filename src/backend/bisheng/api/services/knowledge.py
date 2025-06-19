@@ -3,6 +3,7 @@ import json
 import math
 import os
 import time
+from datetime import datetime
 from typing import Any, Dict, List
 
 from fastapi import BackgroundTasks, Request
@@ -776,13 +777,20 @@ class KnowledgeService(KnowledgeUtils):
                         "_source"
                     ]["metadata"]["title"]
             except Exception as e:
+                # maybe es index not exist so ignore this error
                 logger.warning(f"act=get_knowledge_files error={str(e)}")
                 pass
+        timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
-            if one.status != KnowledgeFileStatus.SUCCESS.value:
+            # 超过一天还在解析中的，将状态置为失败
+            if one.status == KnowledgeFileStatus.PROCESSING.value and (datetime.now() - one.update_time).days > 1:
+                timeout_files.append(one.id)
                 continue
             finally_res[index].title = file_title_map.get(one.id, "")
+        if timeout_files:
+            KnowledgeFileDao.update_file_status(timeout_files, KnowledgeFileStatus.FAILED,
+                                                '文件处理时间超过24小时')
 
         return (
             finally_res,

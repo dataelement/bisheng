@@ -158,8 +158,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_file
 
     @classmethod
-    def update_file_status(cls, file_id: int, status: KnowledgeFileStatus, reason: str = None):
-        statement = update(KnowledgeFile).where(KnowledgeFile.id == file_id).values(status=status.value, remark=reason)
+    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
+        """ 批量更新文件状态 """
+        statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
+                                                                                       remark=reason)
         with session_getter() as session:
             session.exec(statement)
             session.commit()
