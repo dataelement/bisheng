@@ -340,16 +340,10 @@ export default function ChatInput({ autoRun, v = 'v1', clear, form, wsUrl, onBef
                 setAccepts(filesTypes.join(','));
             }
             // 待用户输入
-<<<<<<< HEAD
-            input_schema.tab === 'form_input'
-                ? (setInputForm(input_schema), setFormShow(true))
-                : setInputLock({ locked: false, reason: '' });
-=======
-            input_schema.tab === 'form_input' ? setInputForm(input_schema) : setInputLock({ locked: false, reason: '' })
+            input_schema.tab === 'form_input' ? (setInputForm(input_schema), setFormShow(true)) : setInputLock({ locked: false, reason: '' })
             setTimeout(() => {
                 inputRef.current.focus()
             }, 60);
->>>>>>> eba9e31
             return
         } else if (data.category === 'guide_question') {
             return questionsRef.current.updateQuestions(data.message.guide_question.filter(q => q))

@@ -354,7 +354,6 @@ export function getFileExtension(filename) {
 }
 
 
-<<<<<<< HEAD
 export async function webmToWav(webmBlob) {
     const audioCtx = new AudioContext();
     const buffer = await audioCtx.decodeAudioData(await webmBlob.arrayBuffer());
@@ -501,7 +500,6 @@ export function optimizeForTTS(text) {
   export function formatTTSText(text) {
       return optimizeForTTS(contentToPlainText(text));
   }
-=======
 /**
  * 截取字符串并在末尾添加省略号（如果需要）
  * @param {string} str - 要处理的字符串
@@ -522,4 +520,3 @@ export function truncateString(str, maxLength) {
     // 截取字符串并添加省略号
     return str.substring(0, maxLength) + '...';
 }
->>>>>>> eba9e31

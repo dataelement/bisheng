@@ -66,10 +66,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [appConfig, setAppConfig] = useState<any>({
     libAccepts: [],
     noFace: true,
-<<<<<<< HEAD
     disableCopyFlowIds: [],
-=======
->>>>>>> eba9e31
   })
 
   const loadConfig = () => {
