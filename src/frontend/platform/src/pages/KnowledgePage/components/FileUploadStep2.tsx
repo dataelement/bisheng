@@ -10,7 +10,8 @@ import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import Loading from "@/components/ui/loading";
 
 export interface FileItem {
     id: string;
@@ -211,11 +212,8 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
                 // disabled={strategies.length === 0}
                 onClick={() => handleNext()}
             >
-                {isSubmitting ? (
-    <LoadingIcon className="h-12 w-12" />
-  ) : (
-    t('nextStep')
-  )}
+                {isSubmitting && <LoadIcon className="mr-1" />}
+                {t('nextStep')}
             </Button>
         </div>
     </div>

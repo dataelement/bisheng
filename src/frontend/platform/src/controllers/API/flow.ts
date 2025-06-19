@@ -222,7 +222,7 @@ export async function updateFlowApi(
 ): Promise<FlowType> {
     if (updatedFlow.logo) {
         // logo保存相对路径
-        updatedFlow.logo = updatedFlow.logo.match(/(icon.*)\?/)?.[1]
+        updatedFlow.logo = updatedFlow.logo.replace('/bisheng', '')
     }
     return await axios.patch(`/api/v1/flows/${updatedFlow.id}`, {
         logo: updatedFlow.logo || '',
