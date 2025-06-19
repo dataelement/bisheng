@@ -281,7 +281,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     </div>
                 </div>
                 {/* 工作流安全审查 */}
-                {appConfig.isPro && <Accordion type="multiple" className="w-full">
+                {isEditMode && appConfig.isPro && <Accordion type="multiple" className="w-full">
                     <AssistantSetting ref={securityRef} id={appId} type={5} />
                 </Accordion>}
                 <DialogFooter>
