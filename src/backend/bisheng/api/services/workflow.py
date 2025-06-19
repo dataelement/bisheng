@@ -1,5 +1,7 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
+from bisheng.database.models.group import GroupDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils import generate_uuid
 import json
 import os
@@ -44,6 +46,22 @@ from loguru import logger
 class WorkFlowService(BaseService):
 
     @classmethod
+    def get_company_members_by_uid(cls,user_id: int) -> List[int]:
+        user_groups = UserGroupDao.get_user_group(user_id)
+        if not user_groups:
+            return []
+        group_ids = [ug.group_id for ug in user_groups]
+        group_infos = GroupDao.get_group_by_ids(group_ids)
+        codes = set([str(g.code).split("|")[0] for g in group_infos if g.code])
+        all_group_id = []
+        for code in codes:
+            group_info = GroupDao.get_child_groups(code)
+            all_group_id.extend([g.id for g in group_info])
+        all_user_id = UserGroupDao.get_groups_user(all_group_id)
+        logger.info(f"WorkFlowService get_company_members_by_uid user_id={user_id} all_user_id={all_user_id}")
+        return list(set(all_user_id))
+
+    @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
                       page: int = 1,
                       page_size: int = 10) -> (list[dict], int):
@@ -75,8 +93,9 @@ class WorkFlowService(BaseService):
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, page,
-                                               page_size)
+            all_user_id = cls.get_company_members_by_uid(user.user_id)
+            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, flow_id_extra, page,
+                                               page_size,all_user_id)
 
         # 应用ID列表
         resource_ids = []
