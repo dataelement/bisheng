@@ -33,7 +33,7 @@ const enum DisplayModeType {
 }
 
 const initialStrategies = [
-    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分,用于分隔段落' },
+    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分，用于分隔段落' },
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
@@ -265,7 +265,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
             separator: ['\\n\\n', '\\n'],
             separatorRule: ['after', 'after'],
             chunkSize: "1000",
-            chunkOverlap: "100",
+            chunkOverlap: "0",
             retainImages: true,
             enableFormula: true,
             forceOcr: true,
