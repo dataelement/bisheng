@@ -46,7 +46,7 @@ class FlowService(BaseService):
             group_info = GroupDao.get_child_groups(code)
             all_group_id.extend([g.id for g in group_info])
         all_user_id = UserGroupDao.get_groups_user(all_group_id)
-        logger.info(f"WorkFlowService get_company_members_by_uid user_id={user_id} all_user_id={all_user_id}")
+        logger.info(f"FlowService get_company_members_by_uid user_id={user_id} all_user_id={all_user_id}")
         return list(set(all_user_id))
 
     @classmethod
@@ -237,12 +237,9 @@ class FlowService(BaseService):
         if flow_info.flow_type == FlowType.WORKFLOW.value:
             atype = AccessType.WORK_FLOW
         all_user_id = cls.get_company_members_by_uid(login_user.user_id)
-        if flow_info.user_id in all_user_id:
-            return resp_200(data=flow_info)
-        if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
-            raise UnAuthorizedError.http_exception()
-
-
+        if flow_info.user_id not in all_user_id:
+            if not login_user.access_check(flow_info.user_id, flow_info.id, atype):
+                raise UnAuthorizedError.http_exception()
         return resp_200(data=flow_info)
 
     @classmethod
