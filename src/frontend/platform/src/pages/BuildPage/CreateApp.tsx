@@ -228,7 +228,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
     // 上传头像逻辑
     const uploadAvator = (file: File) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setFormData(prev => ({ ...prev, url: '/bisheng' + res.relative_path }));
+            setFormData(prev => ({ ...prev, url: '/bisheng/' + res.relative_path }));
         });
     };
 
