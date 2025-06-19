@@ -37,7 +37,7 @@ class ParseType(Enum):
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
-    file_name: str = Field(sa_column=Column(String(length=1024), index=True), max_length=1000)
+    file_name: str = Field(index=True, max_length=200)
     md5: Optional[str] = Field(default=None, index=False)
     parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
                                       index=False,
