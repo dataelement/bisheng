@@ -131,6 +131,20 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
         else:
             source = SourceType.FILE.value
 
+            # 判断是否都是知识库内的文件, 有一个不是则不支持溯源
+            for one in source_document:
+                # 如果没有知识库id和文件id，则不支持溯源
+                if not one.metadata.get('knowledge_id') or not one.metadata.get('file_id'):
+                    source = SourceType.NOT_SUPPORT.value
+                    break
+                # 判断下知识库id和文件id是否是数字格式，因为工作流上传的临时文档也有knowledge_id和文件id
+                try:
+                    int(one.metadata.get('knowledge_id'))
+                    int(one.metadata.get('file_id'))
+                except ValueError:
+                    source = SourceType.NOT_SUPPORT.value
+                    break
+
     return source, result
 
 
