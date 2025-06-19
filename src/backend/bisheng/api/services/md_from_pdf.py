@@ -107,7 +107,7 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
     except Exception as e:
         logger.exception(f"Error processing pdf: {e}")
-        raise Exception("文档解析失败")
+        raise Exception(f"文档解析失败: {str(e)[-100:]}")  # 截取最后100个字符以避免过长的错误信息
     finally:
         if doc:
             doc.close()
