@@ -9,7 +9,7 @@ from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig, InspirationConfig
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
@@ -33,6 +33,15 @@ class WorkStationService(BaseService):
         else:
             config = Config(key=ConfigKeyEnum.WORKSTATION.value, value=json.dumps(data.dict()))
         ConfigDao.insert_config(config)
+
+        if data.inspirationConfig is not None:
+            # 如果有灵思配置，则更新灵思的配置
+            inspiration_config = ConfigDao.get_config(ConfigKeyEnum.INSPIRATION_CONFIG)
+
+            inspiration_config.value = json.dumps(data.inspirationConfig.model_dump())
+
+            ConfigDao.insert_config(inspiration_config)
+
         return data
 
     @classmethod
@@ -51,16 +60,22 @@ class WorkStationService(BaseService):
             if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
                 ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
+
+            # 灵思配置获取
+            inspiration_config = ConfigDao.get_config(ConfigKeyEnum.INSPIRATION_CONFIG)
+            if inspiration_config is None:
+                ret.inspirationConfig = InspirationConfig.model_validate_json(inspiration_config.value)
+
             return ret
         return None
 
     @classmethod
     async def uploadPersonalKnowledge(
-        cls,
-        request: Request,
-        login_user: UserPayload,
-        file_path,
-        background_tasks: BackgroundTasks,
+            cls,
+            request: Request,
+            login_user: UserPayload,
+            file_path,
+            background_tasks: BackgroundTasks,
     ):
         # 查询是否有个人知识库
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
@@ -84,11 +99,11 @@ class WorkStationService(BaseService):
 
     @classmethod
     def queryKnowledgeList(
-        cls,
-        request: Request,
-        login_user: UserPayload,
-        page: int,
-        size: int,
+            cls,
+            request: Request,
+            login_user: UserPayload,
+            page: int,
+            size: int,
     ):
         # 查询是否有个人知识库
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,

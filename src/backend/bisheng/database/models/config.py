@@ -18,6 +18,7 @@ class ConfigKeyEnum(Enum):
     EVALUATION_LLM = 'evaluation_llm'  # 评测默认模型配置
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
     WORKSTATION = 'workstation'  # 工作台默认模型配置
+    INSPIRATION_CONFIG = 'inspiration_config'  # 灵思配置
 
 
 class ConfigBase(SQLModelSerializable):
@@ -54,7 +55,10 @@ class ConfigDao(ConfigBase):
     def get_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
         with session_getter() as session:
             statement = select(Config).where(Config.key == key.value)
-            return session.exec(statement).first()
+            config = session.exec(statement).first()
+            if config is None:
+                config = ConfigCreate(key=key.value, value='')
+            return config
 
     @classmethod
     def insert_config(cls, config: Config) -> Config:

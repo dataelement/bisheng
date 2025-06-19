@@ -17,7 +17,7 @@ from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConv
                                               WorkstationMessage, WorkStationService, SearchTool)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
@@ -102,7 +102,7 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
     return f'event: message\ndata: {msg}\n\n'
 
 
-@router.get('/config')
+@router.get('/config', summary='获取工作台配置', response_model=UnifiedResponseModel)
 def get_config(
         request: Request,
         login_user: UserPayload = Depends(get_login_user),
@@ -112,7 +112,7 @@ def get_config(
     return resp_200(data=ret)
 
 
-@router.post('/config')
+@router.post('/config', summary='更新工作台配置', response_model=UnifiedResponseModel)
 def update_config(
         request: Request,
         login_user: UserPayload = Depends(get_admin_user),
