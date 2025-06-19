@@ -228,7 +228,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
     // 上传头像逻辑
     const uploadAvator = (file: File) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setFormData(prev => ({ ...prev, url: res.file_path }));
+            setFormData(prev => ({ ...prev, url: '/bisheng/' + res.relative_path }));
         });
     };
 
@@ -281,7 +281,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     </div>
                 </div>
                 {/* 工作流安全审查 */}
-                {appConfig.isPro && <Accordion type="multiple" className="w-full">
+                {isEditMode && appConfig.isPro && <Accordion type="multiple" className="w-full">
                     <AssistantSetting ref={securityRef} id={appId} type={5} />
                 </Accordion>}
                 <DialogFooter>

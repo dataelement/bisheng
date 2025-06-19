@@ -24,7 +24,7 @@ export const getWorkflowReportTemplate = async (key: string): Promise<any> => {
 export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => {
     if (url) {
         // logo保存相对路径
-        url = url.match(/(icon.*)\?/)?.[1]
+        url = url.replace('/bisheng', '')
     }
     const data = flow || {}
     return await axios.post("/api/v1/workflow/create", {
@@ -41,7 +41,7 @@ export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => 
 export const saveWorkflow = async (versionId: number, data: WorkFlow): Promise<any> => {
     if (data.logo) {
         // logo保存相对路径
-        data.logo = data.logo.match(/(icon.*)\?/)?.[1]
+        data.logo = data.logo.replace('/bisheng', '')
     }
     return await axios.put(`/api/v1/workflow/versions/${versionId}`, data);
 }

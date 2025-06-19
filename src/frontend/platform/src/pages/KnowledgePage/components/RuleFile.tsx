@@ -75,7 +75,7 @@ export default function RuleFile({
                                     placeholder={t('chunkOverlapPlaceholder')}
                                     className="flex-1 min-w-[150px]"
                                     onBlur={(e) => {
-                                        !e.target.value && handleSettingChange('chunkOverlap', '100');
+                                        !e.target.value && handleSettingChange('chunkOverlap', '0');
                                     }}
                                 />
                                 <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">字符</span>
