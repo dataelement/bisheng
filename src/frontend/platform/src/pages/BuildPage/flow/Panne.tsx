@@ -174,7 +174,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             // onReconnectEnd={onEdgeUpdateEnd}
                             style={{
                                 backgroundImage: window.ThemeStyle.bg === 'gradient'
-                                    && 'radial-gradient(circle at center bottom, rgba(2, 77, 227, 0.3) 2%, rgba(2, 77, 227, 0.2) 25%, rgba(2, 77, 227, 0.05) 60%, rgba(0, 0, 0, 0) 100%)',
+                                    && 'radial-gradient(circle at center bottom, hsl(var(--primary) / 30%) 2%, hsl(var(--primary) / 20%) 25%, hsl(var(--primary) / 5%) 60%, rgba(0, 0, 0, 0) 100%)',
                                 backgroundRepeat: 'no-repeat',
                                 backgroundSize: 'cover',
                             }}
