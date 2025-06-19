@@ -12,7 +12,7 @@ export interface InputProps
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
     ({ className, boxClassName, type, maxLength, showCount, value, defaultValue, onChange, ...props }, ref) => {
-        const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
+        const [currentValue, setCurrentValue] = useState(value ?? defaultValue ?? '');
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
             const { value } = e.target;
@@ -46,16 +46,16 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             }
         };
 
-        React.useEffect(() => {
-            if (value !== undefined) {
-                // 处理外部传入值为0的情况
-                if (type === "number" && (value === 0 || value === "0")) {
-                    setCurrentValue('');
-                } else {
-                    setCurrentValue(value);
-                }
-            }
-        }, [value, type]);
+        // React.useEffect(() => {
+        //     if (value !== undefined) {
+        //         // 处理外部传入值为0的情况
+        //         if (type === "number" && (value === 0 || value === "0")) {
+        //             setCurrentValue('');
+        //         } else {
+        //             setCurrentValue(value);
+        //         }
+        //     }
+        // }, [value, type]);
 
         const noEmptyProps =
             value === undefined ? {} : { value: currentValue }
