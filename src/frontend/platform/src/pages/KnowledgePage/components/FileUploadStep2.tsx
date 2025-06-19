@@ -10,6 +10,7 @@ import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export interface FileItem {
     id: string;
@@ -21,6 +22,7 @@ export interface FileItem {
 interface IProps {
     step: number
     resultFiles: FileItem[]
+    isSubmitting: boolean
     onNext: (step: number, config?: any) => void
     onPrev: () => void
 }
@@ -35,7 +37,7 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: IProps) {
+export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNext, onPrev }: IProps) {
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
@@ -193,7 +195,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                 )
             }
         </div >
-        <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
+        <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
             <Button
                 className="h-8"
                 variant="outline"
@@ -206,10 +208,14 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
             </Button>
             <Button
                 className="h-8"
-                disabled={strategies.length === 0}
+                // disabled={strategies.length === 0}
                 onClick={() => handleNext()}
             >
-                {t('nextStep')}
+                {isSubmitting ? (
+    <LoadingIcon className="h-12 w-12" />
+  ) : (
+    t('nextStep')
+  )}
             </Button>
         </div>
     </div>
