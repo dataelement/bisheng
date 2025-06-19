@@ -94,10 +94,11 @@ class InputNode(BaseNode):
             if key_info['type'] == 'file':
                 new_params = self.parse_upload_file(key, key_info, value)
                 ret.update(new_params)
-                content = ""
-                for one in new_params[key_info['key']]:
-                    content += f"{one.get('source')},"
-                human_input += f"{label}: {content.rstrip(',')}\n"
+                if new_params[key_info['key']]:
+                    content = ""
+                    for one in new_params[key_info['key']]:
+                        content += f"{one.get('source')},"
+                    human_input += f"{label}: {content.rstrip(',')}\n"
             else:
                 human_input += f"{label}: {value}\n"
         self.graph_state.save_context(content=f'{human_input}', msg_sender='human')

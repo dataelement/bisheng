@@ -329,7 +329,7 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             )
         except Exception as e:
             logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
-            KnowledgeFileDao.update_file_status(file_id, KnowledgeFileStatus.FAILED.value, str(e)[:500])
+            KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED, str(e)[:500])
             return
         try:
             _parse_knowledge_file(file_id, preview_cache_key, callback_url)

@@ -37,7 +37,7 @@ class ParseType(Enum):
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
-    file_name: str = Field(sa_column=Column(String(length=1024), index=True), max_length=1000)
+    file_name: str = Field(index=True, max_length=200)
     md5: Optional[str] = Field(default=None, index=False)
     parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
                                       index=False,
@@ -158,8 +158,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_file
 
     @classmethod
-    def update_file_status(cls, file_id: int, status: KnowledgeFileStatus, reason: str = None):
-        statement = update(KnowledgeFile).where(KnowledgeFile.id == file_id).values(status=status.value, remark=reason)
+    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
+        """ 批量更新文件状态 """
+        statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
+                                                                                       remark=reason)
         with session_getter() as session:
             session.exec(statement)
             session.commit()

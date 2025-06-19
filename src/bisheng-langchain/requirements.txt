@@ -7,7 +7,7 @@ Pillow==9.5.0
 bisheng-pyautogen
 jieba==0.42.1
 pydantic
-pymupdf==1.23.8
+pymupdf==1.26.*
 shapely==2.0.2
 filetype==1.2.0
 langgraph==0.3.*

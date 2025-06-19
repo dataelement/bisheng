@@ -403,7 +403,7 @@ class BishengLLM(BaseChatModel):
         """更新模型状态"""
         if self.model_info.status != status:
             self.model_info.status = status
-            LLMDao.update_model_status(self.model_id, status, remark[:500])
+            LLMDao.update_model_status(self.model_id, status, remark[-500:])  # 限制备注长度为500字符
 
     def bind_tools(
             self,
