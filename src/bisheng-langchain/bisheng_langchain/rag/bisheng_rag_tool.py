@@ -21,8 +21,6 @@ from langchain_core.tools import BaseTool, Tool
 from langchain_core.vectorstores import VectorStoreRetriever
 from loguru import logger
 
-from tests.rag.test_rag_chain import max_content
-
 
 class MultArgsSchemaTool(Tool):
 

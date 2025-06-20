@@ -56,6 +56,17 @@ class AzureDallEWrapper(DallEAPIWrapper):
     chunk_size: int = 2048
     """Maximum number of texts to embed in each batch"""
 
+    @model_validator(mode='before')
+    @classmethod
+    def validate_environment(cls, values: Dict) -> Dict:
+        """Validate that api key and python package exists in environment."""
+        client_params = values.copy()
+        if not values.get('client'):
+            values['client'] = openai.AzureOpenAI(**client_params).images
+        if not values.get('async_client'):
+            values['async_client'] = openai.AsyncAzureOpenAI(**client_params).images
+        return values
+
     @property
     def _llm_type(self) -> str:
         return 'azure-openai-chat'
