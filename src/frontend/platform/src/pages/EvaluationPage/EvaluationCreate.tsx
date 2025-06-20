@@ -45,7 +45,7 @@ export default function EvaluatingCreate() {
   const flow = useMemo(() => {
     return id ? nextFlow : null;
   }, [nextFlow]);
-  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "workflow" | "">(
+  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "work_flow" | "">(
     ""
   );
   const [selectedKeyId, setSelectedKeyId] = useState("");
@@ -128,7 +128,7 @@ export default function EvaluatingCreate() {
       getAssistantsApi(1, 100, "").then((data) => {
         setDataSource((data as any).data as AssistantItemDB[]);
       });
-    } else if (type === "workflow") {
+    } else if (type === "work_flow") {
       readFlowsFromDatabase(1, 100, "", -1, FLOW_TYPE.WORKFLOW).then((_flow) => {
         setDataSource(_flow.data);
       });
@@ -153,7 +153,7 @@ export default function EvaluatingCreate() {
       getAssistantsApi(1, 100, value).then((data) => {
         setDataSource((data as any).data as AssistantItemDB[]);
       });
-    } else if (selectedType === "workflow") {
+    } else if (selectedType === "work_flow") {
       readFlowsFromDatabase(1, 100, value, -1, FLOW_TYPE.WORKFLOW).then((_flow) => {
         setDataSource(_flow.data);
       });
@@ -211,7 +211,7 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="workflow">{t("build.workflow")}</SelectItem>
+                        <SelectItem value="work_flow">{t("build.workflow")}</SelectItem>
                         <SelectItem value="flow">{t("build.skill")}</SelectItem>
                         <SelectItem value="assistant">
                           {t("build.assistant")}
@@ -253,7 +253,7 @@ export default function EvaluatingCreate() {
                       </SelectViewport>
                     </SelectContent>
                   </Select>
-                  {["workflow", "flow"].includes(selectedType) && (
+                  {["work_flow", "flow"].includes(selectedType) && (
                     <Select
                       value={selectedVersion}
                       onValueChange={(version) => setSelectedVersion(version)}
