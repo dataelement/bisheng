@@ -220,7 +220,7 @@ export default function KnowledgeQa(params) {
                             </TableCell>
                             <TableCell className="text-right" onClick={() => {
                                 // @ts-ignore
-                                window.libname = el.name;
+                                window.libname = [el.name, el.description];
                             }}>
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>添加到数据集</Button> */}
                                 <Link to={`/filelib/qalib/${el.id}`} className="no-underline hover:underline text-primary" onClick={handleCachePage}>{t('lib.details')}</Link>
