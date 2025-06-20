@@ -56,11 +56,11 @@ export default function MessageUser({ debug, mark = false, useName = '', data, o
                     </div>
                 </div> : (!Array.isArray(data.message.data) && <div className="flex justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <span></span>
-                    {!debug && <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
+                    {/* {!debug && <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
                         {!running && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
                         {!running && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
                         {appConfig.dialogQuickSearch && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
-                    </div>}
+                    </div>} */}
                 </div>)
             }
         </div>
