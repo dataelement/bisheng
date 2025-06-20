@@ -132,58 +132,29 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
         {
             (!isMobile || !collapse) && <div className="sm:w-[300px] bg-gray-100 dark:bg-[#3C4048] rounded-md py-4 px-2 h-full overflow-y-auto no-scrollbar w-[200px] max-h-[100%] sm:max-h-full absolute sm:static z-20 sm:z-auto">
                 {/* label */}
-                <div className="mb-4 text-sm font-bold space-x-1 hidden sm:block">
-                    <div className="flex">
-                        <span>{t('chat.filterLabel')}</span>
-                        <TooltipProvider delayDuration={100}>
-                            <Tooltip>
-                                <TooltipTrigger>
-                                    <CircleHelp className="w-4 h-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p className="w-[170px] break-words">{t('chat.tooltipText')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                    </div>
-                </div>
-                <div className="flex flex-wrap gap-2 text-sm">
-                    {words.map((str, i) => <div key={str} className="badge rounded-md px-2 badge-info h-[auto] gap-2 text-gray-600 bg-[rgba(53,126,249,.15)] dark:text-slate-50">{str}<span className="cursor-pointer font-thin" onClick={() => onClose(i)}>x</span></div>)}
-                    {
-                        editCustomKey ? <div className="badge badge-info cursor-pointer bg-[rgba(53,126,249,.15)]"><input ref={inputRef} id="taginput" className="w-20 h-4 py-0 border-none outline-none bg-gray-50"
-                            onKeyDown={(event) => {
-                                if (event.key === "Enter" && !event.shiftKey) {
-                                    handleAddKeyword(inputRef.current.value);
-                                }
-                            }}
-                            onBlur={() => {
-                                handleAddKeyword(inputRef.current.value);
-                            }}></input></div> :
-                            <div className="badge badge-info rounded-md px-2 cursor-pointer bg-[rgba(53,126,249,.86)] text-gray-50" onClick={handleOpenInput}><span>{t('chat.addCustomLabel')}</span></div>
-                    }
-                </div>
+                {/* 中英 */}
                 {/* files */}
                 <div className="mt-4">
                     <p className="mb-4 text-sm font-bold">{t('chat.sourceDocumentsLabel')}</p>
                     {files.map(_file =>
                         _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] dark:bg-[#303134] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                             <p className="text-sm break-all">{_file.fileName}</p>
-                            <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
+                            {/* <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
                                 {
-                                    _file.fileUrl && <Tip content={t('chat.downloadPDFTooltip')}>
+                                    _file.fileUrl && <Tip content={t('chat.downloadPDFTooltip')} side={"top"}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                             <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                         </a>
                                     </Tip>
                                 }
                                 {
-                                    _file.originUrl && <Tip content={t('chat.downloadOriginalTooltip')}>
+                                    _file.originUrl && <Tip content={t('chat.downloadOriginalTooltip')} side={"top"}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
                                             <Download color="rgba(53,126,249,1)" size={20} strokeWidth={1.5}></Download>
                                         </a>
                                     </Tip>
                                 }
-                            </div>
+                            </div> */}
                             <span className="absolute right-1 bottom-1 text-blue-400 text-sm">{_file.score}</span>
                         </div> :
                             <div key={_file.id} className={`msk group rounded-xl bg-[#fff] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
