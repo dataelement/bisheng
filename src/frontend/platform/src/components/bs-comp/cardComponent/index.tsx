@@ -68,7 +68,7 @@ export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
 }
 
 export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {
-  return url ? <img src={url} className={cname(`w-6 h-6 rounded-sm object-cover`, className)} /> : <TitleIconBg id={id} className={className}>{children}</TitleIconBg>
+  return url ? <img src={__APP_ENV__.BASE_URL + url} className={cname(`w-6 h-6 rounded-sm object-cover`, className)} /> : <TitleIconBg id={id} className={className}>{children}</TitleIconBg>
 }
 
 export default function CardComponent<T>({

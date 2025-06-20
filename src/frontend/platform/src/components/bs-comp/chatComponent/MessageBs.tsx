@@ -1,5 +1,5 @@
 import { AvatarIcon } from "@/components/bs-icons/avatar";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
@@ -12,6 +12,12 @@ import remarkMath from "remark-math";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
+import { Badge } from "@/components/bs-ui/badge";
+import { ShieldAlert } from "lucide-react";
+import { TitleLogo } from "../cardComponent";
+import MsgVNodeCom from "@/pages/OperationPage/useAppLog/MsgBox";
+import RichText from "../richText";
+import { SourceType } from "@/constants";
 import { ChevronDown } from "lucide-react";
 import { cname } from "@/components/bs-ui/utils";
 import { ToastIcon } from "@/components/bs-icons";
@@ -59,7 +65,13 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ debug, operation = false, mark = false, audit = false, msgVNode = null, logo, data, onUnlike = () => { }, onSource, onMarkClick, flow }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any, flow: any }) {
+    const [remark, setRemark] = useState("");
+    
+    useEffect(() => {
+        setRemark(data.remark || '')
+    },[ data.remark ])
+
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -109,6 +121,18 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
         [data.message]
     )
 
+    // 输出富文本
+    const richText = useMemo(
+        () => {
+            // 命中QA了 说明返回的大概率是富文本
+            if (data.source === SourceType.HAS_QA && /<[a-z][\s\S]*>/i.test(message)) {
+                return <RichText msg={message}/>;
+            }
+            return '';
+        },
+        [message]
+    )
+
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
         // api data.id
@@ -124,20 +148,23 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                 <div className="flex justify-between items-center mb-1">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
                     <div className={`text-right group-hover:opacity-100 opacity-0`}>
-                        <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                        <span className="text-slate-400 text-sm">{formatStrTime(data.update_time, 'MM 月 dd 日 HH:mm')}</span>
                     </div>
                 </div>
+                {/* 只有审核页面展示违规消息 */}
+                {audit && data.review_status === 3 && <Badge variant="destructive" className="bg-red-500"><ShieldAlert className="size-4" /> 违规情况: {data.review_reason}</Badge>}
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
-                        {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
+                        {<TitleLogo url={flow?.logo} className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden" id={flow?.id}></TitleLogo>}
+                        {/* {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                             <img className="w-6 h-6" src={logo} />
                         </div>
                             : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
                                 <AvatarIcon />
-                            </div>}
+                            </div>} */}
                         {data.message.toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {mkdown}
+                                {richText || mkdown}
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                                 {/* 光标 */}
@@ -162,13 +189,18 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                             message: data.message || data.thought,
                         })} />
                     {!debug && <MessageButtons
+                        onlyRead={(audit || operation)}
                         mark={mark}
                         id={data.id}
+                        chatId={chatId + data.id}
                         data={data.liked}
+                        msg={message}
                         onUnlike={onUnlike}
+                        // 审计 & 运营页面展示差评
+                        msgVNode={(audit || operation) && data.remark && <MsgVNodeCom message={remark} />}
                         onCopy={handleCopyMessage}
                         onMarkClick={onMarkClick}
-                    ></MessageButtons>}
+                    />}
                 </div>
             }
         </div>

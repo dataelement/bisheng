@@ -208,4 +208,6 @@ export interface WorkflowMessage {
   update_time: string;
   reasoning_log?: string; // 推理
   extra?: string;
+  /** 违规原因 */
+  review_reason: string;
 }
