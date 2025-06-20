@@ -174,7 +174,8 @@ class InputNode(BaseNode):
         file_extension_name = file_name.split(".")[-1].lower()
         if file_extension_name in self._audio_ext:
             texts = [file_name]
-            metadatas = [{'file_id': file_id, 'knowledge_id': self.workflow_id, 'extra': '', 'bbox': ''}]
+            metadatas = [{'file_id': file_id, 'knowledge_id': self.workflow_id, 'extra': '', 'bbox': '',
+                          'page': 0, 'title': str(file_id), "source": file_name, "chunk_index": 0}]
             return file_name, original_file_path, texts, metadatas
         try:
             texts, metadatas, _, _ = read_chunk_text(filepath, file_name,
