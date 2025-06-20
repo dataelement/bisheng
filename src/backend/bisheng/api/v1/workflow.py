@@ -245,7 +245,7 @@ async def update_flow(*,
 
     flow_data = flow.model_dump(exclude_unset=True)
 
-    if FlowService.judge_name_repeat(flow.name):
+    if FlowService.judge_name_repeat(flow.name, flow_id):
         raise WorkflowNameExistsError.http_exception()
     # TODO:  验证工作流是否可以使用
 
