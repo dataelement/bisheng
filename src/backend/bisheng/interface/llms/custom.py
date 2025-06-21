@@ -5,6 +5,11 @@ from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackMana
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
 from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
+from loguru import logger
+from pydantic import Field
 
 from bisheng.database.models.llm_server import LLMDao, LLMModelType, LLMServerType, LLMModel, LLMServer
 from bisheng.interface.importing import import_by_type
@@ -48,7 +53,7 @@ def _get_bisheng_rt_params(params: dict, server_config: dict, model_config: dict
 def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
     if server_config:
         params.update({
-            'api_key': server_config.get('openai_api_key') or server_config.get('api_key'),
+            'api_key': server_config.get('openai_api_key') or server_config.get('api_key') or "empty",
             'base_url': server_config.get('openai_api_base') or server_config.get('base_url'),
         })
         params['base_url'] = params['base_url'].rstrip('/')
@@ -507,15 +512,15 @@ class BishengLLM(BaseChatModel):
         """更新模型状态"""
         if self.model_info.status != status:
             self.model_info.status = status
-            LLMDao.update_model_status(self.model_id, status, remark[:500])
+            LLMDao.update_model_status(self.model_id, status, remark[-500:])  # 限制备注长度为500字符
 
     def bind_tools(
             self,
             tools: Sequence[Union[Dict[str, Any], Type, Callable, BaseTool]],
             **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
-        self.llm.bind_tools(tools, **kwargs)
-        return self
+        formatted_tools = [convert_to_openai_tool(tool) for tool in tools]
+        return super().bind(tools=formatted_tools, **kwargs)
 
     def convert_qwen_result(self, message: BaseMessageChunk | BaseMessage) -> BaseMessageChunk | BaseMessage:
         # ChatTongYi model vl model message.content is list

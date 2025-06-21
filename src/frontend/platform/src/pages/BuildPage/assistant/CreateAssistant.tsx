@@ -93,7 +93,7 @@ ${t('build.exampleTwo')}
 
     const uploadAvator = (file) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setFormData(prev => ({ ...prev, url: res.file_path }));
+            setFormData(prev => ({ ...prev, url: '/bisheng' + res.relative_path }));
         })
     }
 

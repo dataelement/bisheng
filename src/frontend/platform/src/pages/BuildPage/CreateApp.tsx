@@ -198,7 +198,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                                     param.value = workflowModelId
                                 } else if (param.type === 'agent_model') {
                                     param.value = assistantModelId
-                                } else if (param.type === 'knowledge_select_multi') {
+                                } else if (param.type === 'knowledge_select_multi' && param.value.type !== 'tmp') {
                                     param.value.value = []
                                 } else if (param.type === 'qa_select_multi') {
                                     param.value = []
@@ -245,7 +245,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
     // 上传头像逻辑
     const uploadAvator = (file: File) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setFormData(prev => ({ ...prev, url: res.file_path }));
+            setFormData(prev => ({ ...prev, url: '/bisheng/' + res.relative_path }));
         });
     };
 
@@ -302,9 +302,11 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     </div>}
                 </div>
                 {/* 工作流安全审查 */}
-                {appConfig.isPro && <Accordion type="multiple" className="w-full">
-                    <AssistantSetting ref={securityRef} id={appId} type={5} />
-                </Accordion>}
+                <div className={isEditMode ? '' : 'hidden'}>
+                    {appConfig.isPro && <Accordion type="multiple" className="w-full">
+                        <AssistantSetting ref={securityRef} id={appId} type={5} />
+                    </Accordion>}
+                </div>
                 <DialogFooter>
                     <DialogClose>
                         <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })}>

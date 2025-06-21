@@ -248,6 +248,7 @@ const ParagraphEdit = ({
             case 'pdf':
                 return previewFileUrl && <FileView
                     select
+                    startIndex={0} 
                     fileUrl={previewFileUrl}
                     labels={labels}
                     scrollTo={postion}
@@ -297,7 +298,7 @@ const ParagraphEdit = ({
                     ></div>
                 </div>
                 {/* right */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0 w-0">
                     {/* head */}
                     <div className="flex justify-between items-center relative h-10 mb-2 text-sm">
                         <span>{fileName}</span>

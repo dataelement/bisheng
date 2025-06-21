@@ -116,12 +116,6 @@ services:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
     restart: on-failure
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
-      start_period: 30s
-      interval: 90s
-      timeout: 30s
-      retries: 3
     depends_on:
       mysql:
         condition: service_healthy

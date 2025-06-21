@@ -169,13 +169,13 @@ const ResultPanne = ({ chatId, words, data, onClose, onAdd, children, fullScreen
                         _file.right ? <div key={_file.id} onClick={() => setFile(_file)} className={`group rounded-xl bg-[#fff] dark:bg-[#303134] hover-bg-gray-200 flex items-center px-4 mb-2 relative min-h-16 cursor-pointer ${file?.id === _file.id && 'bg-gray-200'}`}>
                             <p className="text-sm break-all">{_file.fileName}</p>
                             <div className="absolute right-1 top-1 gap-2 hidden group-hover:flex">
-                                {/* {
-                                    _file.fileUrl && <Tip content={t('chat.downloadPDFTooltip')}>
+                                {
+                                    _file.parse_type === 'uns' && _file.fileUrl && <Tip content={t('chat.downloadPDFTooltip')}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.fileUrl), _file.fileName.replace(/\.[\w\d]+$/, '.pdf')); event.stopPropagation() }} >
                                             <Import color="rgba(53,126,249,1)" size={22} strokeWidth={1.5}></Import>
                                         </a>
                                     </Tip>
-                                } */}
+                                }
                                 {
                                     _file.originUrl && <Tip content={t('chat.downloadOriginalTooltip')}>
                                         <a href="javascript:;" onClick={(event) => { downloadFile(checkSassUrl(_file.originUrl), _file.fileName); event.stopPropagation() }} >
@@ -216,9 +216,9 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     const [loading, setLoading] = useState(true)
     const handleAnwserInit = (words) => {
         setKeywords(words)
-        if (words.length) {
-            setLoading(false)
-        }
+        setLoading(false)
+        // if (words.length) {
+        // }
     }
 
 

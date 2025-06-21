@@ -24,7 +24,7 @@ export const getWorkflowReportTemplate = async (key: string): Promise<any> => {
 export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => {
     if (url) {
         // logo保存相对路径
-        url = url.match(/(icon.*)\?/)?.[1]
+        url = url.replace('/bisheng', '')
     }
     const data = flow || {}
     return await axios.post("/api/v1/workflow/create", {
@@ -41,7 +41,7 @@ export const createWorkflowApi = async (name, desc, url, flow): Promise<any> => 
 export const saveWorkflow = async (versionId: number, data: WorkFlow): Promise<any> => {
     if (data.logo) {
         // logo保存相对路径
-        data.logo = data.logo.match(/(icon.*)\?/)?.[1]
+        data.logo = data.logo.replace('/bisheng', '')
     }
     return await axios.put(`/api/v1/workflow/versions/${versionId}`, data);
 }
@@ -806,7 +806,7 @@ const workflowTemplate = [
                         "key": "system_prompt",
                         "label": "系统提示词",
                         "type": "var_textarea",
-                        "value": "你是一个知识库问答助手：\n1.用中文回答用户问题，并且答案要严谨专业。\n2.你需要依据以下【参考文本】中的内容来回答，当【参考文本】中有明确与用户问题相关的内容时才进行回答，不可根据自己的知识来回答。若相关内容中包含图片占位符（例如：![image](路径/IMAGE_1.png)），回答时请保留这些占位符，不要修改或删除。\n3.由于【参考文本】可能包含多个来自不同信息源的信息，所以根据这些不同的信息源可能得出有差异甚至冲突的答案，当发现这种情况时，这些答案都列举出来；如果没有冲突或差异，则只需要给出一个最终结果。\n4.若【参考文本】中内容与用户问题不相关则回复“没有找到相关内容”。",
+                        "value": "你是一位知识库问答助手，遵守以下规则回答问题：\n1. 请用中文严谨、专业地回答用户的问题。\n2. 回答时须严格基于【参考文本】中的内容：\n\n- 如果【参考文本】中有明确与用户问题相关的文字内容，请依据相关内容进行回答；如果【参考文本】中没有任何与用户问题相关的内容，则直接回复：“没有找到相关内容”。\n- 如果相关内容中包含 markdown 格式的图片（例如 ![image](路径/IMAGE_1.png)），必须严格保留其原始 markdown 格式，不得添加引号、代码块（`或```）或其他特殊符号，也不得修改图片路径，保证可以正常渲染 markdown 图片。\n3. 当【参考文本】中的内容来源于多个不同的信息源时，若相关内容存在明显差异或冲突，请分别列出这些差异或冲突的答案；若无差异或冲突，只给出一个统一的回答即可。",
                         "required": true
                     },
                     {

@@ -80,6 +80,7 @@ export default function MessageBs({ debug, operation, audit, mark = false, logo,
             .replaceAll('$$', '$') // latex
             .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
             .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
+            .replaceAll('(bisheng/', '(/bisheng/')  // TODO 临时处理方案,以后需要改为markdown插件方式处理
     }, [data.message])
 
     const mkdown = useMemo(

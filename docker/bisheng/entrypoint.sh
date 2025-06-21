@@ -20,7 +20,7 @@ if [ $start_mode = "api" ]; then
 elif [ $start_mode = "worker" ]; then
     echo "Starting Celery worker..."
     # 处理知识库相关任务的worker
-    nohup celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q knowledge_celery &
+    nohup celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celery &
     # 工作流执行worker
     celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery
 else

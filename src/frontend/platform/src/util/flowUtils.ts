@@ -287,7 +287,7 @@ export function importFlow() {
                                             param.value = workflowModelId
                                         } else if (param.type === 'agent_model') {
                                             param.value = assistantModelId
-                                        } else if (param.type === 'knowledge_select_multi') {
+                                        } else if (param.type === 'knowledge_select_multi' && param.value.type !== 'tmp') {
                                             param.value.value = []
                                         } else if (param.type === 'qa_select_multi') {
                                             param.value = []

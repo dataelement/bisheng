@@ -1,7 +1,8 @@
-import re
 import html
-from bs4 import BeautifulSoup
 import os
+import re
+
+from bs4 import BeautifulSoup
 
 
 def post_processing(file_path, retain_images=True):
@@ -152,12 +153,10 @@ def post_processing(file_path, retain_images=True):
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(content)
 
-        print(f"成功处理文件: {file_path}")
-
     except FileNotFoundError:
-        print(f"错误: 文件 {file_path} 未找到。")
+        raise Exception(f"错误: 文件 {file_path} 未找到。")
     except Exception as e:
-        print(f"处理文件时发生错误: {e}")
+        raise Exception(f"处理文件时发生错误: {e}")
 
 
 if __name__ == "__main__":

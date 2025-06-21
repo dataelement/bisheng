@@ -27,7 +27,7 @@ jobs:
           echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
       
       - name: Set Environment Variable
-        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+        run: echo "RELEASE_VERSION=1.3.1" >> $GITHUB_ENV
 
       # 构建 bisheng_langchain
       - name: Set python version 3.10
@@ -61,7 +61,8 @@ jobs:
           echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
       
       - name: Set Environment Variable
-        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+        run: echo "RELEASE_VERSION=1.3.1" >> $GITHUB_ENV
+
 
       # 登录 docker hub
       - name: Login to DockerHub
@@ -87,7 +88,7 @@ jobs:
       
   build_backend_arm:
     needs: build_bisheng_langchain
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-arm
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -98,7 +99,7 @@ jobs:
           echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
       
       - name: Set Environment Variable
-        run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
+        run: echo "RELEASE_VERSION=1.3.1" >> $GITHUB_ENV
 
       # 登录 docker hub
       - name: Login to DockerHub
@@ -110,8 +111,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
   
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v1
 
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -151,7 +152,7 @@ jobs:
           docker buildx build --file ./src/frontend/Dockerfile --platform linux/amd64 --provenance false --tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64 --push ./src/frontend/
 
   build_frontend_arm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04-arm
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -164,8 +165,8 @@ jobs:
       - name: Set Environment Variable
         run: echo "RELEASE_VERSION=${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_ENV
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+      # - name: Set up QEMU
+      #   uses: docker/setup-qemu-action@v1
 
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -193,6 +194,11 @@ jobs:
       - build_frontend_arm
     runs-on: ubuntu-latest
     steps:
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+
       - name: Process git message
         id: process_message
         run: |

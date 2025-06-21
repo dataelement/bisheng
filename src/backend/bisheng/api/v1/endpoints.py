@@ -30,8 +30,6 @@ from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
 
-ETL_4_LM_URL_NAME = "unstructured_api_url"
-
 try:
     from bisheng.worker import process_graph_cached_task
 except ImportError:

@@ -301,8 +301,9 @@ if __name__ == '__main__':
                                        description='金融年报财报知识库问答',
                                        vector_store=vector_store,
                                        keyword_store=keyword_store,
-                                       llm=llm)
-    print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？'))
+                                       llm=llm,
+                                       max_content=15000)
+    print(tool.run('能否根据2020年金宇生物技术股份有限公司的年报，给我简要介绍一下报告期内公司的社会责任工作情况？', return_only_outputs=False))
 
     # tool = BishengRAGTool.get_rag_tool(
     #     name='rag_knowledge_retrieve',

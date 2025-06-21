@@ -31,6 +31,8 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
     const [postion, setPostion] = useState([1, 0])
     const [labelsMap, setLabelsMap] = useState(new Map()) // {p-bbox: label}
     const labelsMapRef = useRef(new Map())
+
+    const labelsMapTempRef = useRef({}) // 临时存每个分段覆盖后的labels结果
     // 分段标注有变更
     const [labelChange, setLabelChange] = useState(false)
     useEffect(() => {
@@ -44,6 +46,18 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
         let setPostioned = false;
         const labelsMap = new Map();
 
+        const _labelsMap = labelsMapTempRef.current[selectedChunkIndex]
+        if (labelsMapTempRef.current[selectedChunkIndex]) {
+            setLabelsMap(_labelsMap)
+            labelsMapRef.current = _labelsMap
+            return
+        }
+
+        // 合并覆盖的activeLabels
+        // const activeLabels = chunks.reduce((res, chunk) => {
+        //     res = {...res, ...chunk.activeLabels}
+        //     return res
+        // }, {})
         // if (chunks[0]) chunks[0].bbox = [{ page: 1, bbox: [40, 40, 400, 80] }, { page: 1, bbox: [140, 140, 400, 180] }]
         // if (chunks[1]) chunks[1].bbox = [{ page: 1, bbox: [240, 240, 400, 330] }]
         chunks.forEach(chunk => {
@@ -54,16 +68,17 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
                 const id = [label.page, ...label.bbox].join('-');
                 const existing = labelsMap.get(id);
 
-                const activeded = chunk.activeLabels?.[id];
-                if (activeded !== undefined) {
-                    labelsMap.set(id, {
-                        id,
-                        page: label.page,
-                        label: label.bbox,
-                        active: activeded,
-                        txt: chunk.text
-                    });
-                } else if (isActive || !existing) {
+                // const activeded = chunk.activeLabels?.[id];
+                // if (activeded !== undefined) {
+                //     labelsMap.set(id, {
+                //         id,
+                //         page: label.page,
+                //         label: label.bbox,
+                //         active: activeded,
+                //         txt: chunk.text
+                //     });
+                // } else
+                if (isActive || !existing) {
                     // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
                     labelsMap.set(id, {
                         id,
@@ -78,19 +93,22 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
 
                 // 初始定位到第一个激活的标签
                 if (isActive && !setPostioned) {
-                    setPostion([label.page, label.bbox[1]])
+                    setPostion([label.page, label.bbox[1]]) // 增量
                     setPostioned = true;
                 }
             });
         });
-
-        setLabelsMap(labelsMap)
+        labelsMap.size && setLabelsMap(labelsMap)
         labelsMapRef.current = labelsMap
     }, [file.suffix, chunks, selectedChunkIndex]);
 
+    useEffect(() => {
+        labelsMapTempRef.current = {}
+    }, [file])
+
     // 点击定位
     useEffect(() => {
-        setPostion((p) => [p[0] + selectedChunkDistanceFactor, p[1]])
+        setPostion((p) => [p[0], p[1] + selectedChunkDistanceFactor])
     }, [selectedChunkDistanceFactor])
 
     const pageLabels = useMemo(() => {
@@ -142,7 +160,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
     const render = (type) => {
         const { url, load } = urlState
 
-        if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">解析失败...</div>
+        if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
         if (!url) return <div className="flex justify-center items-center h-full text-gray-400">加载中...</div>
         switch (type) {
             case 'ppt':
@@ -150,7 +168,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
             case 'pdf':
                 return <FileView
                     startIndex={0}
-                    select={selectedChunkIndex !== -1}
+                    select={false} // selectedChunkIndex !== -1}
                     fileUrl={url}
                     labels={pageLabels}
                     scrollTo={postion}
@@ -210,7 +228,8 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
         })
         console.log('JSON. :>> ', JSON.stringify(str));
         setNeedCoverData({ index: selectedChunkIndex, txt: str })
-        setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === selectedChunkIndex ? { ...chunk, activeLabels: activeMap } : chunk))
+        // setChunks(chunks => chunks.map(chunk => chunk.chunkIndex === selectedChunkIndex ? { ...chunk, activeLabels: activeMap } : chunk))
+        labelsMapTempRef.current[selectedChunkIndex] = labelsMap
     }
 
     if (['xlsx', 'xls', 'csv'].includes(file.suffix)) return null

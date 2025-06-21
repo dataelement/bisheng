@@ -64,7 +64,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledS
         The `CompiledStateGraph` object.
     """
 
-    tool_executor = ToolNode(tools=tools)
+    tool_executor = {one.name: one for one in tools}
 
     state = _get_agent_state(input_schema)
 
@@ -95,7 +95,18 @@ def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledS
         agent_action = data['agent_outcome']
         if not isinstance(agent_action, list):
             agent_action = [agent_action]
-        output = tool_executor.batch(agent_action, config, return_exceptions=True)
+
+        output = []
+        for action in agent_action:
+            if action.tool not in tool_executor:
+                output.append(f"Tool {action.tool} not found in tool executor.")
+                continue
+            try:
+                result = tool_executor[action.tool].invoke(action.tool_input, config)
+                output.append(result)
+            except Exception as e:
+                output.append(f"invoke tool {action.tool} failed: {str(e)[-50:]}")
+
         return {
             'intermediate_steps': [(action, str(out)) for action, out in zip(agent_action, output)]
         }
@@ -105,7 +116,17 @@ def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledS
         agent_action = data['agent_outcome']
         if not isinstance(agent_action, list):
             agent_action = [agent_action]
-        output = await tool_executor.abatch(agent_action, config, return_exceptions=True)
+        output = []
+        for action in agent_action:
+            if action.tool not in tool_executor:
+                output.append(f"Tool {action.tool} not found in tool executor.")
+                continue
+            try:
+                result = await tool_executor[action.tool].ainvoke(action.tool_input, config)
+                output.append(result)
+            except Exception as e:
+                output.append(f"invoke tool {action.tool} failed: {str(e)[-50:]}")
+
         return {
             'intermediate_steps': [(action, str(out)) for action, out in zip(agent_action, output)]
         }

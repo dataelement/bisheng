@@ -174,7 +174,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             // onReconnectEnd={onEdgeUpdateEnd}
                             style={{
                                 backgroundImage: window.ThemeStyle.bg === 'gradient'
-                                    && 'radial-gradient(circle at center bottom, rgba(2, 77, 227, 0.3) 2%, rgba(2, 77, 227, 0.2) 25%, rgba(2, 77, 227, 0.05) 60%, rgba(0, 0, 0, 0) 100%)',
+                                    && 'radial-gradient(circle at center bottom, hsl(var(--primary) / 30%) 2%, hsl(var(--primary) / 20%) 25%, hsl(var(--primary) / 5%) 60%, rgba(0, 0, 0, 0) 100%)',
                                 backgroundRepeat: 'no-repeat',
                                 backgroundSize: 'cover',
                             }}
@@ -479,10 +479,14 @@ const useFlow = (_reactFlowInstance, data, takeSnapshot) => {
         const pos = _reactFlowInstance.screenToFlowPosition({
             x: reactflowBounds.width * 0.2, y: reactflowBounds.height * 0.9
         });
+        const position = calculatePosition(nodes, {
+            x: pos.x + 50,
+            y: pos.y + 50,
+        })
         // 增加节点
         setNodes((nds) => {
             return nds.concat({
-                id: nodeId, type: 'noteNode', position: pos, data: {
+                id: nodeId, type: 'noteNode', position, data: {
                     id: nodeId,
                     group_params: [],
                     type: 'note',

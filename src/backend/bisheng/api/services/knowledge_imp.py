@@ -32,6 +32,7 @@ from bisheng.api.services.libreoffice_converter import (
     convert_ppt_to_pdf,
 )
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
@@ -754,6 +755,10 @@ def read_chunk_text(
         documents = loader.load()
     else:
         if etl_for_lm_url:
+            if file_extension_name in ["pdf"]:
+                # 判断文件是否损坏
+                if is_pdf_damaged(input_file):
+                    raise Exception('The file is damaged.')
             etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
             loader = Etl4lmLoader(
                 file_name,
@@ -771,11 +776,30 @@ def read_chunk_text(
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
-            # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
-            if file_extension_name not in filetype_load_map:
-                raise Exception("类型不支持")
-            loader = filetype_load_map[file_extension_name](file_path=input_file)
-            documents = loader.load()
+            if file_extension_name in ['pdf']:
+                md_file_name, local_image_dir, doc_id = convert_file_to_md(
+                    file_name=file_name,
+                    input_file_name=input_file,
+                    knowledge_id=knowledge_id,
+                    retain_images=bool(retain_images),
+                )
+                if not md_file_name: raise Exception(f"failed to parse {file_name}, please check backend log")
+
+                # save images to minio
+                if local_image_dir and retain_images == 1:
+                    put_images_to_minio(
+                        local_image_dir=local_image_dir,
+                        knowledge_id=knowledge_id,
+                        doc_id=doc_id,
+                    )
+                    # 沿用原来的方法处理md文件
+                loader = filetype_load_map["md"](file_path=md_file_name)
+                documents = loader.load()
+            else:
+                if file_extension_name not in filetype_load_map:
+                    raise Exception("类型不支持")
+                loader = filetype_load_map[file_extension_name](file_path=input_file)
+                documents = loader.load()
 
     logger.info(f"start_extract_title file_name={file_name}")
     if llm:
