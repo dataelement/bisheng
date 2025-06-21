@@ -133,24 +133,13 @@ export default function l2Edit() {
         await updateVersion(vid, { data: flow.data })
 
         setLoading(false)
-<<<<<<< HEAD
-        if (res) {
-            message({
-                title: t('prompt'),
-                variant: 'success',
-                description: t('saved')
-            });
-            setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
-        }
-        flow.status === 1 && appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId)
-=======
         message({
             title: t('prompt'),
             variant: 'success',
             description: t('saved')
         });
-        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);
->>>>>>> v1.3.0
+        setTimeout(() => /^\/skill\/[\w\d-]+/.test(location.pathname) && navigate(-1), 2000);    
+        flow.status === 1 && appConfig.securityCommitment && setCommitmentApi(flow.id, commitmentId);
     }
 
     // 表单收缩
