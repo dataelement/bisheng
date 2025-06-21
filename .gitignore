@@ -267,7 +267,8 @@ sftp-config.json
 /src/backend/bisheng/config.yaml
 /src/backend/build.sh
 /DEV.md
-/*.tar.gz
+/bisheng.tar.gz
+/bisheng
 
 
 # Docker local files
