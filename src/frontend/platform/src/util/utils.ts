@@ -483,20 +483,47 @@ export function contentToPlainText(content) {
 }
 
 export function optimizeForTTS(text) {
-    if (!text) return '';
+  if (!text) return '';
     
-    return text
-      // 合并连续空白字符
-      .replace(/\s+/g, ' ')
-      // 处理特殊符号
-      .replace(/\.{3,}/g, '省略号')
-      .replace(/…/g, '省略号')
-      .replace(/#/g, '井号')
-      .replace(/\*/g, '星号')
-      // 去除首尾空白
-      .trim();
-  }
+  return text
+    // 合并连续空白字符
+    .replace(/\s+/g, ' ')
+    // 处理特殊符号
+    .replace(/\.{3,}/g, '省略号')
+    .replace(/…/g, '省略号')
+    .replace(/#/g, '井号')
+    .replace(/\*/g, '星号')
+    // 去除首尾空白
+    .trim();
+}
   
-  export function formatTTSText(text) {
-      return optimizeForTTS(contentToPlainText(text));
-  }
+export function formatTTSText(text) {
+    return optimizeForTTS(contentToPlainText(text));
+}
+
+// 用户组转树形结构
+function buildGroupTree(groups) {
+  // 创建一个映射，用于快速查找组
+  const groupMap = {};
+  groups.forEach(group => {
+    groupMap[group.id] = { ...group, children: [] };
+  });
+
+  // 构建树结构
+  const tree = [];
+  groups.forEach(group => {
+  const node = groupMap[group.id];
+  if (group.parent_id) {
+  // 如果有父节点，将当前节点添加到父节点的children中
+  if (groupMap[group.parent_id]) {
+    groupMap[group.parent_id].children.push(node);
+    } else {
+        // 如果父节点不存在，直接放到顶层
+      tree.push(node);
+    }
+  }  else {
+    // 没有父节点，直接放到顶层
+    tree.push(node);
+  }});
+  return tree;
+}
