@@ -502,28 +502,34 @@ export function formatTTSText(text) {
 }
 
 // 用户组转树形结构
-function buildGroupTree(groups) {
-  // 创建一个映射，用于快速查找组
-  const groupMap = {};
-  groups.forEach(group => {
-    groupMap[group.id] = { ...group, children: [] };
+export function buildUserGroupTreeOptimized(
+  flatList
+) {
+  const idToNode = new Map();
+  const roots = [];
+  
+  // 第一次遍历：创建所有节点
+  flatList.forEach(item => {
+    const node = { ...item, children: [] };
+    idToNode.set(item.id, node);
   });
-
-  // 构建树结构
-  const tree = [];
-  groups.forEach(group => {
-  const node = groupMap[group.id];
-  if (group.parent_id) {
-  // 如果有父节点，将当前节点添加到父节点的children中
-  if (groupMap[group.parent_id]) {
-    groupMap[group.parent_id].children.push(node);
+  
+  // 第二次遍历：建立父子关系
+  flatList.forEach(item => {
+    const node = idToNode.get(item.id);
+    const parentId = item.parent_id;
+    
+    if (parentId && idToNode.has(parentId)) {
+      // 如果父节点存在，建立关系
+      idToNode.get(parentId).children.push(node);
+    } else if (!parentId) {
+      // 如果parent_id为null/undefined，作为根节点
+      roots.push(node);
     } else {
-        // 如果父节点不存在，直接放到顶层
-      tree.push(node);
+      // 父节点不存在，也作为根节点显示
+      roots.push(node);
     }
-  }  else {
-    // 没有父节点，直接放到顶层
-    tree.push(node);
-  }});
-  return tree;
+  });
+  
+  return roots;
 }
