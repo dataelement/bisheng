@@ -492,6 +492,3 @@ class WorkFlowService(BaseService):
                 out_put = even.output_schema.message
                 break
         return out_put
-
-
-
