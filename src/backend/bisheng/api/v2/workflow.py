@@ -76,6 +76,7 @@ async def invoke_workflow(request: Request,
         async for event in workflow.get_response_until_break():
             if event.category == WorkflowEventType.NodeRun.value:
                 continue
+            logger.debug(f'handle_workflow_event workflow event: {event}')
             # 非流式请求，过滤掉节点产生的流式输出事件
             if not stream and event.category == WorkflowEventType.StreamMsg.value and event.type == 'stream':
                 continue
