@@ -12,6 +12,7 @@ from bisheng.database.models.base import SQLModelSerializable
 class ExecType(Enum):
     FLOW = 'flow'
     ASSISTANT = 'assistant'
+    WORK_FLOW = 'work_flow'
 
 
 class EvaluationTaskStatus(Enum):

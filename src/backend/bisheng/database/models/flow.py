@@ -340,7 +340,8 @@ class FlowDao(FlowBase):
                      user_id: int = None,
                      id_extra: list = None,
                      page: int = 0,
-                     limit: int = 0) -> (List[Dict], int):
+                     limit: int = 0,
+                     user_ids:list = None) -> (List[Dict], int):
         """ 获取所有的应用 包含技能、助手、工作流 """
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
@@ -380,6 +381,9 @@ class FlowDao(FlowBase):
             statement = statement.order_by(sub_query.c.name)
         else:
             statement = statement.order_by(sub_query.c.update_time.desc())
+        if user_ids:
+            statement = statement.where(sub_query.c.user_id.in_(user_ids))
+            count_statement = count_statement.where(sub_query.c.user_id.in_(user_ids))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         with session_getter() as session:
