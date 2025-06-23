@@ -70,7 +70,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                         className
                     )}
                     defaultValue={defaultValue}
-                    onInput={handleChange}
+                    onChange={handleChange}
                     onPaste={handlePaste} // 添加粘贴事件处理
                     maxLength={maxLength}
                     ref={ref}
@@ -243,18 +243,18 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             className={cname('pr-8', inputClassName)}
                             placeholder={props.placeholder || ''}
                             onChange={(e) => handleChange(e.target.value, item.key, index)}
-                            onInput={(e) => {
-                                rules.some(rule => {
-                                    if (rule.maxLength && e.target.value.length > rule.maxLength) {
-                                        e.target.nextSibling.textContent = rule.message;
-                                        e.target.nextSibling.style.display = '';
-                                        return true;
-                                    }
-                                    if (e.target.nextSibling) {
-                                        e.target.nextSibling.style.display = 'none';
-                                    }
-                                })
-                            }}
+                            // onInput={(e) => {
+                            //     rules.some(rule => {
+                            //         if (rule.maxLength && e.target.value.length > rule.maxLength) {
+                            //             e.target.parentNode.nextSibling.textContent = rule.message;
+                            //             e.target.parentNode.nextSibling.style.display = '';
+                            //             return true;
+                            //         }
+                            //         if (e.target.nextSibling) {
+                            //             e.target.parentNode.nextSibling.style.display = 'none';
+                            //         }
+                            //     })
+                            // }}
                         // onFocus={(e) => {
                         //     if (e.target.value && index === inputs.length - 1) {
                         //         setInputs([...inputs, { id: generateUUID(8), value: '' }]);
