@@ -10,4 +10,6 @@ class SOPManagementSchema(BaseModel):
     rating: int = Field(0, ge=0, le=5, description="SOP评分，范围0-5")
 
 
-
+class SOPManagementUpdateSchema(SOPManagementSchema):
+    """SOP管理更新 Schema"""
+    id: int = Field(..., description="SOP唯一ID")

@@ -1,9 +1,11 @@
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
+from loguru import logger
 from sqlalchemy import Column, Text, DateTime, text
-from sqlmodel import Field, select
+from sqlmodel import Field, select, delete, col
 
+from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.database.base import session_getter, get_count
 from bisheng.database.models.base import SQLModelSerializable
 
@@ -46,9 +48,20 @@ class InspirationSOPDao(InspirationSOPBase):
             return sop
 
     @classmethod
-    def update_sop(cls, sop: InspirationSOP) -> InspirationSOP:
+    def update_sop(cls, sop_obj: SOPManagementUpdateSchema) -> InspirationSOP:
         with session_getter() as session:
             # 使用Update语句更新SOP
+            statement = select(InspirationSOP).where(InspirationSOP.id == sop_obj.id)
+            sop = session.exec(statement).first()
+            if not sop:
+                raise ValueError("SOP not found")
+
+            # 将sop_obj的字段值更新到sop实例中
+            for key, value in sop_obj.model_dump().items():
+                if hasattr(sop, key):
+                    setattr(sop, key, value)
+
+            sop.update_time = datetime.now()  # 更新修改时间
             session.add(sop)
             session.commit()
             session.refresh(sop)
@@ -81,3 +94,15 @@ class InspirationSOPDao(InspirationSOPBase):
             "page_size": page_size,
             "items": sop_list_dict
         }
+
+    @classmethod
+    def remove_sop(cls, sop_ids: List[int]) -> bool:
+        """
+        删除SOP
+        """
+        with session_getter() as session:
+            delete_statement = delete(InspirationSOP).where(col(InspirationSOP.id).in_(sop_ids))
+            result = session.exec(delete_statement)
+            session.commit()
+            logger.info(f"Deleted {result.rowcount} SOP(s) with IDs: {sop_ids}")
+            return True
