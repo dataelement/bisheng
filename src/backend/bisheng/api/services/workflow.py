@@ -2,7 +2,6 @@ import asyncio
 import uuid
 from typing import Dict, Optional, List
 from bisheng.worker.workflow.tasks import execute_workflow
-from bisheng.api.v2.utils import get_default_operator
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.utils import generate_uuid
@@ -38,7 +37,6 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
 from bisheng.database.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
-from bisheng.worker import RedisCallback
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -400,6 +398,8 @@ class WorkFlowService(BaseService):
                           message_id: Optional[int],
                           session_id: Optional[str],
                           stream: Optional[bool] = False):
+        from bisheng.api.v2.utils import get_default_operator
+        from bisheng.worker import RedisCallback
         login_user = get_default_operator()
         workflow_id = workflow_id.hex
 
