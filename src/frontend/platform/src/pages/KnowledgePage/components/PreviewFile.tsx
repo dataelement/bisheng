@@ -98,8 +98,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
                 }
             });
         });
-
-        setLabelsMap(labelsMap)
+        labelsMap.size && setLabelsMap(labelsMap)
         labelsMapRef.current = labelsMap
     }, [file.suffix, chunks, selectedChunkIndex]);
 

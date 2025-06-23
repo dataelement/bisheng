@@ -43,6 +43,12 @@ jobs:
 
           docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
           docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }} ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
   
   sync_dataelem_repos:
     runs-on: ubuntu-latest

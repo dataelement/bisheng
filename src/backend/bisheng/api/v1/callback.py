@@ -4,10 +4,6 @@ import json
 from queue import Queue
 from typing import Any, Dict, List, Union
 
-from bisheng.api.v1.schemas import ChatResponse
-from bisheng.database.models.message import ChatMessage as ChatMessageModel
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.utils.logger import logger
 from fastapi import WebSocket
 from langchain.callbacks.base import AsyncCallbackHandler, BaseCallbackHandler
 from langchain.schema import AgentFinish, LLMResult
@@ -15,6 +11,11 @@ from langchain.schema.agent import AgentAction
 from langchain.schema.document import Document
 from langchain.schema.messages import BaseMessage
 from langchain_core.messages import ToolMessage
+
+from bisheng.api.v1.schemas import ChatResponse
+from bisheng.database.models.message import ChatMessage as ChatMessageModel
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.utils.logger import logger
 
 
 # https://github.com/hwchase17/chat-langchain/blob/master/callback.py
@@ -57,9 +58,9 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
             'content': token,
             'reasoning_content': reasoning_content
         },
-                            type='stream',
-                            flow_id=self.flow_id,
-                            chat_id=self.chat_id)
+            type='stream',
+            flow_id=self.flow_id,
+            chat_id=self.chat_id)
         # 将流式输出内容放入到队列内，以方便中断流式输出后，可以将内容记录到数据库
         await self.websocket.send_json(resp.dict())
         if self.stream_queue:
@@ -498,7 +499,6 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
 
     async def on_tool_end(self, output: ToolMessage, **kwargs: Any) -> Any:
         """Run when tool ends running."""
-        output = output.content
         logger.debug(f'on_tool_end output={output} kwargs={kwargs}')
         observation_prefix = kwargs.get('observation_prefix', 'Tool output: ')
 
@@ -508,7 +508,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
         tool_name, tool_category = self.parse_tool_category(kwargs.get('name'))
 
         # Create a ChatResponse instance.
-        output_info = {'tool_key': tool_name, 'output': output}
+        output_info = {'tool_key': tool_name, 'output': result}
         resp = ChatResponse(type='end',
                             category=tool_category,
                             intermediate_steps=intermediate_steps,
@@ -568,7 +568,7 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
                     is_bot=1,
                     message=json.dumps(output_info),
                     intermediate_steps=f'{input_info["steps"]}\n\nTool output:\n\n  Error: ' +
-                    str(error),
+                                       str(error),
                     category=tool_category,
                     type='end',
                     flow_id=self.flow_id,
