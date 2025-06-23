@@ -261,3 +261,11 @@ class MessageSessionDao(MessageSessionBase):
         with session_getter() as session:
             session.exec(statement)
             session.commit()
+
+
+    @classmethod
+    def update_flow_name_by_flow_id(cls, flow_id: str, flow_name: str):
+        statement = update(MessageSession).where(MessageSession.flow_id == flow_id).values(flow_name=flow_name)
+        with session_getter() as session:
+            session.exec(statement)
+            session.commit()
