@@ -392,8 +392,8 @@ class WorkFlowService(BaseService):
         return workflow_event
 
     @classmethod
-    async def invoke_workflow(cls,workflow_id: UUID,
-                              version:str,
+    async def invoke_workflow(cls,workflow_id: str,
+                              version:int,
                           user_input: Optional[dict],
                           message_id: Optional[int],
                           session_id: Optional[str],
@@ -401,7 +401,7 @@ class WorkFlowService(BaseService):
         from bisheng.api.v2.utils import get_default_operator
         from bisheng.worker import RedisCallback
         login_user = get_default_operator()
-        workflow_id = workflow_id.hex
+        workflow_id = workflow_id
 
         # 解析出chat_id和unique_id
         if not session_id:
@@ -415,7 +415,8 @@ class WorkFlowService(BaseService):
         workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
 
         # 查询工作流信息
-        workflow_info = FlowVersionDao.get_version_by_name(workflow_id,version)
+        logger.info("workflow_id,version",workflow_id,version)
+        workflow_info = FlowVersionDao.get_version_by_id(version)
         if not workflow_info:
             raise NotFoundError.http_exception()
         if workflow_info.flow_type != FlowType.WORKFLOW.value:
@@ -470,7 +471,7 @@ class WorkFlowService(BaseService):
 
     # 仅处理一问一答的workflow
     @classmethod
-    async def run_workflow_1Q1A(cls, workflow_id: UUID, version: str, input: str) -> str:
+    async def run_workflow_1Q1A(cls, workflow_id: str, version: int, input: str) -> str:
         events = await cls.invoke_workflow(workflow_id, version, None, None, None, False)
         session_id = events['session_id']
         message_id = None
@@ -484,7 +485,7 @@ class WorkFlowService(BaseService):
             break
         out_put = ""
         if node_id and message_id:
-            result = await cls.invoke_workflow(workflow_id, version, {node_id:{"user_input": input}}, message_id, session_id, False)
+            result = await cls.invoke_workflow(workflow_id, version, {node_id:{"user_input": str(input)}}, message_id, session_id, False)
             for even in result['events']:
                 if even.event!= WorkflowEventType.OutputMsg.value:
                     continue
