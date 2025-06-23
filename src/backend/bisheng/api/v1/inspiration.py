@@ -43,8 +43,8 @@ async def update_sop(
     :return:
     """
 
-    # if not login_user.is_admin():
-    #     return UnAuthorizedError.return_resp()
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
 
     try:
         sop_model = InspirationSOPDao.update_sop(sop_obj)
@@ -87,8 +87,8 @@ async def remove_sop(
     :return:
     """
 
-    # if not login_user.is_admin():
-    #     return UnAuthorizedError.return_resp()
+    if not login_user.is_admin():
+        return UnAuthorizedError.return_resp()
 
     InspirationSOPDao.remove_sop(sop_ids=sop_ids)
 
