@@ -1,5 +1,8 @@
 from contextlib import contextmanager
 
+from sqlalchemy import func
+from sqlmodel.sql.expression import  SelectOfScalar
+
 from bisheng.database.service import DatabaseService
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
@@ -20,3 +23,17 @@ def session_getter() -> Session:
         raise
     finally:
         session.close()
+
+
+def get_count(session: Session, q: SelectOfScalar) -> int:
+    """
+    获取查询结果的数量
+    :param session:
+    :param q:
+    :return:
+    """
+    count_q = q.with_only_columns(func.count()).order_by(None).select_from(q.get_final_froms()[0])
+    iterator = session.exec(count_q)
+    for count in iterator:
+        return count
+    return 0
