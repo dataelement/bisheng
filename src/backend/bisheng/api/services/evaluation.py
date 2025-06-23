@@ -292,9 +292,9 @@ def add_evaluation_task(evaluation_id: int):
         _llm = LLMService.get_evaluation_llm_object()
         llm = LangchainLLM(_llm)
         data_samples = {
-            "question": [one.get('question') for one in csv_data],
+            "question": [str(one.get('question')) for one in csv_data],
             "answer": [one.get('answer') for one in csv_data],
-            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+            "ground_truths": [[str(one.get('ground_truth'))] for one in csv_data]
         }
         dataset = Dataset.from_dict(data_samples)
         answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm)
