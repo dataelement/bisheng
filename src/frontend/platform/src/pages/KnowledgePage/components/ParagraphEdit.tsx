@@ -272,7 +272,7 @@ const ParagraphEdit = ({
                         <img
                             className="size-52 block"
                             src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-                        <p>预览失败</p>
+                        <p>此文件类型不支持预览</p>
                     </div>
                 </div>
         }
