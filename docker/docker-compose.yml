@@ -45,7 +45,7 @@ services:
       - "8701:80"
     environment:
       TZ: Asia/Shanghai
-      JWT_ENABLED: false
+      JWT_ENABLED: "false"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
     command: bash -c "supervisorctl restart all"
@@ -53,7 +53,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v1.3.0
+    image: dataelement/bisheng-backend:v1.3.1
     ports:
       - "7860:7860"
     environment:
@@ -93,7 +93,7 @@ services:
   
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v1.3.0
+    image: dataelement/bisheng-backend:v1.3.1
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
@@ -125,7 +125,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v1.3.0
+    image: dataelement/bisheng-frontend:v1.3.1
     ports:
       - "3001:3001"
     environment:
