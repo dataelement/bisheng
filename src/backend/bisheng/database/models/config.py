@@ -18,7 +18,6 @@ class ConfigKeyEnum(Enum):
     EVALUATION_LLM = 'evaluation_llm'  # 评测默认模型配置
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
     WORKSTATION = 'workstation'  # 工作台默认模型配置
-    INSPIRATION_CONFIG = 'inspiration_config'  # 灵思配置
 
 
 class ConfigBase(SQLModelSerializable):

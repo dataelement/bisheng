@@ -29,18 +29,10 @@ class WorkStationService(BaseService):
         """ 更新workflow的默认模型配置 """
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         if config:
-            config.value = json.dumps(data.dict())
+            config.value = data.model_dump_json()
         else:
             config = Config(key=ConfigKeyEnum.WORKSTATION.value, value=json.dumps(data.dict()))
         ConfigDao.insert_config(config)
-
-        if data.inspirationConfig is not None:
-            # 如果有灵思配置，则更新灵思的配置
-            inspiration_config = ConfigDao.get_config(ConfigKeyEnum.INSPIRATION_CONFIG)
-
-            inspiration_config.value = json.dumps(data.inspirationConfig.model_dump())
-
-            ConfigDao.insert_config(inspiration_config)
 
         return data
 
@@ -60,11 +52,6 @@ class WorkStationService(BaseService):
             if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
                 ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
-
-            # 灵思配置获取
-            inspiration_config = ConfigDao.get_config(ConfigKeyEnum.INSPIRATION_CONFIG)
-            if inspiration_config is None:
-                ret.inspirationConfig = InspirationConfig.model_validate_json(inspiration_config.value)
 
             return ret
         return None
