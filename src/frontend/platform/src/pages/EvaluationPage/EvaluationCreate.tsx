@@ -90,7 +90,7 @@ export default function EvaluatingCreate() {
     const errorlist = [];
     if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
     if (!selectedKeyId) errorlist.push(t("evaluation.enterUniqueId"));
-    if (selectedType === "flow" && !selectedVersion)
+    if (["flow", "work_flow"].includes(selectedType) && !selectedVersion)
       errorlist.push(t("evaluation.enterVersion"));
     if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
     if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
