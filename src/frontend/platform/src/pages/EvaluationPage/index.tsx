@@ -35,6 +35,7 @@ import {
 } from "./types";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();
@@ -153,6 +154,9 @@ export default function EvaluationPage() {
                           className={"whitespace-nowrap"}
                         >
                           {t(EvaluationStatusLabelMap[el.status].label)}
+                          {
+                            el.status === EvaluationStatusEnum.failed && <QuestionTooltip content={''} />
+                          }
                           {el.status === EvaluationStatusEnum.running
                             ? ` ${el.progress}`
                             : null}
