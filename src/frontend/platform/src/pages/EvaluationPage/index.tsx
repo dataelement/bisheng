@@ -182,13 +182,14 @@ export default function EvaluationPage() {
                     </TableCell>
                     <TableCell className="flex justify-end">
                       <div className="flex">
-                        <Button
+                        {/* 只有状态成功 才展示下载 */}
+                        {el.status === EvaluationStatusEnum.success && <Button
                           variant="link"
                           className="no-underline hover:underline"
                           onClick={() => handleDownload(el)}
                         >
                           {t("evaluation.download")}
-                        </Button>
+                        </Button>}
                         <Button
                           variant="link"
                           onClick={() => handleDelete(el.id)}
