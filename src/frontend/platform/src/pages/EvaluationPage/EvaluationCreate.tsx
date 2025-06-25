@@ -34,7 +34,8 @@ import { TabsContext } from "@/contexts/tabsContext";
 import { FLOW_TYPE, readFlowsFromDatabase } from "@/controllers/API/flow";
 import PromptAreaComponent from "./PromptCom";
 import defaultPrompt from "./defaultPrompt";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { message, useToast } from "@/components/bs-ui/toast/use-toast";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export default function EvaluatingCreate() {
   const { t } = useTranslation();
@@ -97,14 +98,23 @@ export default function EvaluatingCreate() {
     if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
-      await createEvaluationApi({
-        exec_type: selectedType,
-        unique_id: selectedKeyId,
-        version: selectedVersion,
-        prompt,
-        file: fileRef.current,
-      });
-      navigate(-1);
+      const res = await captureAndAlertRequestErrorHoc(
+        createEvaluationApi({
+          exec_type: selectedType,
+          unique_id: selectedKeyId,
+          version: selectedVersion,
+          prompt,
+          file: fileRef.current,
+        })
+      );
+      if (res) {
+        message({
+            title: t('prompt'),
+            variant: 'success',
+            description: t('create')
+        });
+        navigate(-1);
+      }
     } finally {
       setLoading(false);
     }
