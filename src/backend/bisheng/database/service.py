@@ -1,9 +1,12 @@
 from typing import TYPE_CHECKING
 
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 from bisheng.services.base import Service
 from loguru import logger
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -19,7 +22,11 @@ class DatabaseService(Service):
         # langflow_dir = Path(__file__).parent.parent.parent
         # self.script_location = langflow_dir / "alembic"
         # self.alembic_cfg_path = langflow_dir / "alembic.ini"
+
+        self.sync_database_url = database_url.replace('pymysql', 'aiomysql')
+
         self.engine = self._create_engine()
+        self.async_engine = self._async_create_engine()
 
     def _create_engine(self) -> 'Engine':
         """Create the engine for the database."""
@@ -27,7 +34,24 @@ class DatabaseService(Service):
             connect_args = {'check_same_thread': False}
         else:
             connect_args = {}
-        return create_engine(self.database_url, connect_args=connect_args, pool_size=100, max_overflow=20, pool_timeout=3, pool_pre_ping=True)
+        return create_engine(self.database_url, connect_args=connect_args, pool_size=100, max_overflow=20,
+                             pool_timeout=3, pool_pre_ping=True)
+
+    def _async_create_engine(self) -> 'AsyncEngine':
+        """Create the async engine for the database."""
+        if self.database_url and self.database_url.startswith('sqlite'):
+            connect_args = {'check_same_thread': False}
+        else:
+            connect_args = {}
+        engine = AsyncEngine(create_engine(
+            self.sync_database_url,
+            connect_args=connect_args,
+            pool_size=100,
+            max_overflow=20,
+            pool_timeout=3,
+            pool_pre_ping=True
+        ))
+        return engine
 
     def __enter__(self):
         self._session = Session(self.engine)

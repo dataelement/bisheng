@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO
+from typing import Any, Dict, List, Optional, BinaryIO, Union
 
 import requests
 from bisheng_langchain.rag.extract_info import extract_title
@@ -319,7 +319,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 def decide_vectorstores(
         collection_name: str, vector_store: str, embedding: Embeddings
-) -> VectorStore:
+) -> Union[VectorStore, Any]:
     """vector db"""
     param: dict = {"embedding": embedding}
 

@@ -9,7 +9,7 @@ from bisheng.api.services import knowledge_imp, llm
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig, InspirationConfig
+from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum

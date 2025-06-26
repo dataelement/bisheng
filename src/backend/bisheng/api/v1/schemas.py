@@ -451,13 +451,14 @@ class WSPrompt(BaseModel):
     bingUrl: Optional[str] = None
 
 
-class InspirationConfig(BaseModel):
+class LinsightConfig(BaseModel):
     """
     灵思管理配置
     """
     input_placeholder: str = Field(..., description='输入框提示语')
     task_model: WSModel = Field(..., description='任务执行模型')
     task_summary_model: WSModel = Field(..., description='任务信息摘要模型')
+    sop_embedding_model: WSModel = Field(None, description='SOP embedding模型')
     tools: Optional[List[Dict]] = Field(None, description='灵思可选工具列表')
 
 
@@ -476,7 +477,7 @@ class WorkstationConfig(BaseModel):
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
-    inspirationConfig: Optional[InspirationConfig] = Field(default=None, description='灵思配置')
+    linsightConfig: Optional[LinsightConfig] = Field(default=None, description='灵思配置')
 
 
 class ExcelRule(BaseModel):

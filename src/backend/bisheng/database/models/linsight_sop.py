@@ -6,11 +6,11 @@ from sqlalchemy import Column, Text, DateTime, text
 from sqlmodel import Field, select, delete, col
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
-from bisheng.database.base import session_getter, get_count
+from bisheng.database.base import async_session_getter, async_get_count
 from bisheng.database.models.base import SQLModelSerializable
 
 
-class InspirationSOPBase(SQLModelSerializable):
+class LinsightSOPBase(SQLModelSerializable):
     """
     Inspiration SOP模型基类
     """
@@ -19,6 +19,7 @@ class InspirationSOPBase(SQLModelSerializable):
     user_id: int = Field(default=0, description='创建人ID')
     content: str = Field(..., description='SOP内容', sa_column=Column(Text))
     rating: int = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
+    vector_store_id: Optional[str] = Field(..., description='向量存储ID', max_length=64)
 
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -26,33 +27,34 @@ class InspirationSOPBase(SQLModelSerializable):
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
-class InspirationSOP(InspirationSOPBase, table=True):
+class LinsightSOP(LinsightSOPBase, table=True):
     """
     Inspiration SOP模型
     """
-    __tablename__ = "inspiration_sop"
+    __tablename__ = "linsight_sop"
     id: Optional[int] = Field(default=None, primary_key=True, description='SOP唯一ID')
 
 
-class InspirationSOPDao(InspirationSOPBase):
+class LinsightSOPDao(LinsightSOPBase):
     """
     Inspiration SOP数据访问对象
     """
 
     @classmethod
-    def create_sop(cls, sop: InspirationSOP) -> InspirationSOP:
-        with session_getter() as session:
+    async def create_sop(cls, sop: LinsightSOP) -> LinsightSOP:
+        async with async_session_getter() as session:
             session.add(sop)
-            session.commit()
-            session.refresh(sop)
+            await session.commit()
+            await session.refresh(sop)
             return sop
 
     @classmethod
-    def update_sop(cls, sop_obj: SOPManagementUpdateSchema) -> InspirationSOP:
-        with session_getter() as session:
+    async def update_sop(cls, sop_obj: SOPManagementUpdateSchema) -> LinsightSOP:
+        async with async_session_getter() as session:
             # 使用Update语句更新SOP
-            statement = select(InspirationSOP).where(InspirationSOP.id == sop_obj.id)
-            sop = session.exec(statement).first()
+            statement = select(LinsightSOP).where(LinsightSOP.id == sop_obj.id)
+            result = await session.exec(statement)
+            sop = result.first()
             if not sop:
                 raise ValueError("SOP not found")
 
@@ -63,30 +65,31 @@ class InspirationSOPDao(InspirationSOPBase):
 
             sop.update_time = datetime.now()  # 更新修改时间
             session.add(sop)
-            session.commit()
-            session.refresh(sop)
+            await session.commit()
+            await session.refresh(sop)
             return sop
 
     @classmethod
-    def get_sop_page(cls, keywords: Optional[str] = None, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+    async def get_sop_page(cls, keywords: Optional[str] = None, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         """
         获取SOP分页列表
         """
 
-        statement = select(InspirationSOP)
+        statement = select(LinsightSOP)
         if keywords:
             statement = statement.where(
-                InspirationSOP.name.ilike(f'%{keywords}%') |
-                InspirationSOP.description.ilike(f'%{keywords}%') |
-                InspirationSOP.content.ilike(f'%{keywords}%')
+                LinsightSOP.name.ilike(f'%{keywords}%') |
+                LinsightSOP.description.ilike(f'%{keywords}%') |
+                LinsightSOP.content.ilike(f'%{keywords}%')
             )
         statement = statement.offset((page - 1) * page_size).limit(page_size)
 
-        with session_getter() as session:
-            sop_list = session.exec(statement).all()
+        async with async_session_getter() as session:
+            result = await session.exec(statement)
+            sop_list = result.all()
             sop_list_dict = [sop.model_dump() for sop in sop_list]
 
-            total_count = get_count(session, statement)
+            total_count = await async_get_count(session, statement)
 
         return {
             "total": total_count,
@@ -96,13 +99,24 @@ class InspirationSOPDao(InspirationSOPBase):
         }
 
     @classmethod
-    def remove_sop(cls, sop_ids: List[int]) -> bool:
+    async def get_sops_by_ids(cls, sop_ids: List[int]) -> List[LinsightSOP]:
+        """
+        根据SOP ID列表获取SOP对象
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
+            result = await session.exec(statement)
+            sop_list = result.all()
+            return sop_list
+
+    @classmethod
+    async def remove_sop(cls, sop_ids: List[int]) -> bool:
         """
         删除SOP
         """
-        with session_getter() as session:
-            delete_statement = delete(InspirationSOP).where(col(InspirationSOP.id).in_(sop_ids))
-            result = session.exec(delete_statement)
-            session.commit()
+        async with async_session_getter() as session:
+            delete_statement = delete(LinsightSOP).where(col(LinsightSOP.id).in_(sop_ids))
+            result = await session.exec(delete_statement)
+            await session.commit()
             logger.info(f"Deleted {result.rowcount} SOP(s) with IDs: {sop_ids}")
             return True

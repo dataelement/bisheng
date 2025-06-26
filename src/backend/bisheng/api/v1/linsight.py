@@ -3,12 +3,13 @@ from typing import List
 from fastapi import APIRouter, Depends, Body, Query
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
-from bisheng.database.models.inspiration_sop import InspirationSOP, InspirationSOPDao
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.database.models.linsight_sop import LinsightSOPDao
 
-router = APIRouter(prefix="/inspiration", tags=["灵思"])
+router = APIRouter(prefix="/linsight", tags=["灵思"])
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
@@ -25,11 +26,7 @@ async def add_sop(
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
 
-    sop_model = InspirationSOP.model_validate(sop_obj)
-    sop_model.user_id = login_user.user_id
-    sop_model = InspirationSOPDao.create_sop(sop_model)
-
-    return resp_200(data=sop_model)
+    return await SOPManageService.add_sop(sop_obj, login_user)
 
 
 @router.post("/sop/update", summary="更新灵思SOP", response_model=UnifiedResponseModel)
@@ -45,13 +42,7 @@ async def update_sop(
 
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
-
-    try:
-        sop_model = InspirationSOPDao.update_sop(sop_obj)
-    except ValueError as e:
-        return resp_500(code=404, message=str(e))
-
-    return resp_200(data=sop_model)
+    return await SOPManageService.update_sop(sop_obj, login_user)
 
 
 @router.get("/sop/list", summary="获取灵思SOP列表", response_model=UnifiedResponseModel)
@@ -72,7 +63,7 @@ async def get_sop_list(
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
 
-    sop_pages = InspirationSOPDao.get_sop_page(keywords=keywords, page=page, page_size=page_size)
+    sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, page=page, page_size=page_size)
     return resp_200(data=sop_pages)
 
 
@@ -90,6 +81,4 @@ async def remove_sop(
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
 
-    InspirationSOPDao.remove_sop(sop_ids=sop_ids)
-
-    return resp_200(data=True)
+    return await SOPManageService.remove_sop(sop_ids, login_user)

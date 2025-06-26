@@ -1,4 +1,5 @@
 import pickle
+import typing
 from typing import Dict, Optional
 
 import redis
@@ -9,6 +10,9 @@ from redis.backoff import ExponentialBackoff
 from redis.cluster import ClusterNode
 from redis.retry import Retry
 from redis.sentinel import Sentinel
+from redis.asyncio.sentinel import Sentinel as AsyncSentinel
+from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
+from redis.asyncio import Redis as AsyncRedis
 
 
 class RedisClient:
@@ -31,18 +35,24 @@ class RedisClient:
                 self.connection = RedisCluster.from_url(cluster_url, **redis_conf,
                                                         retry=Retry(ExponentialBackoff(), 6),
                                                         cluster_error_retry_attempts=1)
+                self.async_connection: typing.Union[AsyncRedisCluster, AsyncRedis] = AsyncRedisCluster.from_url(
+                    cluster_url, **redis_conf, retry=Retry(ExponentialBackoff(), 6), cluster_error_retry_attempts=1)
                 return
             hosts = [eval(x) for x in redis_conf.pop('sentinel_hosts')]
             password = redis_conf.pop('sentinel_password')
             master = redis_conf.pop('sentinel_master')
             sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
+            async_sentinel = AsyncSentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
             # 获取主节点的连接
             self.connection = sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
+            self.async_connection: AsyncRedis = async_sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
 
         else:
             # 单机模式
             self.pool = ConnectionPool.from_url(url, max_connections=max_connections)
+            self.async_pool = redis.asyncio.ConnectionPool.from_url(url, max_connections=max_connections)
             self.connection = redis.StrictRedis(connection_pool=self.pool)
+            self.async_connection: AsyncRedis = redis.asyncio.Redis.from_pool(self.async_pool)
 
     def set(self, key, value, expiration=3600):
         try:
@@ -61,6 +71,23 @@ class RedisClient:
         finally:
             self.close()
 
+    async def aset(self, key, value, expiration=3600):
+        try:
+            if pickled := pickle.dumps(value):
+                # await self.acluster_nodes(key)
+                if expiration:
+                    result = await self.async_connection.setex(name=key, value=pickled, time=expiration)
+                else:
+                    result = await self.async_connection.set(key, pickled)
+                if not result:
+                    raise ValueError('RedisCache could not set the value.')
+            else:
+                logger.error('pickle error, value={}', value)
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            await self.aclose()
+
     def setNx(self, key, value, expiration=3600):
         try:
             if pickled := pickle.dumps(value):
@@ -75,6 +102,48 @@ class RedisClient:
         finally:
             self.close()
 
+    async def asetNx(self, key, value, expiration=3600):
+        try:
+            if pickled := pickle.dumps(value):
+                await self.acluster_nodes(key)
+                result = await self.async_connection.setnx(key, pickled)
+                await self.async_connection.expire(key, expiration)
+                if not result:
+                    return False
+                return True
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            await self.aclose()
+
+    def setex(self, key, value, expiration=3600):
+        try:
+            if pickled := pickle.dumps(value):
+                self.cluster_nodes(key)
+                result = self.connection.setex(key, expiration, pickled)
+                if not result:
+                    raise ValueError('RedisCache could not set the value.')
+            else:
+                logger.error('pickle error, value={}', value)
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            self.close()
+
+    async def asetex(self, key, value, expiration=3600):
+        try:
+            if pickled := pickle.dumps(value):
+                await self.acluster_nodes(key)
+                result = await self.async_connection.setex(key, expiration, pickled)
+                if not result:
+                    raise ValueError('RedisCache could not set the value.')
+            else:
+                logger.error('pickle error, value={}', value)
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            await self.aclose()
+
     def hsetkey(self, name, key, value, expiration=3600):
         try:
             self.cluster_nodes(key)
@@ -84,6 +153,16 @@ class RedisClient:
             return r
         finally:
             self.close()
+
+    async def ahsetkey(self, name, key, value, expiration=3600):
+        try:
+            await self.acluster_nodes(key)
+            r = await self.async_connection.hset(name, key, value)
+            if expiration:
+                await self.async_connection.expire(name, expiration)
+            return r
+        finally:
+            await self.aclose()
 
     def hset(self, name,
              key: Optional[str] = None,
@@ -100,12 +179,34 @@ class RedisClient:
         finally:
             self.close()
 
+    async def ahset(self, name,
+                    key: Optional[str] = None,
+                    value: Optional[str] = None,
+                    mapping: Optional[dict] = None,
+                    items: Optional[list] = None,
+                    expiration: int = 3600):
+        try:
+            await self.acluster_nodes(name)
+            r = await self.async_connection.hset(name, key, value, mapping, items)
+            if expiration:
+                await self.async_connection.expire(name, expiration)
+            return r
+        finally:
+            await self.aclose()
+
     def hget(self, name, key):
         try:
             self.cluster_nodes(name)
             return self.connection.hget(name, key)
         finally:
             self.close()
+
+    async def ahget(self, name, key):
+        try:
+            await self.acluster_nodes(name)
+            return await self.async_connection.hget(name, key)
+        finally:
+            await self.aclose()
 
     def hgetall(self, name):
         try:
@@ -114,12 +215,26 @@ class RedisClient:
         finally:
             self.close()
 
+    async def ahgetall(self, name):
+        try:
+            await self.acluster_nodes(name)
+            return await self.async_connection.hgetall(name)
+        finally:
+            await self.aclose()
+
     def hdel(self, name, *keys):
         try:
             self.cluster_nodes(name)
             return self.connection.hdel(name, *keys)
         finally:
             self.close()
+
+    async def ahdel(self, name, *keys):
+        try:
+            await self.acluster_nodes(name)
+            return await self.async_connection.hdel(name, *keys)
+        finally:
+            await self.aclose()
 
     def get(self, key):
         try:
@@ -128,6 +243,14 @@ class RedisClient:
             return pickle.loads(value) if value else None
         finally:
             self.close()
+
+    async def aget(self, key):
+        try:
+            await self.acluster_nodes(key)
+            value = await self.async_connection.get(key)
+            return pickle.loads(value) if value else None
+        finally:
+            await self.aclose()
 
     def incr(self, key, expiration=3600) -> int:
         try:
@@ -139,6 +262,16 @@ class RedisClient:
         finally:
             self.close()
 
+    async def aincr(self, key, expiration=3600) -> int:
+        try:
+            await self.acluster_nodes(key)
+            value = await self.async_connection.incr(key)
+            if expiration:
+                await self.async_connection.expire(key, expiration)
+            return value
+        finally:
+            await self.aclose()
+
     def expire_key(self, key, expiration: int):
         try:
             self.cluster_nodes(key)
@@ -146,12 +279,26 @@ class RedisClient:
         finally:
             self.close()
 
+    async def aexpire_key(self, key, expiration: int):
+        try:
+            await self.acluster_nodes(key)
+            await self.async_connection.expire(key, expiration)
+        finally:
+            await self.aclose()
+
     def delete(self, key):
         try:
             self.cluster_nodes(key)
             return self.connection.delete(key)
         finally:
             self.close()
+
+    async def adelete(self, key):
+        try:
+            await self.acluster_nodes(key)
+            return await self.async_connection.delete(key)
+        finally:
+            await self.aclose()
 
     def rpush(self, key, value, expiration=3600):
         try:
@@ -163,12 +310,29 @@ class RedisClient:
         finally:
             self.close()
 
-    def lpop(self, key, count: int=None):
+    async def arpush(self, key, value, expiration=3600):
+        try:
+            await self.acluster_nodes(key)
+            ret = await self.async_connection.rpush(key, value)
+            if expiration:
+                await self.aexpire_key(key, expiration)
+            return ret
+        finally:
+            await self.aclose()
+
+    def lpop(self, key, count: int = None):
         try:
             self.cluster_nodes(key)
             return self.connection.lpop(key, count)
         finally:
             self.close()
+
+    async def alpop(self, key, count: int = None):
+        try:
+            await self.acluster_nodes(key)
+            return await self.async_connection.lpop(key, count)
+        finally:
+            await self.aclose()
 
     def publish(self, key, value):
         try:
@@ -177,6 +341,13 @@ class RedisClient:
         finally:
             self.close()
 
+    async def apublish(self, key, value):
+        try:
+            await self.acluster_nodes(key)
+            return await self.async_connection.publish(key, value)
+        finally:
+            await self.aclose()
+
     def exists(self, key):
         try:
             self.cluster_nodes(key)
@@ -184,8 +355,22 @@ class RedisClient:
         finally:
             self.close()
 
+    async def aexists(self, key):
+        try:
+            await self.acluster_nodes(key)
+            return await self.async_connection.exists(key)
+        finally:
+            await self.aclose()
+
     def close(self):
         self.connection.close()
+
+    async def aclose(self):
+        """Asynchronous close method for the Redis connection."""
+        if hasattr(self, 'async_connection') and self.async_connection:
+            await self.async_connection.close()
+        else:
+            logger.warning("No async connection to close.")
 
     def __contains__(self, key):
         """Check if the key is in the cache."""
@@ -212,6 +397,12 @@ class RedisClient:
                       RedisCluster) and self.connection.get_default_node() is None:
             target = self.connection.get_node_from_key(key)
             self.connection.set_default_node(target)
+
+    async def acluster_nodes(self, key):
+        if isinstance(self.async_connection,
+                      AsyncRedisCluster) and self.async_connection.get_default_node() is None:
+            target = self.async_connection.get_node_from_key(key)
+            self.async_connection.set_default_node(target)
 
 
 # 示例用法

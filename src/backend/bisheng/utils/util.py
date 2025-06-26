@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import inspect
 import re
@@ -94,10 +95,10 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
                     if name == 'self':
                         continue
                     variables[name] = {}
-                    variables[name]['default'] = get_default_factory(module=_class.__base__.__module__, function=str(param.annotation))
+                    variables[name]['default'] = get_default_factory(module=_class.__base__.__module__,
+                                                                     function=str(param.annotation))
                     variables[name]['annotation'] = str(param.annotation)
                     variables[name]['required'] = False
-
 
             base_classes = get_base_classes(_class)
             # Adding function to base classes to allow
@@ -113,10 +114,10 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
 
 
 def build_template_from_method(
-    class_name: str,
-    method_name: str,
-    type_to_cls_dict: Dict,
-    add_function: bool = False,
+        class_name: str,
+        method_name: str,
+        type_to_cls_dict: Dict,
+        add_function: bool = False,
 ):
     classes = [item.__name__ for item in type_to_cls_dict.values()]
 
@@ -346,6 +347,25 @@ def sync_to_async(func):
         return func(*args, **kwargs)
 
     return async_wrapper
+
+
+def run_async(coro, loop=None):
+    """
+    运行异步函数
+    :param coro:
+    :param loop:
+    :return:
+    """
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+            return loop.run_until_complete(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(coro)
+
+    return loop.run_until_complete(coro)
 
 
 def get_cache_key(flow_id: str, chat_id: str, vertex_id: str = None):
