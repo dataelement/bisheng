@@ -252,7 +252,7 @@ async def get_app_list(
 
     return resp_200(data=data)
 
-@router.get('/get_group_user', response_model=UnifiedResponseModel[List[User]], status_code=200)
+@router.get('/get_group_user')
 async def get_group_user(group_id: int,
                          page: int = None,
                          limit: int = None,
