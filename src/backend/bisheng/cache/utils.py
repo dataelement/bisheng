@@ -162,7 +162,11 @@ def convert_encoding_cchardet(input_file, output_file, target_encoding='utf-8'):
         output_file = input_file
         return output_file
 
-    source_content = input_file.read().decode(source_encoding)
+    try:
+        source_content = input_file.read().decode(source_encoding)
+    except (UnicodeDecodeError, LookupError):
+        input_file.seek(0)
+        source_content = input_file.read().decode(target_encoding, errors='replace')
     output_file.write(source_content.encode(target_encoding))
     output_file.seek(0)
     return output_file
