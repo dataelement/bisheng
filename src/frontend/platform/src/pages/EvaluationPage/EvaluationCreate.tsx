@@ -61,7 +61,7 @@ export default function EvaluatingCreate() {
 
   const onDrop = (acceptedFiles) => {
     fileRef.current = acceptedFiles[0];
-    const size = fileRef.current.size
+    const size = fileRef?.current?.size
     const errorlist = [];
 
     // 限制文件最大为 10M
