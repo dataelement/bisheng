@@ -120,9 +120,10 @@ class AuditLogService:
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # 获取助手详情
-        assistant_info = AssistantDao.get_one_assistant(assistant_id)
+        obj = UUID(assistant_id)  # DONE merge_check
+        assistant_info = AssistantDao.get_one_assistant(str(obj))
         if not assistant_info:
-            assistant_info = AssistantDao.get_one_assistant(UUID(assistant_id))
+            assistant_info = AssistantDao.get_one_assistant(obj.hex)
         cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.ASSISTANT,
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
