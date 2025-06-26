@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select"
 import { cname } from "@/components/bs-ui/utils";
 import { generateUUID } from "@/utils";
 import { ChevronRight, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 
 const SelectGroup = ({ 
@@ -85,6 +85,12 @@ const SelectGroup = ({
             );
         });
     };
+
+    useEffect(() => {
+        if (open) {
+            handleSearch(inputRef);
+        }
+    }, [open])
 
     // const treeData = buildTree(options);
     console.log('options :>> ', options, value);
