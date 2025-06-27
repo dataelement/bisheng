@@ -64,7 +64,7 @@ async def replan_sop(
 
 
 # workbench 开始执行
-@router.post("/workbench/start-execute", summary="开始执行灵思SOP", response_model=UnifiedResponseModel)
+@router.post("/workbench/start-execute", summary="开始执行灵思", response_model=UnifiedResponseModel)
 async def start_execute_sop(
         linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
@@ -79,7 +79,7 @@ async def start_execute_sop(
 
 
 # workbench 用户输入
-@router.post("/workbench/user-input", summary="用户输入灵思SOP", response_model=UnifiedResponseModel)
+@router.post("/workbench/user-input", summary="用户输入灵思", response_model=UnifiedResponseModel)
 async def user_input(
         linsight_execute_task_id: UUID = Body(..., description="灵思执行任务ID"),
         input_content: str = Body(..., description="用户输入内容"),
