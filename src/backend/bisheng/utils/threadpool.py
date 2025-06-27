@@ -50,7 +50,7 @@ class ThreadPoolManager:
 
     def run_in_event_loop(self, coro, *args, **kwargs) -> concurrent.futures.Future:
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             logger.info('event loop {}', loop)
         except Exception:
             loop = asyncio.new_event_loop()
