@@ -42,6 +42,13 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     status: SessionVersionStatusEnum = Field(default=SessionVersionStatusEnum.NOT_STARTED, description='会话版本状态',
                                              sa_column=Column(SQLEnum(SessionVersionStatusEnum), nullable=False))
     score: Optional[int] = Field(None, description='会话评分', ge=1, le=5, nullable=True)
+    # 执行结果反馈信息
+    execute_feedback: Optional[str] = Field(None, description='执行结果反馈信息', sa_type=Text, nullable=True)
+
+    # 是否有重新执行
+    has_reexecute: bool = Field(default=False, description='是否有重新执行', sa_type=Boolean, nullable=False)
+
+    # 版本
     version: datetime = Field(default_factory=datetime.now, description='会话版本创建时间', sa_type=DateTime)
 
 
