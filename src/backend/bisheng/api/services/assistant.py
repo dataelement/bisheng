@@ -25,17 +25,36 @@ from bisheng.database.models.assistant import (Assistant, AssistantDao, Assistan
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsToolsTypeRead, GptsTools
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 
 
 class AssistantService(BaseService, AssistantUtils):
     UserCache: InMemoryCache = InMemoryCache()
+
+
+    @classmethod
+    def get_company_members_by_uid(cls, user_id: int) -> List[int]:
+        user_groups = UserGroupDao.get_user_group(user_id)
+        if not user_groups:
+            return []
+        group_ids = [ug.group_id for ug in user_groups]
+        group_infos = GroupDao.get_group_by_ids(group_ids)
+        codes = set([str(g.code).split("|")[0] for g in group_infos if g.code])
+        all_group_id = []
+        for code in codes:
+            group_info = GroupDao.get_child_groups(code)
+            all_group_id.extend([g.id for g in group_info])
+        all_user_id = UserGroupDao.get_groups_user(all_group_id)
+        logger.info(f"AssistantService get_company_members_by_uid user_id={user_id} all_user_id={all_user_id}")
+        return list(set(all_user_id))
 
     @classmethod
     def get_assistant(cls,
@@ -112,8 +131,10 @@ class AssistantService(BaseService, AssistantUtils):
         if not assistant or assistant.is_delete:
             return AssistantNotExistsError.return_resp()
         # 检查是否有权限获取信息
-        if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
-            return UnAuthorizedError.return_resp()
+        all_user_id = cls.get_company_members_by_uid(login_user.user_id)
+        if assistant.user_id not in all_user_id:
+            if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
+                return UnAuthorizedError.return_resp()
 
         tool_list = []
         flow_list = []
@@ -270,6 +291,8 @@ class AssistantService(BaseService, AssistantUtils):
             # 检查下是否有重名
             if cls.judge_name_repeat(req.name, assistant.id):
                 return AssistantNameRepeatError.return_resp()
+            # 修改审计/运营中的flow_name
+            MessageSessionDao.update_flow_name_by_flow_id(assistant.id, req.name)
             assistant.name = req.name
         assistant.desc = req.desc
         assistant.logo = req.logo

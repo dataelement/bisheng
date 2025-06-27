@@ -23,6 +23,7 @@ from bisheng.database.base import session_getter
 from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowReadWithStyle, FlowType, FlowUpdate, \
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.utils.minio_client import MinioClient
 from bisheng_langchain.utils.requests import Requests
@@ -245,14 +246,15 @@ async def update_flow(*,
 
     flow_data = flow.model_dump(exclude_unset=True)
 
-    if FlowService.judge_name_repeat(flow.name):
+    if FlowService.judge_name_repeat(flow.name, flow_id):
         raise WorkflowNameExistsError.http_exception()
     # TODO:  验证工作流是否可以使用
 
     if db_flow.status == FlowStatus.ONLINE.value and (
             'status' not in flow_data or flow_data['status'] != FlowStatus.OFFLINE.value):
         raise WorkFlowOnlineEditError.http_exception()
-
+    if 'name' in flow_data and flow_data['name'] != db_flow.name:
+        MessageSessionDao.update_flow_name_by_flow_id(db_flow.id, flow_data['name'])
     for key, value in flow_data.items():
         if key in ['data', 'create_time', 'update_time']:
             continue

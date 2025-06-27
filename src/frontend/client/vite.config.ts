@@ -6,7 +6,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
-const app_env = { BASE_URL: '/workspace' }
+const app_env = { BASE_URL: '/platform/workspace' }
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {

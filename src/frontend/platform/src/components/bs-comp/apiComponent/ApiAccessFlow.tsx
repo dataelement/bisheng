@@ -88,7 +88,7 @@ print(response.text)# 输出工作流的响应`
                     <CardTitle id="guide-t2">整体调用流程</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className='w-[700px] mx-auto'><img src="/assets/api/flow.png" className='size-full' alt="" /></div>
+                    <div className='w-[700px] mx-auto'><img src={`${__APP_ENV__.BASE_URL}/assets/api/flow.png`} className='size-full' alt="" /></div>
                     <p className='bisheng-label pb-2'>如时序图所示，在对接工作流 API 时，一般会经历以下步骤：</p>
                     <p className="bisheng-label pb-2"><span className="font-semibold">1. 第一步：</span>发起工作流执行。通过/invoke 接口让工作流从开始节点开始运行：</p>
                     <div className='relative  max-w-[80vw]'>
@@ -386,7 +386,7 @@ print(response.text)# 输出工作流的响应`
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src="/assets/api/chat1.png" className='size-full' alt="" /></div>
+                                    <div className='max-w-[300px]'><img src={`${__APP_ENV__.BASE_URL}/assets/api/chat1.png`} className='size-full' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -421,7 +421,7 @@ print(response.text)# 输出工作流的响应`
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src="/assets/api/chat2.png" className='size-full' alt="" /></div>
+                                    <div className='max-w-[300px]'><img src={`${__APP_ENV__.BASE_URL}/assets/api/chat2.png`} className='size-full' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -464,7 +464,7 @@ print(response.text)# 输出工作流的响应`
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src="/assets/api/output.png" className='size-full' alt="" /></div>
+                                    <div className='max-w-[300px]'><img src={`${__APP_ENV__.BASE_URL}/assets/api/chat3.png`} className='size-full' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -598,7 +598,7 @@ def upload_file(local_path: str):
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src="/assets/api/chat4.png" className='size-full' alt="" /></div>
+                                    <div className='max-w-[300px]'><img src={`${__APP_ENV__.BASE_URL}/assets/api/chat4.png`} className='size-full' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -718,8 +718,8 @@ def upload_file(local_path: str):
                             <TableRow>
                                 <TableCell className='align-top'>
                                     <div className='max-w-[300px]'>
-                                        <img src="/assets/api/chat5.png" className='size-full' alt="" />
-                                        <img src="/assets/api/chat6.png" className='size-full' alt="" />
+                                        <img src={`${__APP_ENV__.BASE_URL}/assets/api/chat5.png`} className='size-full' alt="" />
+                                        <img src={`${__APP_ENV__.BASE_URL}/assets/api/chat6.png`} className='size-full' alt="" />
                                     </div>
                                 </TableCell>
                                 <TableCell className='align-top'>
@@ -775,7 +775,7 @@ def upload_file(local_path: str):
                             <TableRow>
                                 <TableCell className='align-top'>
                                     <div className='max-w-[300px]'>
-                                        <img src="/assets/api/chat6.png" className='size-full' alt="" />
+                                        <img src={`${__APP_ENV__.BASE_URL}/assets/api/chat6.png`} className='size-full' alt="" />
                                     </div>
                                 </TableCell>
                                 <TableCell className='align-top'>
@@ -861,7 +861,7 @@ def upload_file(local_path: str):
                             <TableRow>
                                 <TableCell className='align-top'>
                                     <div className='max-w-[300px]'>
-                                        <img src="/assets/api/chat7.png" className='size-full' alt="" />
+                                        <img src={`${__APP_ENV__.BASE_URL}/assets/api/chat7.png`} className='size-full' alt="" />
                                     </div>
                                 </TableCell>
                                 <TableCell className='align-top'>

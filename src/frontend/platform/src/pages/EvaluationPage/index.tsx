@@ -35,6 +35,7 @@ import {
 } from "./types";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();
@@ -133,8 +134,7 @@ export default function EvaluationPage() {
                       <div className="flex items-center">
                         <Badge className="whitespace-nowrap">
                           {
-                            t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]
-                              .label)
+                            t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]].label)
                           }
                         </Badge>
                         &nbsp;
@@ -154,6 +154,9 @@ export default function EvaluationPage() {
                           className={"whitespace-nowrap"}
                         >
                           {t(EvaluationStatusLabelMap[el.status].label)}
+                          {
+                            el.status === EvaluationStatusEnum.failed && <QuestionTooltip content={''} />
+                          }
                           {el.status === EvaluationStatusEnum.running
                             ? ` ${el.progress}`
                             : null}
@@ -183,13 +186,14 @@ export default function EvaluationPage() {
                     </TableCell>
                     <TableCell className="flex justify-end">
                       <div className="flex">
-                        <Button
+                        {/* 只有状态成功 才展示下载 */}
+                        {el.status === EvaluationStatusEnum.success && <Button
                           variant="link"
                           className="no-underline hover:underline"
                           onClick={() => handleDownload(el)}
                         >
                           {t("evaluation.download")}
-                        </Button>
+                        </Button>}
                         <Button
                           variant="link"
                           onClick={() => handleDelete(el.id)}

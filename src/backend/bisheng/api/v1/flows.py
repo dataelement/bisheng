@@ -125,13 +125,14 @@ def read_flows(*,
                page_size: int = Query(default=10, description='每页数量'),
                page_num: int = Query(default=1, description='页数'),
                status: int = None,
+               flow_type: int = Query(default=FlowType.FLOW.value, description='flow类型'),
                Authorize: AuthJWT = Depends()):
     """Read all flows."""
     Authorize.jwt_required()
     payload = json.loads(Authorize.get_jwt_subject())
     user = UserPayload(**payload)
     try:
-        return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size)
+        return FlowService.get_all_flows(user, name, status, tag_id, page_num, page_size, flow_type)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=str(e)) from e

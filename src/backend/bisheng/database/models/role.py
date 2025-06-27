@@ -36,17 +36,17 @@ class Role(RoleBase, table=True):
 
 class RoleRead(RoleBase):
     id: Optional[int] = None
+    user_ids: Optional[List[Dict]] = []  # 已绑定的用户列表
 
 
 class RoleUpdate(RoleBase):
     role_name: Optional[str] = None
     remark: Optional[str] = None
-    id: Optional[int]
-    user_ids: Optional[List[Dict]]  # 已绑定的用户列表
+    user_ids: Optional[List[int]] = []  # 已绑定的用户列表
 
 
 class RoleCreate(RoleBase):
-    user_ids: Optional[List[int]]  # 绑定的用户ID列表
+    user_ids: Optional[List[int]] = []  # 绑定的用户ID列表
 
 
 class RoleDao(RoleBase):
@@ -121,6 +121,7 @@ class RoleDao(RoleBase):
             session.exec(delete(RoleAccess).where(RoleAccess.role_id == role_id))
             session.commit()
 
+    @classmethod
     def update_role(cls, data: Role):
         with session_getter() as session:
             session.add(data)

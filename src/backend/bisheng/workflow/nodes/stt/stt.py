@@ -45,7 +45,7 @@ class STTNode(BaseNode):
             ret.insert(0, {"key": "batch_variable", "value": self._batch_variable_list, "type": "params"})
         for k, v in result.items():
             ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
-        return ret
+        return [ret]
 
     def _run_once(self,
                   input_variable: str = None,

@@ -31,10 +31,11 @@ import {
 } from "@/components/bs-ui/tooltip";
 import { alertContext } from "@/contexts/alertContext";
 import { TabsContext } from "@/contexts/tabsContext";
-import { readFlowsFromDatabase } from "@/controllers/API/flow";
+import { FLOW_TYPE, readFlowsFromDatabase } from "@/controllers/API/flow";
 import PromptAreaComponent from "./PromptCom";
 import defaultPrompt from "./defaultPrompt";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { message, useToast } from "@/components/bs-ui/toast/use-toast";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export default function EvaluatingCreate() {
   const { t } = useTranslation();
@@ -45,7 +46,7 @@ export default function EvaluatingCreate() {
   const flow = useMemo(() => {
     return id ? nextFlow : null;
   }, [nextFlow]);
-  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "">(
+  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "work_flow" | "">(
     ""
   );
   const [selectedKeyId, setSelectedKeyId] = useState("");
@@ -60,7 +61,7 @@ export default function EvaluatingCreate() {
 
   const onDrop = (acceptedFiles) => {
     fileRef.current = acceptedFiles[0];
-    const size = fileRef.current.size
+    const size = fileRef?.current?.size
     const errorlist = [];
 
     // 限制文件最大为 10M
@@ -89,7 +90,7 @@ export default function EvaluatingCreate() {
     const errorlist = [];
     if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
     if (!selectedKeyId) errorlist.push(t("evaluation.enterUniqueId"));
-    if (selectedType === "flow" && !selectedVersion)
+    if (["flow", "work_flow"].includes(selectedType) && !selectedVersion)
       errorlist.push(t("evaluation.enterVersion"));
     if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
     if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
@@ -97,14 +98,23 @@ export default function EvaluatingCreate() {
     if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
-      await createEvaluationApi({
-        exec_type: selectedType,
-        unique_id: selectedKeyId,
-        version: selectedVersion,
-        prompt,
-        file: fileRef.current,
-      });
-      navigate(-1);
+      const res = await captureAndAlertRequestErrorHoc(
+        createEvaluationApi({
+          exec_type: selectedType,
+          unique_id: selectedKeyId,
+          version: selectedVersion,
+          prompt,
+          file: fileRef.current,
+        })
+      );
+      if (res) {
+        message({
+            title: t('prompt'),
+            variant: 'success',
+            description: t('createSuccess')
+        });
+        navigate(-1);
+      }
     } finally {
       setLoading(false);
     }
@@ -128,6 +138,10 @@ export default function EvaluatingCreate() {
       getAssistantsApi(1, 100, "").then((data) => {
         setDataSource((data as any).data as AssistantItemDB[]);
       });
+    } else if (type === "work_flow") {
+      readFlowsFromDatabase(1, 100, "", -1, FLOW_TYPE.WORKFLOW).then((_flow) => {
+        setDataSource(_flow.data);
+      });
     }
   };
 
@@ -148,6 +162,10 @@ export default function EvaluatingCreate() {
     } else if (selectedType === "assistant") {
       getAssistantsApi(1, 100, value).then((data) => {
         setDataSource((data as any).data as AssistantItemDB[]);
+      });
+    } else if (selectedType === "work_flow") {
+      readFlowsFromDatabase(1, 100, value, -1, FLOW_TYPE.WORKFLOW).then((_flow) => {
+        setDataSource(_flow.data);
       });
     }
   }, 300), [selectedType])
@@ -203,6 +221,7 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
+                        <SelectItem value="work_flow">{t("build.workflow")}</SelectItem>
                         <SelectItem value="flow">{t("build.skill")}</SelectItem>
                         <SelectItem value="assistant">
                           {t("build.assistant")}
@@ -244,7 +263,7 @@ export default function EvaluatingCreate() {
                       </SelectViewport>
                     </SelectContent>
                   </Select>
-                  {selectedType === "flow" && (
+                  {["work_flow", "flow"].includes(selectedType) && (
                     <Select
                       value={selectedVersion}
                       onValueChange={(version) => setSelectedVersion(version)}

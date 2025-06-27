@@ -25,4 +25,10 @@ export type ChatMessageType = {
   create_time: string;
   update_time: string;
   reasoning_log?: string;
+  /** 违规信息 */
+  review_reason: string;
+  /** 消息状态 */
+  review_status: number;
+  /** 差评 */
+  remark: string;
 };
