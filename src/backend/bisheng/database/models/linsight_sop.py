@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from uuid import UUID
 
 from loguru import logger
@@ -79,7 +79,8 @@ class LinsightSOPDao(LinsightSOPBase):
             return sop
 
     @classmethod
-    async def get_sop_page(cls, keywords: Optional[str] = None, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+    async def get_sop_page(cls, keywords: Optional[str] = None, sort: Literal["asc", "desc"] = "desc", page: int = 1,
+                           page_size: int = 10) -> Dict[str, Any]:
         """
         获取SOP分页列表
         """
@@ -91,6 +92,12 @@ class LinsightSOPDao(LinsightSOPBase):
                 LinsightSOP.description.ilike(f'%{keywords}%') |
                 LinsightSOP.content.ilike(f'%{keywords}%')
             )
+
+        # 根据 rating 和 create_time 排序
+        if sort == "asc":
+            statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.create_time).asc())
+        else:
+            statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.create_time).desc())
         statement = statement.offset((page - 1) * page_size).limit(page_size)
 
         async with async_session_getter() as session:
