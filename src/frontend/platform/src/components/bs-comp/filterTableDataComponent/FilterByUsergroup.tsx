@@ -31,8 +31,7 @@ export default function FilterByUsergroup({ value, onChange, isAudit }) {
             showSearch
             contentClassName="overflow-y-auto max-w-[240px]"
             handleSearch={(e) => {
-                console.log('e', e.target.value)
-                loadData(e.target.value || '')
+                loadData(e?.target?.value || '')
             }}
             searchPlaceholder={'用户组'}
         />

@@ -31,6 +31,7 @@ from bisheng.database.models.knowledge import KnowledgeDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user import UserDao
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.user_role import UserRoleDao
 
@@ -290,6 +291,8 @@ class AssistantService(BaseService, AssistantUtils):
             # 检查下是否有重名
             if cls.judge_name_repeat(req.name, assistant.id):
                 return AssistantNameRepeatError.return_resp()
+            # 修改审计/运营中的flow_name
+            MessageSessionDao.update_flow_name_by_flow_id(assistant.id, req.name)
             assistant.name = req.name
         assistant.desc = req.desc
         assistant.logo = req.logo

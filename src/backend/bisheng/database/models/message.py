@@ -437,7 +437,8 @@ class ChatMessageDao(MessageBase):
         return res, total
 
     @classmethod
-    def get_chat_id_by_time(cls, flow_ids: List[str]=None, start_time: datetime=None, end_time: datetime=None):
+    def get_chat_id_by_time(cls, flow_ids: List[str]=None, start_time: datetime=None, end_time: datetime=None,
+                            category: List[str] = None):
         statement = select(func.distinct(ChatMessage.chat_id))
         if flow_ids:
             statement = statement.where(ChatMessage.flow_id.in_(flow_ids))
@@ -445,6 +446,8 @@ class ChatMessageDao(MessageBase):
             statement = statement.where(ChatMessage.create_time >= start_time)
         if end_time:
             statement = statement.where(ChatMessage.create_time <= end_time)
+        if category:
+            statement = statement.where(ChatMessage.category.in_(category))
         from sqlalchemy.dialects import mysql
         print("get_chat_id_by_time Compiled SQL:",
               statement.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))

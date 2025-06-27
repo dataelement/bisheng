@@ -34,7 +34,8 @@ import { TabsContext } from "@/contexts/tabsContext";
 import { FLOW_TYPE, readFlowsFromDatabase } from "@/controllers/API/flow";
 import PromptAreaComponent from "./PromptCom";
 import defaultPrompt from "./defaultPrompt";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { message, useToast } from "@/components/bs-ui/toast/use-toast";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 export default function EvaluatingCreate() {
   const { t } = useTranslation();
@@ -60,7 +61,7 @@ export default function EvaluatingCreate() {
 
   const onDrop = (acceptedFiles) => {
     fileRef.current = acceptedFiles[0];
-    const size = fileRef.current.size
+    const size = fileRef?.current?.size
     const errorlist = [];
 
     // 限制文件最大为 10M
@@ -89,7 +90,7 @@ export default function EvaluatingCreate() {
     const errorlist = [];
     if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
     if (!selectedKeyId) errorlist.push(t("evaluation.enterUniqueId"));
-    if (selectedType === "flow" && !selectedVersion)
+    if (["flow", "work_flow"].includes(selectedType) && !selectedVersion)
       errorlist.push(t("evaluation.enterVersion"));
     if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
     if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
@@ -97,14 +98,23 @@ export default function EvaluatingCreate() {
     if (errorlist.length) return handleError(errorlist);
     setLoading(true);
     try {
-      await createEvaluationApi({
-        exec_type: selectedType,
-        unique_id: selectedKeyId,
-        version: selectedVersion,
-        prompt,
-        file: fileRef.current,
-      });
-      navigate(-1);
+      const res = await captureAndAlertRequestErrorHoc(
+        createEvaluationApi({
+          exec_type: selectedType,
+          unique_id: selectedKeyId,
+          version: selectedVersion,
+          prompt,
+          file: fileRef.current,
+        })
+      );
+      if (res) {
+        message({
+            title: t('prompt'),
+            variant: 'success',
+            description: t('createSuccess')
+        });
+        navigate(-1);
+      }
     } finally {
       setLoading(false);
     }

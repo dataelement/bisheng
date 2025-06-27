@@ -463,7 +463,7 @@ class RoleGroupService():
         if not resource_list:
             return [], 0
         res = []
-        flow_ids = [UUID(resource.third_id) for resource in resource_list]
+        flow_ids = [resource.third_id for resource in resource_list]
         flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value
         data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
         db_user_ids = {one.user_id for one in data}

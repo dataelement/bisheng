@@ -1,5 +1,5 @@
 import { AvatarIcon } from "@/components/bs-icons/avatar";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
