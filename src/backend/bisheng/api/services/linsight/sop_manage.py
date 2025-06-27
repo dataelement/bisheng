@@ -1,10 +1,10 @@
 import uuid
 
+from bisheng.api.services.llm import LLMService
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.user_service import UserPayload
-from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_500, resp_200
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao
@@ -28,9 +28,9 @@ class SOPManageService:
         """
 
         # 获取当前全局配置的embedding模型
-        workstation_conf = WorkStationService.get_config()
+        linsight_conf = await LLMService.get_linsight_llm()
         try:
-            emb_model_id = workstation_conf.linsightConfig.sop_embedding_model.id
+            emb_model_id = linsight_conf.sop_embedding_model.id
             if not emb_model_id:
                 return resp_500(code=500, message="未配置知识库embedding模型，请从工作台配置中设置")
         except AttributeError:
@@ -87,9 +87,9 @@ class SOPManageService:
         if sop_obj.content != existing_sop[0].content:
 
             # 获取当前全局配置的embedding模型
-            workstation_conf = WorkStationService.get_config()
+            linsight_conf = await LLMService.get_linsight_llm()
             try:
-                emb_model_id = workstation_conf.linsightConfig.sop_embedding_model.id
+                emb_model_id = linsight_conf.sop_embedding_model.id
                 if not emb_model_id:
                     return resp_500(code=500, message="未配置知识库embedding模型，请从工作台配置中设置")
             except AttributeError:
@@ -139,9 +139,8 @@ class SOPManageService:
         # 删除向量存储中的数据
         try:
             vector_store_ids = [sop.vector_store_id for sop in existing_sops]
-            embeddings = decide_embeddings(WorkStationService.get_config().knowledgeBase.model)
             vector_client: Milvus = decide_vectorstores(
-                SOPManageService.collection_name, "Milvus", embeddings
+                SOPManageService.collection_name, "Milvus", FakeEmbedding()
             )
             es_client: ElasticKeywordsSearch = decide_vectorstores(
                 SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()

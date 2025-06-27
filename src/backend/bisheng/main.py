@@ -50,7 +50,7 @@ _EXCEPTION_HANDLERS = {
 async def lifespan(app: FastAPI):
     initialize_services()
     setup_llm_caching()
-    init_default_data()
+    await init_default_data()
     # LangfuseInstance.update()
     yield
     teardown_services()

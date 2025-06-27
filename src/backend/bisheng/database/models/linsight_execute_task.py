@@ -1,0 +1,81 @@
+import uuid
+from datetime import datetime
+from enum import Enum
+from typing import Optional, Dict, List
+from uuid import UUID
+
+from sqlalchemy import String, Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey
+from sqlmodel import Field
+
+from bisheng.database.models.base import SQLModelSerializable
+
+
+class ExecuteTaskTypeEnum(str, Enum):
+    """
+    灵思执行任务类型枚举
+    """
+    # 单体任务
+    SINGLE = "single"
+    # 拥有子任务
+    COMPOSITE = "composite"
+
+
+class ExecuteTaskStatusEnum(str, Enum):
+    """
+    灵思执行任务状态枚举
+    """
+    # 未开始
+    NOT_STARTED = "not_started"
+    # 进行中
+    IN_PROGRESS = "in_progress"
+    # 成功
+    SUCCESS = "success"
+    # 等待用户输入
+    WAITING_FOR_USER_INPUT = "waiting_for_user_input"
+    # 失败
+    FAILED = "failed"
+    # 终止
+    TERMINATED = "terminated"
+
+
+class LinsightExecuteTaskBase(SQLModelSerializable):
+    """
+    灵思执行任务模型基类
+    """
+    session_version_id: UUID = Field(..., description='会话版本ID',
+                                     sa_column=Column(CHAR(36), ForeignKey("linsight_session_version.id"),
+                                                      nullable=False))
+
+    parent_task_id: Optional[UUID] = Field(None, description='父任务ID',
+                                           sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
+                                                            nullable=True))
+    previous_task_id: Optional[UUID] = Field(None, description='上一个任务ID',
+                                             sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
+                                                              nullable=True))
+    next_task_id: Optional[UUID] = Field(None, description='下一个任务ID',
+                                         sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
+                                                          nullable=True))
+    task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
+                                           sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
+    task_data: Optional[dict] = Field(None, description='任务数据', sa_type=JSON, nullable=True)
+    input_prompt: Optional[str] = Field(None, description='输入提示', sa_type=Text, nullable=True)
+    user_input: Optional[str] = Field(None, description='用户输入', sa_type=Text, nullable=True)
+    history: Optional[List[Dict]] = Field(None, description='执行步骤记录', sa_type=JSON, nullable=True)
+    status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="任务状态",
+                                          sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
+    result: Optional[Dict] = Field(None, description='任务结果', sa_type=JSON, nullable=True)
+
+
+class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
+    """
+    灵思执行任务模型
+    """
+    id: UUID = Field(default_factory=uuid.uuid4, description='任务ID',
+                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
+
+    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+                                  sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+
+    __tablename__ = "linsight_execute_task"

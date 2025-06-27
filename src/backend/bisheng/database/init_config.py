@@ -2,21 +2,22 @@ from typing import Dict, List
 
 import yaml
 from bisheng.database.models.config import Config
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.settings import parse_key, read_from_conf
 from bisheng.utils.logger import logger
 from sqlmodel import select
 
 
-def init_config():
+async def init_config():
     # 初始化config
 
     # 首先通过yaml 获取配置文件所有的key
     config_content = read_from_conf('initdb_config.yaml')
     if not config_content:
         return
-    with session_getter() as session:
-        config = session.exec(select(Config)).all()
+    async with async_session_getter() as session:
+        config = await session.exec(select(Config))
+        config = config.all()
         db_keys = {conf.key: conf.value for conf in config}
         all_config_key = 'initdb_config'
         # 数据库内没有默认配置，将默认配置写入到数据库
@@ -27,10 +28,10 @@ def init_config():
             try:
                 db_config = Config(key=all_config_key, value=new_config_content)
                 session.add(db_config)
-                session.commit()
+                await session.commit()
             except Exception as e:
                 logger.exception(e)
-                session.rollback()
+                await session.rollback()
 
 
 def merge_old_config(new_config: str, old_db_config: List[Config], old_db_keys: Dict[str, str]):

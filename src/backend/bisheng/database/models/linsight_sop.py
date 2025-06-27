@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import Column, Text, DateTime, text
+from sqlalchemy import Column, Text, DateTime, text, String, CHAR, ForeignKey
 from sqlmodel import Field, select, delete, col
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
@@ -14,17 +15,21 @@ class LinsightSOPBase(SQLModelSerializable):
     """
     Inspiration SOP模型基类
     """
-    name: str = Field(..., index=True, description='SOP名称', max_length=256)
-    description: str = Field(default=None, sa_column=Column(Text), description='SOP描述')
-    user_id: int = Field(default=0, description='创建人ID')
-    content: str = Field(..., description='SOP内容', sa_column=Column(Text))
-    rating: int = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
-    vector_store_id: Optional[str] = Field(..., description='向量存储ID', max_length=64)
+    name: str = Field(..., description='SOP名称', sa_column=Column(String(256), index=True, nullable=False))
+    description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
+    user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
+    content: str = Field(..., description='SOP内容',
+                         sa_column=Column(Text, nullable=False, comment="SOP内容"))
 
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    rating: Optional[int] = Field(None, ge=0, le=5, description='SOP评分，范围0-5')
+
+    vector_store_id: Optional[str] = Field(..., description='向量存储ID',
+                                           sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
+
+    linsight_session_version_id: Optional[UUID] = Field(default=None, description='会话版本ID',
+                                                        sa_column=Column(CHAR(36),
+                                                                         ForeignKey("linsight_execute_task.id"),
+                                                                         nullable=True))
 
 
 class LinsightSOP(LinsightSOPBase, table=True):
@@ -33,6 +38,10 @@ class LinsightSOP(LinsightSOPBase, table=True):
     """
     __tablename__ = "linsight_sop"
     id: Optional[int] = Field(default=None, primary_key=True, description='SOP唯一ID')
+    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+                                  sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class LinsightSOPDao(LinsightSOPBase):

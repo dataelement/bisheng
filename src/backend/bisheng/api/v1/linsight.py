@@ -6,10 +6,25 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
+
+
+# 提交灵思用户问题请求
+@router.post("/workflow/submit", summary="提交灵思用户问题请求", response_model=UnifiedResponseModel)
+async def submit_linsight_workflow(
+        submit_obj: LinsightQuestionSubmitSchema = Body(..., description="灵思用户问题提交对象"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    提交灵思用户问题请求
+    :param submit_obj:
+    :param login_user:
+    :return:
+    """
+    pass
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
