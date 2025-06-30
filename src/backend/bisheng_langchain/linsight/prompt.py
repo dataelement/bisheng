@@ -24,7 +24,11 @@ SopPrompt = """基于以下信息创建一个标准操作流程(SOP):
 输出内容应该简练，只输出SOP，不要输出其他内容"""
 
 # 调整sop时的反馈prompt模板, variables -> query: 用户问题；sop：参考sop；feedback：用户反馈; history_summary: 历史执行过程
+# variables -> tools_str: 已有工具字符串
 FeedBackSopPrompt = """基于以下信息创建一个标准操作流程(SOP):
+
+已有工具：
+{tools_str}
 
 用户需求: {query}
 

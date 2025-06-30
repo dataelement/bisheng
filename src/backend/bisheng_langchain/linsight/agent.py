@@ -6,6 +6,7 @@ from typing import Optional, AsyncIterator
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
 from bisheng_langchain.linsight.manage import TaskManage
@@ -33,7 +34,9 @@ class LinsightAgent(BaseModel):
         :param sop: The SOP string to be processed.
         :return: Processed SOP string.
         """
-        sop_prompt = SopPrompt.format(query=self.query, sop=sop)
+        tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
+        sop_prompt = SopPrompt.format(query=self.query, sop=sop,
+                                      tools=tools_str)
         # Add logic to process the SOP string
         async for one in self.llm.astream(sop_prompt):
             yield one
@@ -53,7 +56,9 @@ class LinsightAgent(BaseModel):
             history_summary = "\n".join(history_summary)
         else:
             history_summary = ""
-        sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback,
+        tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
+
+        sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
                                               history_summary=history_summary)
         async for one in self.llm.astream(sop_prompt):
             yield one
@@ -99,7 +104,7 @@ if __name__ == '__main__':
 
     async def async_main():
 
-        api_key = 'sk-141e3f6730b5449fb614e2888afd6c69'
+        api_key = ''
         chat = ChatTongyi(api_key=SecretStr(api_key), model="qwen-max-latest", streaming=True)
         file_dir = "~/works/bisheng/src/backend/bisheng_langchain/linsight/data"
 

@@ -209,7 +209,9 @@ class Task(BaseTask):
             res.append(SubTask(**self.model_dump(exclude={"children", "history", "status"}),
                                original_query=original_query,
                                original_method=original_method,
-                               original_done=original_done))
+                               original_done=original_done,
+                               )
+                       )
 
 
 class SubTask(BaseTask):
