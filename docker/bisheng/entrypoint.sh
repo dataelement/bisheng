@@ -9,7 +9,7 @@ elif [ $start_mode = "worker" ]; then
     echo "Starting Celery worker..."
     # 处理知识库相关任务的worker
     nohup celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celery &
-    # 工作流执行worker
+    # 工作流执行worker，只能启动一个进程来处理工作流的执行，暂不支持多进程
     celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery
 else
     echo "Invalid start mode. Use 'api' or 'celery'."

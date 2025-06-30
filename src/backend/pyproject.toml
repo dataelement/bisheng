@@ -114,6 +114,7 @@ opencv-python = "4.5.5.64"
 Pillow = "9.5.0"
 filetype = "1.2.0"
 aiomysql = "^0.2.0"
+transformers = "^4.53.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
