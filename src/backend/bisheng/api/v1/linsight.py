@@ -1,4 +1,4 @@
-import uuid
+import json
 from typing import List, Literal
 from uuid import UUID
 
@@ -42,17 +42,17 @@ async def submit_linsight_workbench(
 
         yield {
             "event": "linsight_workbench_submit",
-            "data": response_data
+            "data": json.dumps(response_data)
         }
 
         # 任务标题生成
         title_data = await LinsightWorkbenchImpl.task_title_generate(question=submit_obj.question,
-                                                                chat_id=message_session_model.chat_id,
-                                                                login_user=login_user)
+                                                                     chat_id=message_session_model.chat_id,
+                                                                     login_user=login_user)
 
         yield {
             "event": "linsight_workbench_title_generate",
-            "data": title_data
+            "data": json.dumps(title_data)
         }
 
     return EventSourceResponse(event_generator())
