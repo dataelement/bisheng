@@ -426,7 +426,7 @@ class LLMService:
         return config_obj
 
     @classmethod
-    async def get_linsight_llm(cls):
+    async def get_linsight_llm(cls) -> LinsightModelConfig:
         """
         获取灵思模型配置
         :return:

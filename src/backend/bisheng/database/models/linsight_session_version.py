@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR
 from sqlmodel import Field
 
+from bisheng.database.base import async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -65,3 +66,23 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     __tablename__ = "linsight_session_version"
+
+
+class LinsightSessionVersionDao(object):
+    """
+    灵思会话版本数据访问对象
+    """
+
+    @staticmethod
+    async def insert_one(session_version: LinsightSessionVersion) -> LinsightSessionVersion:
+        """
+        插入一条灵思会话版本记录
+        :param session_version: 灵思会话版本对象
+        :return: 创建的灵思会话版本对象
+        """
+
+        async with async_session_getter() as session:
+            session.add(session_version)
+            await session.commit()
+            await session.refresh(session_version)
+            return session_version

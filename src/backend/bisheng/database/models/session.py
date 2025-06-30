@@ -4,9 +4,10 @@ from typing import Optional, List
 
 from sqlmodel import Field, Column, DateTime, text, select, func, update
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.flow import FlowType
+
 
 class SensitiveStatus(Enum):
     PASS = 1  # 通过
@@ -47,6 +48,14 @@ class MessageSessionDao(MessageSessionBase):
             return data
 
     @classmethod
+    async def async_insert_one(cls, data: MessageSession) -> MessageSession:
+        async with async_session_getter() as session:
+            session.add(data)
+            await session.commit()
+            await session.refresh(data)
+            return data
+
+    @classmethod
     def delete_session(cls, chat_id: str):
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
         with session_getter() as session:
@@ -58,6 +67,12 @@ class MessageSessionDao(MessageSessionBase):
         statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
         with session_getter() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    async def async_get_one(cls, chat_id: str) -> MessageSession | None:
+        statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
+        async with async_session_getter() as session:
+            return (await session.exec(statement)).first()
 
     @classmethod
     def generate_filter_session_statement(cls,

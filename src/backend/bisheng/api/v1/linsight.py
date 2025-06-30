@@ -1,10 +1,13 @@
+import uuid
 from typing import List, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Body, Query
+from sse_starlette import EventSourceResponse
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.linsight.sop_manage import SOPManageService
+from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
@@ -15,18 +18,61 @@ router = APIRouter(prefix="/linsight", tags=["灵思"])
 
 
 # 提交灵思用户问题请求
-@router.post("/workbench/submit", summary="提交灵思用户问题请求", response_model=UnifiedResponseModel)
+@router.post("/workbench/submit", summary="提交灵思用户问题请求")
 async def submit_linsight_workbench(
         submit_obj: LinsightQuestionSubmitSchema = Body(..., description="灵思用户问题提交对象"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     提交灵思用户问题请求
     :param submit_obj:
     :param login_user:
     :return:
     """
-    # TODO: 实现提交灵思用户问题请求的逻辑
-    pass
+    message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(submit_obj,
+                                                                                                             login_user)
+
+    async def event_generator():
+        """
+        事件生成器，用于生成SSE事件
+        """
+        response_data = {
+            "message_session": message_session_model.model_dump(),
+            "linsight_session_version": linsight_session_version_model.model_dump()
+        }
+
+        yield {
+            "event": "linsight_workbench_submit",
+            "data": response_data
+        }
+
+        # 任务标题生成
+        title_data = await LinsightWorkbenchImpl.task_title_generate(question=submit_obj.question,
+                                                                chat_id=message_session_model.chat_id,
+                                                                login_user=login_user)
+
+        yield {
+            "event": "linsight_workbench_title_generate",
+            "data": title_data
+        }
+
+    return EventSourceResponse(event_generator())
+
+
+# workbench 生成与重新规划灵思SOP
+@router.post("/workbench/generate-sop", summary="生成与重新规划灵思SOP", response_model=UnifiedResponseModel)
+async def generate_sop(
+        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
+        feedback_content: str = Body(None, description="用户反馈内容"),
+        reexecute: bool = Body(False, description="是否重新执行生成SOP"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    生成与重新规划灵思SOP
+    :param reexecute:
+    :param linsight_session_version_id:
+    :param feedback_content:
+    :param login_user:
+    :return:
+    """
 
 
 # workbench 修改sop
@@ -46,27 +92,10 @@ async def modify_sop(
     pass
 
 
-# workbench 重新规划sop
-@router.post("/workbench/sop-replan", summary="重新规划灵思SOP", response_model=UnifiedResponseModel)
-async def replan_sop(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
-        feedback: str = Body(..., description="用户反馈意见"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
-    """
-    重新规划灵思SOP
-    :param feedback:
-    :param linsight_session_version_id:
-    :param login_user:
-    :return:
-    """
-    # TODO: 实现重新规划SOP的逻辑
-    pass
-
-
 # workbench 开始执行
 @router.post("/workbench/start-execute", summary="开始执行灵思", response_model=UnifiedResponseModel)
 async def start_execute_sop(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
+        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID", embed=True),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     开始执行灵思SOP
