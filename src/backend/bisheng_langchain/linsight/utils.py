@@ -1,0 +1,52 @@
+import os
+import re
+import uuid
+
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(os.path.join(os.path.dirname(__file__), "resource/model_tokenizer"),
+                                          trust_remote_code=True)
+
+
+# 提取文本中的markdown代码块内容
+def extract_code_blocks(markdown_code_block: str) -> str | None:
+    # 定义正则表达式模式
+    pattern = r"```\w*\s*(.*?)```"
+
+    # 使用 re.DOTALL 使 . 能够匹配换行符
+    matches = re.findall(pattern, markdown_code_block, re.DOTALL)
+
+    if not matches:
+        return None
+    res = ""
+    for match in matches:
+        res += f"{match.strip()}\n"
+    # 去除每段代码块两端的空白字符
+    return res
+
+
+def format_size(size_bytes):
+    """将字节大小格式化为人类可读形式"""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} PB"
+
+
+def encode_str_tokens(text: str) -> list[int]:
+    """
+    Encode a string into a list of token IDs using the BERT tokenizer.
+    :param text: The input string to be encoded.
+    :return: A list of token IDs.
+    """
+    tokens = tokenizer.encode(text)
+    return tokens
+
+
+def generate_uuid_str() -> str:
+    """
+    Generate a UUID string.
+    :return: A UUID string.
+    """
+    return uuid.uuid4().hex
