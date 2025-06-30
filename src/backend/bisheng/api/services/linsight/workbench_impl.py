@@ -105,3 +105,15 @@ class LinsightWorkbenchImpl(object):
             "chat_id": chat_id,
             "error_message": None
         }
+
+    @classmethod
+    async def get_linsight_session_version_list(cls, session_id: uuid.UUID):
+        """
+        获取灵思会话版本列表
+        :param session_id:
+        :return:
+        """
+
+        linsight_session_version_models = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_id)
+        return linsight_session_version_models
+

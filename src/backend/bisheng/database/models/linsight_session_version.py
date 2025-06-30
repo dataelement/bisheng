@@ -5,7 +5,7 @@ from typing import List, Dict, Optional
 from uuid import UUID
 
 from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR
-from sqlmodel import Field
+from sqlmodel import Field, select, col
 
 from bisheng.database.base import async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
@@ -86,3 +86,16 @@ class LinsightSessionVersionDao(object):
             await session.commit()
             await session.refresh(session_version)
             return session_version
+
+    @staticmethod
+    async def get_session_versions_by_session_id(session_id: UUID) -> List[LinsightSessionVersion]:
+        """
+        根据会话ID获取所有灵思会话版本
+        :param session_id: 会话ID
+        :return: 灵思会话版本列表
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightSessionVersion).where(LinsightSessionVersion.session_id == session_id).order_by(
+                col(LinsightSessionVersion.version).desc())
+
+            return (await session.exec(statement)).all()

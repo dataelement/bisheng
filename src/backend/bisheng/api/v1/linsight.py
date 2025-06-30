@@ -149,7 +149,7 @@ async def submit_feedback(
 # workbench 终止执行
 @router.post("/workbench/terminate-execute", summary="终止执行灵思", response_model=UnifiedResponseModel)
 async def terminate_execute(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
+        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID", embed=True),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     终止执行灵思
@@ -164,7 +164,7 @@ async def terminate_execute(
 # 获取当前会话所有灵思信息
 @router.get("/workbench/session-version-list", summary="获取当前会话所有灵思信息", response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
-        session_id: str = Query(..., description="会话ID"),
+        session_id: UUID = Query(..., description="会话ID"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     获取当前会话所有灵思信息
@@ -172,8 +172,9 @@ async def get_linsight_session_version_list(
     :param login_user:
     :return:
     """
-    # TODO: 实现获取当前会话所有灵思信息的逻辑
-    pass
+
+    linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
+    return resp_200([model.model_dump() for model in linsight_session_version_models])
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
