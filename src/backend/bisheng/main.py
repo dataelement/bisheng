@@ -12,6 +12,7 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from loguru import logger
 
 from bisheng.api import router, router_rpc
+from bisheng.core.app_context import init_app_context
 from bisheng.database.init_data import init_default_data
 from bisheng.interface.utils import setup_llm_caching
 from bisheng.services.utils import initialize_services, teardown_services
@@ -49,6 +50,7 @@ _EXCEPTION_HANDLERS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_services()
+    await init_app_context()
     setup_llm_caching()
     await init_default_data()
     # LangfuseInstance.update()
