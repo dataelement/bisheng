@@ -316,7 +316,11 @@ const ParagraphEdit = ({
                     {/* file view */}
                     <div className="bg-gray-100 relative">
                         {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair className="mr-1" size={16} />{t('backToPosition')}</Button>}
-                        <div className="h-[calc(100vh-104px)] overflow-auto">
+                        <div className="h-[calc(100vh-104px)] overflow-auto"
+                         style={{
+                            width: 'calc(100vh - 104px)',
+                            minWidth: '100%',
+                        }}>
                             {
                                 fileView()
                             }

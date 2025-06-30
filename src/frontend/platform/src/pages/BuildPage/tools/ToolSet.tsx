@@ -12,6 +12,7 @@ import FeishuConfigForm from "./builtInTool/FeishuConfig";
 import SiliconFlowApiKeyForm from "./builtInTool/SiliconFlowApiKey";
 import EmailConfigForm from "./builtInTool/EmailConfig";
 import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
+import WebSearchForm from "./builtInTool/WebSearchForm";
 
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
@@ -49,6 +50,8 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 //     config.openai_api_key = '';
                 //     config.azure_api_key = apiKey;
                 // }
+                console.log(111,config);
+                
                 setFormData(config);
             } else {
                 setFormData({});
@@ -111,6 +114,8 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <BingToolForm formData={formData} onSubmit={handleSubmit} />;
             case '天眼查':
                 return <TianyanchaToolForm formData={formData} onSubmit={handleSubmit} />;
+            // case '联网搜索':
+                // return <WebSearchForm formData={formData} onSubmit={handleSubmit} />;
             default:
                 return null;
         }

@@ -16,6 +16,10 @@ import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
+import { t } from "i18next";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
+import { Settings } from "lucide-react";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -85,12 +89,18 @@ export default function index() {
     // 非admin角色跳走
     const { user } = useContext(userContext);
     const navigate = useNavigate()
+    const [open, setOpen] = useState(false);
     useEffect(() => {
         if (user.user_id && user.role !== 'admin') {
             navigate('/build/apps')
         }
     }, [user])
-
+//     useEffect(() => {
+//   if (formData.models.length > 0) {
+//     new EventEmitter().emit('firstModelUpdated', formData.models[0]);
+//   }
+// }, [formData.models]);
+    // const firstModel = formData.models[0]; 
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -116,10 +126,9 @@ export default function index() {
             models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '' }]
         }));
     };
-
     return (
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
-            <Card className="">
+        <div className=" h-full overflow-y-scroll scrollbar-hide relative bg-background-main">
+            <Card className="rounded-none">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ToggleSection
@@ -251,7 +260,8 @@ export default function index() {
                         <ToggleSection
                             title="联网搜索"
                             enabled={formData.webSearch.enabled}
-                            onToggle={(enabled) => toggleFeature('webSearch', enabled)}
+                            onToggle={(enabled) => {toggleFeature('webSearch', enabled)}}
+                             extra={<Settings onClick={() => setOpen(true)} />} // 将设置图标放在这里
                         >
                             <WebSearchConfig
                                 config={formData.webSearch}
@@ -262,7 +272,6 @@ export default function index() {
                                 errors={errors.webSearch} // 传递错误信息
                             />
                         </ToggleSection>
-
                         <ToggleSection
                             title="个人知识"
                             enabled={formData.knowledgeBase.enabled}
@@ -308,6 +317,20 @@ export default function index() {
                     </div>
                 </CardContent>
             </Card>
+             <Dialog open={open} onOpenChange={setOpen}>
+                        <DialogContent className="sm:max-w-[625px] bg-background-login">
+                            <DialogHeader>
+                                <DialogTitle>{t('build.editTool')}</DialogTitle>
+                            </DialogHeader>
+                         <WebSearchForm config={formData.webSearch}
+                                onChange={(field, value) => setFormData(prev => ({
+                                    ...prev,
+                                    webSearch: { ...prev.webSearch, [field]: value }
+                                }))}
+                                errors={errors.webSearch} 
+                        />
+                        </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -369,6 +392,8 @@ const useChatConfig = () => {
             //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
             // }
             res && setFormData(res);
+            console.log(res);
+            
         })
     }, [])
 
