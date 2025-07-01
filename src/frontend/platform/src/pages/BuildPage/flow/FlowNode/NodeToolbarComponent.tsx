@@ -22,7 +22,7 @@ export default function NodeToolbarComponent({ nodeId, type, onRun }) {
     if (type === 'start') return null
 
     return <div className="rounded-xl shadow-sm p-1 bg-gradient-to-r from-gray-50 to-[#fff] dark:from-gray-900 dark:to-gray-950 border">
-        {["agent", "tool", "llm", "rag", "qa_retriever", "code"].includes(type) && (
+        {["agent", "tool", "llm", "rag", "qa_retriever", "code", "question_predict"].includes(type) && (
             <Tip content={t('runNode')} side="top">
                 <Button size="icon" variant="ghost" className="size-8" onClick={onRun}>
                     <Play size={16} />
