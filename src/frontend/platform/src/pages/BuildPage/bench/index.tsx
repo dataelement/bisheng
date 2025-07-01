@@ -8,7 +8,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
@@ -16,10 +16,6 @@ import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
-import { t } from "i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
-import { Settings } from "lucide-react";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -77,6 +73,15 @@ export interface ChatConfigForm {
 }
 
 export default function index() {
+    const sidebarSloganRef = useRef<HTMLDivElement>(null);
+    const welcomeMessageRef = useRef<HTMLDivElement>(null);
+    const functionDescriptionRef = useRef<HTMLDivElement>(null);
+    const inputPlaceholderRef = useRef<HTMLDivElement>(null);
+    const knowledgeBaseRef = useRef<HTMLDivElement>(null);
+    const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const webSearchRef = useRef<HTMLDivElement>(null);
+    const systemPromptRef = useRef<HTMLDivElement>(null);
+
     const {
         formData,
         errors,
@@ -84,23 +89,30 @@ export default function index() {
         handleInputChange,
         toggleFeature,
         handleSave
-    } = useChatConfig();
+    } = useChatConfig({
+        sidebarSloganRef,
+        welcomeMessageRef,
+        functionDescriptionRef,
+        inputPlaceholderRef,
+        knowledgeBaseRef,
+        modelRefs,
+        webSearchRef,
+        systemPromptRef
+    });
+
+    useEffect(() => {
+        modelRefs.current = modelRefs.current.slice(0, formData.models.length);
+    }, [formData.models]);
 
     // 非admin角色跳走
     const { user } = useContext(userContext);
     const navigate = useNavigate()
-    const [open, setOpen] = useState(false);
     useEffect(() => {
         if (user.user_id && user.role !== 'admin') {
             navigate('/build/apps')
         }
     }, [user])
-//     useEffect(() => {
-//   if (formData.models.length > 0) {
-//     new EventEmitter().emit('firstModelUpdated', formData.models[0]);
-//   }
-// }, [formData.models]);
-    // const firstModel = formData.models[0]; 
+
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -126,9 +138,10 @@ export default function index() {
             models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '' }]
         }));
     };
+
     return (
-        <div className=" h-full overflow-y-scroll scrollbar-hide relative bg-background-main">
-            <Card className="rounded-none">
+        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
+            <Card className="">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ToggleSection
@@ -154,49 +167,56 @@ export default function index() {
                                 onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'assistant', relativePath)}
                             />
                         </div>
+                        <div ref={sidebarSloganRef}>
+                            <FormInput
+                                label={<Label className="bisheng-label">左侧边栏slogan</Label>}
+                                value={formData.sidebarSlogan}
+                                error={errors.sidebarSlogan}
+                                placeholder=""
+                                maxLength={15}
+                                onChange={(v) => handleInputChange('sidebarSlogan', v, 15)}
+                            />
+                        </div>
 
-                        {/* Form Inputs */}
-                        <FormInput
-                            label={<Label className="bisheng-label">左侧边栏slogan</Label>}
-                            value={formData.sidebarSlogan}
-                            error={errors.sidebarSlogan}
-                            placeholder=""
-                            maxLength={15}
-                            onChange={(v) => handleInputChange('sidebarSlogan', v, 15)}
-                        />
+                        <div ref={welcomeMessageRef}>
+                            <FormInput
+                                label="欢迎语设置"
+                                value={formData.welcomeMessage}
+                                error={errors.welcomeMessage}
+                                placeholder="我是 xx，很高兴见到你！"
+                                maxLength={1000}
+                                onChange={(v) => handleInputChange('welcomeMessage', v, 1000)}
+                            />
+                        </div>
+                        <div ref={functionDescriptionRef}>
+                            <FormInput
+                                label="功能说明"
+                                value={formData.functionDescription}
+                                error={errors.functionDescription}
+                                placeholder="我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～"
+                                maxLength={1000}
+                                onChange={(v) => handleInputChange('functionDescription', v, 1000)}
+                            />
+                        </div>
 
-                        <FormInput
-                            label="欢迎语设置"
-                            value={formData.welcomeMessage}
-                            error={errors.welcomeMessage}
-                            placeholder="我是 xx，很高兴见到你！"
-                            maxLength={1000}
-                            onChange={(v) => handleInputChange('welcomeMessage', v, 1000)}
-                        />
+                        <div ref={inputPlaceholderRef}>
+                            <FormInput
+                                label="输入框提示语"
+                                value={formData.inputPlaceholder}
+                                error={errors.inputPlaceholder}
+                                placeholder="给xx发送消息"
+                                maxLength={1000}
+                                onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
+                            />
+                        </div>
 
-                        <FormInput
-                            label="功能说明"
-                            value={formData.functionDescription}
-                            error={errors.functionDescription}
-                            placeholder="我可以帮你写代码、读文件、写作各种创意内容，请把你的任务交给我吧～"
-                            maxLength={1000}
-                            onChange={(v) => handleInputChange('functionDescription', v, 1000)}
-                        />
-
-                        <FormInput
-                            label="输入框提示语"
-                            value={formData.inputPlaceholder}
-                            error={errors.inputPlaceholder}
-                            placeholder="给xx发送消息"
-                            maxLength={1000}
-                            onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
-                        />
 
                         {/* Model Management */}
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">对话模型管理</p>
                             <div className="mb-6">
                                 <ModelManagement
+                                    ref={modelRefs}
                                     models={formData.models}
                                     errors={errors.modelNames}
                                     error={errors.model}
@@ -207,9 +227,7 @@ export default function index() {
                                         setFormData(prev => ({ ...prev, models: newModels }));
                                     }}
                                     onModelChange={handleModelChange}
-                                    onNameChange={(index, name) => {
-                                        handleModelNameChange(index, name);
-                                    }}
+                                    onNameChange={handleModelNameChange}
                                 />
                             </div>
                             <FormInput
@@ -221,18 +239,20 @@ export default function index() {
                                 maxLength={1000}
                                 onChange={(v) => handleInputChange('maxTokens', v, 100)}
                             />
-                            <FormInput
-                                label={<Label className="bisheng-label">系统提示词</Label>}
-                                isTextarea
-                                value={formData.systemPrompt}
-                                error={errors.systemPrompt}
-                                placeholder="你是毕昇 AI 助手"
-                                maxLength={30000}
-                                onChange={(val) => setFormData(prev => ({
-                                    ...prev,
-                                    systemPrompt: val
-                                }))}
-                            />
+                            <div ref={systemPromptRef}>
+                                <FormInput
+                                    label={<Label className="bisheng-label">系统提示词</Label>}
+                                    isTextarea
+                                    value={formData.systemPrompt}
+                                    error={errors.systemPrompt}
+                                    placeholder="你是毕昇 AI 助手"
+                                    maxLength={30000}
+                                    onChange={(val) => setFormData(prev => ({
+                                        ...prev,
+                                        systemPrompt: val
+                                    }))}
+                                />
+                            </div>
                         </div>
 
                         {/* Toggle Sections */}
@@ -260,18 +280,20 @@ export default function index() {
                         <ToggleSection
                             title="联网搜索"
                             enabled={formData.webSearch.enabled}
-                            onToggle={(enabled) => {toggleFeature('webSearch', enabled)}}
-                             extra={<Settings onClick={() => setOpen(true)} />} // 将设置图标放在这里
+                            onToggle={(enabled) => toggleFeature('webSearch', enabled)}
                         >
-                            <WebSearchConfig
-                                config={formData.webSearch}
-                                onChange={(field, value) => setFormData(prev => ({
-                                    ...prev,
-                                    webSearch: { ...prev.webSearch, [field]: value }
-                                }))}
-                                errors={errors.webSearch} // 传递错误信息
-                            />
+                            <div ref={webSearchRef}>
+                                <WebSearchConfig
+                                    config={formData.webSearch}
+                                    onChange={(field, value) => setFormData(prev => ({
+                                        ...prev,
+                                        webSearch: { ...prev.webSearch, [field]: value }
+                                    }))}
+                                    errors={errors.webSearch}
+                                />
+                            </div>
                         </ToggleSection>
+
                         <ToggleSection
                             title="个人知识"
                             enabled={formData.knowledgeBase.enabled}
@@ -317,28 +339,23 @@ export default function index() {
                     </div>
                 </CardContent>
             </Card>
-             <Dialog open={open} onOpenChange={setOpen}>
-                        <DialogContent className="sm:max-w-[625px] bg-background-login">
-                            <DialogHeader>
-                                <DialogTitle>{t('build.editTool')}</DialogTitle>
-                            </DialogHeader>
-                         <WebSearchForm config={formData.webSearch}
-                                onChange={(field, value) => setFormData(prev => ({
-                                    ...prev,
-                                    webSearch: { ...prev.webSearch, [field]: value }
-                                }))}
-                                errors={errors.webSearch} 
-                        />
-                        </DialogContent>
-            </Dialog>
         </div>
     );
 }
 
 
+interface UseChatConfigProps {
+    sidebarSloganRef: React.RefObject<HTMLDivElement>;
+    welcomeMessageRef: React.RefObject<HTMLDivElement>;
+    functionDescriptionRef: React.RefObject<HTMLDivElement>;
+    inputPlaceholderRef: React.RefObject<HTMLDivElement>;
+    knowledgeBaseRef: React.RefObject<HTMLDivElement>;
+    modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
+    webSearchRef: React.RefObject<HTMLDivElement>;
+    systemPromptRef: React.RefObject<HTMLDivElement>;
+}
 
-
-const useChatConfig = () => {
+const useChatConfig = (refs: UseChatConfigProps) => {
     const [formData, setFormData] = useState<ChatConfigForm>({
         menuShow: true,
         systemPrompt: '你是毕昇 AI 助手',
@@ -385,6 +402,14 @@ const useChatConfig = () => {
         },
     });
 
+    //         const sidebarSloganRef = useRef<HTMLDivElement>(null);
+    // const welcomeMessageRef = useRef<HTMLDivElement>(null);
+    // const functionDescriptionRef = useRef<HTMLDivElement>(null);
+    // const inputPlaceholderRef = useRef<HTMLDivElement>(null);
+    // const knowledgeBaseRef = useRef<HTMLDivElement>(null);
+    // const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
+    // const webSearchRef = useRef<HTMLDivElement>(null);
+    // const systemPromptRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         getWorkstationConfigApi().then((res) => {
             // res.webSearch.params = {
@@ -392,8 +417,6 @@ const useChatConfig = () => {
             //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
             // }
             res && setFormData(res);
-            console.log(res);
-            
         })
     }, [])
 
@@ -426,8 +449,9 @@ const useChatConfig = () => {
         }));
     };
 
-    const validateForm = (): boolean => {
+    const validateForm = (): { isValid: boolean, firstErrorRef: React.RefObject<HTMLDivElement> | null } => {
         let isValid = true;
+        let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
         const newErrors: FormErrors = {
             sidebarSlogan: '',
             welcomeMessage: '',
@@ -440,70 +464,92 @@ const useChatConfig = () => {
 
         if (formData.sidebarSlogan.length > 15) {
             newErrors.sidebarSlogan = '最多15个字符';
+            if (!firstErrorRef) firstErrorRef = refs.sidebarSloganRef;
             isValid = false;
         }
 
         // Validate welcome message
         if (formData.welcomeMessage.length > 1000) {
             newErrors.welcomeMessage = '最多1000个字符';
+            if (!firstErrorRef) firstErrorRef = refs.welcomeMessageRef;
             isValid = false;
         }
 
         // Validate function description
         if (formData.functionDescription.length > 1000) {
             newErrors.functionDescription = '最多1000个字符';
+            if (!firstErrorRef) firstErrorRef = refs.functionDescriptionRef;
             isValid = false;
         }
 
         // Validate input placeholder
-        if (formData.inputPlaceholder.length > 100) {
-            newErrors.inputPlaceholder = '最多100个字符';
+        if (formData.inputPlaceholder.length > 1000) {
+            newErrors.inputPlaceholder = '最多1000个字符';
+            if (!firstErrorRef) firstErrorRef = refs.inputPlaceholderRef;
             isValid = false;
         }
 
         if (formData.knowledgeBase.prompt.length > 30000) {
             newErrors.kownledgeBase = '最多30000个字符';
+            if (!firstErrorRef) firstErrorRef = refs.knowledgeBaseRef;
+            isValid = false;
+        }
+
+        if (formData.systemPrompt.length > 30000) {
+            newErrors.systemPrompt = '最多30000个字符';
+            if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
         }
 
         // Validate models
         if (formData.models.length === 0) {
             newErrors.model = '至少添加一个模型';
+            if (!firstErrorRef) {
+                firstErrorRef = refs.modelRefs.current[0] ?
+                    { current: refs.modelRefs.current[0] } :
+                    refs.sidebarSloganRef; // 默认回退
+            }
             isValid = false;
         }
+
         const modelNameErrors: string[][] = [];
         formData.models.forEach((model, index) => {
             const displayName = model.displayName.trim();
             let error = [];
 
-            // 检查是否为空
             if (!displayName) {
                 error = ['', '模型显示名称不能为空'];
+                if (!firstErrorRef && refs.modelRefs.current[index]) {
+                    firstErrorRef = { current: refs.modelRefs.current[index] };
+                }
             } else if (!model.id) {
                 error = ['模型不能为空', ''];
-            }
-            // 检查长度
-            else if (displayName.length > 30) {
+                if (!firstErrorRef && refs.modelRefs.current[index]) {
+                    firstErrorRef = { current: refs.modelRefs.current[index] };
+                }
+            } else if (displayName.length > 30) {
                 error = ['', '最多30个字符'];
-            }
-            // 检查重复（仅在非空且长度有效时检查）
-            else {
-                console.log('formData.models :>> ', formData.models);
-                formData.models.some(
-                    (m, i) => {
-                        if (i !== index) {
-                            error = ['', ''];
-                            if (m.id === model.id) {
-                                error[0] = '模型不能重复'
-                            }
-                            if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
-                                error[1] = '显示名称不能重复'
-                            }
-                            if (error[0] || error[1]) {
-                                return true;
-                            }
+                if (!firstErrorRef && refs.modelRefs.current[index]) {
+                    firstErrorRef = { current: refs.modelRefs.current[index] };
+                }
+            } else {
+                formData.models.some((m, i) => {
+                    if (i !== index) {
+                        error = ['', ''];
+                        if (m.id === model.id) {
+                            error[0] = '模型不能重复'
                         }
-                    });
+                        if (m.displayName.trim().toLowerCase() === displayName.toLowerCase()) {
+                            error[1] = '显示名称不能重复'
+                        }
+                        if (error[0] || error[1]) {
+                            if (!firstErrorRef && refs.modelRefs.current[index]) {
+                                firstErrorRef = { current: refs.modelRefs.current[index] };
+                            }
+                            return true;
+                        }
+                    }
+                });
             }
 
             if (error[0] || error[1]) {
@@ -515,81 +561,74 @@ const useChatConfig = () => {
         // Validate web search
         if (formData.webSearch.enabled) {
             const webSearchErrors: any = {};
+            let hasWebSearchError = false;
 
-            // 根据当前工具动态校验
             switch (formData.webSearch.tool) {
                 case 'bing':
                     if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = {
-                            ...webSearchErrors.params,
-                            api_key: '不能为空'
-                        };
-                        isValid = false;
+                        webSearchErrors.params = { ...webSearchErrors.params, api_key: '不能为空' };
+                        hasWebSearchError = true;
                     }
                     if (!formData.webSearch.params.base_url?.trim()) {
-                        webSearchErrors.params = {
-                            ...webSearchErrors.params,
-                            base_url: '不能为空'
-                        };
-                        isValid = false;
+                        webSearchErrors.params = { ...webSearchErrors.params, base_url: '不能为空' };
+                        hasWebSearchError = true;
                     }
                     break;
-
                 case 'bocha':
                 case 'jina':
                 case 'tavily':
                     if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = {
-                            ...webSearchErrors.params,
-                            api_key: '不能为空'
-                        };
-                        isValid = false;
+                        webSearchErrors.params = { ...webSearchErrors.params, api_key: '不能为空' };
+                        hasWebSearchError = true;
                     }
                     break;
-
                 case 'serp':
                     if (!formData.webSearch.params.api_key?.trim()) {
-                        webSearchErrors.params = {
-                            ...webSearchErrors.params,
-                            api_key: '不能为空'
-                        };
-                        isValid = false;
+                        webSearchErrors.params = { ...webSearchErrors.params, api_key: '不能为空' };
+                        hasWebSearchError = true;
                     }
                     if (!formData.webSearch.params.engine?.trim()) {
-                        webSearchErrors.params = {
-                            ...webSearchErrors.params,
-                            engine: '不能为空'
-                        };
-                        isValid = false;
+                        webSearchErrors.params = { ...webSearchErrors.params, engine: '不能为空' };
+                        hasWebSearchError = true;
                     }
                     break;
-
-                // 其他工具的校验可以在这里添加
             }
 
+            if (hasWebSearchError && !firstErrorRef && refs.webSearchRef.current) {
+                firstErrorRef = refs.webSearchRef;
+            }
             if (Object.keys(webSearchErrors).length) {
                 newErrors.webSearch = webSearchErrors;
             }
         }
 
         newErrors.modelNames = modelNameErrors;
-
         setErrors(newErrors);
-        return isValid;
+
+        return { isValid, firstErrorRef };
     };
 
     const { toast } = useToast()
     const { reloadConfig } = useContext(locationContext)
     const handleSave = async () => {
-        if (!validateForm()) {
-            return;
+        const { isValid, firstErrorRef } = validateForm();
+        if (!isValid) {
+            if (firstErrorRef?.current) {
+                firstErrorRef.current.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+                setTimeout(() => {
+                    const input = firstErrorRef.current?.querySelector('input, textarea, [role="combobox"]');
+                    input?.focus();
+                }, 300);
+            }
+            return false; // 明确返回false表示验证失败
         }
 
-
-        // Prepare the data to be saved
+        // 原有保存逻辑...
         const dataToSave = {
             ...formData,
-            // Ensure sidebar slogan has a default value
             sidebarSlogan: formData.sidebarSlogan.trim(),
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
@@ -597,14 +636,10 @@ const useChatConfig = () => {
             maxTokens: formData.maxTokens || 15000,
         };
 
-        // Here you would typically make an API call to save the data
-        // For example:
-        // const response = await api.saveChatConfig(dataToSave);
         console.log('Saving data:', dataToSave);
 
         captureAndAlertRequestErrorHoc(setWorkstationConfigApi(dataToSave)).then((res) => {
             if (res) {
-                // Show success message or handle response
                 toast({
                     variant: 'success',
                     description: '配置保存成功',

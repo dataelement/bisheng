@@ -5,7 +5,7 @@ import MainLayout from "./layout/MainLayout";
 import Templates from "./pages/BuildPage/appTemps";
 import Apps from "./pages/BuildPage/apps";
 import EditAssistantPage from "./pages/BuildPage/assistant/editAssistant";
-import WorkBenchPage from "./pages/BuildPage/bench";
+import WorkBenchPage from "./pages/BuildPage/bench/DialogueWork";
 import FlowPage from "./pages/BuildPage/flow";
 import SkillPage from "./pages/BuildPage/skills/editSkill";
 import L2Edit from "./pages/BuildPage/skills/l2Edit";
