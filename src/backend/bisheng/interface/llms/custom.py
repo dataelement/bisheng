@@ -75,13 +75,18 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['dashscope_api_key'] = server_config.get('openai_api_key', '')
     enable_web_search = model_config.get('enable_web_search', False)
+    show_reason = model_config.get('show_reason', False)
     params['model_kwargs'] = {
         'enable_search': enable_web_search,
+        # 'enable_thinking': show_reason,
         'search_options': {
             'forced_search': enable_web_search
         },
-        'temperature': params.pop('temperature', 0.3)
+        'temperature': params.pop('temperature', 0.3),
+        'enable_thinking': False,
     }
+    # params['extra_body'] = params.get('extra_body', {})
+    # params['extra_body']['enable_thinking'] = show_reason
 
     if params.get('max_tokens'):
         params['model_kwargs']['max_tokens'] = params.get('max_tokens')
@@ -162,6 +167,7 @@ class BishengLLM(BaseChatModel):
     model_name: Optional[str] = Field(default='', description="后端服务保存的model名称")
     streaming: bool = Field(default=True, description="是否使用流式输出", alias="stream")
     enable_web_search: bool = Field(default=False, description="开启联网搜索")
+    show_reason: bool = Field(default=False, description="是否展示深度思考过程")
     temperature: float = Field(default=0.3, description="模型生成的温度")
     top_p: float = Field(default=1, description="模型生成的top_p")
     cache: bool = Field(default=False, description="是否使用缓存")
@@ -205,6 +211,7 @@ class BishengLLM(BaseChatModel):
         self.top_p = kwargs.get('top_p', 1)
         self.cache = kwargs.get('cache', True)
         self.enable_web_search = kwargs.get('enable_web_search', False)
+        self.show_reason = kwargs.get('show_reason', False)
 
         # 是否忽略模型是否上线的检查
         ignore_online = kwargs.get('ignore_online', False)
@@ -258,6 +265,11 @@ class BishengLLM(BaseChatModel):
         model_config['enable_web_search'] = self.get_enable_web_search()
         if server_info.type == LLMServerType.TENCENT.value:
             default_params['extra_body'] = {'enable_enhancement': self.get_enable_web_search()}
+        if server_info.type == LLMServerType.QWEN.value:
+            # default_params['extra_body'] = {'enable_thinking': self.get_show_reason()}
+            default_params['extra_body'] = {'enable_thinking': False}
+        # model_config['show_reason'] = self.get_show_reason()
+        model_config['show_reason'] = False
 
         params = params_handler(default_params, server_config, model_config)
 
@@ -344,6 +356,9 @@ class BishengLLM(BaseChatModel):
     def get_enable_web_search(self):
         # self.get_model_info_config().get('enable_web_search')
         return self.enable_web_search
+
+    def get_show_reason(self):
+        return self.show_reason
 
     def parse_kwargs(self, messages: List[BaseMessage], kwargs: Dict[str, Any]) -> (List[BaseMessage], Dict[str, Any]):
         if self.server_info.type == LLMServerType.MINIMAX.value:

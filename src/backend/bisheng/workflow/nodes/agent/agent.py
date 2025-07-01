@@ -52,8 +52,10 @@ class AgentNode(BaseNode):
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
         self._enable_web_search = self.node_params.get('enable_web_search', False)
+        self._show_reason = self.node_params.get('show_reason', False)
 
         self._llm = LLMService.get_bisheng_llm(model_id=self.node_params['model_id'], enable_web_search=self._enable_web_search,
+                                               show_reason=self._show_reason,
                                                temperature=self.node_params.get(
                                                    'temperature', 0.3),
                                                cache=False)
