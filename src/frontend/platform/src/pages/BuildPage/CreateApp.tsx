@@ -177,7 +177,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 delete tempDataRef.current.data.source
 
                 tempDataRef.current.data.nodes.forEach(node => {
-                    if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
+                    if (['rag', 'llm', 'agent', 'qa_retriever', 'question_predict'].includes(node.data.type)) {
                         node.data.group_params.forEach(group =>
                             group.params.forEach(param => {
                                 if (param.type === 'bisheng_model') {
