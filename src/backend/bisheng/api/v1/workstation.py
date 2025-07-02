@@ -458,11 +458,11 @@ async def chat_completions(
 
 @router.get('/app/frequently_used')
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
-                            user_link_tag: Optional[str] = 'app',
+                            user_link_type: Optional[str] = 'app',
                             page: Optional[int] = 1,
                             limit: Optional[int] = 8
                             ):
-    data, _ = WorkFlowService.get_frequently_used_flows(login_user, user_link_tag, page, limit)
+    data, _ = WorkFlowService.get_frequently_used_flows(login_user, user_link_type, page, limit)
 
     return resp_200(data=data)
 
@@ -471,15 +471,15 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
                         data:FrequentlyUsedChat=Body(..., description='添加常用应用')
                          ):
-    WorkFlowService.add_frequently_used_flows(login_user, data.user_link_tag, data.tag_detail)
+    WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
     return resp_200(message='添加成功')
 
 @router.delete('/app/frequently_used')
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
-                         user_link_tag: Optional[str] = 'app',
-                         tag_detail: Optional[str] = None
+                         user_link_type: Optional[str] = None,
+                         type_detail: Optional[str] = None
                          ):
-    WorkFlowService.delete_frequently_used_flows(login_user, user_link_tag, tag_detail)
+    WorkFlowService.delete_frequently_used_flows(login_user, user_link_type, type_detail)
     return resp_200(message='删除成功')
 
 @router.get('/app/uncategorized')

@@ -25,7 +25,7 @@ from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
 from bisheng.database.models.user_link import UserLinkDao
-
+from bisheng.database.models.flow import UserLinkType
 
 class WorkFlowService(BaseService):
 
@@ -313,7 +313,7 @@ class WorkFlowService(BaseService):
         return workflow_event
     
     @classmethod
-    def get_frequently_used_flows(cls, user: UserPayload, user_link_tag: str, 
+    def get_frequently_used_flows(cls, user: UserPayload, user_link_type: str, 
                       page: int = 1,
                       page_size: int = 8) -> (list[dict], int):
         """
@@ -322,10 +322,10 @@ class WorkFlowService(BaseService):
         # 通过user_id和tag获取id列表
         flow_ids = []
         
-        ret = UserLinkDao.get_user_link(user.user_id, user_link_tag)
+        ret = UserLinkDao.get_user_link(user.user_id, [app_type.value for app_type in UserLinkType.app.value])
         if not ret:
             return [], 0
-        flow_ids = [one.tag_detail for one in ret]
+        flow_ids = [one.type_detail for one in ret]
 
         # 获取用户可见的技能列表
         if user.is_admin():
@@ -383,13 +383,13 @@ class WorkFlowService(BaseService):
         return data, total
     
     @classmethod
-    def delete_frequently_used_flows(cls, user: UserPayload, user_link_tag: str, tag_detail: str):
-        UserLinkDao.delete_user_link(user.user_id, user_link_tag, tag_detail)
+    def delete_frequently_used_flows(cls, user: UserPayload, user_link_type: str, type_detail: str):
+        UserLinkDao.delete_user_link(user.user_id, user_link_type, type_detail)
         return True
 
     @classmethod
-    def add_frequently_used_flows(cls, user: UserPayload, user_link_tag: str, tag_detail: str):
-        UserLinkDao.add_user_link(user.user_id, user_link_tag, tag_detail)
+    def add_frequently_used_flows(cls, user: UserPayload, user_link_type: str, type_detail: str):
+        UserLinkDao.add_user_link(user.user_id, user_link_type, type_detail)
         return True
 
     @classmethod

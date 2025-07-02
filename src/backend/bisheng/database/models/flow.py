@@ -32,6 +32,15 @@ class FlowType(Enum):
     WORKSTATION = 15
 
 
+class AppEnum(Enum):
+    APP = 'flow'
+    ASSISTANT = 'assistant'
+    WORKFLOW = 'workflow'
+
+
+class UserLinkType(Enum):
+    app = AppEnum
+
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
     user_id: Optional[int] = Field(default=None, index=True)

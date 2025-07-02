@@ -563,5 +563,5 @@ class KnowledgeFileProcess(FileProcessBase):
     extra: Optional[str] = Field(default=None, description='附加信息')
 
 class FrequentlyUsedChat(BaseModel):
-    user_link_tag: str = Field(..., description='用户相关tag')
-    tag_detail: str = Field(..., description='用户相关tagID')
+    user_link_type: str = Field(..., description='用户相关联的type')
+    type_detail: str = Field(..., description='用户相关联的type_id')
