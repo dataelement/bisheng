@@ -4,9 +4,10 @@ from enum import Enum
 from typing import Optional, Dict, List
 from uuid import UUID
 
-from sqlalchemy import String, Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey
-from sqlmodel import Field
+from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey
+from sqlmodel import Field, select, col
 
+from bisheng.database.base import async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -32,6 +33,8 @@ class ExecuteTaskStatusEnum(str, Enum):
     SUCCESS = "success"
     # 等待用户输入
     WAITING_FOR_USER_INPUT = "waiting_for_user_input"
+    # 用户输入完成
+    USER_INPUT_COMPLETED = "user_input_completed"
     # 失败
     FAILED = "failed"
     # 终止
@@ -79,3 +82,28 @@ class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
     __tablename__ = "linsight_execute_task"
+
+
+class LinsightExecuteTaskDao(object):
+    """
+    灵思执行任务数据访问对象
+    """
+
+    @classmethod
+    async def get_by_session_version_id(cls, session_version_id: UUID, is_parent_task: bool = False) -> List[
+        LinsightExecuteTask]:
+        """
+        根据会话版本ID获取所有任务
+        :param is_parent_task:
+        :param session_version_id: 会话版本ID
+        :return: 任务列表
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightExecuteTask).where(
+                LinsightExecuteTask.session_version_id == session_version_id)
+
+            if is_parent_task:
+                statement = statement.where(col(LinsightExecuteTask.parent_task_id).is_(None))
+
+            tasks = await session.exec(statement)
+            return tasks.all()

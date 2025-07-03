@@ -22,7 +22,7 @@ class AppContext:
             await self.cache[key].get_aiohttp_client(loop=loop)
         return self.cache[key]
 
-    async def get_event_loop(self) -> asyncio.AbstractEventLoop:
+    def get_event_loop(self) -> asyncio.AbstractEventLoop:
         """
         获取当前的事件循环，如果没有则创建一个新的。
         :return: asyncio.AbstractEventLoop 实例
@@ -33,7 +33,7 @@ class AppContext:
         return self.cache[key]
 
     # 获取全局信号量量
-    async def get_global_semaphore(self) -> asyncio.Semaphore:
+    def get_global_semaphore(self) -> asyncio.Semaphore:
         """
         获取全局信号量量，如果未初始化则进行初始化。
         :return: asyncio.Semaphore 实例
@@ -44,7 +44,7 @@ class AppContext:
         return self.cache[key]
 
     # 获取 promptLoader
-    async def get_prompt_loader(self) -> PromptLoader:
+    def get_prompt_loader(self) -> PromptLoader:
         """
         获取 promptLoader，如果未初始化则进行初始化。
         :return: promptLoader 实例
@@ -64,10 +64,10 @@ async def init_app_context():
     初始化应用上下文。
     :param loop: 可选的事件循环
     """
-    loop = await app_ctx.get_event_loop()
+    loop = app_ctx.get_event_loop()
     await app_ctx.get_http_client(loop=loop)
-    await app_ctx.get_global_semaphore()
-    await app_ctx.get_prompt_loader()
+    app_ctx.get_global_semaphore()
+    app_ctx.get_prompt_loader()
 
 
 # 关闭应用上下文

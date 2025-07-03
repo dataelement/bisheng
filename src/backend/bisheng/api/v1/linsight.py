@@ -2,8 +2,9 @@ import json
 from typing import List, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Body, Query
+from fastapi import APIRouter, Depends, Body, Query, UploadFile, File
 from sse_starlette import EventSourceResponse
+from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.linsight.sop_manage import SOPManageService
@@ -11,10 +12,31 @@ from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
-from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
+
+
+# 灵思上传文件
+@router.post("/workbench/upload-file", summary="灵思上传文件", response_model=UnifiedResponseModel)
+async def upload_file(file: UploadFile = File(...),
+                      login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    灵思上传文件
+    :param file: 上传的文件
+    :param login_user: 登录用户信息
+    :return: 上传结果
+    """
+
+    # 调用实现类处理文件上传
+    upload_result = await LinsightWorkbenchImpl.upload_file(file)
+
+
+    if upload_result is None:
+        return resp_500(code=500, message="文件上传失败")
+    return resp_200(data=upload_result, message="文件上传成功")
+
 
 
 # 提交灵思用户问题请求
@@ -64,7 +86,7 @@ async def generate_sop(
         linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
     :param reexecute:
@@ -73,6 +95,29 @@ async def generate_sop(
     :param login_user:
     :return:
     """
+
+    async def event_generator():
+        """
+        事件生成器，用于生成SSE事件
+        """
+        # 生成SOP
+        sop_generate = LinsightWorkbenchImpl.generate_sop(
+            linsight_session_version_id=linsight_session_version_id,
+            feedback_content=feedback_content,
+            reexecute=reexecute,
+            login_user=login_user
+        )
+
+        async for event in sop_generate:
+            yield event
+
+        # 结束
+        yield {
+            "event": "sop_generate_complete",
+            "data": json.dumps({"message": "SOP生成与重新规划完成"})
+        }
+
+    return EventSourceResponse(event_generator())
 
 
 # workbench 修改sop
@@ -88,8 +133,10 @@ async def modify_sop(
     :param login_user:
     :return:
     """
-    # TODO: 实现修改SOP的逻辑
-    pass
+
+    modify_res = await LinsightWorkbenchImpl.modify_sop(linsight_session_version_id=linsight_session_version_id,
+                                                        sop_content=sop_content)
+    return resp_200(modify_res)
 
 
 # workbench 开始执行
@@ -175,6 +222,37 @@ async def get_linsight_session_version_list(
 
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
     return resp_200([model.model_dump() for model in linsight_session_version_models])
+
+
+# 获取执行任务详情
+@router.get("/workbench/execute-task-detail", summary="获取执行任务详情", response_model=UnifiedResponseModel)
+async def get_execute_task_detail(
+        session_version_id: UUID = Query(..., description="灵思会话版本ID"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    获取执行任务详情
+    :param session_version_id:
+    :param login_user:
+    :return:
+    """
+
+    execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+    return resp_200(execute_task_models)
+
+
+# 建立灵思任务消息流 websocket
+@router.websocket("/workbench/task-message-stream", name="task_message_stream")
+async def task_message_stream(
+        websocket: WebSocket,
+        session_version_id: UUID = Query(..., description="灵思会话版本ID"),
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    建立灵思任务消息流 websocket
+    :param websocket:
+    :param session_version_id:
+    :param login_user:
+    :return:
+    """
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
