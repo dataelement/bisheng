@@ -16,7 +16,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
-                                    resp_200, resp_500)
+                                    resp_200, resp_500, resp_502)
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -25,6 +25,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
+from bisheng.database.models.knowledge import KnowledgeState
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -603,3 +604,37 @@ def post_import_file(*,
         error_result.append(have_data)
 
     return resp_200({"errors": error_result})
+
+@router.get('/status', status_code=200)
+def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
+    """
+    查看知识库状态接口
+    流程：
+    1. 根据用户id先判断用户有没有个人知识库，没有直接返回200
+    2. 如果拥有知识库，根据用户id查看所在知识库状态，如果个人知识库的状态处于REBUILDING 3 或者 FAILED 4 时，
+       返回 "个人知识库embedding模型已更换，正在重建知识库，请稍后再试" 状态码 502
+    """
+    # 查询用户的个人知识库
+    user_private_knowledge = KnowledgeDao.get_user_knowledge(
+        login_user.user_id, 
+        None, 
+        KnowledgeTypeEnum.PRIVATE
+    )
+    
+    # 如果用户没有个人知识库，直接返回200
+    if not user_private_knowledge:
+        return resp_200({"status": "success"})
+    
+    # 获取第一个个人知识库（通常用户只有一个个人知识库）
+    private_knowledge = user_private_knowledge[0]
+    
+    # 检查知识库状态
+    
+    if private_knowledge.state in [KnowledgeState.REBUILDING.value, KnowledgeState.FAILED.value]:
+        # 返回502状态码和相应提示信息
+        return resp_502(
+            message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
+        )
+    
+    # 知识库状态正常，返回200
+    return resp_200({"status": "success"})

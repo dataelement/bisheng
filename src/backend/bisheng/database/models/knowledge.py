@@ -24,6 +24,8 @@ class KnowledgeState(Enum):
     UNPUBLISHED = 0
     PUBLISHED = 1
     COPYING = 2
+    REBUILDING = 3
+    FAILED = 4
 
 
 class KnowledgeBase(SQLModelSerializable):
