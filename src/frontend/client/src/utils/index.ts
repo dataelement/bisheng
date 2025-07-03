@@ -1,3 +1,4 @@
+import { playDing } from './index';
 import React from 'react';
 
 export * from './map';
@@ -116,3 +117,27 @@ export const normalizeLayout = (layout: number[]) => {
 
   return normalizedLayout;
 };
+
+// ding
+export const playDing = () => {
+  // 1. 创建音频元素
+  const audio = new Audio(__APP_ENV__.BASE_URL + '/assets/ding.wav');
+
+  // 2. 播放音频
+  audio.play().catch(error => {
+    console.error('播放失败:', error);
+    audio.remove(); // 如果播放失败也移除元素
+  });
+
+  // 3. 播放结束后销毁
+  audio.addEventListener('ended', () => {
+    console.log('播放结束，销毁音频元素');
+    audio.remove();
+  });
+
+  // 4. 错误处理（网络问题等）
+  audio.addEventListener('error', () => {
+    console.error('音频加载失败');
+    audio.remove();
+  });
+}

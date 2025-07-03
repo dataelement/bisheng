@@ -39,3 +39,9 @@ export const useGetToolCalls = <TData = t.ToolCallResults>(
     },
   );
 };
+
+
+// 工具列表
+// export const useGetToolList = () => {
+//   return useQuery<t.ToolListResponse>([QueryKeys.toolList], () => dataService.getToolList());
+// }

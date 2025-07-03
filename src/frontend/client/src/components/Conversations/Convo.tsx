@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRecoilValue } from 'recoil';
 import { Check, X } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Constants } from '~/data-provider/data-provider/src';
 import type { MouseEvent, FocusEvent, KeyboardEvent } from 'react';
 import type { TConversation } from '~/data-provider/data-provider/src';
@@ -44,6 +44,7 @@ export default function Conversation({
   const [isPopoverActive, setIsPopoverActive] = useState(false);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const localize = useLocalize();
+  const navigate = useNavigate();
 
   const clickHandler = async (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button === 0 && (event.ctrlKey || event.metaKey)) {
@@ -64,10 +65,13 @@ export default function Conversation({
       // document.title = title;
     }
     /* Note: Latest Message should not be reset if existing convo */
-    navigateWithLastTools(
-      conversation,
-      !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
-    );
+    // 会话
+    // navigateWithLastTools(
+    //   conversation,
+    //   !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
+    // );
+    // 灵思
+    navigate(`/sop/${conversationId}`);
   };
 
   const renameHandler = useCallback(() => {
@@ -184,7 +188,7 @@ export default function Conversation({
       ) : (
         <a
           // 切换会话
-          href={`/c/${conversationId}`}
+          // href={`/c/${conversationId}`}
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
@@ -208,7 +212,7 @@ export default function Conversation({
               setRenaming(true);
             }}
           >
-            {title}
+            {title} [灵思]
           </div>
           {isActiveConvo ? (
             <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l" />

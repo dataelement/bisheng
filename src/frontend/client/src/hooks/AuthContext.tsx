@@ -43,7 +43,7 @@ const AuthContextProvider = ({
     enabled: !!(isAuthenticated && user?.role === SystemRoles.ADMIN),
   });
   useEffect(() => {
-    setUserContext({ token, isAuthenticated: !!user, user, redirect: '/c/new' });
+    setUserContext({ token, isAuthenticated: !!user, user });
   }, [user])
 
   const navigate = useNavigate();
@@ -82,7 +82,7 @@ const AuthContextProvider = ({
         return;
       }
       setError(undefined);
-      setUserContext({ token, isAuthenticated: true, user, redirect: '/c/new' });
+      setUserContext({ token, isAuthenticated: true, user });
     },
     onError: (error: TResError | unknown) => {
       const resError = error as TResError;

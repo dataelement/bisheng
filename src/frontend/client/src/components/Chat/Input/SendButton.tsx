@@ -12,7 +12,7 @@ type SendButtonProps = {
 };
 
 const SubmitButton = React.memo(
-  forwardRef((props: { disabled: boolean }, ref: React.ForwardedRef<HTMLButtonElement>) => {
+  forwardRef((props: { disabled: boolean, isLingsi: boolean }, ref: React.ForwardedRef<HTMLButtonElement>) => {
     const localize = useLocalize();
     return (
       <TooltipAnchor
@@ -25,6 +25,7 @@ const SubmitButton = React.memo(
             disabled={props.disabled}
             className={cn(
               'rounded-full bg-text-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
+              props.isLingsi && 'bg-gradient-to-b from-[#143BFF] to-[#99BCFF]',
             )}
             data-testid="send-button"
             type="submit"
@@ -42,7 +43,7 @@ const SubmitButton = React.memo(
 const SendButton = React.memo(
   forwardRef((props: SendButtonProps, ref: React.ForwardedRef<HTMLButtonElement>) => {
     const data = useWatch({ control: props.control });
-    return <SubmitButton ref={ref} disabled={props.disabled || !data.text} />;
+    return <SubmitButton ref={ref} isLingsi={props.isLingsi || false} disabled={props.disabled || !data.text} />;
   }),
 );
 

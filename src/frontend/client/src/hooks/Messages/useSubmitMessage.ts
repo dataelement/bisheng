@@ -6,6 +6,7 @@ import { useChatContext, useChatFormContext, useAddedChatContext } from '~/Provi
 import { useAuthContext } from '~/hooks/AuthContext';
 import { replaceSpecialVars } from '~/utils';
 import store from '~/store';
+import { useLinsightSessionManager } from '../useLinsightManager';
 
 const appendIndex = (index: number, value?: string) => {
   if (!value) {
@@ -23,11 +24,29 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
   const autoSendPrompts = useRecoilValue(store.autoSendPrompts);
   const activeConvos = useRecoilValue(store.allConversationsSelector);
   const setActivePrompt = useSetRecoilState(store.activePromptByIndex(index));
+  const { setLinsightSubmission } = useLinsightSessionManager('new')
 
   const submitMessage = useCallback(
-    (data?: { text: string }) => {
+    (data?: { text: string, linsight?: boolean }) => {
       if (!data) {
         return console.warn('No data provided to submitMessage');
+      }
+
+      // TODO 补充其他参数
+      if (data?.linsight) {
+        setLinsightSubmission('new', {
+          isNew: true,
+          files: [],
+          question: data?.text,
+          tools: [],
+          model: 'gpt-4',
+          enableWebSearch: false,
+          useKnowledgeBase: true
+        });
+        // 重置表单和清理草稿
+        methods.reset();
+        helpers?.clearDraft && helpers.clearDraft();
+        return;
       }
       // 检查最新消息是否在会话中
       const rootMessages = getMessages();

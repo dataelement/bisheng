@@ -1,22 +1,20 @@
-import { useMemo } from 'react';
-import { EModelEndpoint, Constants } from '~/data-provider/data-provider/src';
-import type * as t from '~/data-provider/data-provider/src';
 import type { ReactNode } from 'react';
-import { useChatContext, useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
+import { useMemo } from 'react';
+import { useAgentsMapContext, useAssistantsMapContext, useChatContext } from '~/Providers';
 import {
   useGetAssistantDocsQuery,
   useGetBsConfig,
   useGetEndpointsQuery,
   useGetStartupConfig,
 } from '~/data-provider';
-import ConvoIcon from '~/components/Endpoints/ConvoIcon';
-import { getIconEndpoint, getEntity, cn } from '~/utils';
+import type * as t from '~/data-provider/data-provider/src';
+import { Constants, EModelEndpoint } from '~/data-provider/data-provider/src';
 import { useLocalize, useSubmitMessage } from '~/hooks';
-import { TooltipAnchor } from '~/components/ui';
-import { BirthdayIcon } from '~/components/svg';
+import { cn, getEntity, getIconEndpoint } from '~/utils';
 import ConvoStarter from './ConvoStarter';
+import SegmentSelector from './SegmentSelector';
 
-export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?: boolean }) {
+export default function Landing({ Header, isNew, lingsi, setLingsi }: { Header?: ReactNode; isNew?: boolean, lingsi: boolean }) {
   const { conversation } = useChatContext();
   const agentsMap = useAgentsMapContext();
   const assistantMap = useAssistantsMapContext();
@@ -94,6 +92,7 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
       : localize('com_nav_welcome_message');
   };
 
+
   return (
     <div className={cn('relative', !isNew && 'h-full')}>
       <div className="absolute left-0 right-0">{Header != null ? Header : null}</div>
@@ -104,47 +103,10 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
             {bsConfig?.welcomeMessage}
           </h2>
         </div>
-        <div className="max-w-lg text-center mt-4 text-sm font-normal text-text-primary">
+        <div className="max-w-lg text-center mt-4 text-sm font-normal text-gray-500">
           {bsConfig?.functionDescription}
         </div>
-        {/* <div className={cn('relative', name && avatar ? 'mb-0' : 'mb-3')}>
-          <ConvoIcon
-            agentsMap={agentsMap}
-            assistantMap={assistantMap}
-            conversation={conversation}
-            endpointsConfig={endpointsConfig}
-            containerClassName={containerClassName}
-            context="landing"
-            className="h-2/3 w-2/3"
-            size={41}
-          />
-          {startupConfig?.showBirthdayIcon === true ? (
-            <TooltipAnchor
-              className="absolute bottom-8 right-2.5"
-              description={localize('com_ui_happy_birthday')}
-            >
-              <BirthdayIcon />
-            </TooltipAnchor>
-          ) : null}
-        </div> */}
-        {/* {name ? (
-          <div className="flex flex-col items-center gap-0 p-2">
-            <div className="text-center text-2xl font-medium dark:text-white">{name}</div>
-            <div className="max-w-md text-center text-sm font-normal text-text-primary">
-              {description ||
-                (typeof startupConfig?.interface?.customWelcome === 'string'
-                  ? startupConfig?.interface?.customWelcome
-                  : localize('com_nav_welcome_message'))}
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-token-text-tertiary">
-             <div className="text-sm text-token-text-tertiary">By Daniel Avila</div>
-          </div> 
-          </div>
-        ) : (
-          <h2 className="mb-5 max-w-[75vh] px-12 text-center text-lg font-medium dark:text-white md:px-0 md:text-2xl">
-            我是毕昇工作台，很高兴见到你！
-          </h2>
-        )} */}
+
         {/* 引导词 */}
         <div className="mt-8 flex flex-wrap justify-center gap-3 px-4">
           {conversation_starters.length > 0 &&
@@ -157,6 +119,11 @@ export default function Landing({ Header, isNew }: { Header?: ReactNode; isNew?:
                   onClick={() => sendConversationStarter(text)}
                 />
               ))}
+        </div>
+
+        {/* 模式切换 */}
+        <div className='mx-auto mb-6 mt-2'>
+          <SegmentSelector onChange={setLingsi} />
         </div>
       </div>
     </div>

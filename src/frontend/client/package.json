@@ -98,6 +98,7 @@
     "tailwind-merge": "^1.14.0",
     "tailwindcss-animate": "^1.0.5",
     "tailwindcss-radix": "^2.8.0",
+    "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "uuid": "^11.1.0",
     "zod": "^3.22.4"
   },

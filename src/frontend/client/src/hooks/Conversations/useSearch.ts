@@ -40,7 +40,7 @@ export default function useSearchMessages({ isAuthenticated }: { isAuthenticated
     if (location.pathname && location.pathname.includes('/c/')) {
       return;
     }
-    navigate('/c/new', { replace: true });
+    // navigate('/c/new', { replace: true });  // 自动跳转新建会话
     /* Disabled eslint rule because we don't want to run this effect when location changes */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, searchQuery]);
