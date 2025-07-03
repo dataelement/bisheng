@@ -1,4 +1,3 @@
-import asyncio
 import json
 from datetime import datetime
 from typing import Optional, AsyncIterator
@@ -9,9 +8,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
+from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
-from bisheng_langchain.linsight.tools.local_file import LocalFileTool
 from bisheng_langchain.linsight.utils import extract_code_blocks
 
 
@@ -35,8 +34,7 @@ class LinsightAgent(BaseModel):
         :return: Processed SOP string.
         """
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
-        sop_prompt = SopPrompt.format(query=self.query, sop=sop,
-                                      tools=tools_str)
+        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str)
         # Add logic to process the SOP string
         async for one in self.llm.astream(sop_prompt):
             yield one
@@ -74,62 +72,44 @@ class LinsightAgent(BaseModel):
             task = json.loads(json_str)
         except json.decoder.JSONDecodeError:
             raise ValueError(f"Invalid JSON format in response: {json_str}")
-        return task.get('steps', [])
+        tasks = task.get('steps', [])
 
-    async def invoke(self, tasks: list[dict], finally_sop: str) -> None:
+        return TaskManage.completion_task_tree_info(tasks)
+
+    async def ainvoke(self, tasks: list[dict], sop: str) -> AsyncIterator[BaseEvent]:
         """
         Run the agent's main functionality.
         :param tasks: List of tasks to be processed by the agent.
-        :param finally_sop: Final SOP to be used in the agent's processing.
+        :param sop: Final SOP to be used in the agent's processing.
         """
         # Add main functionality logic here
-        self.task_manager = TaskManage(tasks=tasks, tools=self.tools, file_dir=self.file_dir, llm=self.llm,
-                                       finally_sop=finally_sop)
+        if not self.task_manager:
+            self.task_manager = TaskManage(tasks=tasks, tools=self.tools)
+            self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop)
 
-        pass
+        async for one in self.task_manager.ainvoke_task():
+            yield one
 
+    async def continue_task(self, task_id: str, user_input: str) -> None:
+        """
+        Continue processing a specific task by its ID.
+        :param task_id: The ID of the task to continue.
+        :param user_input: User input to be processed in the task.
 
-if __name__ == '__main__':
-    from langchain_community.chat_models import ChatTongyi
-    from pydantic import SecretStr
-    from bisheng_langchain.gpts.load_tools import load_tools
+        """
+        if not self.task_manager:
+            raise ValueError("Task manager is not initialized.")
+        if task_id not in self.task_manager.task_map:
+            raise ValueError(f"Task with ID {task_id} not found.")
 
-    used_tools = load_tools({
-        "bing_search": {
-            "bing_subscription_key": "231d87d51dba42bab16f03d44bbd0044",
-            "bing_search_url": "https://api.bing.microsoft.com/v7.0/search",
-        }
-    })
+        result = self.task_manager.continue_task(task_id, user_input)
+        await result
 
-
-    async def async_main():
-
-        api_key = ''
-        chat = ChatTongyi(api_key=SecretStr(api_key), model="qwen-max-latest", streaming=True)
-        file_dir = "~/works/bisheng/src/backend/bisheng_langchain/linsight/data"
-
-        # 获取本地文件相关工具
-        used_tools.extend(LocalFileTool.get_all_tools(root_path=file_dir))
-        query = "分析该目录下的简历文件（仅限txt格式），挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
-
-        agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=file_dir)
-
-        # 生成sop
-        sop = ""
-        async for one in agent.generate_sop(""):
-            sop += one.content
-        print(f"first sop: {sop}")
-
-        # # 反馈sop
-        # feedback = "需要补充更多关于秦始皇兵马俑的历史背景信息"
-        # feedback_sop = ""
-        # async for one in agent.feedback_sop(sop, feedback, []):
-        #     feedback_sop += one.content
-        # print(f"feedback sop: {feedback_sop}")
-        # sop=feedback_sop
-
-        task_info = await agent.generate_task(sop)
-        print(f"task_info: {task_info}")
-
-
-    asyncio.run(async_main())
+    async def get_all_task_info(self) -> list[dict]:
+        """
+        Get all tasks managed by the agent.
+        :return: List of all tasks info.
+        """
+        if not self.task_manager:
+            return []
+        return self.task_manager.get_all_task_info()

@@ -121,7 +121,7 @@ async def copy_knowledge(*,
     """ 复制知识库. """
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
 
-    if not login_user.is_admin and knowledge.user_id != login_user.id:
+    if not login_user.is_admin and knowledge.user_id != login_user.user_id:
         return UnAuthorizedError.return_resp()
 
     knowledge_count = KnowledgeFileDao.count_file_by_filters(

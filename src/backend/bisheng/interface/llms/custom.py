@@ -67,6 +67,7 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     params['model_kwargs'] = {
         'enable_search': model_config.get('enable_web_search', False),
         'temperature': params.pop('temperature', 0.3),
+        'incremental_output': True,  # 默认增量输出，tool call拼接流式内容call_id拼接重复的bug
     }
     if params.get('max_tokens'):
         params['model_kwargs']['max_tokens'] = params.get('max_tokens')

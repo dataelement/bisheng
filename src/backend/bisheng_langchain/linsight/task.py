@@ -1,28 +1,38 @@
+import asyncio
 import datetime
 import json
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, HumanMessage, AIMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer
-from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt
-from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks
+from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
+from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput
+from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
+    LoopAgentPrompt
+from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks, generate_uuid_str
 
 
 class BaseTask(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    id: str = Field(..., description='Unique ID')
+    parent_id: Optional[str] = Field(default=None, description='父任务id')
+    next_id: Optional[list[str]] = Field(default=None, description='下一批任务的id列表')
+
     query: str = Field(..., description='用户问题')
     file_dir: str = Field(default="", description='存储文件的目录')
     llm: BaseLanguageModel = Field(..., description='Language model to use for processing queries')
     finally_sop: str = Field(default="", description="最终的SOP，用于处理任务的最终结果。")
-    max_steps: int = Field(default=10, description='最大步骤数，超过这个数会报错')
+    max_steps: int = Field(default=MaxSteps, description='最大步骤数，超过这个数会报错')
 
     tool_buffer: int = Field(default=DefaultToolBuffer, description='工具缓冲区，用于存储工具调用的结果')
     history: List[BaseMessage] = Field(default_factory=list, description='原始聊天记录，包含user、tool、AI消息')
     status: str = Field(TaskStatus.WAITING.value, description='任务状态')
     answer: str = Field(default='', description='任务答案，最终的结果')
-    task_manager: Optional["TaskManage"] = Field(None, description='Task manager for handling tasks and workflows')
+    task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
+    user_input: Optional[str] = Field(default=None, description='用户输入的内容')
 
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
@@ -34,6 +44,11 @@ class BaseTask(BaseModel):
     prompt: str = Field(default='', description='任务的prompt')
     input: list[str] = Field(default_factory=list,
                              description='任务输入，必须是前置步骤的step_id或"query",可以多个。"query"代表用户的原始问题')
+
+    children: Optional[list['Task']] = []  # List of child tasks, if is loop agent
+
+    def get_task_info(self) -> dict:
+        return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
 
     def get_input_str(self) -> str:
         if not self.input:
@@ -48,24 +63,77 @@ class BaseTask(BaseModel):
             input_str = f"输入：\n{input_str}"
         return input_str
 
+    async def _ainvoke_llm(self, messages: list[BaseMessage]) -> BaseMessage:
+        """
+        Invoke the language model with the provided messages.
+        :param messages: List of messages to be sent to the language model.
+        :return: The response from the language model.
+        """
+        # get tool schema
+        tool_args = self.task_manager.get_all_tool_schema()
+        return await self.llm.ainvoke(messages, tools=tool_args)
+
+    async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
+        """
+        Invoke the language model without tools.
+        :param messages: List of messages to be sent to the language model.
+        :return: The response from the language model.
+        """
+        return await self.llm.ainvoke(messages)
+
+    async def handle_user_input(self, user_input: str) -> None:
+        """
+        Handle user input for the task.
+        This method should be called when the task is waiting for user input.
+        :param user_input: The input provided by the user.
+        """
+        self.user_input = user_input
+        self.status = TaskStatus.INPUT_OVER.value
+
+
+class Task(BaseTask):
+    """
+    Represents a task in the Lingsi agent system.
+    This class is used to define the structure of a task,
+    including its ID, name, description, and status.
+    """
+
+    # sub task field
+    original_query: Optional[str] = Field(default='', description='整体任务目标')
+    original_method: Optional[str] = Field(default='', description='整体任务方法')
+    original_done: Optional[str] = Field(default='', description='已完成的内容')
+    last_answer: Optional[str] = Field(default='', description='上一步骤的答案')
+
     def build_system_message(self) -> BaseMessage:
         """
         Build the system message for the task.
         :return: The system message as a BaseMessage object.
         """
-        if self.node_loop:
-            pass
-        prompt = SingleAgentPrompt.format(profile=self.profile,
-                                          current_time=datetime.datetime.now().isoformat(),
-                                          file_dir=self.file_dir,
-                                          query=self.query,
-                                          sop=self.finally_sop,
-                                          workflow=self.task_manager.get_workflow(),
-                                          processed_steps=self.task_manager.get_processed_steps(),
-                                          input_str=self.get_input_str(),
-                                          step_id=self.step_id,
-                                          target=self.target,
-                                          single_sop=self.sop)
+        current_time = datetime.datetime.now().isoformat()
+        # 说明是二级子任务
+        if self.node_loop and self.parent_id:
+            prompt = LoopAgentPrompt.format(profile=self.profile,
+                                            current_time=current_time,
+                                            file_dir=self.file_dir,
+                                            original_query=self.original_query,
+                                            original_method=self.original_method,
+                                            original_done=self.original_done,
+                                            last_answer="",
+                                            single_sop=self.sop,
+                                            step_id=self.step_id,
+                                            target=self.target)
+        else:
+            prompt = SingleAgentPrompt.format(profile=self.profile,
+                                              current_time=datetime.datetime.now().isoformat(),
+                                              file_dir=self.file_dir,
+                                              query=self.query,
+                                              sop=self.finally_sop,
+                                              workflow=self.task_manager.get_workflow(),
+                                              processed_steps=self.task_manager.get_processed_steps(),
+                                              input_str=self.get_input_str(),
+                                              step_id=self.step_id,
+                                              target=self.target,
+                                              single_sop=self.sop)
         return SystemMessage(content=prompt)
 
     async def summarize_history(self, messages_str: str) -> str:
@@ -93,50 +161,31 @@ class BaseTask(BaseModel):
         if not self.history:
             return messages
 
+        messages.extend(self.history)
+
         # 如果有聊天历史记录, 需要对工具消息做精简
         all_tool_messages = []
         all_remain_messages = []
-        for one in self.history:
+        for one in messages:
             if 'tool_calls' in one.additional_kwargs or isinstance(one, ToolMessage):
                 all_tool_messages.append(one)
             else:
                 all_remain_messages.append(one)
-        all_tool_messages_str = json.dumps(all_tool_messages, ensure_ascii=False, indent=2)
+        all_tool_messages_str = json.dumps([one.model_dump() for one in all_tool_messages], ensure_ascii=False,
+                                           indent=2)
         if len(encode_str_tokens(all_tool_messages_str)) > self.tool_buffer:
-            messages_str = json.dumps(messages, ensure_ascii=False, indent=2)
+            messages_str = json.dumps([one.model_dump() for one in messages], ensure_ascii=False, indent=2)
             history_summary = await self.summarize_history(messages_str)
             all_remain_messages.append(AIMessage(content=history_summary))
             return all_remain_messages
-
         return messages
 
-    async def _ainvoke_llm(self, messages: list[BaseMessage]) -> BaseMessage:
-        """
-        Invoke the language model with the provided messages.
-        :param messages: List of messages to be sent to the language model.
-        :return: The response from the language model.
-        """
-        # get tool schema
-        tool_args = self.tool_manager.get_all_input_schema()
-        return await self.llm.ainvoke(messages, tools=tool_args)
-
-    async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
-        """
-        Invoke the language model without tools.
-        :param messages: List of messages to be sent to the language model.
-        :return: The response from the language model.
-        """
-        return await self.llm.ainvoke(messages)
-
-
-class Task(BaseTask):
-    """
-    Represents a task in the Lingsi agent system.
-    This class is used to define the structure of a task,
-    including its ID, name, description, and status.
-    """
-
-    children: list['SubTask'] = []  # List of child tasks, if is loop agent
+    async def put_event(self, event: BaseEvent) -> None:
+        if not self.task_manager:
+            raise RuntimeError('Task manager not initialized.')
+        if not self.task_manager.aqueue:
+            raise RuntimeError('Task manager queue not initialized.')
+        self.task_manager.aqueue.put_nowait(event)
 
     async def ainvoke(self) -> None:
         """
@@ -144,18 +193,51 @@ class Task(BaseTask):
         This method should contain the logic to perform the task's operation.
         """
         self.status = TaskStatus.PROCESSING.value
-        if self.node_loop:
-            return await self.loop_invoke()
+        if self.node_loop and not self.parent_id:
+            return await self.ainvoke_loop()
 
         for i in range(self.max_steps):
             messages = await self.build_messages_with_history()
             res = await self._ainvoke_llm(messages)
             self.history.append(res)
+            print(res)
             if "tool_calls" in res.additional_kwargs and res.tool_calls:
                 for one in res.tool_calls:
                     tool_name = one.get("name")
                     tool_args = one.get("args")
-                    tool_result = await self.tool_manager.ainvoke_tool(tool_name, tool_args)
+                    call_reason = tool_args.pop("_call_reason") if "_call_reason" in tool_args else ""
+
+                    # 等待用户输入的特殊工具调用
+                    if tool_name == "call_user_input":
+                        # 等待用户输入
+                        self.status = TaskStatus.INPUT.value
+                        await self.put_event(NeedUserInput(task_id=self.id, call_reason=call_reason))
+                        # 等待用户输入
+                        while self.status != TaskStatus.INPUT_OVER.value:
+                            await asyncio.sleep(0.5)
+
+                        # 用户输入结束继续执行
+                        self.status = TaskStatus.PROCESSING.value
+                        self.user_input = None
+                        self.history.append(
+                            ToolMessage(name=tool_name, content=self.user_input, tool_call_id=one.get("id")))
+                        break
+
+                    # 正常工具调用
+                    await self.put_event(ExecStep(task_id=self.id,
+                                                  call_id=one.get('id'),
+                                                  call_reason=call_reason,
+                                                  name=tool_name,
+                                                  params=tool_args,
+                                                  status="start"))
+                    tool_result = await self.task_manager.ainvoke_tool(tool_name, tool_args)
+                    await self.put_event(ExecStep(task_id=self.id,
+                                                  call_id=one.get('id'),
+                                                  call_reason=call_reason,
+                                                  name=tool_name,
+                                                  params=tool_args,
+                                                  output=tool_result,
+                                                  status="end"))
                     self.history.append(ToolMessage(name=tool_name, content=tool_result, tool_call_id=one.get("id")))
             else:  # 不需要工具调用说明输出了最终答案，执行结束
                 break
@@ -164,27 +246,43 @@ class Task(BaseTask):
             self.answer = self.history[-1].content
         else:
             self.status = TaskStatus.FAILED.value
+            self.answer = "task exec over max steps and not generate answer"
         return None
 
     async def ainvoke_loop(self):
         """
-        Execute the sub task in a loop.
+        Execute the subtask in a loop.
         This method should contain the logic to perform the task's operation in a loop.
         """
         # generate sub-tasks based on the loop condition
         if not self.children:
-            sub_task = await self.generate_sub_tasks()
+            self.children = await self.generate_sub_tasks()
+            self.task_manager.add_tasks(self.children)
+            await self.put_event(GenerateSubTask(task_id=self.id,
+                                                 subtask=[one.get_task_info() for one in self.children]))
+        if not self.children:
+            raise ValueError("No sub-tasks generated for the loop task.")
+        _ = await asyncio.gather(*[one.ainvoke() for one in self.children])
 
-        self.status = "in_progress"
-        # Add loop execution logic here
-        self.status = "completed"
+        # 如果是循环任务，子任务执行完毕后需要将结果合并。目前
+        all_failed = True
+        answer = ""
+        error = ""
+        for one in self.children:
+            if one.status == TaskStatus.SUCCESS.value:
+                all_failed = False
+                answer += one.answer + "\n"
+            else:
+                error += one.answer + "\n"
+        self.status = TaskStatus.FAILED.value if all_failed else TaskStatus.SUCCESS.value
+        self.answer = error if all_failed else answer
         return None
 
     async def generate_sub_tasks(self) -> List['SubTask']:
         """
-        Generate sub-tasks based on the current task.
-        This method should contain the logic to create sub-tasks.
-        :return: List of generated sub-tasks.
+        Generate subtasks based on the current task.
+        This method should contain the logic to create subtasks.
+        :return: List of generated subtasks.
         """
         prompt = LoopAgentSplitPrompt.format(query=self.query, sop=self.sop,
                                              workflow=self.task_manager.get_workflow(),
@@ -206,32 +304,20 @@ class Task(BaseTask):
         sub_task_list = sub_task.get("任务列表", [])
         res = []
         for one in sub_task_list:
-            res.append(SubTask(**self.model_dump(exclude={"children", "history", "status"}),
-                               original_query=original_query,
-                               original_method=original_method,
-                               original_done=original_done,
-                               )
-                       )
-
-
-class SubTask(BaseTask):
-    """
-    Represents a sub-task in the Lingsi agent system.
-    This class is used to define the structure of a sub-task,
-    which inherits from the Task class.
-    """
-    original_query: str = Field(default='', description='整体任务目标')
-    original_method: str = Field(default='', description='整体任务方法')
-    original_done: str = Field(default='', description='已完成的内容')
-    last_answer: str = Field(default='', description='上一步骤的答案')
-
-    parent_step_id: str = Field(default='', description='Parent step ID for the sub-task')
-
-    async def invoke(self):
-        """
-        Execute the sub-task.
-        This method should contain the logic to perform the sub-task's operation.
-        """
-        self.status = "in_progress"
-        # Add sub-task execution logic here
-        self.status = "completed"
+            parent_info = self.model_dump(
+                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm"})
+            parent_info.update({
+                "original_query": original_query,
+                "original_method": original_method,
+                "original_done": original_done,
+                "target": one.get("当前目标", ""),
+                "sop": one.get("当前方法", ""),
+                "id": generate_uuid_str(),
+                "parent_id": self.id,
+                "task_manager": self.task_manager,
+                "llm": self.llm,
+            })
+            res.append(
+                Task(**parent_info)
+            )
+        return res

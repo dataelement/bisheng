@@ -1,4 +1,4 @@
-# 生成sop的prompt模板, variables -> query: 用户问题；sop：参考sop
+# 生成sop的prompt模板, variables -> query: 用户问题；sop：参考sop; tools_str: 已有工具字符串
 SopPrompt = """基于以下信息创建一个标准操作流程(SOP):
 请基于用户需求的生成SOP：
 1. SOP指的是通过哪些标准步骤能指导大模型解决用户的问题。

@@ -9,7 +9,6 @@ import pymysql
 from dotenv import load_dotenv
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from langchain_community.tools.bearly.tool import BearlyInterpreterTool
-from langchain_community.utilities.arxiv import ArxivAPIWrapper
 from langchain_community.utilities.bing_search import BingSearchAPIWrapper
 from langchain_core.callbacks import BaseCallbackManager, Callbacks
 from langchain_core.language_models import BaseLanguageModel
@@ -18,7 +17,7 @@ from mypy_extensions import Arg, KwArg
 
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.self_arxiv import ArxivAPIWrapperSelf
-from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults, BingSearchRun
+from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
@@ -27,6 +26,7 @@ from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
     DallEImageGenerator,
 )
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
+from bisheng_langchain.gpts.tools.local_file.local_file import LocalFileTool
 from bisheng_langchain.gpts.tools.sql_agent.tool import SqlAgentTool, SqlAgentAPIWrapper
 from bisheng_langchain.rag import BishengRAGTool
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
@@ -41,7 +41,8 @@ def _get_calculator() -> BaseTool:
 
 
 def _get_arxiv() -> BaseTool:
-    return ArxivQueryRun(api_wrapper=ArxivAPIWrapperSelf(top_k_results=5,load_max_docs=5,load_all_available_meta=True))
+    return ArxivQueryRun(
+        api_wrapper=ArxivAPIWrapperSelf(top_k_results=5, load_max_docs=5, load_all_available_meta=True))
 
 
 _BASE_TOOLS: Dict[str, Callable[[], BaseTool]] = {
@@ -100,7 +101,8 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
     # type: ignore
     'dalle_image_generator': (_get_dalle_image_generator,
                               ['openai_api_key'],
-                              ['openai_api_base', 'openai_proxy', 'azure_deployment', 'azure_endpoint', 'openai_api_version']),
+                              ['openai_api_base', 'openai_proxy', 'azure_deployment', 'azure_endpoint',
+                               'openai_api_version']),
     'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url'], []),
     'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
     'bisheng_rag': (BishengRAGTool.get_rag_tool, ['name', 'description'],
@@ -109,7 +111,17 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
     'sql_agent': (_get_sql_agent, ['llm', 'sql_address'], []),
 }
 
-_API_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore
+_API_TOOLS: Dict[str, Tuple[Callable[Any, BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore
+
+_API_TOOLS.update({
+    "list_files": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "get_file_details": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "search_files": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "search_text_in_file": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "read_text_file": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "write_text_file": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "replace_file_lines": (LocalFileTool.get_tool_by_name, ['root_path']),
+})
 
 _ALL_TOOLS = {
     **_BASE_TOOLS,

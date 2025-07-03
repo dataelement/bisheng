@@ -131,6 +131,7 @@ pandas-stubs = "^2.0.0.230412"
 types-pillow = "^9.5.0.2"
 types-appdirs = "^1.4.3.5"
 types-pyyaml = "^6.0.12.8"
+pytest-asyncio = "*"
 
 [tool.poetry.extras]
 deploy = ["langchain-serve"]

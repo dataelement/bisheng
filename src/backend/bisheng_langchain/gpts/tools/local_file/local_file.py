@@ -43,6 +43,13 @@ class WriteFileInput(BaseModel):
                                       description="开始写入的行号（1-based）。-1 表示追加，0 表示从头覆盖，正数表示插入")
 
 
+class ReplaceFileInput(BaseModel):
+    file_path: str = Field(..., description="要编辑的文件路径")
+    start_line: int = Field(..., description="开始替换的行号（从1开始计数，包含此行）")
+    end_line: int = Field(..., description="结束替换的行号（从1开始计数，不包含此行，左开右闭区间）")
+    replacement_text: str = Field(..., description="替换的文本内容")
+
+
 class LocalFileTool(BaseModel):
     """
     LocalFileTool is a tool for managing local files.
@@ -285,7 +292,7 @@ class LocalFileTool(BaseModel):
             包含文件内容和元数据的字典
         """
         try:
-            flag, lines = self.judge_file_can_read(file_path)
+            flag, lines = await self.judge_file_can_read(file_path)
             if not flag:
                 return lines
 
@@ -331,7 +338,7 @@ class LocalFileTool(BaseModel):
             包含搜索结果和上下文的字典，包括匹配总数、当前匹配索引和上下文内容
         """
         try:
-            flag, lines = self.judge_file_can_read(file_path)
+            flag, lines = await self.judge_file_can_read(file_path)
             if not flag:
                 return lines
 
@@ -481,51 +488,139 @@ class LocalFileTool(BaseModel):
         except Exception as e:
             return {"状态": "错误", "错误信息": str(e)}
 
-    @classmethod
-    def get_all_tools(cls, root_path: str) -> list[BaseTool]:
+    async def replace_file_lines(self, file_path: str, start_line: int, end_line: int, replacement_text: str) \
+            -> Dict[str, Any]:
         """
-        Get all files in the specified directory.
+        替换文件中的指定行范围
 
+        Args:
+            file_path: 要编辑的文件路径
+            start_line: 开始替换的行号（从1开始计数，包含此行）
+            end_line: 结束替换的行号（从1开始计数，不包含此行，左开右闭区间）
+            replacement_text: 替换的文本内容
+
+        Returns:
+            包含替换结果的字典
+        """
+        is_valid, normalized_path, error_msg = self.validate_file_path(file_path)
+        if not is_valid:
+            return {"状态": "错误", "错误信息": error_msg}
+        flag, lines = await self.judge_file_can_read(file_path)
+        if not flag:
+            return lines
+
+        total_lines = len(lines)
+
+        # 验证行号范围
+        if start_line > total_lines:
+            return {
+                "状态": "错误",
+                "错误信息": f"起始行号 {start_line} 超出文件总行数 {total_lines}"
+            }
+
+        # 调整end_line，确保不超出文件范围
+        actual_end_line = min(end_line, total_lines + 1)
+
+        # 转换为0基索引
+        start_idx = start_line - 1
+        end_idx = actual_end_line - 1
+
+        # 处理替换文本，确保以换行符结尾（如果原来被替换的行有换行符）
+        replacement_lines = []
+        if replacement_text:
+            # 分割替换文本为行
+            replacement_lines = replacement_text.splitlines(True)  # 保留换行符
+            # 如果最后一行没有换行符，且被替换的范围有内容，则添加换行符
+            if replacement_lines and not replacement_lines[-1].endswith('\n') and end_idx > start_idx:
+                replacement_lines[-1] += '\n'
+
+        # 记录被替换的内容
+        replaced_line_count = end_idx - start_idx
+
+        # 执行替换
+        new_lines = lines[:start_idx] + replacement_lines + lines[end_idx:]
+
+        # 写回文件
+        try:
+            async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
+                await f.writelines(new_lines)
+        except Exception as e:
+            return {
+                "状态": "错误",
+                "错误信息": f"写入文件时出错: {str(e)}"
+            }
+
+        # 构建结果
+        result = {
+            "状态": "成功",
+            "文件路径": file_path,
+            "替换范围": f"第{start_line}行到第{actual_end_line - 1}行（左开右闭）",
+            "原始行数": total_lines,
+            "替换后行数": len(new_lines),
+            "被替换的行数": replaced_line_count,
+            "新增的行数": len(replacement_lines)
+        }
+
+        return result
+
+    @classmethod
+    def get_tool_by_name(cls, name: str, root_path: str) -> Optional[BaseTool]:
+        """
+        Get a specific tool by name.
+
+        :param name: The name of the tool to retrieve.
         :param root_path: Path to the directory to list files from.
-        :return: List of file paths in the directory.
+        :return: The tool if found, otherwise None.
         """
         obj = cls(root_path=root_path)
-        tools = [
-            StructuredTool(
-                name=f"local_{cls.list_files.__name__}",
+        if name == "list_files":
+            return StructuredTool(
+                name=f"{cls.list_files.__name__}",
                 description=cls.list_files.__doc__,
                 args_schema=FileDirToolInput,
                 func=obj.list_files,
-            ),
-            StructuredTool(
-                name=f"local_{cls.get_file_details.__name__}",
+            )
+        elif name == "get_file_details":
+            return StructuredTool(
+                name=f"{cls.get_file_details.__name__}",
                 description=cls.get_file_details.__doc__,
                 args_schema=FileToolInput,
                 func=obj.get_file_details,
-            ),
-            StructuredTool(
-                name=f"local_{cls.search_files.__name__}",
+            )
+        elif name == "search_files":
+            return StructuredTool(
+                name=f"{cls.search_files.__name__}",
                 description=cls.search_files.__doc__,
                 args_schema=SearchFilesInput,
                 func=obj.search_files,
-            ),
-            StructuredTool(
-                name=f"local_{cls.read_text_file.__name__}",
+            )
+        elif name == "read_text_file":
+            return StructuredTool(
+                name=f"{cls.read_text_file.__name__}",
                 description=cls.read_text_file.__doc__,
                 args_schema=ReadFileInput,
                 coroutine=obj.read_text_file,
-            ),
-            StructuredTool(
-                name=f"local_{cls.search_text_in_file.__name__}",
+            )
+        elif name == "search_text_in_file":
+            return StructuredTool(
+                name=f"{cls.search_text_in_file.__name__}",
                 description=cls.search_text_in_file.__doc__,
                 args_schema=SearchTextInput,
                 coroutine=obj.search_text_in_file,
-            ),
-            StructuredTool(
-                name=f"local_{cls.write_text_file.__name__}",
+            )
+        elif name == "write_text_file":
+            return StructuredTool(
+                name=f"{cls.write_text_file.__name__}",
                 description=cls.write_text_file.__doc__,
                 args_schema=WriteFileInput,
                 coroutine=obj.write_text_file,
-            ),
-        ]
-        return tools
+            )
+        elif name == "replace_file_lines":
+            return StructuredTool(
+                name=f"{cls.replace_file_lines.__name__}",
+                description=cls.replace_file_lines.__doc__,
+                args_schema=ReplaceFileInput,
+                coroutine=obj.replace_file_lines,
+            )
+        # 如果没有找到对应的工具，抛出异常
+        raise Exception(f"LocalFile not found tool: {name}")
