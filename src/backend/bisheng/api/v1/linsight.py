@@ -29,14 +29,23 @@ async def upload_file(file: UploadFile = File(...),
     :return: 上传结果
     """
 
-    # 调用实现类处理文件上传
-    upload_result = await LinsightWorkbenchImpl.upload_file(file)
+    try:
+        # 调用实现类处理文件上传
+        upload_result = await LinsightWorkbenchImpl.upload_file(file)
 
+        # 解析
+        parse_result = await LinsightWorkbenchImpl.parse_file(upload_result)
 
-    if upload_result is None:
-        return resp_500(code=500, message="文件上传失败")
-    return resp_200(data=upload_result, message="文件上传成功")
+        result = {
+            "file_id": parse_result.get("file_id"),
+            "file_name": parse_result.get("original_filename"),
+            "parsing_status": "completed"
+        }
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
 
+    # 返回上传结果
+    return resp_200(data=result, message="文件上传成功")
 
 
 # 提交灵思用户问题请求

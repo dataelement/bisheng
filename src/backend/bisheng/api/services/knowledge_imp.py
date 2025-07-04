@@ -646,8 +646,8 @@ def parse_document_title(title: str) -> str:
 def read_chunk_text(
         input_file,
         file_name,
-        separator: List[str],
-        separator_rule: List[str],
+        separator: Optional[List[str]],
+        separator_rule: Optional[List[str]],
         chunk_size: int,
         chunk_overlap: int,
         knowledge_id: Optional[int] = None,
@@ -751,7 +751,7 @@ def read_chunk_text(
         documents = loader.load()
 
     elif file_extension_name in ["txt", "md"]:
-        loader = filetype_load_map[file_extension_name](file_path=input_file)
+        loader = filetype_load_map[file_extension_name](file_path=input_file, autodetect_encoding=True)
         documents = loader.load()
     else:
         if etl_for_lm_url:

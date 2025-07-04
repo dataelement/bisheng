@@ -144,6 +144,31 @@ class RedisClient:
         finally:
             await self.aclose()
 
+    def mget(self, keys: typing.List[str]) -> typing.List[typing.Any]:
+        """批量获取"""
+        try:
+            if not keys:
+                return []
+            values = self.connection.mget(keys)
+
+            return [pickle.loads(v) for v in values if v is not None]
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            self.close()
+
+    async def amget(self, keys: typing.List[str]) -> typing.List[typing.Any]:
+        """异步批量获取"""
+        try:
+            if not keys:
+                return []
+            values = await self.async_connection.mget(keys)
+            return [pickle.loads(v) for v in values if v is not None]
+        except TypeError as exc:
+            raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
+        finally:
+            await self.aclose()
+
     def hsetkey(self, name, key, value, expiration=3600):
         try:
             self.cluster_nodes(key)

@@ -26,12 +26,18 @@ class LinsightToolSchema(BaseModel):
         return v.value
 
 
+class SubmitFileSchema(BaseModel):
+    file_id: str = Field(..., description="文件唯一ID")
+    file_name: str = Field(..., description="文件名称")
+    parsing_status: str = Field(..., description="文件解析状态")
+
+
 # 问题提交Schema
 class LinsightQuestionSubmitSchema(BaseModel):
     question: str = Field(..., description="用户提交的问题")
     org_knowledge_enabled: bool = Field(False, description="是否启用组织知识库")
     personal_knowledge_enabled: bool = Field(False, description="是否启用个人知识库")
-    files: List[Dict] = Field(None, description="上传的文件列表")
+    files: List[SubmitFileSchema] = Field(None, description="上传的文件列表")
     tools: List[LinsightToolSchema] = Field(None, description="可用的工具列表")
 
     @field_validator("tools")
@@ -41,5 +47,3 @@ class LinsightQuestionSubmitSchema(BaseModel):
             return []
         # 将工具转换为字典格式
         return [tool.model_dump() for tool in v]
-
-

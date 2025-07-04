@@ -1,17 +1,25 @@
+import asyncio
 import uuid
+from io import BytesIO
 from typing import Dict, List
 
+from poetry.console.commands import self
+
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 from fastapi import UploadFile
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import run_in_executor
 from langchain_core.tools import BaseTool
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_uploaded_file
+from bisheng.cache.utils import save_uploaded_file, file_download
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
@@ -19,10 +27,13 @@ from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.linsight.agent import LinsightAgent
 
 
 class LinsightWorkbenchImpl(object):
+    collection_name = "col_linsight_file_"
+    file_info_redis_key = "linsight_file:"
 
     # 提交用户问题
     @classmethod
@@ -44,6 +55,13 @@ class LinsightWorkbenchImpl(object):
         )
         await MessageSessionDao.async_insert_one(message_session_model)
 
+        files = submit_obj.files
+
+        if files:
+            file_ids = [file.file_id for file in files]
+
+            files = await redis_client.amget([f"{cls.file_info_redis_key}{file_id}" for file_id in file_ids])
+
         # 灵思会话版本
         linsight_session_version_model = LinsightSessionVersion(
             session_id=chat_id,
@@ -52,7 +70,7 @@ class LinsightWorkbenchImpl(object):
             tools=submit_obj.tools,
             org_knowledge_enabled=submit_obj.org_knowledge_enabled,
             personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
-            files=submit_obj.files
+            files=files
         )
         linsight_session_version_model = await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
@@ -267,27 +285,110 @@ class LinsightWorkbenchImpl(object):
 
         # 原始文件名
         original_filename = file.filename
-
+        file_id = uuid.uuid4().hex
         # 生成唯一的文件名
-        unique_filename = f"{uuid.uuid4().hex}.{original_filename.split('.')[-1]}"
+        unique_filename = f"{file_id}.{original_filename.split('.')[-1]}"
 
         # 保存文件
         file_path = save_uploaded_file(file.file, 'bisheng', unique_filename)
 
         # 缓存文件信息
         file_info = {
+            "file_id": file_id,
             "filename": unique_filename,
             "original_filename": original_filename,
             "file_path": file_path,
             "parsing_status": "pending",
         }
 
-        key = f"linsight_file:{unique_filename}"
+        return file_info
+
+    @classmethod
+    async def parse_file(cls, upload_result):
+
+        """
+        解析上传的文件
+        :param upload_result: 上传结果
+        :return: 解析结果
+        """
+        # 获取文件信息
+        file_id = upload_result.get("file_id")
+        filename = upload_result.get("filename")
+        original_filename = upload_result.get("original_filename")
+        file_path = upload_result.get("file_path")
+
+        # 写入向量库
+        # 获取当前全局配置的embedding模型
+        linsight_conf = await LLMService.get_linsight_llm()
+
+        collection_name = f"{cls.collection_name}{linsight_conf.sop_embedding_model.id}"
+
+        # 包装同步处理函数
+        def wrap_sunc_func(file_id, file_path, original_filename, collection_name, linsight_conf):
+            filepath, _ = file_download(file_path)
+            texts, _, parse_type, _ = read_chunk_text(
+                input_file=filepath,
+                file_name=original_filename,
+                separator=['\n\n', '\n'],
+                separator_rule=['after', 'after'],
+                chunk_size=1000,
+                chunk_overlap=100
+            )
+
+            markdown_str = ""
+            for text in texts:
+                markdown_str += f"{text}\n"
+
+            # 写成markdown文件bytes
+            markdown_file_bytes = BytesIO()
+            markdown_file_bytes.write(markdown_str.encode('utf-8'))
+            markdown_file_bytes.seek(0)
+
+            # 生成唯一的文件名
+            markdown_filename = f"{uuid.uuid4().hex}.md"
+            # 保存markdown文件
+            markdown_file_path = save_uploaded_file(markdown_file_bytes, 'bisheng', markdown_filename)
+
+            emb_model_id = linsight_conf.sop_embedding_model.id
+            embeddings = decide_embeddings(emb_model_id)
+
+            vector_client: Milvus = decide_vectorstores(
+                collection_name, "Milvus", embeddings
+            )
+
+            es_client: ElasticKeywordsSearch = decide_vectorstores(
+                collection_name, "ElasticKeywordsSearch", FakeEmbedding()
+            )
+            metadatas = [{"file_id": file_id} for _ in texts]
+            vector_client.add_texts(texts, metadatas=metadatas)
+            es_client.add_texts(texts, metadatas=metadatas)
+
+            # 缓存解析结果
+            parse_result = {
+                "file_id": file_id,
+                "original_filename": original_filename,
+                "file_path": file_path,
+                "parsing_status": "completed",
+                "parse_type": parse_type,
+                "markdown_file_path": markdown_file_path,
+                "embedding_model_id": emb_model_id,
+                "collection_name": collection_name
+            }
+
+            return parse_result
+
+        parse_result = await run_in_executor(None, wrap_sunc_func, file_id, file_path, original_filename,
+                                             collection_name,
+                                             linsight_conf)
+
+        parse_result["filename"] = filename
+
+        key = f"{cls.file_info_redis_key}{file_id}"
         # 将文件信息存储到缓存中
         await redis_client.aset(
             key=key,
-            value=file_info,
+            value=parse_result,
             expiration=60 * 60 * 24  # 设置过期时间为24小时
         )
 
-        return file_info
+        return parse_result
