@@ -10,7 +10,7 @@ from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, LinsightModelConfig
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
@@ -408,7 +408,7 @@ class LLMService:
         return ret
 
     @classmethod
-    async def update_linsight_llm(cls, config_obj: LinsightModelConfig):
+    async def update_workbench_llm(cls, config_obj: WorkbenchModelConfig):
         """
         更新灵思模型配置
         :param config_obj:
@@ -426,13 +426,13 @@ class LLMService:
         return config_obj
 
     @classmethod
-    async def get_linsight_llm(cls) -> LinsightModelConfig:
+    async def get_workbench_llm(cls) -> WorkbenchModelConfig:
         """
-        获取灵思模型配置
+        获取工作台模型配置
         :return:
         """
         ret = {}
         config = await ConfigDao.aget_config(ConfigKeyEnum.LINSIGHT_LLM)
         if config:
             ret = json.loads(config.value)
-        return LinsightModelConfig(**ret)
+        return WorkbenchModelConfig(**ret)

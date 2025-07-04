@@ -38,9 +38,9 @@ class SOPManageService:
         """
 
         # 获取当前全局配置的embedding模型
-        linsight_conf = await LLMService.get_linsight_llm()
+        workbench_conf = await LLMService.get_workbench_llm()
         try:
-            emb_model_id = linsight_conf.sop_embedding_model.id
+            emb_model_id = workbench_conf.embedding_model.id
             if not emb_model_id:
                 return resp_500(code=500, message="未配置知识库embedding模型，请从工作台配置中设置")
         except AttributeError:
@@ -97,9 +97,9 @@ class SOPManageService:
         if sop_obj.content != existing_sop[0].content:
 
             # 获取当前全局配置的embedding模型
-            linsight_conf = await LLMService.get_linsight_llm()
+            workbench_conf = await LLMService.get_workbench_llm()
             try:
-                emb_model_id = linsight_conf.sop_embedding_model.id
+                emb_model_id = workbench_conf.embedding_model.id
                 if not emb_model_id:
                     return resp_500(code=500, message="未配置知识库embedding模型，请从工作台配置中设置")
             except AttributeError:
@@ -177,8 +177,8 @@ class SOPManageService:
         :return: 搜索结果
         """
         # 获取当前全局配置的embedding模型
-        linsight_conf = await LLMService.get_linsight_llm()
-        emb_model_id = linsight_conf.sop_embedding_model.id
+        workbench_conf = await LLMService.get_workbench_llm()
+        emb_model_id = workbench_conf.embedding_model.id
         embeddings = decide_embeddings(emb_model_id)
 
         vector_client: Milvus = decide_vectorstores(

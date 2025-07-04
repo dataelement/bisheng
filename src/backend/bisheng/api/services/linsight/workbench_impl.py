@@ -87,11 +87,11 @@ class LinsightWorkbenchImpl(object):
         """
         try:
             # 获取生成摘要模型
-            linsight_conf = await LLMService.get_linsight_llm()
-            if not linsight_conf:
+            workbench_conf = await LLMService.get_workbench_llm()
+            if not workbench_conf:
                 raise ValueError("未配置灵思生成摘要模型，请从工作台配置中设置")
 
-            summary_model = linsight_conf.task_summary_model
+            summary_model = workbench_conf.task_model
             if not summary_model:
                 raise ValueError("未配置灵思生成摘要模型，请从工作台配置中设置")
 
@@ -182,15 +182,15 @@ class LinsightWorkbenchImpl(object):
         """
 
         # 获取生成摘要模型
-        linsight_conf = await LLMService.get_linsight_llm()
-        if not linsight_conf and not linsight_conf.task_model:
+        workbench_conf = await LLMService.get_workbench_llm()
+        if not workbench_conf and not workbench_conf.task_model:
             yield {
                 "event": "error",
                 "data": "未配置任务执行模型"
             }
 
         # 创建 BishengLLM
-        llm = BishengLLM(model_id=linsight_conf.task_model.id)
+        llm = BishengLLM(model_id=workbench_conf.task_model.id)
 
         linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
         if not linsight_session_version_model:
@@ -319,12 +319,12 @@ class LinsightWorkbenchImpl(object):
 
         # 写入向量库
         # 获取当前全局配置的embedding模型
-        linsight_conf = await LLMService.get_linsight_llm()
+        workbench_conf = await LLMService.get_workbench_llm()
 
-        collection_name = f"{cls.collection_name}{linsight_conf.sop_embedding_model.id}"
+        collection_name = f"{cls.collection_name}{workbench_conf.embedding_model.id}"
 
         # 包装同步处理函数
-        def wrap_sunc_func(file_id, file_path, original_filename, collection_name, linsight_conf):
+        def wrap_sunc_func(file_id, file_path, original_filename, collection_name, workbench_conf):
             filepath, _ = file_download(file_path)
             texts, _, parse_type, _ = read_chunk_text(
                 input_file=filepath,
@@ -349,7 +349,7 @@ class LinsightWorkbenchImpl(object):
             # 保存markdown文件
             markdown_file_path = save_uploaded_file(markdown_file_bytes, 'bisheng', markdown_filename)
 
-            emb_model_id = linsight_conf.sop_embedding_model.id
+            emb_model_id = workbench_conf.embedding_model.id
             embeddings = decide_embeddings(emb_model_id)
 
             vector_client: Milvus = decide_vectorstores(
@@ -379,7 +379,7 @@ class LinsightWorkbenchImpl(object):
 
         parse_result = await run_in_executor(None, wrap_sunc_func, file_id, file_path, original_filename,
                                              collection_name,
-                                             linsight_conf)
+                                             workbench_conf)
 
         parse_result["filename"] = filename
 

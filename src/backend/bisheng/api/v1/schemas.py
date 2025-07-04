@@ -458,16 +458,14 @@ class LinsightConfig(BaseModel):
     input_placeholder: str = Field(..., description='输入框提示语')
     tools: Optional[List[Dict]] = Field(None, description='灵思可选工具列表')
 
-class LinsightModelConfig(BaseModel):
+class WorkbenchModelConfig(BaseModel):
     """
     灵思模型配置
     """
     # 任务执行模型
     task_model: Optional[WSModel] = Field(None, description='任务执行模型')
-    # 任务信息摘要模型
-    task_summary_model: Optional[WSModel] = Field(None, description='任务信息摘要模型')
-    # SOP检索embedding模型
-    sop_embedding_model: Optional[WSModel] = Field(None, description='SOP检索embedding模型')
+    # 检索embedding模型
+    embedding_model: Optional[WSModel] = Field(None, description='embedding模型')
 
 
 class WorkstationConfig(BaseModel):

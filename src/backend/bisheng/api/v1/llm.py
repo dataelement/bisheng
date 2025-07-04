@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, Depends, Body, Query
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, LinsightModelConfig, UnifiedResponseModel
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, WorkbenchModelConfig, UnifiedResponseModel
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -50,18 +50,18 @@ def update_model_online(request: Request, login_user: UserPayload = Depends(get_
     return resp_200(data=ret)
 
 
-@router.get('/linsight', summary="获取灵思相关的模型配置", response_model=UnifiedResponseModel)
-async def get_linsight_llm(request: Request, login_user: UserPayload = Depends(get_admin_user)):
+@router.get('/workbench', summary="获取工作台相关的模型配置", response_model=UnifiedResponseModel)
+async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(get_admin_user)):
     """ 获取灵思相关的模型配置 """
-    ret = await LLMService.get_linsight_llm()
+    ret = await LLMService.get_workbench_llm()
     return resp_200(data=ret)
 
 
-@router.post('/linsight', summary="更新灵思相关的模型配置", response_model=UnifiedResponseModel)
-async def update_linsight_llm(request: Request, login_user: UserPayload = Depends(get_admin_user),
-                              config_obj: LinsightModelConfig = Body(..., description="灵思模型配置对象")):
+@router.post('/workbench', summary="更新工作台相关的模型配置", response_model=UnifiedResponseModel)
+async def update_workbench_llm(request: Request, login_user: UserPayload = Depends(get_admin_user),
+                              config_obj: WorkbenchModelConfig = Body(..., description="模型配置对象")):
     """ 更新灵思相关的模型配置 """
-    ret = await LLMService.update_linsight_llm(config_obj)
+    ret = await LLMService.update_workbench_llm(config_obj)
     return resp_200(data=ret)
 
 
