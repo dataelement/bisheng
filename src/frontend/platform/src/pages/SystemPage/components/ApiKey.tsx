@@ -34,14 +34,14 @@ export const ApiKeyPage = () => {
     const { t } = useTranslation();
     const { message } = useToast();
     const navigate = useNavigate();
-    
+
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
     const [loading, setLoading] = useState(false);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [showEditDialog, setShowEditDialog] = useState(false);
     const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
     const [newApiKey, setNewApiKey] = useState<string>('');
-    
+
     // 表单数据
     const [formData, setFormData] = useState({
         keyName: '',
@@ -103,7 +103,7 @@ export const ApiKeyPage = () => {
                     formData.remark || undefined
                 )
             );
-            
+
             if (response) {
                 setNewApiKey(response.api_key);
                 message({
@@ -156,7 +156,7 @@ export const ApiKeyPage = () => {
                     formData.remark || undefined
                 )
             );
-            
+
             message({
                 title: t('prompt'),
                 variant: 'success',
@@ -226,20 +226,32 @@ export const ApiKeyPage = () => {
     };
 
     // 复制API Key
-    const handleCopyApiKey = (apiKey: string) => {
-        navigator.clipboard.writeText(apiKey).then(() => {
-            message({
-                title: t('prompt'),
-                variant: 'success',
-                description: [t('apiKey.copySuccess')]
-            });
-        }).catch(() => {
+    const handleCopyApiKey = async (apiKey: string) => {
+        if (navigator.clipboard) {
+            try {
+                await navigator.clipboard.writeText(apiKey);
+                message({
+                    title: t('prompt'),
+                    variant: 'success',
+                    description: [t('apiKey.copySuccess')]
+                });
+                return true;
+            } catch {
+                message({
+                    title: t('prompt'),
+                    variant: 'error',
+                    description: [t('apiKey.copyFailed')]
+                });
+                return false;
+            }
+        } else {
             message({
                 title: t('prompt'),
                 variant: 'error',
                 description: [t('apiKey.copyFailed')]
             });
-        });
+            return false;
+        }
     };
 
     // 打开编辑对话框
@@ -250,7 +262,7 @@ export const ApiKeyPage = () => {
             expiresAt: apiKey.expires_at ? apiKey.expires_at.split('T')[0] : '',
             remark: apiKey.remark || ''
         });
-        
+
         // 设置编辑时的日期和时间
         if (apiKey.expires_at) {
             const expiresDate = new Date(apiKey.expires_at);
@@ -263,7 +275,7 @@ export const ApiKeyPage = () => {
             setEditExpiresDate(undefined);
             setEditExpiresTime('');
         }
-        
+
         setShowEditDialog(true);
     };
 
@@ -280,12 +292,12 @@ export const ApiKeyPage = () => {
     };
 
     // 日期时间选择器组件
-    const DateTimePicker = ({ 
-        date, 
-        time, 
-        onDateChange, 
-        onTimeChange, 
-        placeholder = "选择过期时间" 
+    const DateTimePicker = ({
+        date,
+        time,
+        onDateChange,
+        onTimeChange,
+        placeholder = "选择过期时间"
     }: {
         date: Date | undefined;
         time: string;
@@ -401,7 +413,7 @@ export const ApiKeyPage = () => {
                                         </code>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge 
+                                        <Badge
                                             variant={apiKey.is_active ? "default" : "secondary"}
                                             className="cursor-pointer"
                                             onClick={() => handleToggleStatus(apiKey)}
@@ -465,7 +477,7 @@ export const ApiKeyPage = () => {
                             ))}
                         </TableBody>
                     </Table>
-                    
+
                     {apiKeys.length === 0 && !loading && (
                         <div className="text-center py-12">
                             <Key className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -476,7 +488,15 @@ export const ApiKeyPage = () => {
             </div>
 
             {/* 创建API Key对话框 */}
-            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <Dialog open={showCreateDialog} onOpenChange={(open) => {
+                setShowCreateDialog(open);
+                if (!open) {
+                    setFormData({ keyName: '', expiresAt: '', remark: '' });
+                    setCreateExpiresDate(undefined);
+                    setCreateExpiresTime('');
+                    setNewApiKey('');
+                }
+            }}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle>{t('apiKey.createNew')}</DialogTitle>
@@ -487,7 +507,7 @@ export const ApiKeyPage = () => {
                             <Input
                                 id="keyName"
                                 value={formData.keyName}
-                                onChange={(e) => setFormData({...formData, keyName: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, keyName: e.target.value })}
                                 placeholder={t('apiKey.keyNamePlaceholder')}
                             />
                         </div>
@@ -506,7 +526,7 @@ export const ApiKeyPage = () => {
                             <Input
                                 id="remark"
                                 value={formData.remark}
-                                onChange={(e) => setFormData({...formData, remark: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
                                 placeholder={t('apiKey.remarkPlaceholder')}
                             />
                         </div>
@@ -521,13 +541,15 @@ export const ApiKeyPage = () => {
                                     </code>
                                     <Button
                                         size="sm"
-                                        onClick={() => {
-                                            handleCopyApiKey(newApiKey);
-                                            setShowCreateDialog(false);
-                                            setFormData({ keyName: '', expiresAt: '', remark: '' });
-                                            setCreateExpiresDate(undefined);
-                                            setCreateExpiresTime('');
-                                            setNewApiKey('');
+                                        onClick={async () => {
+                                            const success = await handleCopyApiKey(newApiKey);
+                                            if (success) {
+                                                setShowCreateDialog(false);
+                                                setFormData({ keyName: '', expiresAt: '', remark: '' });
+                                                setCreateExpiresDate(undefined);
+                                                setCreateExpiresTime('');
+                                                setNewApiKey('');
+                                            }
                                         }}
                                     >
                                         <Copy className="h-3 w-3 mr-1" />
@@ -566,7 +588,7 @@ export const ApiKeyPage = () => {
                             <Input
                                 id="editKeyName"
                                 value={formData.keyName}
-                                onChange={(e) => setFormData({...formData, keyName: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, keyName: e.target.value })}
                                 placeholder={t('apiKey.keyNamePlaceholder')}
                             />
                         </div>
@@ -585,7 +607,7 @@ export const ApiKeyPage = () => {
                             <Input
                                 id="editRemark"
                                 value={formData.remark}
-                                onChange={(e) => setFormData({...formData, remark: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, remark: e.target.value })}
                                 placeholder={t('apiKey.remarkPlaceholder')}
                             />
                         </div>

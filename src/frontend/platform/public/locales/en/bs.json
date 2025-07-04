@@ -670,7 +670,7 @@
     "updateFailed": "Update failed",
     "deleteFailed": "Delete failed",
     "copySuccess": "API Key copied to clipboard",
-    "copyFailed": "Copy failed",
+    "copyFailed": "Copy failed, please copy manually",
     "maxKeysReached": "Maximum number of API Keys reached",
     "keyCreatedWarning": "API Key will only be displayed once when created, please save it properly",
     "neverUsed": "Never used",

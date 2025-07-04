@@ -667,7 +667,7 @@
     "updateFailed": "更新失败",
     "deleteFailed": "删除失败",
     "copySuccess": "API Key 已复制到剪贴板",
-    "copyFailed": "复制失败",
+    "copyFailed": "复制失败,请手动复制",
     "maxKeysReached": "API Key 数量已达上限",
     "keyCreatedWarning": "API Key 只会在创建时显示一次，请妥善保存",
     "neverUsed": "从未使用",
