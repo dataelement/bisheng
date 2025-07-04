@@ -308,3 +308,33 @@ export async function loggedChangePasswordApi(password, new_password): Promise<a
     new_password
   })
 }
+
+// API Key 相关接口
+export async function createApiKeyApi(keyName: string, expiresAt?: string, remark?: string): Promise<any> {
+  return axios.post(`/api/v1/user/api_key/create`, {
+    key_name: keyName,
+    expires_at: expiresAt,
+    remark
+  });
+}
+
+export async function getApiKeysApi(): Promise<any> {
+  return axios.get(`/api/v1/user/api_key/list`);
+}
+
+export async function updateApiKeyApi(apiKeyId: number, keyName?: string, isActive?: boolean, expiresAt?: string, remark?: string): Promise<any> {
+  return axios.patch(`/api/v1/user/api_key/${apiKeyId}`, {
+    key_name: keyName,
+    is_active: isActive,
+    expires_at: expiresAt,
+    remark
+  });
+}
+
+export async function deleteApiKeyApi(apiKeyId: number): Promise<any> {
+  return axios.delete(`/api/v1/user/api_key/${apiKeyId}`);
+}
+
+export async function getApiKeyUsageApi(apiKeyId: number): Promise<any> {
+  return axios.get(`/api/v1/user/api_key/${apiKeyId}/usage`);
+}
