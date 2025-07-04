@@ -1152,7 +1152,7 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
     
 
-def mixed_retrieval_recall(cls, question: str, vector_store, keyword_store, max_content: int):
+def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int):
     """
     使用 BishengRetrieval进行混合检索召回
     
@@ -1174,10 +1174,10 @@ def mixed_retrieval_recall(cls, question: str, vector_store, keyword_store, max_
         )
     
         # 执行检索和生成
-        result = rag_tool.run(question, return_only_outputs=False)
-        logger.info(f"act=mixed_retrieval_recall result={result}")
+        answer, docs = rag_tool.run(question, return_only_outputs=False)
+        logger.info(f"act=mixed_retrieval_recall result={docs}")
         # 格式化返回结果
-        return result
+        return docs
         
     except Exception as e:
         logger.error(f"检索失败: {str(e)}")
