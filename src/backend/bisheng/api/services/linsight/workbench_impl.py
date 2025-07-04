@@ -3,8 +3,6 @@ import uuid
 from io import BytesIO
 from typing import Dict, List
 
-from poetry.console.commands import self
-
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 from fastapi import UploadFile
