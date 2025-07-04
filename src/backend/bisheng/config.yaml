@@ -1,75 +1,55 @@
-## 数据库配置
-#database_url:
-#  "mysql+pymysql://root:gAAAAABlsc05yYeNuwuU_m2g7sGMMq2y2jPA72SaUnR05KFPz9uSawL82EXC3tgyFVl_Zp8kEPrfV-eB2SRyk1P_F4JbaXiGDg==@127.0.0.1:3306/bisheng?charset=utf8mb4"
-#
-## 缓存配置  redis://[[username]:[password]]@localhost:6379/0
-#redis_url: "redis://:gAAAAABlskJXI3rk_IxiOVTbg9eP1aqYxJ1I3ciGYJFmpiBJxOo0YJbC_oP60g3EXZTS1fgJJRStx2ehZuRzEkZB9I72Tjqwrw==@127.0.0.1:6379/0"
-#
-## 知识库的向量库配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
-#vector_stores:
-#  milvus:
-#    connection_args: '{"host":"127.0.0.1","port":"19530","user":"","password":"","secure":false}'
-#    is_partition: true
-#    partition_suffix: '1'
-#  elasticsearch:
-#    url: 'http://127.0.0.1:9200'
-#    ssl_verify: '{"basic_auth": ("elastic", "elastic")}'
-#
-#
-## 对象存储， 目前只支持minio
-#object_storage:
-#  type: minio
-#  minio:
-#    schema: false
-#    cert_check: false
-#    endpoint: '127.0.0.1:9000'
-#    sharepoint: '127.0.0.1:9000'
-#    access_key: minioadmin
-#    secret_key: minioadmin
-
-
-
 # 数据库配置
-#database_url: "mysql+pymysql://root:gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=@192.168.106.116:3306/langflow"
-#database_url: "mysql+pymysql://root:gAAAAABlp5vQN7g85IfoeK8nLCb9cfbisheng_3003Vqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=@192.168.106.116:3306/zgq-test-bisheng"
-database_url: "mysql+pymysql://root:gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=@192.168.106.116:3306/bisheng_3003"
-redis_url: "redis://192.168.106.120:6379/3"
+database_url:
+  # "mysql+pymysql://root:E1SkG0PaDMEPTAxY@192.168.106.109:3306/bisheng"
+  "mysql+pymysql://root:gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=@192.168.106.116:3306/langflow?charset=utf8mb4"
+  # "mysql+pymysql://root:gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=@192.168.106.109:3306/bisheng?charset=utf8mb4"
 
-# celery的broken地址
-celery_redis_url: "redis://192.168.106.120:6379/3"
-celery_task:
-  # 文件解析处理的速率 多少文件并发每秒。不能高于celery的worker并发数
-  knowledge_file_time_limit: null  # 每秒处理10个文件  null: 表示无限制
-  # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务，注意工作流的执行只能在一个进程内
-  task_routers:
-    bisheng.worker.knowledge.*: # 知识库文件处理相关任务
-      queue: knowledge_celery
-    bisheng.worker.workflow.*: # 工作流相关任务
-      queue: workflow_celery
+# redis://[[username]:[password]]@localhost:6379/0
+redis_url: "redis://192.168.106.116:6379/1"
+# redis_url:
+#   mode: "cluster"
+#   startup_nodes:
+#     - {"host": "192.168.106.116", "port": 6001}
+    # - {"host": "192.168.106.116", "port": 6002}
+    # - {"host": "192.168.106.116", "port": 6003}
+# #sentinel
+# redis_url:
+#   sentinel_hosts:
+#     - ("redis", 6379)
+#   sentinel_master: "mymaster"
+#   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
 
-# 知识库的向量库配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
+# db2_url: "redis://192.168.106.116:6379/1"
+
+celery_redis_url: "redis://192.168.106.116:6379/8"
+
+# 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
 vector_stores:
   milvus:
-    connection_args: '{"host":"192.168.106.120","port":"19530","user":"","password":"","secure":false}'
-    is_partition: true
-    partition_suffix: '1'
+    connection_args: !env ${BS_MILVUS_CONNECTION_ARGS}
+    is_partition: !env ${BS_MILVUS_IS_PARTITION}
+    partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
   elasticsearch:
-    url: 'http://192.168.106.122:32258'
-    ssl_verify: '{}'
+    url: !env ${BS_ELASTICSEARCH_URL}
+    ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
 
 
 # 对象存储， 目前只支持minio
 object_storage:
   type: minio
   minio:
-    schema: false
-    cert_check: false
-    endpoint: '192.168.106.120:9102'
-    sharepoint: '192.168.106.120:9102'
-    access_key: minioadmin
-    secret_key: minioadmin
-    public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
-    tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
+    schema: !env ${BS_MINIO_SCHEMA}
+    cert_check: !env ${BS_MINIO_CERT_CHECK}
+    endpoint: !env ${BS_MINIO_ENDPOINT}
+    sharepoint: !env ${BS_MINIO_SHAREPOIN}
+    access_key: !env ${BS_MINIO_ACCESS_KEY}
+    secret_key: !env ${BS_MINIO_SECRET_KEY}
+
+environment:
+  env: dev
+  uns_support: ['png','jpg','jpeg','bmp','doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf']
+
+# jwt_secret: "xvNWJrdNcSeKT6upwQyNdzd9MFBESBxVabJCNmr94JXqcgtSczcLXkXSvDgqg35U"
 
 # 可根据loguru的文档配置不同 handlers
 logger_conf:
@@ -79,13 +59,29 @@ logger_conf:
   format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
   # 参考loguru.add()中的参数可以配置多个handler
   handlers:
-    # 文件路径，支持插入一些系统环境变量，若环境变量不存在则置空。例如 HOSTNAME: 主机名。后端会处理环境变量的替换
-    - sink: "/Users/zhangguoqing/works/logs/bisheng/bisheng.log"
+      # 文件路径，支持插入一些系统环境变量，若环境变量不存在则置空。例如 HOSTNAME: 主机名。后端会处理环境变量的替换
+    - sink: "./data/bisheng.log"
       # 日志级别
       level: INFO
       # 日志格式化函数，extra内支持trace_id
-      format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}|{process.id}|{thread.id}|{message}"
       # 每天的几点进行切割
+      rotation: "00:00"
+      retention: "3 Days"
+      enqueue: ture
+    - sink: "./data/err-v0-BISHENG-{HOSTNAME}.log"
+      level: ERROR
+      # 和原生不一样，后端会将配置使用eval()执行转为函数用来过滤特定日志级别。推荐lambda
+      filter: "lambda record: record['level'].name == 'ERROR'"
+      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}||{process.id}|{thread.id}|||#EX_ERR:POS={name},line {line},ERR=500,EMSG={message}"
+      rotation: "00:00"
+      retention: "3 Days"
+      enqueue: ture
+    - sink: "./data/statistic.log"
+      level: INFO
+      # 和原生不一样，后端会将配置使用eval()执行转为函数用来过滤特定日志级别。推荐lambda
+      filter: "lambda record: record['level'].name == 'INFO' and record['message'].startswith('k=s')"
+      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}||{process.id}|{thread.id}|||#STAT_INFO:POS={name},line {line},EMSG={message}"
       rotation: "00:00"
       retention: "3 Days"
       enqueue: ture
