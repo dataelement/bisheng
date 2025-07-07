@@ -1,6 +1,6 @@
 // components/SopTable.tsx
 import { useState } from 'react';
-import { ChevronUp, ChevronDown, Star } from 'lucide-react';
+import { ChevronUp, ChevronDown, Star, Check } from 'lucide-react';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import { LoadIcon } from '../bs-icons';
 import { Button } from '../bs-ui/button';
@@ -45,12 +45,22 @@ const SopTable = ({
                 <thead className="bg-gray-50">
                     <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-gray-300 focus:ring-blue-500 text-blue-600 focus:ring-offset-0 checked:bg-blue-600 checked:hover:bg-blue-700 checked:focus:bg-blue-600 checked:border-blue-600"
-                                checked={datalist.length > 0 && selectedItems.length === datalist.length}
-                                onChange={handleSelectAll}
-                            />
+                            <button
+                                type="button"
+                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 && selectedItems.length === datalist.length
+                                        ? 'bg-blue-600 border-blue-600'
+                                        : 'bg-white border-gray-300'
+                                    }`}
+                                style={{ color: 'white' }}
+                                onClick={(e) => {
+                                    handleSelectAll();
+                                }}
+                                aria-pressed={datalist.length > 0 && selectedItems.length === datalist.length}
+                            >
+                                {datalist.length > 0 && selectedItems.length === datalist.length && (
+                                    <Check className="w-3 h-3 text-white" />
+                                )}
+                            </button>
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
@@ -82,12 +92,20 @@ const SopTable = ({
                         datalist.map((item) => (
                             <tr key={item.id}>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedItems.includes(item.id)}
-                                        onChange={() => handleSelectItem(item.id)}
-                                        className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                    />
+                                    <button
+                                        type="button"
+                                        className="relative h-4 w-4 rounded border flex items-center justify-center"
+                                        style={{
+                                            backgroundColor: selectedItems.includes(item.id) ? '#2563eb' : 'white',
+                                            borderColor: selectedItems.includes(item.id) ? '#2563eb' : '#d1d5db',
+                                            color: "white"
+                                        }}
+                                        onClick={() => handleSelectItem(item.id)}
+                                    >
+                                        {selectedItems.includes(item.id) && (
+                                            <Check className="w-3 h-3 text-white" />
+                                        )}
+                                    </button>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
                                     <TooltipProvider>

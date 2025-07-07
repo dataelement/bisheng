@@ -11,6 +11,9 @@ import { SearchInput } from '../bs-ui/input';
 import { Button } from '../bs-ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
 import { LoadIcon } from '../bs-icons/loading';
+import { Check, Minus } from "lucide-react";
+
+type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
 const ToolSelector = ({
   selectedTools,
@@ -28,8 +31,33 @@ const ToolSelector = ({
   loading,
   filteredTools,
   expandedItems,
-  setManuallyExpandedItems
+  setManuallyExpandedItems,
+  toggleGroup,
 }) => {
+  const getGroupState = (group): CheckboxState => {
+    const childIds = group.children?.map(c => c.id) || [];
+    const selectedCount = selectedTools.filter(t =>
+      childIds.includes(t.id)
+    ).length;
+
+    if (selectedCount === 0) return 'unchecked';
+    if (selectedCount === childIds.length) return 'checked';
+    return 'indeterminate';
+  };
+
+  const CustomCheckbox = ({ state, onChange }) => (
+    <button
+      type="button"
+      className={`w-4 h-4 border rounded flex items-center justify-center 
+        ${state !== 'unchecked' ? 'bg-primary border-primary' : 'border-gray-300'}`}
+      style={{ color: 'white' }}
+      onClick={() => onChange(state !== 'checked')}
+    >
+      {state === 'checked' && <Check className="w-3 h-3 text-white" />}
+      {state === 'indeterminate' && <Minus className="w-3 h-3 text-white" />}
+    </button>
+  );
+
   return (
     <div className="flex gap-4">
       {/* 已选工具面板 */}
@@ -45,7 +73,7 @@ const ToolSelector = ({
               添加更多工具
             </button>
           )}
-          
+
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="selectedTools">
               {(provided) => (
@@ -61,9 +89,8 @@ const ToolSelector = ({
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                           {...provided.dragHandleProps}
-                          className={`flex items-center justify-between p-3 rounded-lg ${
-                            snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
-                          }`}
+                          className={`flex items-center justify-between p-3 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                            }`}
                         >
                           <div className="flex items-center">
                             <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
@@ -96,7 +123,7 @@ const ToolSelector = ({
 
           {selectedTools.length > 0 && (
             <Button
-                variant='outline'
+              variant='outline'
               onClick={() => setShowToolSelector(!showToolSelector)}
             >
               <Plus className="inline w-4 h-4 mr-1" />
@@ -113,7 +140,7 @@ const ToolSelector = ({
             <div className="p-2 border-b">
               <h3 className="font-medium">工具分类</h3>
             </div>
-            
+
             <div className="relative p-2 border-b">
               <SearchInput
                 placeholder="搜索工具..."
@@ -122,7 +149,7 @@ const ToolSelector = ({
                 onClear={() => setToolSearchTerm('')}
               />
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-2">
               <div className="space-y-1">
                 <button
@@ -156,8 +183,8 @@ const ToolSelector = ({
                 <LoadIcon className="animate-spin" />
               </div>
             ) : filteredTools.length > 0 ? (
-              <Accordion 
-                type="multiple" 
+              <Accordion
+                type="multiple"
                 className="w-full"
                 value={expandedItems}
                 onValueChange={(values) => {
@@ -168,77 +195,77 @@ const ToolSelector = ({
               >
                 {filteredTools.map((tool) => (
                   <AccordionItem key={tool.id} value={tool.id}>
-                    <AccordionTrigger>
-                      <div className="flex items-center">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="truncate max-w-[180px]">
-                                {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
-                                  part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
-                                    <span key={i} className="bg-yellow-200">{part}</span>
-                                  ) : (
-                                    <span key={i}>{part}</span>
-                                  )
-                                ))}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{tool.name}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        
-                        {tool.children?.some(child => isToolSelected(child.id)) && (
-                          <span className="ml-2 text-xs text-green-500">
-                            ({tool.children.filter(child => isToolSelected(child.id)).length} 已选)
-                          </span>
-                        )}
-                      </div>
-                    </AccordionTrigger>
-                    
+                    <div className="flex items-center gap-2">
+                      <AccordionTrigger className="p-0 w-4 hover:no-underline">
+                      </AccordionTrigger>
+                      <CustomCheckbox
+                        state={getGroupState(tool)}
+                        onChange={(checked) => toggleGroup(tool, checked)}
+                      />
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="truncate max-w-[180px]">
+                              {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
+                                  <span key={i} className="bg-yellow-200">{part}</span>
+                                ) : (
+                                  <span key={i}>{part}</span>
+                                )
+                              ))}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{tool.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+
                     <AccordionContent>
                       {tool.children?.map(child => (
-                        <div key={child.id} className="ml-4 p-2 hover:bg-gray-50">
-                          <label className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={isToolSelected(child.id)}
-                              onChange={() => toggleTool(child)}
-                            />
-                            <div className="min-w-0">
+                        <div
+                          className="flex items-center gap-2 ml-10 p-2 hover:bg-gray-50 cursor-pointer"
+                          onClick={() => toggleTool(child)}
+                        >
+
+                          <div className={`w-4 h-4 border rounded flex items-center justify-center 
+    ${isToolSelected(child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
+                            {isToolSelected(child.id) && <Check className="w-3 h-3 !text-white" />}
+                          </div>
+                          <div className="min-w-0">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <p className="truncate max-w-[180px]">
+                                    {child.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                      part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
+                                        <span key={i} className="bg-yellow-200">{part}</span>
+                                      ) : (
+                                        <span key={i}>{part}</span>
+                                      )
+                                    ))}
+                                  </p>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{child.name}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            {child.desc && (
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <p className="truncate max-w-[180px]">
-                                      {child.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
-                                        part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
-                                          <span key={i} className="bg-yellow-200">{part}</span>
-                                        ) : (
-                                          <span key={i}>{part}</span>
-                                        )
-                                      ))}
-                                    </p>
+                                    <p className="text-xs text-gray-500 truncate max-w-[180px]">{child.desc}</p>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>{child.name}</p>
+                                    <p>{child.desc}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                              {child.desc && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <p className="text-xs text-gray-500 truncate max-w-[180px]">{child.desc}</p>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>{child.desc}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                            </div>
-                          </label>
+                            )}
+                          </div>
+
                         </div>
                       ))}
                     </AccordionContent>

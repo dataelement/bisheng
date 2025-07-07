@@ -175,11 +175,11 @@ export const updateKnowledgeModelConfig = async (data: any): Promise<any> => {
 }
 // 获取灵思模型配置
 export const getLinsightModelConfig = async (): Promise<any> => {
-    return await axios.get(`/api/v1/llm/linsight`)
+    return await axios.get(`/api/v1/llm/workbench`)
 }
 // 更新灵思模型配置
 export const updateLinsightModelConfig = async (data: any): Promise<any> => {
-    return await axios.post(`/api/v1/llm/linsight`, data)
+    return await axios.post(`/api/v1/llm/workbench`, data)
 }
 // 获取助手模型配置
 export const getAssistantModelConfig = async (): Promise<any> => {

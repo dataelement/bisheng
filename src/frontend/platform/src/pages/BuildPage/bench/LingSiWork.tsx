@@ -7,7 +7,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model, ModelManagement } from "./ModelManagement";
@@ -19,9 +19,12 @@ import { t } from "i18next";
 import { sopApi } from "@/controllers/API/linsight";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { useAssistantLLmModel } from "@/pages/ModelPage/manage";
-import ToolSelector from "@/components/Linsight/ToolSelector";
-import SopFormDrawer from "@/components/Linsight/SopFormDrawer";
-import SopTable from "@/components/Linsight/SopTable";
+import ToolSelector from "@/components/LinSight/ToolSelector";
+import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
+import SopTable from "@/components/LinSight/SopTable";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { LoadingIcon } from "@/components/bs-icons/loading";
+
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -96,6 +99,7 @@ export default function index() {
     const [pageInputValue, setPageInputValue] = useState('1');
     const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('builtin');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
+    const [initialized, setInitialized] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
         title: '确认删除',
@@ -103,8 +107,7 @@ export default function index() {
         onConfirm: () => { },
         isBatch: false
     });
-    // 在组件顶部添加表单状态
-    const [formData, setFormData] = useState<ChatConfigForm>({
+    const defaultFormValues = {
         menuShow: false,
         systemPrompt: '',
         sidebarIcon: {
@@ -120,7 +123,7 @@ export default function index() {
         sidebarSlogan: '',
         welcomeMessage: '',
         functionDescription: '',
-        inputPlaceholder: '请输入任务，然后交给BISHENG灵思', // 默认值
+        inputPlaceholder: '请输入你的任务目标，然后交给 BISHENG 灵思',
         models: [],
         maxTokens: 15000,
         voiceInput: {
@@ -141,7 +144,8 @@ export default function index() {
             enabled: true,
             prompt: ''
         }
-    });
+    };
+    const [formData, setFormData] = useState<ChatConfigForm>(defaultFormValues);
     const [toolsData, setToolsData] = useState({
         builtin: [],
         api: [],
@@ -167,21 +171,6 @@ export default function index() {
         }
     };
 
-    // 根据当前tab加载数据
-    useEffect(() => {
-        if (!toolsData[activeToolTab].length) {
-            fetchTools(activeToolTab);
-        }
-    }, [activeToolTab]);
-    useEffect(() => {
-        console.log('当前分页状态:', {
-            page,
-            total,
-            pageSize,
-            totalPages: Math.ceil(total / pageSize),
-            datalistLength: datalist.length
-        });
-    }, [page, total, datalist]);
     useEffect(() => {
         setPageInputValue(page.toString());
     }, [page]);
@@ -212,19 +201,14 @@ export default function index() {
             .filter(Boolean);
     }, [toolsData, activeToolTab, toolSearchTerm]);
 
-    // 控制展开状态的value
+
     const expandedItems = useMemo(() => {
         const searchExpanded = toolSearchTerm
             ? filteredTools.filter(tool => tool._forceExpanded).map(tool => tool.id)
             : [];
         return [...new Set([...searchExpanded, ...manuallyExpandedItems])];
     }, [filteredTools, toolSearchTerm, manuallyExpandedItems]);
-    useEffect(() => {
-        sopApi.getSopList({ page_size: 10, page: 1, keywords: '' })
-            .then(res => {
-                setDatalist(res.items || []);  // 直接设置 datalist
-            });
-    }, []);
+
     const fetchData = async (params = {}) => {
         setLoading(true);
         try {
@@ -272,16 +256,12 @@ export default function index() {
     const {
         handleInputChange,
         handleSave
-    } = useChatConfig(assistantState, selectedTools, toolsData);
+    } = useChatConfig(assistantState, selectedTools, toolsData, setFormData);
 
     // 非admin角色跳走
     const { user } = useContext(userContext);
     const navigate = useNavigate()
-    useEffect(() => {
-        if (user.user_id && user.role !== 'admin') {
-            navigate('/build/apps')
-        }
-    }, [user])
+
     const removeTool = (index) => {
         const newTools = [...selectedTools];
         newTools.splice(index, 1);
@@ -299,7 +279,67 @@ export default function index() {
 
         setSelectedTools(newSelectedTools);
     };
+    useEffect(() => {
+        if (!user.user_id) return;
 
+        if (user.role !== 'admin') {
+            navigate('/build/apps');
+            return;
+        }
+        const processToolsConfig = (toolsConfig) => {
+            return toolsConfig.flatMap(tool => {
+                if (tool.children?.length) {
+                    return tool.children.map(child => ({
+                        ...child,
+                        parentId: tool.id
+                    }));
+                }
+                return {
+                    ...tool,
+                    parentId: null
+                };
+            });
+        };
+        const loadInitialData = async () => {
+            try {
+                const config = await getWorkstationConfigApi();
+
+                if (config) {
+                    setFormData({
+                        ...defaultFormValues,
+                        ...config,
+                        inputPlaceholder: config?.linsightConfig?.input_placeholder || defaultFormValues.inputPlaceholder
+                    });
+
+                    if (config?.linsightConfig?.tools) {
+                        const tools = processToolsConfig(config.linsightConfig.tools);
+                        setSelectedTools(tools);
+                    }
+                }
+
+                const [sops, defaultTools] = await Promise.all([
+                    sopApi.getSopList({ page_size: 10, page: 1, keywords: '' }),
+                    getAssistantToolsApi('default')
+                ]);
+
+                setDatalist(sops.items || []);
+                setToolsData(prev => ({ ...prev, builtin: defaultTools || [] }));
+
+            } catch (error) {
+                toast({ variant: 'error', description: '初始化数据加载失败' });
+            } finally {
+                setInitialized(true);
+            }
+        };
+
+        loadInitialData();
+    }, [user]);
+
+    useEffect(() => {
+        if (initialized && !toolsData[activeToolTab].length) {
+            fetchTools(activeToolTab);
+        }
+    }, [activeToolTab, initialized]);
 
     const [selectedItems, setSelectedItems] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
@@ -307,7 +347,6 @@ export default function index() {
         const newKeywords = keyword;
         const newPage = resetPage || newKeywords.trim() === '' ? 1 : page;
 
-        // 直接调用 fetchData，不依赖 useEffect
         fetchData({
             keyword: newKeywords,
             page: newPage,
@@ -416,14 +455,13 @@ export default function index() {
         }
     };
 
-    const handleSelectAll = (e) => {
-        if (e.target.checked) {
-            setSelectedItems(datalist.map(item => item.id));
-        } else {
+    const handleSelectAll = () => {
+        if (selectedItems.length === datalist.length) {
             setSelectedItems([]);
+        } else {
+            setSelectedItems(datalist.map(item => item.id));
         }
     };
-    // const [isBatchDeleteModalOpen, setIsBatchDeleteModalOpen] = useState(false);
     const [sopForm, setSopForm] = useState({
         id: '',
         name: '',
@@ -498,43 +536,65 @@ export default function index() {
     };
 
     const handleDelete = (id: string) => {
-        setDeleteConfirmModal({
-            open: true,
-            title: '',
-            content: '确认删除该SOP吗？',
-            onConfirm: async () => {
-                try {
-                    await sopApi.deleteSop(id);
-                    toast({
-                        variant: 'success',
-                        description: 'SOP删除成功'
+        bsConfirm({
+            title: '删除确认',
+            desc: '确认删除该SOP吗？',
+            showClose: true,
+            okTxt: '确认删除',
+            canelTxt: '取消',
+            onOk(next) {
+                sopApi.deleteSop(id)
+                    .then(() => {
+                        toast({
+                            variant: 'success',
+                            description: 'SOP删除成功'
+                        });
+                        if (datalist.length === 1 && page > 1) {
+                            setPage(page - 1);
+                        } else {
+                            fetchData();
+                        }
+                        next();
+                    })
+                    .catch(error => {
+                        console.error('删除SOP失败:', error);
+                        toast({
+                            variant: 'error',
+                            description: '删除失败',
+                            details: error.message || '请稍后重试'
+                        });
                     });
-                    if (datalist.length === 1 && page > 1) {
-                        setPage(page - 1);
-                    } else {
-                        fetchData();
-                    }
-                } catch (error) {
-                    console.error('删除SOP失败:', error);
-                    toast({
-                        variant: 'error',
-                        description: '删除失败',
-                        details: error.message || '请稍后重试'
-                    });
-                }
             },
-            isBatch: false
+            onCancel() {
+            }
         });
     };
+    const toggleGroup = useCallback((group: any, checked: boolean) => {
+        setSelectedTools(prev => {
+            const groupToolIds = group.children?.map(t => t.id) || [];
+            const otherTools = prev.filter(t => !groupToolIds.includes(t.id));
+
+            if (checked) {
+                return [...otherTools, ...(group.children || [])];
+            } else {
+                return otherTools;
+            }
+        });
+    }, []);
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative bg-background-main">
+            {loading && (
+                <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+                    <LoadingIcon />
+                </div>
+            )}
             <Card className="rounded-none">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
                             label="输入框提示语"
-                            value=""
-                            placeholder="请输入任务，然后交给BISHENG灵思"
+                            value={formData.inputPlaceholder}
+                            placeholder={formData.inputPlaceholder}
                             maxLength={1000}
                             onChange={(v) => {
                                 setFormData(prev => ({
@@ -542,27 +602,6 @@ export default function index() {
                                     inputPlaceholder: v
                                 }));
                             }} error={""} />
-                        {/* <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">灵思模型</p>
-                                        <ModelSelect
-                                                close
-                                                label={t('任务执行模型')}
-                                                 tooltipText={t('建议使用能力最强的模型，以获得更佳任务执行效果')}
-                                                  value={assistantState.task_model}
-                                                options={embeddings}
-                                                onChange={(val) => dispatchAssistant("setting", { task_model: val })}
-                                            />
-                            <div className="mb-6 mt-6">
-                                <ModelSelect
-                                   close
-                                  label={t('任务信息摘要模型')}
-                tooltipText={t('用于工具调用信息摘要和标题生成等场景，建议使用参数量小、响应速度快的模型')}
-               value={assistantState.summary_model}
-                                     options={llmOptions}
-                                     onChange={(val) => dispatchAssistant("setting", { summary_model: val })}
-                                />
-                            </div>
-                        </div> */}
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">灵思可选工具</p>
                             <ToolSelector
@@ -582,13 +621,13 @@ export default function index() {
                                 filteredTools={filteredTools}
                                 expandedItems={expandedItems}
                                 setManuallyExpandedItems={setManuallyExpandedItems}
+                                toggleGroup={toggleGroup}
                             />
                         </div>
 
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">灵思SOP管理</p>
                             <div className="flex items-center gap-2 mb-2">
-                                {/* 搜索框 - 调整宽度 */}
                                 <div className="relative flex-1 max-w-xs">
                                     <div className="relative">
                                         <input
@@ -611,7 +650,6 @@ export default function index() {
                                     </div>
                                 </div>
 
-                                {/* 按钮组 - 调整大小和间距 */}
                                 <div className="flex gap-2">
                                     <Button
                                         variant="default"
@@ -636,12 +674,18 @@ export default function index() {
                                         size="sm"
                                         disabled={selectedItems.length === 0}
                                         onClick={() => {
-                                            setDeleteConfirmModal({
-                                                open: true,
-                                                title: '',
-                                                content: `确认批量删除${selectedItems.length}个SOP吗？`,
-                                                onConfirm: handleBatchDelete,
-                                                isBatch: true
+                                            bsConfirm({
+                                                title: '批量删除确认',
+                                                desc: `确认批量删除${selectedItems.length}个SOP吗？`,
+                                                showClose: true,
+                                                okTxt: '确认删除',
+                                                canelTxt: '取消',
+                                                onOk(next) {
+                                                    handleBatchDelete();
+                                                    next();
+                                                },
+                                                onCancel() {
+                                                }
                                             });
                                         }}
                                         className={selectedItems.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
@@ -688,7 +732,7 @@ export default function index() {
                         </div>
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-4 right-4">
-                        <Preview onBeforView={handleSave} />
+                        <Preview onBeforView={() => handleSave(formData)} />
                         <Button onClick={() => handleSave(formData)}>保存</Button>
                     </div>
                 </CardContent>
@@ -700,93 +744,58 @@ export default function index() {
 
 
 
-const useChatConfig = (assistantState: {
-    model_name: string; task_model: string;
-    summary_model: string;
-},
+const useChatConfig = (
+    assistantState: { model_name: string; task_model: string; summary_model: string },
     selectedTools: Array<{ id: string | number; name: string }>,
-    toolsData: { builtin: any[]; api: any[]; mcp: any[] }) => {
-
+    toolsData: { builtin: any[]; api: any[]; mcp: any[] },
+    setFormData: React.Dispatch<React.SetStateAction<ChatConfigForm>>,// 添加 setFormData 参数
+    activeToolTab: 'builtin' | 'api' | 'mcp' // 添加这个参数
+) => {
     const { toast } = useToast();
     const { llmOptions, embeddings } = useAssistantLLmModel();
 
-    const getModelDisplayName = (modelId: string) => {
-        const allModels = [...llmOptions, ...embeddings];
-        const targetId = String(modelId);
-
-        for (const group of allModels) {
-            if (String(group.value) === targetId) {
-                return group.label;
-            }
-            if (group.children) {
-                const childModel = group.children.find(child => String(child.value) === targetId);
-                if (childModel) {
-                    return childModel.label;
-                }
-            }
-        }
-        return `未知模型 (ID: ${modelId})`;
-    };
-    const safeClone = (obj: any) => {
-        const seen = new WeakSet();
-        return JSON.parse(JSON.stringify(obj, (key, value) => {
-            if (typeof value === 'object' && value !== null) {
-                if (seen.has(value)) {
-                    return;
-                }
-                seen.add(value);
-            }
-            return value;
-        }));
-    };
-    const handleSave = async (formData: any) => {
+    const handleSave = async (formData: ChatConfigForm) => {
+        const currentTools = Array.isArray(toolsData[activeToolTab])
+            ? toolsData[activeToolTab]
+            : [];
         const dataToSave = {
-            ...safeClone(formData),
+            ...formData,
             sidebarSlogan: formData.sidebarSlogan?.trim() || '',
             welcomeMessage: formData.welcomeMessage?.trim() || '',
             functionDescription: formData.functionDescription?.trim() || '',
-            inputPlaceholder: formData.inputPlaceholder?.trim() || "请输入任务，然后交给 BISHENG 灵思",
+            inputPlaceholder: formData.inputPlaceholder?.trim() || "",
             maxTokens: formData.maxTokens || 15000,
+            linsightConfig: {
+                input_placeholder: formData.inputPlaceholder?.trim() || "",
+                tools: selectedTools.reduce((acc, tool) => {
+                    const parentTool = currentTools.find(parent =>
+                        parent?.children?.some(child => child.id === tool.id)
+                    );
 
-            inspirationConfig: {
-                input_placeholder: formData.inputPlaceholder?.trim() || "请输入任务，然后交给 BISHENG 灵思",
-                task_model: {
-                    key: generateUUID(4),
-                    id: assistantState.task_model,
-                    name: "",
-                    displayName: getModelDisplayName(assistantState.task_model)
-                },
-
-                task_summary_model: {
-                    key: generateUUID(4),
-                    id: assistantState.summary_model,
-                    name: "",
-                    displayName: getModelDisplayName(assistantState.summary_model)
-                },
-
-                tools: selectedTools.map(tool => {
-                    const parentTool = [...toolsData.builtin, ...toolsData.api, ...toolsData.mcp]
-                        .find(parent =>
-                            parent.children &&
-                            parent.children.some(child => child.id === tool.id)
-                        );
-
-                    return {
-                        id: parentTool?.id || tool.id,
-                        name: parentTool?.name || tool.name,
-                        children: parentTool
-                            ? [{ id: tool.id, name: tool.name }]
-                            : []
-                    };
-                })
+                    if (parentTool) {
+                        const existingGroup = acc.find(g => g.id === parentTool.id);
+                        if (existingGroup) {
+                            existingGroup.children.push(tool);
+                        } else {
+                            acc.push({
+                                id: parentTool.id,
+                                name: parentTool.name,
+                                children: [tool]
+                            });
+                        }
+                    } else {
+                        acc.push(tool);
+                    }
+                    return acc;
+                }, [])
             }
         };
 
         try {
             const res = await setWorkstationConfigApi(dataToSave);
-            console.log(res, dataToSave);
-
             if (res) {
+                // 保存成功后更新本地状态
+                setFormData(dataToSave);
                 toast({ variant: 'success', description: '配置保存成功' });
                 return true;
             }

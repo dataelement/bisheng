@@ -3,7 +3,7 @@ import axios from "../request";
 // src/controllers/API.ts
 export const sopApi = {
   // 获取SOP列表
-  getSopList: (params: { keywords?: string; page?: number; page_size?: number;sort?:string }) => {
+  getSopList: (params: { keywords?: string; page?: number; page_size?: number; sort?: string }) => {
     return axios.get('/api/v1/linsight/sop/list', { params });
   },
 
@@ -19,17 +19,19 @@ export const sopApi = {
 
   // 删除SOP
   deleteSop: (id: string) => {
-    return axios.delete(`/api/v1/linsight/sop/remove`,{
+    return axios.delete(`/api/v1/linsight/sop/remove`, {
       data: {
-        sop_ids: [id] // 单个ID也包装成数组
+        sop_ids: [id]
       }
     });
   },
   // 批量删除SOP
-  batchDeleteSop: (ids: string[]) => {
-    return axios.post('/api/v1/inspiration/sop/batch_delete', { ids });
+  batchDeleteSop: (sop_ids: string[]) => {
+    return axios.delete('/api/v1/linsight/sop/remove', {
+      data: { sop_ids }
+    });
   },
-    // 获取工具列表
+  // 获取工具列表
   getToolList: () => {
     return axios.get('/api/v1/workstation/config');
   },
