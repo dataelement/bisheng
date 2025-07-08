@@ -231,7 +231,7 @@ const ToolSelector = ({
 
                           <div className={`w-4 h-4 border rounded flex items-center justify-center 
     ${isToolSelected(child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
-                            {isToolSelected(child.id) && <Check className="w-3 h-3 !text-white" />}
+                            {isToolSelected(child.id) && <Check className="w-3 h-3" style={{ color: 'white' }} />}
                           </div>
                           <div className="min-w-0">
                             <TooltipProvider>
