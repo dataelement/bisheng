@@ -599,7 +599,11 @@ export default function index() {
                             onChange={(v) => {
                                 setFormData(prev => ({
                                     ...prev,
-                                    inputPlaceholder: v
+                                    linsightConfig: {
+                                        ...prev.linsightConfig,
+                                        input_placeholder: v
+                                    }
+
                                 }));
                             }} error={""} />
                         <div className="mb-6">
@@ -748,11 +752,10 @@ const useChatConfig = (
     assistantState: { model_name: string; task_model: string; summary_model: string },
     selectedTools: Array<{ id: string | number; name: string }>,
     toolsData: { builtin: any[]; api: any[]; mcp: any[] },
-    setFormData: React.Dispatch<React.SetStateAction<ChatConfigForm>>,// 添加 setFormData 参数
-    activeToolTab: 'builtin' | 'api' | 'mcp' // 添加这个参数
+    setFormData: React.Dispatch<React.SetStateAction<ChatConfigForm>>,
+    activeToolTab: 'builtin' | 'api' | 'mcp'
 ) => {
     const { toast } = useToast();
-    const { llmOptions, embeddings } = useAssistantLLmModel();
 
     const handleSave = async (formData: ChatConfigForm) => {
         const currentTools = Array.isArray(toolsData[activeToolTab])
@@ -763,10 +766,11 @@ const useChatConfig = (
             sidebarSlogan: formData.sidebarSlogan?.trim() || '',
             welcomeMessage: formData.welcomeMessage?.trim() || '',
             functionDescription: formData.functionDescription?.trim() || '',
-            inputPlaceholder: formData.inputPlaceholder?.trim() || "",
+            inputPlaceholder: formData.inputPlaceholder,
             maxTokens: formData.maxTokens || 15000,
             linsightConfig: {
-                input_placeholder: formData.inputPlaceholder?.trim() || "",
+                ...formData.linsightConfig,
+                input_placeholder: formData.linsightConfig?.input_placeholder || formData.inputPlaceholder,
                 tools: selectedTools.reduce((acc, tool) => {
                     const parentTool = currentTools.find(parent =>
                         parent?.children?.some(child => child.id === tool.id)
