@@ -1,5 +1,5 @@
 import json
-from typing import List, Literal
+from typing import List, Literal, Any, Coroutine
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File
@@ -14,6 +14,7 @@ from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPMan
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.database.models.linsight_sop import LinsightSOPDao
+from bisheng.worker.linsight.state_message_manager import LinsightStateMessageManager
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -166,18 +167,23 @@ async def start_execute_sop(
 # workbench 用户输入
 @router.post("/workbench/user-input", summary="用户输入灵思", response_model=UnifiedResponseModel)
 async def user_input(
+        session_version_id: UUID = Body(..., description="灵思会话版本ID"),
         linsight_execute_task_id: UUID = Body(..., description="灵思执行任务ID"),
         input_content: str = Body(..., description="用户输入内容"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     用户输入
+    :param session_version_id:
     :param input_content:
     :param linsight_execute_task_id:
     :param login_user:
     :return:
     """
-    # TODO: 实现用户输入的逻辑
-    pass
+    state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
+
+    await state_message_manager.set_user_input(task_id=linsight_execute_task_id.hex, user_input=input_content)
+
+    return resp_200(data=True, message="用户输入已提交")
 
 
 # workbench 提交执行结果反馈

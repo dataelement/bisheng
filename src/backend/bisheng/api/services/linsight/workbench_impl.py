@@ -179,7 +179,7 @@ class LinsightWorkbenchImpl(object):
         :return:
         """
 
-        # 获取生成摘要模型
+        # 获取生成模型
         workbench_conf = await LLMService.get_workbench_llm()
         if not workbench_conf and not workbench_conf.task_model:
             yield {

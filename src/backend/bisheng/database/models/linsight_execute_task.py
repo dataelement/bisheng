@@ -6,7 +6,6 @@ from uuid import UUID
 
 from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey
 from sqlmodel import Field, select, col
-
 from bisheng.database.base import async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 
@@ -53,10 +52,10 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
                                            sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
                                                             nullable=True))
     previous_task_id: Optional[UUID] = Field(None, description='上一个任务ID',
-                                             sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
+                                             sa_column=Column(CHAR(36),
                                                               nullable=True))
     next_task_id: Optional[UUID] = Field(None, description='下一个任务ID',
-                                         sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
+                                         sa_column=Column(CHAR(36),
                                                           nullable=True))
     task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
                                            sa_column=Column(SQLEnum(ExecuteTaskTypeEnum), nullable=False))
@@ -100,10 +99,46 @@ class LinsightExecuteTaskDao(object):
         """
         async with async_session_getter() as session:
             statement = select(LinsightExecuteTask).where(
-                LinsightExecuteTask.session_version_id == session_version_id)
+                LinsightExecuteTask.session_version_id == str(session_version_id))
 
             if is_parent_task:
                 statement = statement.where(col(LinsightExecuteTask.parent_task_id).is_(None))
 
             tasks = await session.exec(statement)
             return tasks.all()
+
+    @classmethod
+    async def batch_create_tasks(cls, tasks: List[LinsightExecuteTask]) -> List[LinsightExecuteTask]:
+        """
+        批量创建任务
+        :param tasks: 任务列表
+        :return: 创建后的任务列表
+        """
+        async with async_session_getter() as session:
+            session.add_all(tasks)
+            await session.commit()
+            return tasks
+
+    @classmethod
+    async def update_by_id(cls, task_id: str, **kwargs) -> Optional[LinsightExecuteTask]:
+        """
+        根据任务ID更新任务
+        :param task_id: 任务ID
+        :param kwargs: 更新字段
+        :return: 更新后的任务对象
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightExecuteTask).where(LinsightExecuteTask.id == task_id)
+            task = await session.exec(statement)
+            task = task.first()
+
+            if not task:
+                return None
+
+            for key, value in kwargs.items():
+                setattr(task, key, value)
+
+            session.add(task)
+            await session.commit()
+            await session.refresh(task)
+            return task
