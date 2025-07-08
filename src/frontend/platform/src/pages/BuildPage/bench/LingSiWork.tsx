@@ -24,6 +24,7 @@ import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import SopTable from "@/components/LinSight/SopTable";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { cloneDeep } from "lodash-es";
 
 
 export interface FormErrors {
@@ -238,18 +239,39 @@ export default function index() {
     const [isEditing, setIsEditing] = useState(false); // 标记当前是否为编辑模式
     const [currentSopId, setCurrentSopId] = useState(null); // 当前编辑的SOP ID
     // 切换工具选中状态
-    const toggleTool = (tool) => {
+    const toggleTool = (tool, child) => {
         setSelectedTools(prev => {
-            const existingIndex = prev.findIndex(t => t.id === tool.id);
-            if (existingIndex >= 0) {
-                return [...prev.slice(0, existingIndex), ...prev.slice(existingIndex + 1)];
-            } else {
-                return [...prev, tool];
+            const parentIndex = prev.findIndex(t => t.id === tool.id);
+
+            // 一级工具存在
+            if (parentIndex > -1) {
+                const parent = prev[parentIndex];
+                const childIndex = parent.children.findIndex(c => c.id === child.id);
+
+                // 创建新的子工具数组
+                const newChildren = childIndex === -1
+                    ? [...parent.children, child]  // 添加新子工具
+                    : parent.children.filter((_, i) => i !== childIndex); // 移除已存在子工具
+
+                // 更新或移除父级工具
+                return newChildren.length > 0
+                    ? [
+                        ...prev.slice(0, parentIndex),
+                        { ...parent, children: newChildren },
+                        ...prev.slice(parentIndex + 1)
+                    ]
+                    : prev.filter(t => t.id !== tool.id);
             }
+
+            // 一级工具不存在，直接添加
+            return [...prev, { ...tool, children: [child] }];
         });
     };
 
-    const isToolSelected = (toolId) => {
+    const isToolSelected = (toolId, childId) => {
+        const parent = selectedTools.find(t => t.id === toolId);
+        if (!parent) return false;
+        return parent.children.some(c => c.id === childId);
         return selectedTools.some(t => t.id === toolId);
     };
     let { assistantState, dispatchAssistant } = useAssistantStore();
@@ -312,8 +334,8 @@ export default function index() {
                     });
 
                     if (config?.linsightConfig?.tools) {
-                        const tools = processToolsConfig(config.linsightConfig.tools);
-                        setSelectedTools(tools);
+                        // const tools = processToolsConfig(config.linsightConfig.tools);
+                        setSelectedTools(config.linsightConfig.tools);
                     }
                 }
 
@@ -571,14 +593,12 @@ export default function index() {
     };
     const toggleGroup = useCallback((group: any, checked: boolean) => {
         setSelectedTools(prev => {
-            const groupToolIds = group.children?.map(t => t.id) || [];
-            const otherTools = prev.filter(t => !groupToolIds.includes(t.id));
-
+            const tools = prev.filter(t => t.id !== group.id);
             if (checked) {
-                return [...otherTools, ...(group.children || [])];
-            } else {
-                return otherTools;
+                tools.push(cloneDeep(group));
             }
+
+            return [...tools];
         });
     }, []);
     return (
