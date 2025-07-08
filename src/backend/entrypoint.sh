@@ -12,6 +12,6 @@ elif [ $start_mode = "worker" ]; then
     # 工作流执行worker
     celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery
 else
-    echo "Invalid start mode. Use 'api' or 'celery'."
+    echo "Invalid start mode. Use 'api' or 'worker'."
     exit 1
 fi

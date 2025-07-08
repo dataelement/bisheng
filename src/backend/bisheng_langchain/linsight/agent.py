@@ -8,6 +8,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
+from bisheng_langchain.linsight.const import TaskMode
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
@@ -26,6 +27,8 @@ class LinsightAgent(BaseModel):
                                             description='List of langchain tools to be used by the agent')
     task_manager: Optional[TaskManage] = Field(default=None,
                                                description='Task manager for handling tasks and workflows')
+    task_mode: str = Field(default=TaskMode.FUNCTION.value,
+                           description="Mode of the task execute")
 
     async def generate_sop(self, sop: str) -> AsyncIterator[ChatGenerationChunk]:
         """
@@ -85,7 +88,8 @@ class LinsightAgent(BaseModel):
         # Add main functionality logic here
         if not self.task_manager:
             self.task_manager = TaskManage(tasks=tasks, tools=self.tools)
-            self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop)
+            self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop,
+                                            mode=self.task_mode)
 
         async for one in self.task_manager.ainvoke_task():
             yield one

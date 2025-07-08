@@ -8,7 +8,7 @@ from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, Hum
 from pydantic import BaseModel, Field, ConfigDict
 
 from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
-from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput
+from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt
 from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks, generate_uuid_str
@@ -70,7 +70,7 @@ class BaseTask(BaseModel):
         :return: The response from the language model.
         """
         # get tool schema
-        tool_args = self.task_manager.get_all_tool_schema()
+        tool_args = self.task_manager.get_all_tool_schema
         return await self.llm.ainvoke(messages, tools=tool_args)
 
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
@@ -89,6 +89,109 @@ class BaseTask(BaseModel):
         """
         self.user_input = user_input
         self.status = TaskStatus.INPUT_OVER.value
+
+    async def summarize_history(self, messages_str: str) -> str:
+        """
+        调用LLM总结历史记录,去除细节,保留关键信息
+
+        Args:
+            messages_str: 历史记录文本
+
+        Returns:
+            总结后的历史记录
+        """
+        # This is a placeholder for the actual summarization logic.
+        # You would typically call an LLM or a summarization service here.
+        # For now, we will just return a truncated version of the messages_str.
+        prompt = SummarizeHistoryPrompt.format(sop=self.sop, query=self.query, history_str=messages_str)
+        res = await self._ainvoke_llm_without_tools([HumanMessage(content=prompt)])
+        return res.content
+
+    async def ainvoke_loop(self):
+        """
+        Execute the subtask in a loop.
+        This method should contain the logic to perform the task's operation in a loop.
+        """
+        # generate sub-tasks based on the loop condition
+        if not self.children:
+            self.children = await self.generate_sub_tasks()
+            self.task_manager.add_tasks(self.children)
+            await self.put_event(GenerateSubTask(task_id=self.id,
+                                                 subtask=[one.get_task_info() for one in self.children]))
+        if not self.children:
+            raise ValueError("No sub-tasks generated for the loop task.")
+        _ = await asyncio.gather(*[one.ainvoke() for one in self.children])
+
+        # 如果是循环任务，子任务执行完毕后需要将结果合并。目前
+        all_failed = True
+        answer = ""
+        error = ""
+        for one in self.children:
+            if one.status == TaskStatus.SUCCESS.value:
+                all_failed = False
+                answer += one.answer + "\n"
+            else:
+                error += one.answer + "\n"
+        self.status = TaskStatus.FAILED.value if all_failed else TaskStatus.SUCCESS.value
+        self.answer = error if all_failed else answer
+        return None
+
+    async def generate_sub_tasks(self) -> List['Task']:
+        """
+        Generate subtasks based on the current task.
+        This method should contain the logic to create subtasks.
+        :return: List of generated subtasks.
+        """
+        prompt = LoopAgentSplitPrompt.format(query=self.query, sop=self.sop,
+                                             workflow=self.task_manager.get_workflow(),
+                                             processed_steps=self.task_manager.get_processed_steps(),
+                                             input_str=self.get_input_str(),
+                                             prompt=self.prompt)
+        messages = [HumanMessage(content=prompt)]
+        res = await self._ainvoke_llm_without_tools(messages)
+        # 解析生成的任务json数据
+        json_str = extract_code_blocks(res.content)
+        try:
+            sub_task = json.loads(json_str)
+        except json.decoder.JSONDecodeError:
+            raise ValueError(f"Invalid JSON format in response: {json_str}")
+        original_query = sub_task.get("总体任务目标", "")
+        original_method = sub_task.get("总体方法", "") + "\n" + sub_task.get("可用资源", "")
+        original_done = sub_task.get("已经完成的内容", "")
+        sub_task_list = sub_task.get("任务列表", [])
+        res = []
+        for one in sub_task_list:
+            parent_info = self.model_dump(
+                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm"})
+            target = one.get("当前目标", "") + f"\n{one.get('输出方法', '')}"
+            if one.get("标题层级", ""):
+                target += f"\n标题层级要求: {one.get('标题层级', '')}"
+            parent_info.update({
+                "original_query": original_query,
+                "original_method": original_method,
+                "original_done": original_done,
+                "target": target,
+                "sop": one.get("当前方法", ""),
+                "id": generate_uuid_str(),
+                "parent_id": self.id,
+                "task_manager": self.task_manager,
+                "llm": self.llm,
+            })
+            res.append(
+                Task(**parent_info)
+            )
+        return res
+
+    async def ainvoke(self) -> None:
+        await self.put_event(TaskStart(task_id=self.id, name=self.profile))
+        try:
+            await self._ainvoke()
+        except Exception as e:
+            self.status = TaskStatus.FAILED.value
+            self.answer = f"task exec failed: {str(e)[-100:]}"
+            raise e
+        finally:
+            await self.put_event(TaskEnd(task_id=self.id, status=self.status, name=self.profile, answer=self.answer))
 
 
 class Task(BaseTask):
@@ -136,23 +239,6 @@ class Task(BaseTask):
                                               single_sop=self.sop)
         return SystemMessage(content=prompt)
 
-    async def summarize_history(self, messages_str: str) -> str:
-        """
-        调用LLM总结历史记录,去除细节,保留关键信息
-
-        Args:
-            messages_str: 历史记录文本
-
-        Returns:
-            总结后的历史记录
-        """
-        # This is a placeholder for the actual summarization logic.
-        # You would typically call an LLM or a summarization service here.
-        # For now, we will just return a truncated version of the messages_str.
-        prompt = SummarizeHistoryPrompt.format(sop=self.sop, query=self.query, history_str=messages_str)
-        res = await self._ainvoke_llm_without_tools([HumanMessage(content=prompt)])
-        return res.content
-
     async def build_messages_with_history(self) -> list[BaseMessage]:
         messages = []
         system_message = self.build_system_message()
@@ -176,7 +262,9 @@ class Task(BaseTask):
         if len(encode_str_tokens(all_tool_messages_str)) > self.tool_buffer:
             messages_str = json.dumps([one.model_dump() for one in messages], ensure_ascii=False, indent=2)
             history_summary = await self.summarize_history(messages_str)
+            # 将总结后的历史记录插入到system_message后面
             all_remain_messages.append(AIMessage(content=history_summary))
+            self.history = all_remain_messages
             return all_remain_messages
         return messages
 
@@ -187,7 +275,7 @@ class Task(BaseTask):
             raise RuntimeError('Task manager queue not initialized.')
         self.task_manager.aqueue.put_nowait(event)
 
-    async def ainvoke(self) -> None:
+    async def _ainvoke(self) -> None:
         """
         Execute the task.
         This method should contain the logic to perform the task's operation.
@@ -218,9 +306,9 @@ class Task(BaseTask):
 
                         # 用户输入结束继续执行
                         self.status = TaskStatus.PROCESSING.value
-                        self.user_input = None
                         self.history.append(
                             ToolMessage(name=tool_name, content=self.user_input, tool_call_id=one.get("id")))
+                        self.user_input = None
                         break
 
                     # 正常工具调用
@@ -248,76 +336,3 @@ class Task(BaseTask):
             self.status = TaskStatus.FAILED.value
             self.answer = "task exec over max steps and not generate answer"
         return None
-
-    async def ainvoke_loop(self):
-        """
-        Execute the subtask in a loop.
-        This method should contain the logic to perform the task's operation in a loop.
-        """
-        # generate sub-tasks based on the loop condition
-        if not self.children:
-            self.children = await self.generate_sub_tasks()
-            self.task_manager.add_tasks(self.children)
-            await self.put_event(GenerateSubTask(task_id=self.id,
-                                                 subtask=[one.get_task_info() for one in self.children]))
-        if not self.children:
-            raise ValueError("No sub-tasks generated for the loop task.")
-        _ = await asyncio.gather(*[one.ainvoke() for one in self.children])
-
-        # 如果是循环任务，子任务执行完毕后需要将结果合并。目前
-        all_failed = True
-        answer = ""
-        error = ""
-        for one in self.children:
-            if one.status == TaskStatus.SUCCESS.value:
-                all_failed = False
-                answer += one.answer + "\n"
-            else:
-                error += one.answer + "\n"
-        self.status = TaskStatus.FAILED.value if all_failed else TaskStatus.SUCCESS.value
-        self.answer = error if all_failed else answer
-        return None
-
-    async def generate_sub_tasks(self) -> List['SubTask']:
-        """
-        Generate subtasks based on the current task.
-        This method should contain the logic to create subtasks.
-        :return: List of generated subtasks.
-        """
-        prompt = LoopAgentSplitPrompt.format(query=self.query, sop=self.sop,
-                                             workflow=self.task_manager.get_workflow(),
-                                             processed_steps=self.task_manager.get_processed_steps(),
-                                             input_str=self.get_input_str(),
-                                             prompt=self.prompt)
-        messages = [HumanMessage(content=prompt)]
-        res = await self._ainvoke_llm_without_tools(messages)
-        # 解析生成的任务json数据
-        json_str = extract_code_blocks(res.content)
-        try:
-            sub_task = json.loads(json_str)
-        except json.decoder.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format in response: {json_str}")
-
-        original_query = sub_task.get("总体任务目标", "")
-        original_method = sub_task.get("总体方法", "")
-        original_done = sub_task.get("已经完成的内容", "")
-        sub_task_list = sub_task.get("任务列表", [])
-        res = []
-        for one in sub_task_list:
-            parent_info = self.model_dump(
-                exclude={"children", "history", "status", "target", "sop", "task_manager", "llm"})
-            parent_info.update({
-                "original_query": original_query,
-                "original_method": original_method,
-                "original_done": original_done,
-                "target": one.get("当前目标", ""),
-                "sop": one.get("当前方法", ""),
-                "id": generate_uuid_str(),
-                "parent_id": self.id,
-                "task_manager": self.task_manager,
-                "llm": self.llm,
-            })
-            res.append(
-                Task(**parent_info)
-            )
-        return res

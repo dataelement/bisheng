@@ -26,3 +26,13 @@ class GenerateSubTask(BaseEvent):
 # 需要用户输入的事件
 class NeedUserInput(BaseEvent):
     call_reason: str = Field(..., description='需要用户输入的原因')
+
+
+class TaskStart(BaseEvent):
+    name: str = Field(..., description='任务名称')
+
+
+class TaskEnd(BaseEvent):
+    name: str = Field(..., description='任务名称')
+    status: str = Field(..., description='任务状态')
+    answer: str = Field(..., description='任务最终结果')

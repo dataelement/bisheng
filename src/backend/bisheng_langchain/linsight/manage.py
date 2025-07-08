@@ -1,6 +1,8 @@
 import asyncio
+import json
 import traceback
 from asyncio.queues import Queue
+from functools import cached_property
 from typing import Optional, AsyncIterator
 
 from langchain_core.language_models import BaseLanguageModel
@@ -8,8 +10,9 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field, BaseModel, model_validator, ConfigDict
 
-from bisheng_langchain.linsight.const import TaskStatus
+from bisheng_langchain.linsight.const import TaskStatus, TaskMode
 from bisheng_langchain.linsight.event import BaseEvent
+from bisheng_langchain.linsight.react_task import ReactTask
 from bisheng_langchain.linsight.task import Task
 from bisheng_langchain.linsight.utils import generate_uuid_str
 
@@ -31,22 +34,30 @@ class TaskManage(BaseModel):
 
     @model_validator(mode="after")
     def validate_tasks(self) -> "TaskManage":
-        self.aqueue = Queue(maxsize=20)
+        self.aqueue = Queue(maxsize=50)
         self.tool_map = {tool.name: tool for tool in self.tools}
         return self
 
-    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str) -> None:
+    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str, mode: str) -> None:
         res = []
         child_map = {}  # task_id: [child_task]
         for task in self.tasks:
             if not isinstance(task, dict):
                 raise TypeError(f"Task must be an instance of dict, not {type(task)}")
-            task_instance = Task(**task,
-                                 query=query,
-                                 task_manager=self,
-                                 llm=llm,
-                                 file_dir=file_dir,
-                                 finally_sop=sop)
+            if mode == TaskMode.FUNCTION.value:
+                task_instance = Task(**task,
+                                     query=query,
+                                     task_manager=self,
+                                     llm=llm,
+                                     file_dir=file_dir,
+                                     finally_sop=sop)
+            else:
+                task_instance = ReactTask(**task,
+                                          query=query,
+                                          task_manager=self,
+                                          llm=llm,
+                                          file_dir=file_dir,
+                                          finally_sop=sop)
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue
@@ -80,6 +91,7 @@ class TaskManage(BaseModel):
         res.extend(sub_task)
         return res
 
+    @cached_property
     def get_all_tool_schema(self) -> list[dict]:
         """
         Retrieve all tools managed by the tool manager.
@@ -119,6 +131,14 @@ class TaskManage(BaseModel):
             }
         })
         return res
+
+    @cached_property
+    def get_all_tool_schema_str(self) -> str:
+        """
+        Retrieve all tools managed by the tool manager as a JSON string.
+        :return: JSON string of tools input schema.
+        """
+        return json.dumps(self.get_all_tool_schema, ensure_ascii=False, indent=2)
 
     async def ainvoke_tool(self, name: str, params: dict) -> str:
         """
