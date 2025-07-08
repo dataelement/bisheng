@@ -36,7 +36,7 @@ def get_linsight_agent():
     # 获取本地文件相关工具
     query = "分析该目录下的简历文件（仅限txt格式），挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
 
-    agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=file_dir, task_mode=TaskMode.FUNCTION.value)
+    agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=file_dir, task_mode=TaskMode.REACT.value)
     return agent
 
 

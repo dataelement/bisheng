@@ -45,7 +45,7 @@ class BaseTask(BaseModel):
     input: list[str] = Field(default_factory=list,
                              description='任务输入，必须是前置步骤的step_id或"query",可以多个。"query"代表用户的原始问题')
 
-    children: Optional[list['Task']] = []  # List of child tasks, if is loop agent
+    children: Optional[list['BaseTask']] = []  # List of child tasks, if is loop agent
 
     def get_task_info(self) -> dict:
         return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
@@ -136,7 +136,7 @@ class BaseTask(BaseModel):
         self.answer = error if all_failed else answer
         return None
 
-    async def generate_sub_tasks(self) -> List['Task']:
+    async def _get_sub_tasks(self) -> List[dict]:
         """
         Generate subtasks based on the current task.
         This method should contain the logic to create subtasks.
@@ -177,10 +177,15 @@ class BaseTask(BaseModel):
                 "task_manager": self.task_manager,
                 "llm": self.llm,
             })
-            res.append(
-                Task(**parent_info)
-            )
+            res.append(parent_info)
         return res
+
+    async def put_event(self, event: BaseEvent) -> None:
+        if not self.task_manager:
+            raise RuntimeError('Task manager not initialized.')
+        if not self.task_manager.aqueue:
+            raise RuntimeError('Task manager queue not initialized.')
+        self.task_manager.aqueue.put_nowait(event)
 
     async def ainvoke(self) -> None:
         await self.put_event(TaskStart(task_id=self.id, name=self.profile))
@@ -268,13 +273,6 @@ class Task(BaseTask):
             return all_remain_messages
         return messages
 
-    async def put_event(self, event: BaseEvent) -> None:
-        if not self.task_manager:
-            raise RuntimeError('Task manager not initialized.')
-        if not self.task_manager.aqueue:
-            raise RuntimeError('Task manager queue not initialized.')
-        self.task_manager.aqueue.put_nowait(event)
-
     async def _ainvoke(self) -> None:
         """
         Execute the task.
@@ -336,3 +334,7 @@ class Task(BaseTask):
             self.status = TaskStatus.FAILED.value
             self.answer = "task exec over max steps and not generate answer"
         return None
+
+    async def generate_sub_tasks(self) -> list['Task']:
+        sub_tasks_info = await self._get_sub_tasks()
+        return [Task(**one) for one in sub_tasks_info]
