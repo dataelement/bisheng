@@ -330,7 +330,8 @@ class LinsightWorkbenchImpl(object):
                 separator=['\n\n', '\n'],
                 separator_rule=['after', 'after'],
                 chunk_size=1000,
-                chunk_overlap=100
+                chunk_overlap=100,
+                no_summary=True
             )
 
             markdown_str = ""

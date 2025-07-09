@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import List, Literal, Any, Coroutine
 from uuid import UUID
 
@@ -18,6 +19,8 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.worker.linsight.state_message_manager import LinsightStateMessageManager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -46,6 +49,7 @@ async def upload_file(file: UploadFile = File(...),
             "parsing_status": "completed"
         }
     except Exception as e:
+        logger.error(f"文件上传失败: {str(e)}")
         return resp_500(code=500, message=str(e))
 
     # 返回上传结果

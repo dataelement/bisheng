@@ -656,6 +656,8 @@ def read_chunk_text(
         force_ocr: int = 1,
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
+        no_summary: bool = False,
+
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -664,14 +666,17 @@ def read_chunk_text(
     3: ocr bbox data: maybe None
     """
     # 获取文档总结标题的llm
-    try:
-        llm = decide_knowledge_llm()
-        knowledge_llm = LLMService.get_knowledge_llm()
-    except Exception as e:
-        logger.exception("knowledge_llm_error:")
-        raise Exception(
-            f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
-        )
+    llm = None
+    if not no_summary:
+        try:
+            llm = decide_knowledge_llm()
+            knowledge_llm = LLMService.get_knowledge_llm()
+        except Exception as e:
+            logger.exception("knowledge_llm_error:")
+            raise Exception(
+                f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
+            )
+
     text_splitter = ElemCharacterTextSplitter(
         separators=separator,
         separator_rule=separator_rule,
