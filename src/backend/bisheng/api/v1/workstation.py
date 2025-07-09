@@ -24,6 +24,7 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.settings import settings as bisheng_settings
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -105,8 +106,7 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
 @router.get('/config', summary='获取工作台配置', response_model=UnifiedResponseModel)
 def get_config(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user),
-bisheng_settings=None):
+        login_user: UserPayload = Depends(get_login_user)):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
 

@@ -47,7 +47,7 @@ class LinsightWorkbenchImpl(object):
         message_session_model = MessageSession(
             chat_id=chat_id,
             flow_id='',
-            flow_name='New Chat',
+            flow_name='新对话',
             flow_type=FlowType.LINSIGHT.value,
             user_id=login_user.user_id
         )
@@ -59,6 +59,7 @@ class LinsightWorkbenchImpl(object):
             file_ids = [file.file_id for file in files]
 
             files = await redis_client.amget([f"{cls.file_info_redis_key}{file_id}" for file_id in file_ids])
+
 
         # 灵思会话版本
         linsight_session_version_model = LinsightSessionVersion(
