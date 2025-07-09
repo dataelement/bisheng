@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import shutil
 from datetime import datetime
 from typing import Optional, List, Dict
 
@@ -12,6 +14,7 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.llm import LLMService
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema
+from bisheng.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightExecuteTask
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
@@ -20,8 +23,10 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils import util
+from bisheng.utils.minio_client import minio_client
 from bisheng.worker import bisheng_celery
 from bisheng.worker.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
+from bisheng.worker.main import loop
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd
@@ -101,6 +106,52 @@ class LinsightWorkflowTask(Task):
         await SOPManageService.add_sop(sop_obj, session_version_model.user_id)
 
     @staticmethod
+    async def download_file(file_url, file_name: str, tmp_dir: str) -> str:
+        """
+        下载文件
+        """
+        logger.info(f"开始下载文件: {file_url}")
+
+        file_path = os.path.join(tmp_dir, file_name)
+
+        try:
+            http_client = await app_ctx.get_http_client(loop=app_ctx.get_event_loop())
+            # 使用with语句确保文件正确关闭
+            with open(file_path, "wb") as f:
+                async for chunk in http_client.stream(method="GET", url=str(file_url)):
+                    f.write(chunk)
+
+            # 检查文件是否下载成功
+            if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                raise ValueError(f"文件下载失败或文件为空: {file_url}")
+
+            return file_path
+        except Exception as e:
+            logger.error("下载文件失败: %s, 错误: %s", file_url, str(e))
+            raise ValueError(f"下载文件失败: {file_url}, 错误: {str(e)}")
+
+    @create_cache_folder_async
+    async def init_file_dir(self, session_version_model: LinsightSessionVersion) -> str:
+        """初始化文件目录"""
+
+        if not session_version_model.files:
+            return ""
+
+        file_dir = os.path.join(CACHE_DIR, "linsight", session_version_model.id)
+        os.makedirs(file_dir, exist_ok=True)
+
+        for file in session_version_model.files:
+            object_name = file["markdown_file_path"]
+            file_url = minio_client.get_share_link(object_name)
+            file_name = os.path.basename(object_name)
+            try:
+                await self.download_file(file_url, file_name, file_dir)
+            except ValueError as e:
+                logger.error(f"Error downloading file {file_name}: {str(e)}")
+
+        return file_dir
+
+    @staticmethod
     async def generate_tools(session_version_model: LinsightSessionVersion, llm: BishengLLM) -> List[BaseTool]:
         """生成工具列表"""
         tools: List[BaseTool] = []
@@ -118,7 +169,8 @@ class LinsightWorkflowTask(Task):
 
         return tools
 
-    def _find_previous_task_id(self, target_task_id: str, task_info: List[dict]) -> Optional[str]:
+    @staticmethod
+    def _find_previous_task_id(target_task_id: str, task_info: List[dict]) -> Optional[str]:
         """查找前置任务ID"""
         for task in task_info:
             if task["id"] == target_task_id:
@@ -442,6 +494,7 @@ class LinsightWorkflowTask(Task):
     async def async_run(self, linsight_session_version_id: str) -> None:
         """异步任务执行逻辑"""
         session_version_model = None
+        file_dir = None
         try:
             # 获取会话任务
             session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
@@ -457,8 +510,11 @@ class LinsightWorkflowTask(Task):
             # 启动终止监控
             await self._start_termination_monitor(session_version_model)
 
-            # 初始化LLM和工具
+            # 初始化LLM、文件目录和工具
             bisheng_llm = await self.get_bisheng_llm()
+
+            file_dir = await self.init_file_dir(session_version_model)
+
             tools = await self.generate_tools(session_version_model, bisheng_llm)
 
             # 创建agent并生成任务
@@ -466,7 +522,7 @@ class LinsightWorkflowTask(Task):
                 llm=bisheng_llm,
                 query=session_version_model.question,
                 tools=tools,
-                file_dir=""
+                file_dir=file_dir
             )
 
             # 检查是否在初始化过程中被终止
@@ -507,11 +563,17 @@ class LinsightWorkflowTask(Task):
         finally:
             # 停止终止监控
             await self._stop_termination_monitor()
+            if file_dir and os.path.exists(file_dir):
+                try:
+                    # 清理临时文件目录
+                    shutil.rmtree(file_dir)
+                except Exception as cleanup_error:
+                    logger.error(f"Error cleaning up file directory {file_dir}: {str(cleanup_error)}")
 
     def run(self, linsight_session_version_id: str) -> None:
         """同步 Celery 任务执行入口"""
         self._state_message_manager = LinsightStateMessageManager(linsight_session_version_id)
-        util.run_async(self.async_run(linsight_session_version_id), loop=app_ctx.get_event_loop())
+        util.run_async(self.async_run(linsight_session_version_id), loop=loop)
 
 
 # 注册任务

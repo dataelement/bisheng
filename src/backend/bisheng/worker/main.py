@@ -1,5 +1,3 @@
-import asyncio
-
 from celery import Celery
 
 from bisheng.core.app_context import app_ctx

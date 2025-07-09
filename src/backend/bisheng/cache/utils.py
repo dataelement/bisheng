@@ -35,6 +35,18 @@ def create_cache_folder(func):
 
     return wrapper
 
+def create_cache_folder_async(func):
+    async def wrapper(*args, **kwargs):
+        # Get the destination folder
+        cache_path = Path(CACHE_DIR) / PREFIX
+
+        # Create the destination folder if it doesn't exist
+        os.makedirs(cache_path, exist_ok=True)
+
+        return await func(*args, **kwargs)
+
+    return wrapper
+
 
 def memoize_dict(maxsize=128):
     cache = OrderedDict()
@@ -174,7 +186,7 @@ def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str = tmp_b
     return minio_client.get_share_link(object_name, bucket_name)
 
 
-@create_cache_folder
+@create_cache_folder_async
 async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str) -> str:
     """
     保存上传的文件到folder_name文件夹

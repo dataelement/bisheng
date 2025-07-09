@@ -1,7 +1,6 @@
 import json
 import logging
-from typing import List, Literal, Any, Coroutine
-from uuid import UUID
+from typing import List, Literal
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File
 from fastapi_jwt_auth import AuthJWT

@@ -1,9 +1,6 @@
-import asyncio
 import uuid
 from io import BytesIO
 from typing import Dict, List
-
-from pyarrow.ipc import new_file
 
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils.minio_client import minio_client
@@ -359,7 +356,7 @@ class LinsightWorkbenchImpl(object):
             # 生成唯一的文件名
             markdown_filename = f"{file_id}.md"
             # 保存markdown文件
-            save_uploaded_file(markdown_file_bytes, 'linsight', markdown_filename)
+            minio_client.upload_tmp(markdown_filename, markdown_file_bytes.read())
 
             emb_model_id = workbench_conf.embedding_model.id
             embeddings = decide_embeddings(emb_model_id)
@@ -381,6 +378,7 @@ class LinsightWorkbenchImpl(object):
                 "original_filename": original_filename,
                 "parsing_status": "completed",
                 "parse_type": parse_type,
+                "markdown_filename": markdown_filename,
                 "markdown_file_path": f"{markdown_filename}",
                 "embedding_model_id": emb_model_id,
                 "collection_name": collection_name
