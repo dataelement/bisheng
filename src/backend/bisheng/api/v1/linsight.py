@@ -3,16 +3,19 @@ from typing import List, Literal, Any, Coroutine
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File
+from fastapi_jwt_auth import AuthJWT
 from sse_starlette import EventSourceResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
+from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.worker.linsight.state_message_manager import LinsightStateMessageManager
 
@@ -93,7 +96,7 @@ async def submit_linsight_workbench(
 # workbench 生成与重新规划灵思SOP
 @router.post("/workbench/generate-sop", summary="生成与重新规划灵思SOP", response_model=UnifiedResponseModel)
 async def generate_sop(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
+        linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
@@ -134,7 +137,7 @@ async def generate_sop(
 @router.post("/workbench/sop-modify", summary="修改灵思SOP", response_model=UnifiedResponseModel)
 async def modify_sop(
         sop_content: str = Body(..., description="SOP内容"),
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
+        linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     修改灵思SOP
@@ -152,7 +155,7 @@ async def modify_sop(
 # workbench 开始执行
 @router.post("/workbench/start-execute", summary="开始执行灵思", response_model=UnifiedResponseModel)
 async def start_execute_sop(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID", embed=True),
+        linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     开始执行灵思SOP
@@ -160,15 +163,17 @@ async def start_execute_sop(
     :param login_user:
     :return:
     """
-    # TODO: 实现开始执行SOP的逻辑
-    pass
+    from bisheng.worker.linsight.task_exec import LinsightWorkflowTask
+    LinsightWorkflowTask.delay(linsight_session_version_id=linsight_session_version_id)
+
+    return resp_200(data=True, message="灵思执行任务已开始，执行结果将通过消息流返回")
 
 
 # workbench 用户输入
 @router.post("/workbench/user-input", summary="用户输入灵思", response_model=UnifiedResponseModel)
 async def user_input(
-        session_version_id: UUID = Body(..., description="灵思会话版本ID"),
-        linsight_execute_task_id: UUID = Body(..., description="灵思执行任务ID"),
+        session_version_id: str = Body(..., description="灵思会话版本ID"),
+        linsight_execute_task_id: str = Body(..., description="灵思执行任务ID"),
         input_content: str = Body(..., description="用户输入内容"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
@@ -181,7 +186,7 @@ async def user_input(
     """
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
-    await state_message_manager.set_user_input(task_id=linsight_execute_task_id.hex, user_input=input_content)
+    await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content)
 
     return resp_200(data=True, message="用户输入已提交")
 
@@ -189,7 +194,7 @@ async def user_input(
 # workbench 提交执行结果反馈
 @router.post("/workbench/submit-feedback", summary="提交执行结果反馈", response_model=UnifiedResponseModel)
 async def submit_feedback(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID"),
+        linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
         feedback: str = Body(None, description="用户反馈意见"),
         score: int = Body(None, ge=1, le=5, description="用户评分，1-5分"),
         is_reexecute: bool = Body(False, description="是否重新执行"),
@@ -211,7 +216,7 @@ async def submit_feedback(
 # workbench 终止执行
 @router.post("/workbench/terminate-execute", summary="终止执行灵思", response_model=UnifiedResponseModel)
 async def terminate_execute(
-        linsight_session_version_id: UUID = Body(..., description="灵思会话版本ID", embed=True),
+        linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     终止执行灵思
@@ -219,14 +224,33 @@ async def terminate_execute(
     :param login_user:
     :return:
     """
-    # TODO: 实现终止执行灵思的逻辑
-    pass
+    # 现终止执行灵思的逻辑
+    session_version_model = await LinsightSessionVersionDao.get_by_id(
+        linsight_session_version_id=linsight_session_version_id)
+
+    if not session_version_model:
+        return resp_500(code=404, message="灵思会话版本不存在")
+
+    if session_version_model.status == SessionVersionStatusEnum.COMPLETED:
+        return resp_500(code=400, message="灵思会话版本已完成，无法终止执行")
+
+    if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
+        return resp_500(code=400, message="灵思会话版本已终止执行")
+
+    # 更新状态为终止
+    session_version_model.status = SessionVersionStatusEnum.TERMINATED
+
+    state_message_manager = LinsightStateMessageManager(session_version_id=linsight_session_version_id)
+
+    await state_message_manager.set_session_version_info(session_version_model)
+
+    return resp_200(data=True, message="灵思执行已终止")
 
 
 # 获取当前会话所有灵思信息
 @router.get("/workbench/session-version-list", summary="获取当前会话所有灵思信息", response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
-        session_id: UUID = Query(..., description="会话ID"),
+        session_id: str = Query(..., description="会话ID"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     获取当前会话所有灵思信息
@@ -242,7 +266,7 @@ async def get_linsight_session_version_list(
 # 获取执行任务详情
 @router.get("/workbench/execute-task-detail", summary="获取执行任务详情", response_model=UnifiedResponseModel)
 async def get_execute_task_detail(
-        session_version_id: UUID = Query(..., description="灵思会话版本ID"),
+        session_version_id: str = Query(..., description="灵思会话版本ID"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     获取执行任务详情
@@ -259,15 +283,29 @@ async def get_execute_task_detail(
 @router.websocket("/workbench/task-message-stream", name="task_message_stream")
 async def task_message_stream(
         websocket: WebSocket,
-        session_version_id: UUID = Query(..., description="灵思会话版本ID"),
-        login_user: UserPayload = Depends(get_login_user)):
+        session_version_id: str = Query(..., description="灵思会话版本ID"),
+        Authorize: AuthJWT = Depends()):
     """
     建立灵思任务消息流 websocket
+    :param Authorize:
     :param websocket:
     :param session_version_id:
-    :param login_user:
     :return:
     """
+
+    try:
+        Authorize.jwt_required(auth_from='websocket', websocket=websocket)
+        payload = Authorize.get_jwt_subject()
+        payload = json.loads(payload)
+        login_user = UserPayload(**payload)
+
+        message_handler = MessageStreamHandle(websocket=websocket, session_version_id=session_version_id)
+
+        await message_handler.connect()
+
+    except Exception as e:
+        await websocket.close(code=1000, reason=str(e))
+        return
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
@@ -282,7 +320,7 @@ async def add_sop(
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
 
-    return await SOPManageService.add_sop(sop_obj, login_user)
+    return await SOPManageService.add_sop(sop_obj, user_id=login_user.user_id)
 
 
 @router.post("/sop/update", summary="更新灵思SOP", response_model=UnifiedResponseModel)

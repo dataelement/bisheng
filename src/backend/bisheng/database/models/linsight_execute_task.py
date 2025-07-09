@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey
 from sqlmodel import Field, select, col
-from bisheng.database.base import async_session_getter
+from bisheng.database.base import async_session_getter, uuid_hex
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -44,17 +44,17 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
     """
     灵思执行任务模型基类
     """
-    session_version_id: UUID = Field(..., description='会话版本ID',
+    session_version_id: str = Field(..., description='会话版本ID',
                                      sa_column=Column(CHAR(36), ForeignKey("linsight_session_version.id"),
                                                       nullable=False))
 
-    parent_task_id: Optional[UUID] = Field(None, description='父任务ID',
+    parent_task_id: Optional[str] = Field(None, description='父任务ID',
                                            sa_column=Column(CHAR(36), ForeignKey("linsight_execute_task.id"),
                                                             nullable=True))
-    previous_task_id: Optional[UUID] = Field(None, description='上一个任务ID',
+    previous_task_id: Optional[str] = Field(None, description='上一个任务ID',
                                              sa_column=Column(CHAR(36),
                                                               nullable=True))
-    next_task_id: Optional[UUID] = Field(None, description='下一个任务ID',
+    next_task_id: Optional[str] = Field(None, description='下一个任务ID',
                                          sa_column=Column(CHAR(36),
                                                           nullable=True))
     task_type: ExecuteTaskTypeEnum = Field(..., description='任务类型',
@@ -72,7 +72,7 @@ class LinsightExecuteTask(LinsightExecuteTaskBase, table=True):
     """
     灵思执行任务模型
     """
-    id: UUID = Field(default_factory=uuid.uuid4, description='任务ID',
+    id: str = Field(default_factory=uuid_hex, description='任务ID',
                      sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
 
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
@@ -89,7 +89,7 @@ class LinsightExecuteTaskDao(object):
     """
 
     @classmethod
-    async def get_by_session_version_id(cls, session_version_id: UUID, is_parent_task: bool = False) -> List[
+    async def get_by_session_version_id(cls, session_version_id: str, is_parent_task: bool = False) -> List[
         LinsightExecuteTask]:
         """
         根据会话版本ID获取所有任务

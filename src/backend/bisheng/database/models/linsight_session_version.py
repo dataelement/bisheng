@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR
 from sqlmodel import Field, select, col, update
 
-from bisheng.database.base import async_session_getter
+from bisheng.database.base import async_session_getter, uuid_hex
 from bisheng.database.models.base import SQLModelSerializable
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     """
     灵思会话版本模型基类
     """
-    session_id: UUID = Field(..., description='会话ID', sa_column=Column(CHAR(36),
+    session_id: str = Field(..., description='会话ID', sa_column=Column(CHAR(36),
                                                                          ForeignKey("message_session.chat_id"),
                                                                          nullable=False,
                                                                          index=True))
@@ -63,7 +63,7 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     """
     灵思会话版本模型
     """
-    id: UUID = Field(default_factory=uuid.uuid4, description='会话版本ID',
+    id: str = Field(default_factory=uuid_hex, description='会话版本ID',
                      sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
 
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
@@ -94,7 +94,7 @@ class LinsightSessionVersionDao(object):
             return session_version
 
     @staticmethod
-    async def get_by_id(linsight_session_version_id: UUID) -> Optional[LinsightSessionVersion]:
+    async def get_by_id(linsight_session_version_id: str) -> Optional[LinsightSessionVersion]:
         """
         根据灵思会话版本ID获取灵思会话版本
         :param linsight_session_version_id: 灵思会话版本ID
@@ -107,7 +107,7 @@ class LinsightSessionVersionDao(object):
             return result.first()
 
     @staticmethod
-    async def get_session_versions_by_session_id(session_id: UUID) -> List[LinsightSessionVersion]:
+    async def get_session_versions_by_session_id(session_id: str) -> List[LinsightSessionVersion]:
         """
         根据会话ID获取所有灵思会话版本
         :param session_id: 会话ID
@@ -120,7 +120,7 @@ class LinsightSessionVersionDao(object):
             return (await session.exec(statement)).all()
 
     @staticmethod
-    async def modify_sop_content(linsight_session_version_id: UUID, sop_content: str):
+    async def modify_sop_content(linsight_session_version_id: str, sop_content: str):
         """
         修改灵思会话版本的SOP内容
         :param linsight_session_version_id:

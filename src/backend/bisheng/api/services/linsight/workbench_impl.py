@@ -132,7 +132,7 @@ class LinsightWorkbenchImpl(object):
         }
 
     @classmethod
-    async def get_linsight_session_version_list(cls, session_id: uuid.UUID):
+    async def get_linsight_session_version_list(cls, session_id: str):
         """
         获取灵思会话版本列表
         :param session_id:
@@ -143,7 +143,7 @@ class LinsightWorkbenchImpl(object):
         return linsight_session_version_models
 
     @classmethod
-    async def modify_sop(cls, linsight_session_version_id: uuid.UUID, sop_content: str):
+    async def modify_sop(cls, linsight_session_version_id: str, sop_content: str):
         """
         修改灵思会话版本的SOP内容
         :param linsight_session_version_id:
@@ -167,7 +167,7 @@ class LinsightWorkbenchImpl(object):
             }
 
     @classmethod
-    async def generate_sop(cls, linsight_session_version_id: uuid.UUID, feedback_content: str = None,
+    async def generate_sop(cls, linsight_session_version_id: str, feedback_content: str = None,
                            reexecute: bool = False,
                            login_user: UserPayload = None):
         """
@@ -258,7 +258,7 @@ class LinsightWorkbenchImpl(object):
         )
 
     @classmethod
-    async def get_execute_task_detail(cls, session_version_id: uuid.UUID,
+    async def get_execute_task_detail(cls, session_version_id: str,
                                       login_user: UserPayload = None) -> List[LinsightExecuteTask]:
         """
         获取执行任务详情

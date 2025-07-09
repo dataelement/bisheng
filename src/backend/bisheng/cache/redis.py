@@ -110,7 +110,6 @@ class RedisClient:
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
-
     def setex(self, key, value, expiration=3600):
         try:
             if pickled := pickle.dumps(value):
@@ -353,6 +352,24 @@ class RedisClient:
         except Exception as e:
             raise e
 
+    async def alpush(self, key, value, expiration=3600):
+        try:
+            await self.acluster_nodes(key)
+            ret = await self.async_connection.lpush(key, value)
+            if expiration:
+                await self.aexpire_key(key, expiration)
+            return ret
+        except Exception as e:
+            raise e
+
+    async def ablpop(self, key, timeout=0):
+        try:
+            await self.acluster_nodes(key)
+            value = await self.async_connection.blpop(key, timeout)
+            return pickle.loads(value[1]) if value and value[1] else None
+        except Exception as e:
+            raise e
+
     def rpush(self, key, value, expiration=3600):
         try:
             self.cluster_nodes(key)
@@ -366,6 +383,7 @@ class RedisClient:
     async def arpush(self, key, value, expiration=3600):
         try:
             await self.acluster_nodes(key)
+            value = pickle.dumps(value) if not isinstance(value, bytes) else value
             ret = await self.async_connection.rpush(key, value)
             if expiration:
                 await self.aexpire_key(key, expiration)
@@ -379,6 +397,7 @@ class RedisClient:
             return self.connection.lpop(key, count)
         except Exception as e:
             raise e
+
     async def alpop(self, key, count: int = None):
         try:
             await self.acluster_nodes(key)
@@ -423,6 +442,16 @@ class RedisClient:
             await self.async_connection.close()
         else:
             logger.warning("No async connection to close.")
+
+    # ==================== Pipeline支持 ====================
+
+    def pipeline(self, transaction: bool = True) -> redis.client.Pipeline:
+        """获取pipeline对象"""
+        return self.connection.pipeline(transaction=transaction)
+
+    def async_pipeline(self, transaction: bool = True) -> Pipeline:
+        """获取异步pipeline对象"""
+        return self.async_connection.pipeline(transaction=transaction)
 
     def __contains__(self, key):
         """Check if the key is in the cache."""

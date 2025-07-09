@@ -106,9 +106,14 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
 def get_config(
         request: Request,
         login_user: UserPayload = Depends(get_login_user),
-):
+bisheng_settings=None):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
+
+    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
+    etl_for_lm_url = etl4lm_settings.get("url", None)
+    ret = ret.model_dump()
+    ret['enable_etl4lm'] = etl_for_lm_url is not None
     return resp_200(data=ret)
 
 

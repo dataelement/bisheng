@@ -70,3 +70,11 @@ async def async_get_count(session: AsyncSession, q: SelectOfScalar) -> int:
     for count in iterator:
         return count
     return 0
+
+
+def uuid_hex() -> str:
+    """
+    生成一个UUID的十六进制字符串
+    :return: UUID的十六进制字符串
+    """
+    return uuid.uuid4().hex

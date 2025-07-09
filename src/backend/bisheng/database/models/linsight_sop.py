@@ -26,7 +26,7 @@ class LinsightSOPBase(SQLModelSerializable):
     vector_store_id: Optional[str] = Field(..., description='向量存储ID',
                                            sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
 
-    linsight_session_id: Optional[UUID] = Field(default=None, description='灵思会话ID',
+    linsight_session_id: Optional[str] = Field(default=None, description='灵思会话ID',
                                                         sa_column=Column(CHAR(36),
                                                                          ForeignKey("message_session.chat_id"),
                                                                          nullable=True))

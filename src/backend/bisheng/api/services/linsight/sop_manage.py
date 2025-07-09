@@ -29,10 +29,10 @@ class SOPManageService:
     collection_name = "col_linsight_sop"
 
     @staticmethod
-    async def add_sop(sop_obj: SOPManagementSchema, login_user: UserPayload) -> UnifiedResponseModel | None:
+    async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
         """
         添加新的SOP
-        :param login_user:
+        :param user_id:
         :param sop_obj:
         :return: 添加的SOP对象
         """
@@ -74,7 +74,7 @@ class SOPManageService:
         sop_dict["vector_store_id"] = vector_store_id  # 设置向量存储ID
         # 这里可以添加数据库操作，将sop_obj保存到数据库中
         sop_model = LinsightSOP(**sop_dict)
-        sop_model.user_id = login_user.user_id
+        sop_model.user_id = user_id
         sop_model = await LinsightSOPDao.create_sop(sop_model)
         if not sop_model:
             return resp_500(code=500, message="添加SOP失败")
