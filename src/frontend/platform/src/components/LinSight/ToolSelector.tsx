@@ -35,13 +35,9 @@ const ToolSelector = ({
   toggleGroup,
 }) => {
   const getGroupState = (group): CheckboxState => {
-    const childIds = group.children?.map(c => c.id) || [];
-    const selectedCount = selectedTools.filter(t =>
-      childIds.includes(t.id)
-    ).length;
-
-    if (selectedCount === 0) return 'unchecked';
-    if (selectedCount === childIds.length) return 'checked';
+    const parent = selectedTools.find(t => t.id === group.id);
+    if (!parent) return 'unchecked';
+    if (parent.children?.length === group.children.length) return 'checked';
     return 'indeterminate';
   };
 
@@ -89,7 +85,7 @@ const ToolSelector = ({
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                           {...provided.dragHandleProps}
-                          className={`flex items-center justify-between p-3 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                          className={`flex items-center justify-between p-3 py-2 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
                             }`}
                         >
                           <div className="flex items-center">
@@ -205,7 +201,7 @@ const ToolSelector = ({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="truncate max-w-[180px]">
+                            <span className="truncate max-w-[180px] py-2">
                               {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
                                 part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
                                   <span key={i} className="bg-yellow-200">{part}</span>
@@ -226,12 +222,12 @@ const ToolSelector = ({
                       {tool.children?.map(child => (
                         <div
                           className="flex items-center gap-2 ml-10 p-2 hover:bg-gray-50 cursor-pointer"
-                          onClick={() => toggleTool(child)}
+                          onClick={() => toggleTool(tool, child)}
                         >
 
                           <div className={`w-4 h-4 border rounded flex items-center justify-center 
-    ${isToolSelected(child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
-                            {isToolSelected(child.id) && <Check className="w-3 h-3" style={{ color: 'white' }} />}
+    ${isToolSelected(tool.id, child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
+                            {isToolSelected(tool.id, child.id) && <Check className="w-3 h-3" style={{ color: 'white' }} />}
                           </div>
                           <div className="min-w-0">
                             <TooltipProvider>
