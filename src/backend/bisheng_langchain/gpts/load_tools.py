@@ -28,6 +28,7 @@ from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from bisheng_langchain.gpts.tools.local_file.local_file import LocalFileTool
 from bisheng_langchain.gpts.tools.sql_agent.tool import SqlAgentTool, SqlAgentAPIWrapper
+from bisheng_langchain.gpts.tools.web_search.tool import WebSearchTool, SearchTool
 from bisheng_langchain.rag import BishengRAGTool
 from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
 
@@ -60,6 +61,14 @@ _EXTRA_LLM_TOOLS: Dict[
 
 def _get_bing_search(**kwargs: Any) -> BaseTool:
     return BingSearchResults(api_wrapper=BingSearchAPIWrapper(**kwargs))
+
+
+def _get_web_search(**kwargs: Any) -> BaseTool:
+    """Get a web search tool."""
+    tool_name = kwargs.get('type', '')
+    tool_config = kwargs.get('config', {}).get(tool_name)
+    search_tool = SearchTool.init_search_tool(tool_name, **tool_config)
+    return WebSearchTool(api_wrapper=search_tool)
 
 
 def _get_dalle_image_generator(**kwargs: Any) -> Tool:
@@ -109,6 +118,7 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
                     ['vector_store', 'keyword_store', 'llm', 'collection_name', 'max_content',
                      'sort_by_source_and_index']),
     'sql_agent': (_get_sql_agent, ['llm', 'sql_address'], []),
+    "web_search": (_get_web_search, ['type', 'config'], []),
 }
 
 _API_TOOLS: Dict[str, Tuple[Callable[Any, BaseTool], List[str]]] = {**ALL_API_TOOLS}  # type: ignore
