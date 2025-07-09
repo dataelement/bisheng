@@ -47,6 +47,12 @@ class BaseTask(BaseModel):
 
     children: Optional[list['BaseTask']] = []  # List of child tasks, if is loop agent
 
+    # sub task field
+    original_query: Optional[str] = Field(default='', description='整体任务目标')
+    original_method: Optional[str] = Field(default='', description='整体任务方法')
+    original_done: Optional[str] = Field(default='', description='已完成的内容')
+    last_answer: Optional[str] = Field(default='', description='上一步骤的答案')
+
     def get_task_info(self) -> dict:
         return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
 
@@ -156,14 +162,14 @@ class BaseTask(BaseModel):
         except json.decoder.JSONDecodeError:
             raise ValueError(f"Invalid JSON format in response: {json_str}")
         original_query = sub_task.get("总体任务目标", "")
-        original_method = sub_task.get("总体方法", "") + "\n" + sub_task.get("可用资源", "")
+        original_method = f'{sub_task.get("总体方法", "")}\n{sub_task.get("可用资源", "")}'
         original_done = sub_task.get("已经完成的内容", "")
         sub_task_list = sub_task.get("任务列表", [])
         res = []
         for one in sub_task_list:
             parent_info = self.model_dump(
                 exclude={"children", "history", "status", "target", "sop", "task_manager", "llm"})
-            target = one.get("当前目标", "") + f"\n{one.get('输出方法', '')}"
+            target = f'{one.get("当前目标", "")}\n{one.get("输出方法", "")}'
             if one.get("标题层级", ""):
                 target += f"\n标题层级要求: {one.get('标题层级', '')}"
             parent_info.update({
@@ -205,12 +211,6 @@ class Task(BaseTask):
     This class is used to define the structure of a task,
     including its ID, name, description, and status.
     """
-
-    # sub task field
-    original_query: Optional[str] = Field(default='', description='整体任务目标')
-    original_method: Optional[str] = Field(default='', description='整体任务方法')
-    original_done: Optional[str] = Field(default='', description='已完成的内容')
-    last_answer: Optional[str] = Field(default='', description='上一步骤的答案')
 
     def build_system_message(self) -> BaseMessage:
         """

@@ -78,7 +78,10 @@ class ReactTask(BaseTask):
         try:
             response_json = json.loads(response_json)
         except json.decoder.JSONDecodeError:
-            response_json = json.loads(content)
+            try:
+                response_json = json.loads(content)
+            except json.decoder.JSONDecodeError:
+                raise Exception("无法从模型返回的数据中提取出JSON格式的数据: " + content)
         step_type = response_json.get("类型", "未知")
         thinking = response_json.get("思考", "未提供思考过程")
         action = response_json.get("行动", "")

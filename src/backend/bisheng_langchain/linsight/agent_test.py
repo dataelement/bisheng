@@ -7,7 +7,7 @@ from pydantic import SecretStr
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskMode
-from bisheng_langchain.linsight.event import NeedUserInput
+from bisheng_langchain.linsight.event import NeedUserInput, TaskStart, TaskEnd, ExecStep
 
 
 def get_linsight_agent():
@@ -179,11 +179,16 @@ async def only_exec_task():
          'prompt': '在`resume_analysis_results.md`文件末尾添加总结信息：`## 总结\n本次共分析了X份简历，其中Y份符合要求。`。',
          'input': ['step_3', 'step_4'], 'node_loop': False, 'id': '75ac818d7ee14eff882058831b63c892'}]
     async for event in agent.ainvoke(task_info, sop):
-        print(event)
         if isinstance(event, NeedUserInput):
             print("============ need user input ============")
             user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
             await agent.continue_task(event.task_id, user_input)
+        elif isinstance(event, TaskStart):
+            print(f"============ task start ============ {event}")
+        elif isinstance(event, TaskEnd):
+            print(f"============ task end ============ {event}")
+        elif isinstance(event, ExecStep):
+            print(f"============ exec step ============ {event}")
     all_task_info = await agent.get_all_task_info()
     print(all_task_info)
 

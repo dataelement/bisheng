@@ -193,7 +193,7 @@ class TaskManage(BaseModel):
 
         return original_task
 
-    def add_tasks(self, tasks: list[Task]) -> None:
+    def add_tasks(self, tasks: list[Task | ReactTask]) -> None:
         """
         when generate subtasks call this method.
         Add a list of tasks to the task manager.
@@ -201,8 +201,6 @@ class TaskManage(BaseModel):
 
         """
         for task in tasks:
-            if not isinstance(task, Task):
-                raise TypeError(f"Task must be an instance of Task, not {type(task)}")
             self.tasks.append(task)
             self.task_map[task.id] = task
 
