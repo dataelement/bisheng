@@ -3,7 +3,10 @@ import uuid
 from io import BytesIO
 from typing import Dict, List
 
+from pyarrow.ipc import new_file
+
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 from fastapi import UploadFile
 from langchain_core.prompts import ChatPromptTemplate
@@ -17,7 +20,7 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_uploaded_file, file_download
+from bisheng.cache.utils import save_uploaded_file, file_download, save_file_to_folder
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
@@ -60,6 +63,16 @@ class LinsightWorkbenchImpl(object):
 
             files = await redis_client.amget([f"{cls.file_info_redis_key}{file_id}" for file_id in file_ids])
 
+            for file in files:
+                source_object_name = file.get("markdown_file_path")
+                new_object_name = f"linsight/{chat_id}/{source_object_name}"
+                minio_client.copy_object(
+                    source_object_name=source_object_name,
+                    target_object_name=new_object_name,
+                    bucket_name=minio_client.tmp_bucket,
+                    target_bucket_name=minio_client.bucket
+                )
+                file["markdown_file_path"] = new_object_name
 
         # 灵思会话版本
         linsight_session_version_model = LinsightSessionVersion(
@@ -289,7 +302,7 @@ class LinsightWorkbenchImpl(object):
         unique_filename = f"{file_id}.{original_filename.split('.')[-1]}"
 
         # 保存文件
-        file_path = save_uploaded_file(file.file, 'bisheng', unique_filename)
+        file_path = await save_file_to_folder(file, 'linsight', unique_filename)
 
         # 缓存文件信息
         file_info = {
@@ -312,7 +325,7 @@ class LinsightWorkbenchImpl(object):
         """
         # 获取文件信息
         file_id = upload_result.get("file_id")
-        filename = upload_result.get("filename")
+        # filename = upload_result.get("filename")
         original_filename = upload_result.get("original_filename")
         file_path = upload_result.get("file_path")
 
@@ -324,9 +337,8 @@ class LinsightWorkbenchImpl(object):
 
         # 包装同步处理函数
         def wrap_sunc_func(file_id, file_path, original_filename, collection_name, workbench_conf):
-            filepath, _ = file_download(file_path)
             texts, _, parse_type, _ = read_chunk_text(
-                input_file=filepath,
+                input_file=file_path,
                 file_name=original_filename,
                 separator=['\n\n', '\n'],
                 separator_rule=['after', 'after'],
@@ -345,9 +357,9 @@ class LinsightWorkbenchImpl(object):
             markdown_file_bytes.seek(0)
 
             # 生成唯一的文件名
-            markdown_filename = f"{uuid.uuid4().hex}.md"
+            markdown_filename = f"{file_id}.md"
             # 保存markdown文件
-            markdown_file_path = save_uploaded_file(markdown_file_bytes, 'bisheng', markdown_filename)
+            save_uploaded_file(markdown_file_bytes, 'linsight', markdown_filename)
 
             emb_model_id = workbench_conf.embedding_model.id
             embeddings = decide_embeddings(emb_model_id)
@@ -367,10 +379,9 @@ class LinsightWorkbenchImpl(object):
             parse_result = {
                 "file_id": file_id,
                 "original_filename": original_filename,
-                "file_path": file_path,
                 "parsing_status": "completed",
                 "parse_type": parse_type,
-                "markdown_file_path": markdown_file_path,
+                "markdown_file_path": f"{markdown_filename}",
                 "embedding_model_id": emb_model_id,
                 "collection_name": collection_name
             }
@@ -380,8 +391,6 @@ class LinsightWorkbenchImpl(object):
         parse_result = await run_in_executor(None, wrap_sunc_func, file_id, file_path, original_filename,
                                              collection_name,
                                              workbench_conf)
-
-        parse_result["filename"] = filename
 
         key = f"{cls.file_info_redis_key}{file_id}"
         # 将文件信息存储到缓存中
