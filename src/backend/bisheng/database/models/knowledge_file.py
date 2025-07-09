@@ -215,6 +215,29 @@ class KnowledgeFileDao(KnowledgeFileBase):
         with session_getter() as session:
             return session.exec(statement).all()
 
+
+
+    @classmethod
+    def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
+        """
+        根据知识库ID和状态列表查询文件
+        
+        Args:
+            knowledge_id: 知识库ID
+            status_list: 状态值列表
+            
+        Returns:
+            List[KnowledgeFile]: 匹配的文件列表
+        """
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.status.in_(status_list)
+        )
+        
+        with session_getter() as session:
+            return session.exec(statement).all() 
+
+
     @classmethod
     def count_file_by_filters(cls,
                               knowledge_id: int,

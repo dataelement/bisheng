@@ -23,6 +23,7 @@ from bisheng.api.services.knowledge_imp import (
     process_file_task,
     read_chunk_text,
 )
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
@@ -1152,7 +1153,7 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
     
 
-def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int):
+def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_content: int, model_id):
     """
     使用 BishengRetrieval进行混合检索召回
     
@@ -1165,8 +1166,12 @@ def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_conte
         dict: 包含检索结果和源文档的字典
     """
     try:
+        llm = LLMService.get_bisheng_llm(model_id=model_id,
+                                               temperature=0.01,
+                                               cache=False)
         # 创建混合检索器
         rag_tool = BishengRAGTool(
+            llm=llm,
             vector_store=vector_store,
             keyword_store=keyword_store,
             max_content=max_content,
@@ -1176,6 +1181,7 @@ def mixed_retrieval_recall(question: str, vector_store, keyword_store, max_conte
         # 执行检索和生成
         answer, docs = rag_tool.run(question, return_only_outputs=False)
         logger.info(f"act=mixed_retrieval_recall result={docs}")
+        logger.info(f"act=mixed_retrieval_recall answer={answer}")   
         # 格式化返回结果
         return docs
         

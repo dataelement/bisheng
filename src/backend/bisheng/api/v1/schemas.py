@@ -87,6 +87,12 @@ def resp_500(code: int = 500,
     """错误的逻辑回复"""
     return UnifiedResponseModel(status_code=code, status_message=message, data=data)
 
+def resp_501(code: int = 501,
+             data: Union[list, dict, str, Any] = None,
+             message: str = 'BAD REQUEST') -> UnifiedResponseModel:
+    """错误的逻辑回复"""
+    return UnifiedResponseModel(status_code=code, status_message=message, data=data)
+
 def resp_502(code: int = 502,
              data: Union[list, dict, str, Any] = None,
              message: str = 'BAD REQUEST') -> UnifiedResponseModel:
@@ -571,3 +577,10 @@ class KnowledgeFileProcess(FileProcessBase):
 class FrequentlyUsedChat(BaseModel):
     user_link_type: str = Field(..., description='用户相关联的type')
     type_detail: str = Field(..., description='用户相关联的type_id')
+
+
+class UpdateEmbeddingModelReq(BaseModel):
+    """更新embedding模型请求"""
+    model_id: int = Field(..., description='embedding模型ID')
+    model_type: Optional[str] = Field(default=None, description='模型类型，不传时会根据model_id自动查询')
+    knowledge_id: Optional[int] = Field(default=None, description='知识库ID，如果为空则更新所有私有知识库')

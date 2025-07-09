@@ -125,15 +125,20 @@ class WorkStationService(BaseService):
         if not knowledge:
             return []
         
-        vector_store = create_knowledge_vector_store(knowledge[0].id, login_user.user_name)
-        keyword_store = create_knowledge_keyword_store(knowledge[0].id, login_user.user_name)
+        vector_store = create_knowledge_vector_store([str(knowledge[0].id)], login_user.user_name)
+        keyword_store = create_knowledge_keyword_store([str(knowledge[0].id)], login_user.user_name)
 
         # 获取配置中的最大token数，如果没有配置则使用默认值
         config = cls.get_config()
         max_tokens = config.maxTokens if config else 1500
         
-        docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens)
+        # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
+        from bisheng.api.services.llm import LLMService
+        knowledge_llm = LLMService.get_knowledge_llm()
+        model_id = knowledge_llm.source_model_id
         
+        docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens, model_id)
+        logger.info("docs message:{}", docs)
         # 将检索结果格式化为指定的模板格式
         formatted_results = []
         if docs:

@@ -1,8 +1,5 @@
+from typing import List
 from langchain.embeddings.base import Embeddings
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
 
 
 def decide_embeddings(model: str) -> Embeddings:
@@ -24,6 +21,10 @@ def create_knowledge_vector_store(knowledge_ids: List[str], user_name: str, chec
     Returns:
         vector_store: Milvus向量存储实例
     """   
+    # 延迟导入以避免循环导入
+    from bisheng.interface.importing.utils import import_vectorstore
+    from bisheng.interface.initialize.loading import instantiate_vectorstore
+    
     node_type = 'MilvusWithPermissionCheck'
     params = {
         'user_name': user_name,
@@ -33,7 +34,7 @@ def create_knowledge_vector_store(knowledge_ids: List[str], user_name: str, chec
     
     class_obj = import_vectorstore(node_type)
     
-    #实例化向量存储
+    # 实例化向量存储
     vector_store = instantiate_vectorstore(node_type, class_object=class_obj, params=params)
     
     return vector_store
@@ -51,6 +52,9 @@ def create_knowledge_keyword_store(knowledge_ids: List[str], user_name: str, che
     Returns:
         keyword_store: Elasticsearch关键词存储实例
     """
+    # 延迟导入以避免循环导入
+    from bisheng.interface.importing.utils import import_vectorstore
+    from bisheng.interface.initialize.loading import instantiate_vectorstore
  
     node_type = 'ElasticsearchWithPermissionCheck'
     params = {
@@ -61,7 +65,7 @@ def create_knowledge_keyword_store(knowledge_ids: List[str], user_name: str, che
     
     class_obj = import_vectorstore(node_type)
     
-    #实例化关键词存储
+    # 实例化关键词存储
     keyword_store = instantiate_vectorstore(node_type, class_object=class_obj, params=params)
     
     return keyword_store
