@@ -25,7 +25,7 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
-from bisheng.worker.knowledge.rebuild_worker import rebuild_knowledge_celery
+from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 
