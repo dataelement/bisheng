@@ -16,6 +16,10 @@ import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
+import { Settings } from "lucide-react";
+import { useWebSearchStore } from "../tools/webSearchStore";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -55,11 +59,38 @@ export interface ChatConfigForm {
     webSearch: {
         enabled: boolean;
         tool: string;
-        params: {
-            api_key?: string;
-            base_url?: string;
-            engine?: string;
-        },
+        bing: {
+            type: string;
+            config: {
+                api_key: string;
+                base_url: string;
+            };
+        };
+        bocha: {
+            type: string;
+            config: {
+                api_key: string;
+            };
+        };
+        jina: {
+            type: string;
+            config: {
+                api_key: string;
+            };
+        };
+        serp: {
+            type: string;
+            config: {
+                api_key: string;
+                engine: string;
+            };
+        };
+        tavily: {
+            type: string;
+            config: {
+                api_key: string;
+            };
+        };
         prompt: string;
     };
     knowledgeBase: {
@@ -81,7 +112,7 @@ export default function index() {
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
-
+    const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
         errors,
@@ -103,23 +134,33 @@ export default function index() {
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
     }, [formData.models]);
-
+    const [webSearchDialogOpen, setWebSearchDialogOpen] = useState(false);
     // 非admin角色跳走
     const { user } = useContext(userContext);
     const navigate = useNavigate()
+      const [open, setOpen] = useState(false);
     useEffect(() => {
         if (user.user_id && user.role !== 'admin') {
             navigate('/build/apps')
         }
     }, [user])
-
+    useEffect(() => {
+        getWorkstationConfigApi().then(res => {
+            setWebSearchData(res.webSearch)
+            setFormData(res)
+        })
+    }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
             [`${type}Icon`]: { ...prev[`${type}Icon`], image: fileUrl, relative_path: relativePath }
         }));
     };
-
+    const handleWebSearchSave = (config) => {
+        setWebSearchData(config) // 更新全局状态
+        setFormData(prev => ({ ...prev, webSearch: config })) // 更新本地状态
+          setWebSearchDialogOpen(false)
+    }
     const handleModelChange = (index: number, id: string) => {
         const newModels = [...formData.models];
         newModels[index].id = id;
@@ -138,7 +179,9 @@ export default function index() {
             models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '' }]
         }));
     };
-
+  const handleOpenWebSearchSettings = () => {
+        setWebSearchDialogOpen(true);
+    };
     return (
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <Card className="">
@@ -276,24 +319,28 @@ export default function index() {
                                 </Select>
                             </div>
                         </ToggleSection> */}
-
-                        <ToggleSection
+    <ToggleSection
                             title="联网搜索"
                             enabled={formData.webSearch.enabled}
                             onToggle={(enabled) => toggleFeature('webSearch', enabled)}
+                            extra={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleOpenWebSearchSettings}
+                                    className="p-1 h-auto"
+                                >
+                                    <Settings className="h-4 w-4" />
+                                </Button>
+                            }
                         >
-                            <div ref={webSearchRef}>
-                                <WebSearchConfig
-                                    config={formData.webSearch}
-                                    onChange={(field, value) => setFormData(prev => ({
-                                        ...prev,
-                                        webSearch: { ...prev.webSearch, [field]: value }
-                                    }))}
-                                    errors={errors.webSearch}
-                                />
-                            </div>
+                            <WebSearchConfig
+                                config={webSearchData || formData.webSearch}
+                                onChange={(updatedConfig) => {
+                                    setWebSearchData(updatedConfig) // 实时更新全局状态
+                                }}
+                            />
                         </ToggleSection>
-
                         <ToggleSection
                             title="个人知识"
                             enabled={formData.knowledgeBase.enabled}
@@ -339,6 +386,17 @@ export default function index() {
                     </div>
                 </CardContent>
             </Card>
+             <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
+                <DialogContent className="sm:max-w-[625px] bg-background-login">
+                    <DialogHeader>
+                        <DialogTitle>联网搜索配置</DialogTitle>
+                    </DialogHeader>
+                    <WebSearchForm
+                        formData={formData.webSearch}
+                        onSubmit={handleWebSearchSave}
+                    />
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

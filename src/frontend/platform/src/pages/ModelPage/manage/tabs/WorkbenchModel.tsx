@@ -9,6 +9,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
@@ -54,13 +55,14 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
     const [form, setForm] = useState({
         sourceModelId: null,
         extractModelId: null,
+        executionMode: 'function_call'
     });
     const lastSaveFormDataRef = useRef(null)
     const [loading, setLoading] = useState(true)
     const [saveload, setSaveLoad] = useState(false)
 
     const handleSave = async () => {
-        const { extractModelId, sourceModelId } = form;
+        const { extractModelId, sourceModelId, executionMode } = form;
         const errors = [];
         if (errors.length) return message({ variant: 'error', description: errors });
 
@@ -69,6 +71,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
             const data = {
                 task_model: { id: String(extractModelId) },
                 embedding_model: { id: String(sourceModelId) },
+                 execution_mode: executionMode
             };
 
             await updateLinsightModelConfig(data);
@@ -77,11 +80,13 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
             setForm({
                 sourceModelId: linsightConfig?.embedding_model?.id || null,
                 extractModelId: linsightConfig?.task_model?.id || null,
+                executionMode: linsightConfig?.execution_mode || 'function_call'
             });
 
             lastSaveFormDataRef.current = {
                 task_model: { id: linsightConfig?.task_model?.id },
                 embedding_model: { id: linsightConfig?.embedding_model?.id },
+                 execution_mode: linsightConfig?.execution_mode || 'function_call',
                 abstract_prompt: linsightConfig?.abstract_prompt || defalutPrompt
             };
 
@@ -126,12 +131,14 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                 const safeLinsightConfig = linsightConfig || {
                     task_model: null,
                     embedding_model: null,
-                    abstract_prompt: defalutPrompt
+                    abstract_prompt: defalutPrompt,
+                    execution_mode: 'function_call', // 默认执行模式
                 };
 
                 setForm({
                     sourceModelId: safeLinsightConfig.embedding_model?.id || null,
                     extractModelId: safeLinsightConfig.task_model?.id || null,
+                     executionMode: safeLinsightConfig.execution_mode || 'function_call'
                 });
 
                 lastSaveFormDataRef.current = {
@@ -139,6 +146,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                     embedding_model: {
                         id: safeLinsightConfig.embedding_model?.id
                     },
+                    execution_mode: safeLinsightConfig.execution_mode || 'function_call', 
                     abstract_prompt: safeLinsightConfig.abstract_prompt || defalutPrompt
                 };
 
@@ -165,15 +173,40 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                 options={embeddings}
                 onChange={(val) => setForm({ ...form, sourceModelId: val })}
             />
-
+            <h3 className="bisheng-label">{t('model.lingsiTaskModel')}</h3>
+      <div className="border rounded-lg p-4 -mt-3">
+         
+    <div className="flex gap-4">
+        <div className="flex-1">
             <ModelSelect
                 close
-                label={t('model.lingsiTaskModel')}
+                label={t('模型')}
                 tooltipText={t('model.lingsiTaskModelTooltip')}
                 value={form.extractModelId}
                 options={llmOptions}
                 onChange={(val) => setForm({ ...form, extractModelId: val })}
             />
+        </div>
+        <div className="flex-1">
+            <Label className="bisheng-label">
+                <span>执行模式</span>
+                <QuestionTooltip className="relative top-0.5 ml-1" content="一般情况可选择 function call 模式，模型不支持 function call 或追求最佳任务执行效果时可选择 ReAct 模式" />
+            </Label>
+            <Select
+                value={form.executionMode}
+                onValueChange={(val) => setForm({ ...form, executionMode: val })}
+            >
+                <SelectTrigger className="w-full">
+                    <SelectValue placeholder="选择执行模式" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="function_call">Function Call</SelectItem>
+                    <SelectItem value="react">ReAct</SelectItem>
+                </SelectContent>
+            </Select>
+        </div>
+    </div>
+</div>
 
             <div className="mt-10 text-center space-x-6">
                 <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>

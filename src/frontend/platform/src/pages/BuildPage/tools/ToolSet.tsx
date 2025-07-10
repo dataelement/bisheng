@@ -12,8 +12,8 @@ import FeishuConfigForm from "./builtInTool/FeishuConfig";
 import SiliconFlowApiKeyForm from "./builtInTool/SiliconFlowApiKey";
 import EmailConfigForm from "./builtInTool/EmailConfig";
 import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
-import WebSearchForm from "./builtInTool/WebSearchForm";
-
+import WebSearchForm from "./builtInTool/WebSearchFrom";
+import { useWebSearchStore } from './webSearchStore'
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
@@ -33,41 +33,29 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     // });
     const idRef = useRef('');
     const [name, setName] = useState('');
+ const { config: webSearchData, setConfig } = useWebSearchStore()
 
     useImperativeHandle(ref, () => ({
         edit: (item) => {
             setName(item.name);
             idRef.current = item.id;
-            const configStr = item.children[0]?.extra;
-            if (configStr) {
-                const config = JSON.parse(configStr);
-                // config.provider = config.azure_deployment ? 'azure' : 'openai';
-                // const apiKey = config.openai_api_key;
-                // if (config.provider === 'openai') {
-                //     config.openai_api_key = apiKey;
-                //     config.azure_api_key = '';
-                // } else {
-                //     config.openai_api_key = '';
-                //     config.azure_api_key = apiKey;
-                // }
-                console.log(111,config);
+            const config = item.children[0]?.extra 
+                ? JSON.parse(item.children[0].extra)
+                : webSearchData || {};
                 
-                setFormData(config);
-            } else {
-                setFormData({});
-            }
-            setOpen(true);
+            setFormData(config);
+            setOpen(true); 
         }
     }));
 
 
 
-    const handleSubmit = async (formdata) => {
-        await captureAndAlertRequestErrorHoc(updateAssistantToolApi(idRef.current, formdata));
-        setOpen(false);
-        message({ variant: 'success', description: t('build.saveSuccess') });
-        onChange();
-    };
+  const handleSubmit = async (formdata) => {
+    await updateAssistantToolApi(idRef.current, formdata)
+    setConfig(formdata)
+    setOpen(false)
+    onChange()
+  }
 
     // const getFieldsToSubmit = () => {
     //     const fields = {};
@@ -114,8 +102,8 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <BingToolForm formData={formData} onSubmit={handleSubmit} />;
             case '天眼查':
                 return <TianyanchaToolForm formData={formData} onSubmit={handleSubmit} />;
-            // case '联网搜索':
-                // return <WebSearchForm formData={formData} onSubmit={handleSubmit} />;
+            case '联网搜索':
+                return <WebSearchForm formData={formData} onSubmit={handleSubmit} />;
             default:
                 return null;
         }
