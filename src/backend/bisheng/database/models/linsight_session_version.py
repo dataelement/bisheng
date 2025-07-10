@@ -1,11 +1,9 @@
 import logging
-import uuid
 from datetime import datetime
 from enum import Enum
 from typing import List, Dict, Optional
-from uuid import UUID
 
-from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR
+from sqlalchemy import Column, Text, JSON, Boolean, Enum as SQLEnum, DateTime, text, ForeignKey, CHAR, func
 from sqlmodel import Field, select, col, update
 
 from bisheng.database.base import async_session_getter, uuid_hex
@@ -33,9 +31,9 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     灵思会话版本模型基类
     """
     session_id: str = Field(..., description='会话ID', sa_column=Column(CHAR(36),
-                                                                         ForeignKey("message_session.chat_id"),
-                                                                         nullable=False,
-                                                                         index=True))
+                                                                        ForeignKey("message_session.chat_id"),
+                                                                        nullable=False,
+                                                                        index=True))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     question: str = Field(..., description='用户问题', sa_type=Text, nullable=False)
     tools: Optional[List[Dict]] = Field(None, description='可用的工具列表', sa_type=JSON, nullable=True)
@@ -64,7 +62,7 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     灵思会话版本模型
     """
     id: str = Field(default_factory=uuid_hex, description='会话版本ID',
-                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
+                    sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
 
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
@@ -114,7 +112,8 @@ class LinsightSessionVersionDao(object):
         :return: 灵思会话版本列表
         """
         async with async_session_getter() as session:
-            statement = select(LinsightSessionVersion).where(LinsightSessionVersion.session_id == str(session_id)).order_by(
+            statement = select(LinsightSessionVersion).where(
+                LinsightSessionVersion.session_id == str(session_id)).order_by(
                 col(LinsightSessionVersion.version).desc())
 
             return (await session.exec(statement)).all()
@@ -140,3 +139,17 @@ class LinsightSessionVersionDao(object):
                 logger.warning(f"No session version found with ID: {linsight_session_version_id}")
 
             await session.commit()
+
+    @staticmethod
+    async def get_session_version_by_file_id(file_id: str) -> Optional[LinsightSessionVersion]:
+        """
+        根据文件ID获取灵思会话版本
+        :param file_id: 文件ID
+        :return: 灵思会话版本对象
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightSessionVersion).where(
+                func.json_search(LinsightSessionVersion.files, 'all', file_id)
+            )
+            result = await session.exec(statement)
+            return result.first()

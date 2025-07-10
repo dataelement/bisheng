@@ -1,19 +1,22 @@
 import json
-from typing import Optional
+from typing import Optional, List
 
 import yaml
 from fastapi import Request
+from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, ConfigDict
 
 from bisheng.api.errcode.base import ServerError
 from bisheng.api.services.openapi import OpenApiSchema
+from bisheng.api.services.tool.langchain_tool.search_knowledge import SearchKnowledgeBase
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import get_url_content
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType, GptsToolsTypeRead
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.utils import md5_hash
+from bisheng_langchain.gpts.load_tools import load_tools
 
 
 class ToolServices(BaseModel):
@@ -196,3 +199,81 @@ class ToolServices(BaseModel):
                 }
             })
         return res
+
+    @classmethod
+    async def init_linsight_tools(cls, root_path: str) -> List[BaseTool]:
+        """ 初始化Linsight 默认的工具, 特殊点在于本地文件工具初始化的参数不是固定的，而是再运行期间确定的 """
+        # 加载本地文件操作相关工具
+        local_file_tools = load_tools({
+            "list_files": {"root_path": root_path},
+            "get_file_details": {"root_path": root_path},
+            "search_files": {"root_path": root_path},
+            # "search_text_in_file": {"root_path": root_path},
+            "read_text_file": {"root_path": root_path},
+            "write_text_file": {"root_path": root_path},
+            "replace_file_lines": {"root_path": root_path},
+        })
+        knowledge_tools = [SearchKnowledgeBase()]
+        return knowledge_tools + local_file_tools
+
+    @classmethod
+    async def get_linsight_tools(cls) -> list[GptsToolsTypeRead]:
+        tools = await cls.init_linsight_tools("/app")
+        return [
+            GptsToolsTypeRead(
+                id=100000,
+                name="知识库和文件内容检索",
+                description="检索组织知识库、个人知识库以及本地上传文件的内容",
+                children=[
+                    GptsTools(
+                        id=100001,
+                        name="知识库和文件内容检索",
+                        description="检索组织知识库、个人知识库以及本地上传文件的内容。",
+                        tool_key="search_knowledge_base",
+                    )
+                ]
+            ),
+            GptsToolsTypeRead(
+                id=200000,
+                name="文件操作",
+                description="本地文件系统的浏览、搜索与编辑工具集",
+                children=[
+                    GptsTools(
+                        id=200001,
+                        name="获取所有文件和目录",
+                        desc="列出指定目录下的所有文件和子目录。",
+                        tool_key="list_files"
+                    ),
+                    GptsTools(
+                        id=200002,
+                        name="获取文件详细信息",
+                        desc="获取指定文件的文件名、文件大小、文件地址等详细信息。",
+                        tool_key="get_file_details"
+                    ),
+                    GptsTools(
+                        id=200003,
+                        name="搜索文件",
+                        desc="在指定目录中搜索文件和子目录。",
+                        tool_key="search_files"
+                    ),
+                    GptsTools(
+                        id=200004,
+                        name="读取文件内容",
+                        desc="读取本地文本文件的内容。",
+                        tool_key="read_text_file"
+                    ),
+                    GptsTools(
+                        id=200005,
+                        name="写入文件内容",
+                        desc="将内容写入文本文件，支持插入、覆盖和追加。",
+                        tool_key="write_text_file"
+                    ),
+                    GptsTools(
+                        id=200006,
+                        name="替换文件指定行范围内容",
+                        desc="替换文件中的指定行范围。",
+                        tool_key="replace_file_lines"
+                    ),
+                ]
+            )
+        ]

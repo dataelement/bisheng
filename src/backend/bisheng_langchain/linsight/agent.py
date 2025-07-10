@@ -74,7 +74,7 @@ class LinsightAgent(BaseModel):
         try:
             task = json.loads(json_str)
         except json.decoder.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format in response: {json_str}")
+            raise ValueError(f"Invalid JSON format in response: {res.content}")
         tasks = task.get('steps', [])
 
         return TaskManage.completion_task_tree_info(tasks)
