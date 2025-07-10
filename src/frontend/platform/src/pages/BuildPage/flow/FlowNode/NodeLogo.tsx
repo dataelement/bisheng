@@ -12,7 +12,6 @@ export const Icons = {
     'end': FlagTriangleRight,
     'condition': Split,
     'report': FileDown,
-    'question_predict': HelpCircle
 }
 export const Colors = {
     'start': 'bg-[#FFD89A]',
@@ -26,7 +25,6 @@ export const Colors = {
     'end': 'bg-red-400',
     'condition': 'bg-[#EDC9E9]',
     'report': 'bg-[#9CE4F4]',
-    'question_predict': 'bg-[#F0E68C]'
 }
 
 export default function NodeLogo({ type, className = '', colorStr = '' }) {

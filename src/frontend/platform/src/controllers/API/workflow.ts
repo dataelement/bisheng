@@ -221,6 +221,20 @@ const workflowTemplate = [
                         "help": "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
                     },
                     {
+                        "key": "input_prediction_config",
+                        "label": "输入预测配置",
+                        "type": "input_prediction_config",
+                        "tab": "dialog_input",
+                        "value": {
+                            "open": false,
+                            "model_id": "",
+                            "temperature": 0.7,
+                            "predict_count": 3,
+                            "history_count": 10
+                        },
+                        "help": "根据历史消息预测用户下一个可能的输入内容。"
+                    },
+                    {
                         "key": "form_input",
                         "global": "item:form_input",
                         "label": "+ 添加表单项",
@@ -827,86 +841,6 @@ const workflowTemplate = [
         ]
     },
     {
-        "id": "question_predict_xxx",
-        "name": "问题预测",
-        "description": "基于消息历史预测用户下一个可能问的问题。",
-        "type": "question_predict",
-        "v": "1",
-        "group_params": [
-            {
-                "name": "模型设置",
-                "params": [
-                    {
-                        "key": "model_id",
-                        "label": "模型",
-                        "type": "bisheng_model",
-                        "value": "",
-                        "required": true,
-                        "placeholder": "请在模型管理中配置 LLM 模型"
-                    },
-                    {
-                        "key": "temperature",
-                        "label": "温度",
-                        "type": "slide",
-                        "scope": [0, 2],
-                        "step": 0.1,
-                        "value": 0.7
-                    }
-                ]
-            },
-            {
-                "name": "预测设置",
-                "params": [
-                    {
-                        "key": "predict_count",
-                        "label": "预测问题数量",
-                        "type": "slide_switch",
-                        "value": {
-                            "flag": true,
-                            "value": 3
-                        },
-                        "scope": [0, 4],
-                        "help": "预测多少个可能的问题"
-                    },
-                    {
-                        "key": "history_limit",
-                        "label": "历史消息数量限制",
-                        "type": "slide_switch",
-                        "scope": [
-                            0,
-                            100
-                        ],
-                        "step": 1,
-                        "value": {
-                            "flag": true,
-                            "value": 10
-                        },
-                        "help": "用于预测的历史消息数量"
-                    }
-                ]
-            },
-            {
-                "name": "输出",
-                "params": [
-                    {
-                        "key": "predicted_questions",
-                        "label": "预测问题",
-                        "type": "var",
-                        "global": "key",
-                        "value": ""
-                    },
-                    {
-                        "key": "analysis",
-                        "label": "对话趋势分析",
-                        "type": "var",
-                        "global": "key",
-                        "value": ""
-                    }
-                ]
-            }
-        ]
-    },
-    {
         "id": "end_xxx",
         "name": "结束",
         "description": "工作流运行到此结束。",
@@ -1034,6 +968,20 @@ const workflowTemplateEN = [
                         "type": "var",
                         "tab": "dialog_input",
                         "help": "Extract the image file from the uploaded file. When the assistant or large model node uses the MultiModal Machine Learning large model, this image can be passed in."
+                    },
+                    {
+                        "key": "input_prediction_config",
+                        "label": "Input Prediction Configuration",
+                        "type": "input_prediction_config",
+                        "tab": "dialog_input",
+                        "value": {
+                            "open": false,
+                            "model_id": "",
+                            "temperature": 0.7,
+                            "predict_count": 3,
+                            "history_count": 10
+                        },
+                        "help": "Predict the user's next possible input based on message history."
                     },
                     {
                         "global": "item:form_input",
@@ -1619,84 +1567,6 @@ const workflowTemplateEN = [
                                 "type": "str"
                             }
                         ]
-                    }
-                ]
-            }
-        ]
-    },
-    {
-        "id": "question_predict_xxx",
-        "name": "Question Prediction",
-        "description": "Predict the user's next possible question based on message history.",
-        "type": "question_predict",
-        "v": "1",
-        "group_params": [
-            {
-                "name": "Model Settings",
-                "params": [
-                    {
-                        "key": "model_id",
-                        "label": "Model",
-                        "type": "bisheng_model",
-                        "value": "",
-                        "required": true,
-                        "placeholder": "Please configure LLM model in model management"
-                    },
-                    {
-                        "key": "temperature",
-                        "label": "Temperature",
-                        "type": "slide",
-                        "scope": [0, 2],
-                        "step": 0.1,
-                        "value": 0.7
-                    }
-                ]
-            },
-            {
-                "name": "Prediction Settings",
-                "params": [
-                    {
-                        "key": "predict_count",
-                        "label": "Number of Predicted Questions",
-                        "type": "slide_switch",
-                        "scope": [0, 4],
-                        "step": 1,
-                        "value": {
-                            "flag": true,
-                            "value": 3
-                        },
-                        "help": "How many possible questions to predict"
-                    },
-                    {
-                        "key": "history_limit",
-                        "label": "History Message Limit",
-                        "type": "slide_switch",
-                        "scope": [0, 100],
-                        "step": 1,
-                        "value": {
-                            "flag": true,
-                            "value": 10
-                        },
-                        "help": "Number of history messages used for prediction"
-                    }
-                ]
-            },
-            {
-                "name": "Output",
-                "params": [
-                    {
-                        "key": "predicted_questions",
-                        "label": "Predicted Questions",
-                        "type": "var",
-                        "global": "key",
-                        "value": ""
-                    },
-                    {
-                        "key": "analysis",
-                        "label": "Conversation Trend Analysis",
-                        "type": "var",
-                        "global": "key",
-                        "value": ""
                     }
                 ]
             }

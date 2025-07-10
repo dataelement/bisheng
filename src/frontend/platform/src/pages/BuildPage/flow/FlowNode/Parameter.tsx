@@ -8,6 +8,7 @@ import HistoryNumItem from "./component/HistoryNumItem";
 import InputFormItem from "./component/InputFormItem";
 import InputItem from "./component/InputItem";
 import InputListItem from "./component/InputListItem";
+import InputPredictionConfigItem from "./component/InputPredictionConfigItem";
 import KnowledgeQaSelectItem from "./component/KnowledgeQaSelectItem";
 import KnowledgeSelectItem from "./component/KnowledgeSelectItem";
 import ModelItem from "./component/ModelItem";
@@ -138,6 +139,8 @@ export default function Parameter({ node, nodeId, item, onOutPutChange, onStatus
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'sql_config':
             return <SqlConfigItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
+        case 'input_prediction_config':
+            return <InputPredictionConfigItem data={item} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'select_fileaccept':
             return <FileTypeSelect data={item} onChange={(val) => {
                 // group_params[0] 受input模板影响

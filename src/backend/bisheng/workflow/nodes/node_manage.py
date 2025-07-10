@@ -26,7 +26,6 @@ NODE_CLASS_MAP = {
     NodeType.AGENT.value: AgentNode,
     NodeType.CODE.value: CodeNode,
     NodeType.LLM.value: LLMNode,
-    NodeType.QUESTION_PREDICT.value: QuestionPredictNode
 }
 
 

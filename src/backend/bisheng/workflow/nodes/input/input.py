@@ -1,9 +1,15 @@
+import json
 import os
 import shutil
 import tempfile
-from typing import Any
+from typing import Any, Dict, List
 
 from loguru import logger
+
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import decide_vectorstores, read_chunk_text
@@ -12,6 +18,7 @@ from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.cache.utils import file_download
 from bisheng.chat.types import IgnoreException
+from bisheng.workflow.callback.event import GuideQuestionData
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -35,11 +42,22 @@ class InputNode(BaseNode):
         if self.is_dialog_input():
             new_node_params['user_input'] = self.node_params['user_input']
             new_node_params['dialog_files_content'] = self.node_params.get('dialog_files_content', [])
+            predict_config = self.node_params["input_prediction_config"] 
+            if predict_config.get("open", False):
+                self._predict_input_open = True
+                self._predict_count = predict_config.get("predict_count", 3)
+                self._history_limit = predict_config.get("history_limit", 10)
+                predict_model = predict_config.get("model_id")
+                self._predict_llm = LLMService.get_bisheng_llm(
+                    model_id=predict_model,
+                    temperature=predict_config.get("temperature", 0.7),
+                    cache=False,
+                )
         else:
             for value_info in self.node_params['form_input']:
                 new_node_params[value_info['key']] = value_info['value']
                 self._node_params_map[value_info['key']] = value_info
-
+    
         self.node_params = new_node_params
         self._image_ext = ['png', 'jpg', 'jpeg', 'bmp']
 
@@ -60,6 +78,8 @@ class InputNode(BaseNode):
 
     def get_input_schema(self) -> Any:
         if self.is_dialog_input():
+            if self._predict_input_open:
+                self._predict_input(self.exec_unique_id)
             user_input_info = self.node_data.get_variable_info('user_input')
             user_input_info.value = [
                 self.node_data.get_variable_info('dialog_files_content'),
@@ -255,3 +275,135 @@ class InputNode(BaseNode):
             key_info['file_path']: original_file_path,
             key_info['image_file']: image_files_path
         }
+
+    def _build_system_prompt(self) -> str:
+        """构建系统提示词"""
+
+        return f"""你是一个智能助手，专门负责分析用户的对话历史，预测用户可能会问的下一个问题。
+
+请基于以下对话历史，分析用户的意图、兴趣点和对话发展趋势，预测用户最可能问的{self._predict_count}个问题。
+
+分析要点：
+1. 用户的关注焦点和兴趣方向
+2. 对话的逻辑发展趋势
+3. 用户可能的深入需求
+4. 相关的延伸话题
+
+请确保预测的问题：
+- 与对话上下文相关
+- 符合用户的交流风格
+- 具有实际价值和可操作性
+- 按照可能性从高到低排序"""
+
+    def _build_output_format_prompt(self) -> str:
+        """构建输出格式说明"""
+        return """
+请以JSON格式返回结果：
+{
+    "predicted_questions": [
+        {
+            "question": "预测的问题内容",
+            "probability": "可能性评分(0-1)",
+            "reason": "预测理由"
+        }
+    ],
+    "analysis": "对话趋势分析总结"
+}
+
+确保返回有效的JSON格式。"""
+
+    def _get_chat_history(self) -> List[Dict]:
+        """获取聊天历史"""
+        try:
+            # 从图状态获取历史消息
+            history_list = self.graph_state.get_history_list(self._history_limit)
+
+            # 转换为更易处理的格式
+            formatted_history = []
+            for msg in history_list:
+                if hasattr(msg, "content"):
+                    content = msg.content
+                    if isinstance(content, list) and len(content) > 0:
+                        # 处理多模态消息，只取文本部分
+                        text_content = ""
+                        for item in content:
+                            if isinstance(item, dict) and item.get("type") == "text":
+                                text_content += item.get("text", "")
+                        content = text_content
+
+                    role = "user" if hasattr(msg, "__class__") and "Human" in msg.__class__.__name__ else "assistant"
+                    formatted_history.append({"role": role, "content": str(content)})
+
+            return formatted_history
+        except Exception as e:
+            logger.warning(f"获取聊天历史失败: {e}")
+            return []
+
+    def _format_history_for_prompt(self, history: List[Dict]) -> str:
+        """将历史消息格式化为提示词"""
+        formatted = "对话历史：\n"
+        for i, msg in enumerate(history, 1):
+            role_name = "用户" if msg["role"] == "user" else "助手"
+            formatted += f"{i}. {role_name}: {msg['content']}\n"
+
+        return formatted
+
+    def _parse_llm_output(self, output: str) -> Dict:
+        """解析LLM输出"""
+        try:
+            # 尝试解析JSON
+            # 清理可能的markdown代码块标记
+            cleaned_output = output.strip()
+            if cleaned_output.startswith("```json"):
+                cleaned_output = cleaned_output[7:]
+            if cleaned_output.endswith("```"):
+                cleaned_output = cleaned_output[:-3]
+            cleaned_output = cleaned_output.strip()
+
+            result = json.loads(cleaned_output)
+            return {
+                "questions": result.get("predicted_questions", []),
+                "analysis": result.get("analysis", ""),
+            }
+
+        except Exception as e:
+            logger.error(f"解析LLM输出失败: {e}")
+            return {
+                "questions": [{"question": "解析预测结果失败", "probability": 0.0, "reason": str(e)}],
+                "analysis": "输出解析出错",
+                "format": "error",
+                "raw_output": output,
+            }
+
+    def _predict_input(self, unique_id: str) -> Dict:
+        chat_history = self._get_chat_history()
+        if not chat_history:
+            return
+        self._history_used = chat_history
+
+        # 构建提示词
+        system_prompt = self._build_system_prompt()
+        self._system_prompt_used = system_prompt
+
+        history_text = self._format_history_for_prompt(chat_history)
+        output_format = self._build_output_format_prompt()
+
+        user_prompt = f"{history_text}\n\n{output_format}"
+
+        # 构建消息
+        messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+
+        # 调用LLM
+        result = self._predict_llm.invoke(messages, config=RunnableConfig())
+
+        # 解析结果
+        parsed_result = self._parse_llm_output(result.content)
+
+
+        self.callback_manager.on_guide_question(
+            GuideQuestionData(
+                node_id=self.id,
+                guide_question=[q["question"] for q in parsed_result["questions"]],
+                unique_id=unique_id,
+            )
+        )
