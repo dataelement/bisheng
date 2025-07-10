@@ -113,10 +113,13 @@ class MessageSessionDao(MessageSessionBase):
             statement = statement.where(
                 MessageSession.sensitive_status.in_([one.value for one in sensitive_status]))
         if flow_type:
-            statement = statement.where(MessageSession.flow_type == flow_type)
+            statement = statement.where(MessageSession.flow_type.in_(flow_type))
         else:
-            # 过滤掉工作站的会话, 默认不带工作站
-            statement = statement.where(MessageSession.flow_type != FlowType.WORKSTATION.value)
+            # 过滤掉工作站的会话, 默认不带工作站 和 灵思
+            statement = statement.where(
+                MessageSession.flow_type != FlowType.WORKSTATION.value)  # noqa
+            statement = statement.where(
+                MessageSession.flow_type != FlowType.LINSIGHT.value)  # noqa
         # 过滤掉被删除的会话
         return statement
 
@@ -133,7 +136,7 @@ class MessageSessionDao(MessageSessionBase):
                        exclude_chats: List[str] = None,
                        page: int = 0,
                        limit: int = 0,
-                       flow_type: int = None) -> List[MessageSession]:
+                       flow_type: List[int] = None) -> List[MessageSession]:
         statement = select(MessageSession)
         statement = cls.generate_filter_session_statement(statement,
                                                           chat_ids,

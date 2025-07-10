@@ -111,12 +111,10 @@ class LinsightWorkbenchImpl(object):
             prompt_service = app_ctx.get_prompt_loader()
             prompt_obj = prompt_service.render_prompt(namespace="gen_title", prompt_name="linsight",
                                                       USER_GOAL=question)
-            prompt = ChatPromptTemplate(
-                messages=[
-                    ("system", prompt_obj.prompt.system),
-                    ("user", prompt_obj.prompt.user),
-                ]
-            ).format_prompt()
+            prompt = [
+                ("system", prompt_obj.prompt.system),
+                ("user", prompt_obj.prompt.user)
+            ]
 
             # 生成任务标题
             task_title = await llm.ainvoke(prompt)

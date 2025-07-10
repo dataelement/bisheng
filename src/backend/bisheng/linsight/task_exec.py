@@ -6,7 +6,6 @@ import shutil
 from datetime import datetime
 from typing import Optional, List, Dict
 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import BaseTool
 
 from bisheng.api.services.assistant_agent import AssistantAgent
@@ -57,12 +56,10 @@ class LinsightWorkflowTask(object):
                 sop_detail=sop_content
             )
 
-            prompt = ChatPromptTemplate(
-                messages=[
-                    ("system", prompt_obj.prompt.system),
-                    ("user", prompt_obj.prompt.user),
-                ]
-            ).format_prompt()
+            prompt = [
+                ("system", prompt_obj.prompt.system),
+                ("user", prompt_obj.prompt.user)
+            ]
 
             res = await llm.ainvoke(prompt)
             if not res.content:

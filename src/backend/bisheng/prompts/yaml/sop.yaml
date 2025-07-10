@@ -14,13 +14,10 @@ prompts:
             # 约束
             1. SOP 名称应该尽量控制在 15 个字以内，SOP 描述应该尽量控制在 50 字以内。
             2. 请严格按下面 JSON 模板输出（字段顺序和名称请保持一致）：
-            
-            ```json
             {
               "sop_title": " 生成的 SOP 名称",
               "sop_description": "生成的 SOP 描述"
             }
-            ```
         user: |
             SOP 详细内容：
             ${sop_detail}
