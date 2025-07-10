@@ -6,7 +6,6 @@ import shutil
 from datetime import datetime
 from typing import Optional, List, Dict
 
-from celery import Task
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import BaseTool
 
@@ -22,11 +21,8 @@ from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.interface.llms.custom import BishengLLM
-from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
-from bisheng.worker import bisheng_celery
-from bisheng.worker.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
-from bisheng.worker.main import loop
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd
@@ -34,29 +30,16 @@ from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, Exe
 logger = logging.getLogger(__name__)
 
 
-class LinsightWorkflowTask(Task):
-    name = "bisheng.worker.linsight.LinsightWorkflowTask"
-
+class LinsightWorkflowTask(object):
     # 用户终止检查间隔（秒）
     USER_TERMINATION_CHECK_INTERVAL = 2
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, semaphore: asyncio.Semaphore):
+        self.semaphore = semaphore
         self._state_message_manager: Optional[LinsightStateMessageManager] = None
         self.final_task_end_event: Optional[TaskEnd] = None
         self._termination_check_task: Optional[asyncio.Task] = None
         self._is_terminated = False
-
-    def before_start(self, task_id: str, args: tuple, kwargs: dict) -> None:
-        """任务开始前执行的初始化逻辑"""
-        self.final_task_end_event = None
-        self._termination_check_task = None
-        self._is_terminated = False
-
-    @staticmethod
-    def delay(linsight_session_version_id: str):
-        """使用 Celery 异步加入任务队列"""
-        return bisheng_celery.send_task(LinsightWorkflowTask.name, args=(linsight_session_version_id,))
 
     @staticmethod
     async def get_bisheng_llm() -> BishengLLM:
@@ -115,7 +98,7 @@ class LinsightWorkflowTask(Task):
         file_path = os.path.join(tmp_dir, file_name)
 
         try:
-            http_client = await app_ctx.get_http_client(loop=app_ctx.get_event_loop())
+            http_client = await app_ctx.get_http_client()
             # 使用with语句确保文件正确关闭
             with open(file_path, "wb") as f:
                 async for chunk in http_client.stream(method="GET", url=str(file_url)):
@@ -493,6 +476,8 @@ class LinsightWorkflowTask(Task):
 
     async def async_run(self, linsight_session_version_id: str) -> None:
         """异步任务执行逻辑"""
+
+        self._state_message_manager = LinsightStateMessageManager(linsight_session_version_id)
         session_version_model = None
         file_dir = None
         try:
@@ -569,12 +554,6 @@ class LinsightWorkflowTask(Task):
                     shutil.rmtree(file_dir)
                 except Exception as cleanup_error:
                     logger.error(f"Error cleaning up file directory {file_dir}: {str(cleanup_error)}")
-
-    def run(self, linsight_session_version_id: str) -> None:
-        """同步 Celery 任务执行入口"""
-        self._state_message_manager = LinsightStateMessageManager(linsight_session_version_id)
-        util.run_async(self.async_run(linsight_session_version_id), loop=loop)
-
-
-# 注册任务
-bisheng_celery.register_task(LinsightWorkflowTask())
+            # 释放信号量
+            if self.semaphore.locked():
+                self.semaphore.release()

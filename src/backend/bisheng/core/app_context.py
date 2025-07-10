@@ -29,18 +29,7 @@ class AppContext:
         """
         key = "EVENT_LOOP"
         if key not in self.cache:
-            self.cache[key] = asyncio.get_event_loop()
-        return self.cache[key]
-
-    # 获取全局信号量量
-    def get_global_semaphore(self) -> asyncio.Semaphore:
-        """
-        获取全局信号量量，如果未初始化则进行初始化。
-        :return: asyncio.Semaphore 实例
-        """
-        key = "GLOBAL_SEMAPHORE"
-        if key not in self.cache:
-            self.cache[key] = asyncio.Semaphore(8)
+            self.cache[key] = asyncio.new_event_loop()
         return self.cache[key]
 
     # 获取 promptLoader
@@ -66,7 +55,6 @@ async def init_app_context():
     """
     loop = app_ctx.get_event_loop()
     await app_ctx.get_http_client(loop=loop)
-    app_ctx.get_global_semaphore()
     app_ctx.get_prompt_loader()
 
 

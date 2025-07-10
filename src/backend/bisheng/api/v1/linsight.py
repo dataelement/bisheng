@@ -15,9 +15,10 @@ from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
+from bisheng.cache.redis import redis_client
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPDao
-from bisheng.worker.linsight.state_message_manager import LinsightStateMessageManager
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager
 
 logger = logging.getLogger(__name__)
 
@@ -166,8 +167,12 @@ async def start_execute_sop(
     :param login_user:
     :return:
     """
-    from bisheng.worker.linsight.task_exec import LinsightWorkflowTask
-    LinsightWorkflowTask.delay(linsight_session_version_id=linsight_session_version_id)
+    # from bisheng.linsight.task_exec import LinsightWorkflowTask
+    # LinsightWorkflowTask.delay(linsight_session_version_id=linsight_session_version_id)
+    from bisheng.linsight.worker import RedisQueue
+    queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
+
+    await queue.put(data=linsight_session_version_id)
 
     return resp_200(data=True, message="灵思执行任务已开始，执行结果将通过消息流返回")
 

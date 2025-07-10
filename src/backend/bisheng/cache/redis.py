@@ -453,6 +453,11 @@ class RedisClient:
         """获取异步pipeline对象"""
         return self.async_connection.pipeline(transaction=transaction)
 
+    async def allen(self, key: str) -> int:
+        """Check if the key is in the cache using the 'in' operator."""
+        await self.acluster_nodes(key)
+        return await self.async_connection.llen(key)
+
     def __contains__(self, key):
         """Check if the key is in the cache."""
         self.cluster_nodes(key)
