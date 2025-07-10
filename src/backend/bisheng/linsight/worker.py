@@ -12,12 +12,6 @@ from bisheng.utils import util
 
 logger = logging.getLogger(__name__)
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--worker_num', type=int, default=4, help='进程数量，默认为4')
-# 每个进程的最大并发数
-parser.add_argument('--max_concurrency', type=int, default=32, help='每个进程的最大并发数，默认为32')
-
-args = parser.parse_args()
 
 
 # Redis 队列
@@ -82,7 +76,7 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
-        self.semaphore = asyncio.Semaphore(args.max_concurrency)
+        self.semaphore = asyncio.Semaphore(32)
         self.queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
 
         loop = app_ctx.get_event_loop()
@@ -112,6 +106,11 @@ def start_schedule_center_process(worker_num: int = 4) -> Optional[list[Schedule
 
 
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--worker_num', type=int, default=4, help='进程数量，默认为4')
+
+    args = parser.parse_args()
 
     try:
         processes = start_schedule_center_process(worker_num=args.worker_num)

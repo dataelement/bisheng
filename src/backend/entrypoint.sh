@@ -12,7 +12,7 @@ elif [ $start_mode = "worker" ]; then
     # 工作流执行worker
     nohup celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery &
 
-    python bisheng/linsight/worker.py --worker_num 8 --max_concurrency 32
+    python bisheng/linsight/worker.py --worker_num 8
 else
     echo "Invalid start mode. Use 'api' or 'worker'."
     exit 1
