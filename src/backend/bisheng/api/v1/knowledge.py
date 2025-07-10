@@ -180,6 +180,17 @@ def delete_knowledge(*,
     return resp_200(message='删除成功')
 
 
+# 个人知识库信息获取
+@router.get('/personal_knowledge_info', status_code=200)
+def get_personal_knowledge_info(
+        login_user: UserPayload = Depends(get_login_user)):
+    """ 获取个人知识库信息. """
+    knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
+                                                KnowledgeTypeEnum.PRIVATE)
+
+    return resp_200(data=knowledge)
+
+
 @router.get('/file_list/{knowledge_id}', status_code=200)
 def get_filelist(*,
                  request: Request,

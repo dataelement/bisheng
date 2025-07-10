@@ -1,12 +1,11 @@
 import uuid
-from io import BytesIO
 from typing import Dict, List
 
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 from fastapi import UploadFile
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import run_in_executor
 from langchain_core.tools import BaseTool
 
@@ -17,7 +16,7 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_uploaded_file, file_download, save_file_to_folder
+from bisheng.cache.utils import save_file_to_folder
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
@@ -347,14 +346,13 @@ class LinsightWorkbenchImpl(object):
                 markdown_str += f"{text}\n"
 
             # 写成markdown文件bytes
-            markdown_file_bytes = BytesIO()
-            markdown_file_bytes.write(markdown_str.encode('utf-8'))
-            markdown_file_bytes.seek(0)
+            markdown_file_bytes = markdown_str.encode('utf-8')
 
             # 生成唯一的文件名
             markdown_filename = f"{file_id}.md"
             # 保存markdown文件
-            minio_client.upload_tmp(markdown_filename, markdown_file_bytes.read())
+            minio_client.upload_tmp(markdown_filename, markdown_file_bytes)
+            markdown_file_md5 = util.calculate_md5(markdown_file_bytes)
 
             emb_model_id = workbench_conf.embedding_model.id
             embeddings = decide_embeddings(emb_model_id)
@@ -378,6 +376,7 @@ class LinsightWorkbenchImpl(object):
                 "parse_type": parse_type,
                 "markdown_filename": markdown_filename,
                 "markdown_file_path": f"{markdown_filename}",
+                "markdown_file_md5": markdown_file_md5,
                 "embedding_model_id": emb_model_id,
                 "collection_name": collection_name
             }

@@ -1,11 +1,12 @@
 import asyncio
+import hashlib
 import importlib
 import inspect
 import logging
 import re
 import time
 from functools import wraps
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
@@ -424,3 +425,24 @@ def retry_sync(num_retries=3, delay=0.5, return_exceptions=False):
         return wrapped
 
     return wrapper
+
+
+def calculate_md5(file: Union[str, bytes]):
+    """计算文档的 MD5 值。
+    Returns:
+        str: 文档的 MD5 值。
+    """
+    md5_hash = hashlib.md5()
+
+    if isinstance(file, bytes):
+        md5_hash.update(file)
+        return md5_hash.hexdigest()
+
+    else:
+        # 以二进制形式读取文件
+        with open(file, "rb") as f:
+            # 按块读取文件，避免大文件占用过多内存
+            for chunk in iter(lambda: f.read(4096), b""):
+                md5_hash.update(chunk)
+
+        return md5_hash.hexdigest()
