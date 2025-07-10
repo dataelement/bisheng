@@ -39,7 +39,8 @@ function ChatView({ index = 0 }: { index?: number }) {
 
   console.log('messagesTree :>> ', rootSubmission, messagesTree);
 
-  const chatHelpers = useChatHelpers(index, conversationId);
+  const [isLingsi, setIsLingsi] = useState(false);
+  const chatHelpers = useChatHelpers(index, conversationId, isLingsi);
   const addedChatHelpers = useAddedResponse({ rootIndex: index });
 
   useSSE(rootSubmission, chatHelpers, false); // rootSubmission变化触发SSE
@@ -48,9 +49,6 @@ function ChatView({ index = 0 }: { index?: number }) {
   const methods = useForm<ChatFormValues>({
     defaultValues: { text: '' },
   });
-
-  const [isLingsi, setIsLingsi] = useState(false);
-
 
   const isNew = conversationId === 'new';
   let content: JSX.Element | null | undefined;

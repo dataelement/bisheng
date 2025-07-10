@@ -141,3 +141,27 @@ export const playDing = () => {
     audio.remove();
   });
 }
+
+
+/**
+ * 切换导航栏的展开/闭合状态
+ * @param {boolean} shouldExpand - true表示展开，false表示关闭
+ */
+export const toggleNav = (shouldExpand) => {
+  // 获取导航栏切换按钮元素
+  const navToggle = document.querySelector('div[id="toggle-left-nav"]');
+
+  if (!navToggle) {
+    console.error('未找到导航栏切换按钮');
+    return;
+  }
+
+  // 获取当前展开状态
+  const isExpanded = navToggle.getAttribute('aria-expanded') === 'true';
+
+  // 判断是否需要操作
+  if ((shouldExpand && !isExpanded) || (!shouldExpand && isExpanded)) {
+    // 触发点击事件来切换状态
+    navToggle.click();
+  }
+}

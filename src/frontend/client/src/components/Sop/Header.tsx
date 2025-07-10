@@ -5,7 +5,7 @@ import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 
-export const Header = ({ isLoading, sesstionId }) => {
+export const Header = ({ isLoading, sesstionId, versionId, versions }) => {
     const [open2, setOpen2] = useState(false);
     const { getLinsight } = useLinsightManager()
     const linsight = useMemo(() => {
@@ -47,16 +47,16 @@ export const Header = ({ isLoading, sesstionId }) => {
                 </Popover>
 
                 {
-                    linsight?.tasks && linsight.tasks.length > 0 && <Select>
+                    versions.length > 0 && <Select onValueChange={() => console.log('切换版本 :>> ')}>
                         <SelectTrigger className="h-7 rounded-lg px-3 border bg-white hover:bg-gray-50 data-[state=open]:border-blue-500">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-normal text-gray-600">任务版本 2025/08/24 29D</span>
+                                <span className="text-xs font-normal text-gray-600">{versions.find(task => task.id === versionId)?.name}</span>
                             </div>
                         </SelectTrigger>
                         <SelectContent className="bg-white rounded-lg p-2 w-52 shadow-md">
                             {
-                                linsight.tasks.map(task => <SelectItem key={task.session_version_id} value="option1" className="text-xs px-3 py-2 hover:bg-gray-50">
-                                    任务版本 {task.task_data}
+                                versions.map(task => <SelectItem key={task.id} value="option1" className="text-xs px-3 py-2 hover:bg-gray-50">
+                                    任务版本 {task.name}
                                 </SelectItem>)
                             }
                         </SelectContent>

@@ -8,11 +8,14 @@ import useChatFunctions from '~/hooks/Chat/useChatFunctions';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useNewConvo from '~/hooks/useNewConvo';
 import store from '~/store';
+import { filesByIndex } from '~/store/linsight';
 
 // this to be set somewhere else
-export default function useChatHelpers(index = 0, paramId?: string) {
+export default function useChatHelpers(index = 0, paramId?: string, isLingsight = false) {
   const clearAllSubmissions = store.useClearSubmissionState();
   const [files, setFiles] = useRecoilState(store.filesByIndex(index));
+  const [linsightFiles, setLinsightFiles] = useRecoilState(filesByIndex(index));
+
   const [filesLoading, setFilesLoading] = useState(false);
 
   const queryClient = useQueryClient();
@@ -75,8 +78,8 @@ export default function useChatHelpers(index = 0, paramId?: string) {
 
   const { ask, regenerate } = useChatFunctions({
     index,
-    files,
-    setFiles,
+    files: isLingsight ? linsightFiles : files,
+    setFiles: isLingsight ? setLinsightFiles : setFiles,
     getMessages,
     setMessages,
     isSubmitting,
@@ -169,9 +172,9 @@ export default function useChatHelpers(index = 0, paramId?: string) {
     setOptionSettings,
     showAgentSettings,
     setShowAgentSettings,
-    files,
-    setFiles,
+    files: isLingsight ? linsightFiles : files,
+    setFiles: isLingsight ? setLinsightFiles : setFiles,
     filesLoading,
-    setFilesLoading,
+    setFilesLoading
   };
 }

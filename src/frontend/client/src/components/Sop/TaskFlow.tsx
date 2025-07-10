@@ -3,31 +3,68 @@ import { useGetBsConfig } from '~/data-provider';
 import { TaskControls } from './TaskControls';
 import { TaskFlowContent } from './TaskFlowContent';
 import { useMemo } from 'react';
-import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
+import { SopStatus } from './SOPEditor';
+import { submitLinsightFeedback } from '~/api/linsight';
 
-
-export const TaskFlow = ({ sesstionId }) => {
+export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
-    const { getLinsight } = useLinsightManager()
+    const { getLinsight, updateLinsight } = useLinsightManager()
 
-    const {stop, sendInput} = useLinsightWebSocket(sesstionId)
+    const { stop, sendInput } = useLinsightWebSocket(versionId)
 
-    const { sop, tools, tasks, isExecuting } = useMemo(() => {
-        const linsight = getLinsight(sesstionId)
-        if (linsight) {
-            const { sop, sop_map, tasks, status } = linsight
-            return { sop, sop_map, tasks, isExecuting: status === 'running' }
-        } else {
-            return { sop: '', tools: [], tasks: [], isExecuting: false }
+    const linsight = useMemo(() => {
+        const linsight = getLinsight(versionId)
+        return linsight || { sop: '', tools: [], tasks: [], status: '' }
+    }, [getLinsight, versionId])
+
+    const showTask = [SopStatus.Running, SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(linsight.status)
+
+    const currentTask = useMemo(() => {
+        const runningTask = linsight.tasks.find(task => task.status !== 'success')
+
+        if (runningTask) {
+            return runningTask; // 返回第一个未完成的任务
         }
-    }, [getLinsight, sesstionId])
+
+        //  如果没有未完成子任务的任务，则返回最后一个任务
+        return linsight.tasks[linsight.tasks.length - 1];
+    }, [linsight.tasks]);
+
+    const { setLinsightSubmission } = useLinsightSessionManager(versionId)
+    // 提交反馈
+    const handleFeedback = (rating, comment, check, cancel) => {
+        submitLinsightFeedback(versionId, {
+            feedback: comment,
+            score: rating,
+            is_reexecute: check,
+            cancel_feedback: cancel
+        }).then(res => {
+            console.log('res :>> ', res);
+
+            // setVersions()
+            //  setVersionId()
+            // 切换版本
+            updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
+            check && !cancel && setLinsightSubmission(versionId, {
+                isNew: false,
+                files: [],
+                question: linsight.question,
+                feedback: comment,
+                tools: [],
+                model: 'gpt-4',
+                enableWebSearch: false,
+                useKnowledgeBase: true
+            });
+        })
+    }
 
     return (
         <motion.div
-            className={`${isExecuting ? 'w-[70%]' : 'flex-1'} relative flex flex-col h-full rounded-2xl border border-[#E8E9ED] bg-white overflow-hidden`}
-            initial={{ width: isExecuting ? 'flex-1' : 'flex-1' }}
-            animate={{ width: isExecuting ? '70%' : 'flex-1' }}
+            className={`${showTask ? 'w-[70%]' : 'flex-1'} relative flex flex-col h-full rounded-2xl border border-[#E8E9ED] bg-white overflow-hidden`}
+            initial={{ width: showTask ? 'flex-1' : 'flex-1' }}
+            animate={{ width: showTask ? '70%' : 'flex-1' }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
         >
             <div className='flex items-center gap-2 border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780]'>
@@ -35,7 +72,7 @@ export const TaskFlow = ({ sesstionId }) => {
             </div>
 
             <div className='relative flex-1 pb-40 min-h-0 overflow-auto'>
-                {!isExecuting ? (
+                {!showTask && (
                     <div className='flex flex-col h-full justify-center text-center bg-gradient-to-b from-[#F4F8FF] to-white'>
                         <div className='size-10 mx-auto'>
                             <img
@@ -46,12 +83,24 @@ export const TaskFlow = ({ sesstionId }) => {
                         </div>
                         <p className='text-sm text-gray-400 mt-7'>确认SOP规划后，任务开始运行</p>
                     </div>
-                ) : (
-                    <TaskFlowContent tasks={tasks} wsMethod={sendInput} />
                 )}
+                {
+                    showTask && <TaskFlowContent
+                        tasks={linsight.tasks}
+                        summary={linsight?.summary}
+                        files={linsight?.file_list}
+                        sendInput={sendInput}
+                    />
+                }
             </div>
 
-            <TaskControls tasks={tasks} isExecuting={isExecuting} stop={stop} />
+            <TaskControls
+                current={currentTask}
+                tasks={linsight.tasks}
+                status={linsight.status}
+                onStop={stop}
+                onFeedback={handleFeedback}
+            />
         </motion.div>
     );
 };

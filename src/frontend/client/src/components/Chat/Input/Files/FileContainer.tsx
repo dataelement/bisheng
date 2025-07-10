@@ -11,7 +11,37 @@ const FileContainer = ({
   file: ExtendedFile | TFile;
   onDelete?: () => void;
 }) => {
-  const fileType = getFileType(file.type);
+
+  function getFileSuffix(file) {
+    if (file.type) {
+      return file.type;
+    }
+
+    if (!file.filename) return 'artifact';
+
+    // Extract file extension
+    const extension = file.filename.split('.').pop().toLowerCase();
+
+    // Match extensions to types
+    switch (extension) {
+      case 'txt':
+      case 'md':
+      case 'html':
+      case 'htm':
+        return 'text';
+
+      case 'csv':
+        return 'csv';
+
+      case 'pdf':
+        return 'pdf';
+
+      default:
+        return 'file';
+    }
+  }
+
+  const fileType = getFileType(getFileSuffix(file));
 
   return (
     <div className="group relative inline-block text-sm text-text-primary">

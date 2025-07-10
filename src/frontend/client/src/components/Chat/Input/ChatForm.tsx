@@ -1,4 +1,4 @@
-import { FileText, GlobeIcon, Rotate3DIcon, Settings2Icon, Spline, Waypoints } from 'lucide-react';
+import { File, FileText, FileUpIcon, GlobeIcon, KeyRound, Pencil, Rotate3DIcon, Settings2Icon, Spline, Waypoints } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { Switch, TextareaAutosize } from '~/components/ui';
@@ -81,7 +81,7 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
     submitButtonRef,
     setIsScrollable,
     disabled: !!(requiresKey ?? false),
-    placeholder: bsConfig?.inputPlaceholder // 请输入你的任务目标，然后交给 BISHENG 灵思
+    placeholder: isLingsi ? (bsConfig?.linsightConfig?.input_placeholder || '请输入你的任务目标，然后交给 BISHENG 灵思') : bsConfig?.inputPlaceholder
   });
 
   const {
@@ -184,10 +184,42 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
     ? `pr-${uploadActive ? '6' : '4'} pl-6`
     : `pl-${uploadActive ? '6' : '4'} pr-6`;
 
+  // linsight工具
+  const [tools, setTools] = useState([
+    {
+      id: 'pro_knowledge',
+      name: '组织知识库',
+      icon: <KeyRound size="16" />,
+      checked: true
+    },
+    {
+      id: 'knowledge',
+      name: '个人知识库',
+      icon: <Pencil size="16" />,
+      checked: true
+    },
+    //     id: 'search',
+    //     name: '联网搜索',
+    //     icon: <GlobeIcon size="16" />,
+    //     checked: true
+    // }
+  ])
+
+
+  const accept = useMemo(() => {
+    const etl4lm = true  // TODO bgconfig
+    if (isLingsi) {
+      return etl4lm
+        ? '.pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.doc,.png,.jpg,.jpeg,.bmp'
+        : '.pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx'
+    }
+    return ''
+  }, [isLingsi])
+
   return (
     <form
       onSubmit={methods.handleSubmit((data) => {
-        submitMessage({ ...data, linsight: isLingsi })
+        submitMessage({ ...data, linsight: isLingsi, tools })
         isLingsi && navigator('/sop/new')
       })}
       className={cn(
@@ -227,7 +259,12 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
           {/* 操作已添加的对话 */}
           {/* <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} /> */}
           {/* {bsConfig?.fileUpload.enabled && */}
-          <FileFormWrapper noUpload={!bsConfig?.fileUpload.enabled} disableInputs={disableInputs} disabledSearch={isSearch}>
+          <FileFormWrapper
+            accept={accept}
+            noUpload={!bsConfig?.fileUpload.enabled}
+            disableInputs={disableInputs}
+            disabledSearch={isSearch && !isLingsi}
+          >
             {endpoint && (
               <>
                 <CollapseChat
@@ -290,7 +327,15 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
             {!isLingsi && <ModelSelect value={chatModel.id} options={bsConfig?.models} onChange={val => {
               setChatModel({ id: Number(val), name: bsConfig?.models?.find(item => item.id === val)?.displayName || '' })
             }} />}
-            <ChatToolDown linsi={isLingsi} config={bsConfig} searchType={searchType} setSearchType={setSearchType} disabled={!!files.size} />
+            <ChatToolDown
+              tools={tools}
+              setTools={setTools}
+              linsi={isLingsi}
+              config={bsConfig}
+              searchType={searchType}
+              setSearchType={setSearchType}
+              disabled={!!files.size}
+            />
           </div>
         </div>
         {/* 气泡 */}
@@ -331,7 +376,7 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
     if (currentOpt) {
       return currentOpt.displayName
     } else {
-      onChange(options[0].id + '')
+      options[0] && onChange(options[0].id + '')
       return ''
     }
   }, [options, value])
@@ -354,3 +399,4 @@ const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'
 
 
 export default memo(ChatForm);
+

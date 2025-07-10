@@ -17,6 +17,7 @@ import store from '~/store';
 
 function FileFormWrapper({
   children,
+  accept = '',
   disableInputs,
   disabledSearch,
   noUpload = false
@@ -24,6 +25,7 @@ function FileFormWrapper({
   disableInputs: boolean;
   children?: React.ReactNode;
   disabledSearch: boolean;
+  accept?: string;
   noUpload: boolean;
 }) {
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
@@ -61,6 +63,7 @@ function FileFormWrapper({
       return (
         <AttachFile
           isRTL={isRTL}
+          accept={accept}
           disabled={disableInputs || disabledSearch}
           handleFileChange={handleFileChange}
         />

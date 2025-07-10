@@ -1,37 +1,44 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { Header } from './Header';
 import { SOPEditor } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
 import { useGenerateSop } from '~/hooks/useLinsightManager';
+import { getLinsightSessionVersionList } from '~/api/linsight';
 
 export default function index(params) {
+    // 获取url参数
+    const { conversationId } = useParams();
+    console.log('conversationId :>> ', conversationId);
     const location = useLocation();
-    const [sesstionId, setSesstionId] = useState('new')
-    console.log('location.pathname', location.pathname);
+    const [versions, setVersions] = useState<{id: string, name: string}[]>([]);
+    const [versionId, setVersionId] = useState('new')
 
-    const [isLoading, setIsLoading] = useState(true);
+    const [setIsLoading] = useState(true);
+
+    const isLoading = useGenerateSop(versionId, setVersionId, setVersions)
+    //
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 2000);
-        return () => clearTimeout(timer);
-    }, []);
+        getLinsightSessionVersionList("f5dd6fb689dc4b259746eaebd7496269").then(res => {
+            console.log('res xx :>> ', res);
 
-    useGenerateSop('new')
-    //
+            // getLinsightTaskList(versionId)
+        })
+    }, [conversationId])
 
     return (
         <div className='h-full bg-gradient-to-b from-[#F4F8FF] to-white'>
-            <Header isLoading={isLoading} sesstionId={sesstionId} />
+            <Header isLoading={isLoading} sesstionId={versionId} versionId={versionId} versions={versions} />
 
             {isLoading ? <LoadingBox /> : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
                 <div className='h-full flex gap-2'>
                     <SOPEditor
-                        sesstionId={sesstionId}
+                        versionId={versionId}
                         setIsLoading={setIsLoading}
                     />
 
-                    <TaskFlow sesstionId={sesstionId} />
+                    <TaskFlow versionId={versionId} setVersions={setVersions} setVersionId={setVersionId}/>
                 </div>
             </div>}
         </div>

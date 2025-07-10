@@ -2781,7 +2781,7 @@ button.scroll-convo {
 }
 .linsight-vditor .vditor-reset{
 	font-size: 14px;
-	padding: 0 !important;
+	padding: 0 20px 40px 0 !important;
 }
 .linsight-vditor .vditor-content{
 	min-height: 20px;

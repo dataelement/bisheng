@@ -28,9 +28,11 @@ export default defineConfig({
         },
       },
       '/workspace/api': {
+        // target: 'http://192.168.2.38:7860',
         target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
+        ws: true,
         rewrite: (path) => {
           return path.replace(/^\/workspace\/api/, '/api');
         },

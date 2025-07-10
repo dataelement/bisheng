@@ -1,17 +1,18 @@
-import { FileText, GlobeIcon, Settings2Icon, Wrench } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { FileText, GlobeIcon, Hammer, Settings2Icon } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import { Switch } from '~/components/ui';
 import { Select, SelectContent, SelectTrigger } from '~/components/ui/Select';
+import { useGetBsConfig } from '~/data-provider';
 import {
     BsConfig
 } from '~/data-provider/data-provider/src';
 import { cn } from '~/utils';
 
 // 工具
-export const ChatToolDown = ({ linsi, config, searchType, setSearchType, disabled }
+export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSearchType, disabled }
     : { linsi: boolean, config?: BsConfig, searchType: string, setSearchType: (type: string) => void, disabled: boolean }) => {
 
-    if (linsi) return <LinsiTools />
+    if (linsi) return <LinsiTools tools={tools} setTools={setTools} />
 
     return <Select disabled={disabled}>
         <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
@@ -64,47 +65,40 @@ export const ChatToolDown = ({ linsi, config, searchType, setSearchType, disable
 }
 
 
-const LinsiTools = () => {
-
-    const [tools, setTools] = useState([
-        {
-            id: 'knowledge',
-            name: '个人知识库',
-            icon: <FileText size="16" />,
-            checked: true
-        }, {
-            id: 'search',
-            name: '联网搜索',
-            icon: <GlobeIcon size="16" />,
-            checked: true
-        }, {
-            id: 'f23',
-            name: '其他工具',
-            icon: <Wrench size="16" />,
-            checked: true
-        }, {
-            id: 'sd3',
-            name: '一级工具名',
-            icon: <Wrench size="16" />,
-            checked: true
+const LinsiTools = ({ tools, setTools }) => {
+    const { data: bsConfig } = useGetBsConfig()
+    //   const toolsRef = useRef<any>([])
+    useEffect(() => {
+        if (bsConfig) {
+            const tools = bsConfig.linsightConfig.tools
+            const newTools = tools.map(tool => ({
+                id: tool.id,
+                name: tool.name,
+                icon: <Hammer size="16" />,
+                checked: true,
+                data: tool
+            }))
+            setTools((tools) => [...tools, ...newTools])
         }
-    ])
+
+    }, [bsConfig])
+
 
     const active = useMemo(() => tools.some(tool => tool.checked), [tools])
 
-    return <Select >
+    return <Select>
         <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
             <div className={cn('flex gap-2', active && 'text-blue-600')}>
                 <Settings2Icon size="16" />
                 <span className="text-xs font-normal">工具</span>
             </div>
         </SelectTrigger>
-        <SelectContent className='bg-white rounded-xl p-2 w-52'>
+        <SelectContent className='bg-white rounded-xl p-2 w-64'>
             {tools.map(tool => {
                 return <div key={tool.name} className='flex justify-between mb-2'>
                     <div className='flex gap-2 items-center'>
                         {tool.icon}
-                        <span className="text-xs font-normal">{tool.name}</span>
+                        <span className="max-w-36 text-xs font-normal line-clamp-1 flex-1 grow overflow-hidden">{tool.name}</span>
                     </div>
                     <Switch className='data-[state=checked]:bg-blue-600'
                         checked={tool.checked}

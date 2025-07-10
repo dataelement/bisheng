@@ -197,6 +197,7 @@ export const resendVerificationEmail = (
 };
 
 export const getAvailablePlugins = (): Promise<s.TPlugin[]> => {
+  return Promise.resolve([])
   return request.get(endpoints.plugins());
 };
 
@@ -465,14 +466,23 @@ export const uploadImage = (
 ): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
   return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
-    // res.data.temp_file_id = data.get('file_id')
+    if (!res.data.temp_file_id) {
+      res.data.temp_file_id = data.get('file_id')
+      res.data.filename = decodeURIComponent(res.data.file_name)
+    }
     return res.data
   });
 };
 
 export const uploadFile = (data: FormData, signal?: AbortSignal | null): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => res.data);
+  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
+    if (!res.data.temp_file_id) {
+      res.data.temp_file_id = data.get('file_id')
+      res.data.filename = decodeURIComponent(res.data.file_name)
+    }
+    return res.data
+  });
 };
 
 /* actions */

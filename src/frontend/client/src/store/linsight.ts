@@ -1,5 +1,6 @@
 // src/state/linsightState.ts
 import { atom, atomFamily, selectorFamily, useRecoilState } from 'recoil';
+import { ExtendedFile } from '~/common';
 
 export type LinsightInfo = {
     title: string;
@@ -7,14 +8,17 @@ export type LinsightInfo = {
     question: string;
     knowledge_enabled: boolean;
     sop: null | string;
-    sop_map: { [key in string]: string };
+    // sop_map: { [key in string]: string };
     status: string;
     execute_feedback: null | string;
     version: string;
     create_time: string;
     session_id: string;
     tools: {
-        tool_id: string;
+        id: string | number;
+        name: string;
+        is_preset: boolean;
+        children: ApiTool[];
     }[];
     files: {
         file_id: string;
@@ -38,7 +42,16 @@ export type LinsightInfo = {
         }[] | null;
         status: string;
         result: any | null;
-    }[]
+        children: any[]
+    }[],
+    summary: string;
+    file_list: any[]
+}
+
+interface ApiTool {
+    id: string | number;
+    name: string;
+    tool_key: string;
 }
 
 // 使用 Map 结构存储 {会话id-版本id: linsight信息}
@@ -64,8 +77,13 @@ export type ToolConfig = {
 
 export type SubmissionState = {
     isNew: boolean;
-    files: string[];
+    files: {
+        file_id: string;
+        file_name: string;
+        parsing_status: string;
+    }[];
     question: string;
+    feedback?: string;
     tools: ToolConfig[];
     model: string;
     enableWebSearch: boolean;
@@ -76,4 +94,10 @@ export type SubmissionState = {
 export const submissionState = atomFamily<SubmissionState | null, string>({
     key: 'submissionState',
     default: null, // 初始状态为null
+});
+
+// 上传文件管理
+export const filesByIndex = atomFamily<Map<string, ExtendedFile>, string | number>({
+  key: 'linsightFilesByIndex',
+  default: new Map(),
 });

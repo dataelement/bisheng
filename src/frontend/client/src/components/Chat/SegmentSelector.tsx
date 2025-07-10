@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { TooltipAnchor } from '../ui/Tooltip';
 
 const SegmentSelector = ({ onChange }) => {
     const [activeTab, setActiveTab] = useState('base');
@@ -17,7 +16,10 @@ const SegmentSelector = ({ onChange }) => {
                         ? 'bg-blue-50 shadow-sm'
                         : '0'
                         }`}
-                    onClick={() => setActiveTab('base')}
+                    onClick={() => {
+                        setActiveTab('base');
+                        window.isLinsight = false
+                    }}
                 >
                     日常模式
                 </button>
@@ -26,7 +28,10 @@ const SegmentSelector = ({ onChange }) => {
                         ? 'bg-blue-50 shadow-sm'
                         : ''
                         }`}
-                    onClick={() => setActiveTab('lingsi')}
+                    onClick={() => {
+                        setActiveTab('lingsi');
+                        window.isLinsight = true
+                    }}
                 >
                     <div className='flex items-center justify-center relative'>
                         {activeTab === 'lingsi' && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-4 block' alt="" />}
@@ -34,7 +39,7 @@ const SegmentSelector = ({ onChange }) => {
                     </div>
                 </button>
             </div>
-        </div>
+        </div >
     );
 };
 

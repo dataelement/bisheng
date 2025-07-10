@@ -1,9 +1,26 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { PencilLineIcon } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { Button, Textarea } from '../ui';
 import Markdown from './Markdown';
+import { saveSop, startLinsight } from '~/api/linsight';
+
+
+export const enum SopStatus {
+    /* SOP生成中 */
+    SopGenerating = 'sopGenerating',
+    /* SOP生成完成 */
+    SopGenerated = 'sopGenerated',
+    /* 开始执行 */
+    Running = 'running',
+    /* 执行完成 */
+    completed = 'completed',
+    /* 反馈完成 */
+    FeedbackCompleted = 'feedbackCompleted',
+    /* stop */
+    Stoped = 'stoped'
+}
 
 const slideDownAnimation = {
     initial: { y: 100, opacity: 0 },
@@ -47,44 +64,60 @@ const SOPEditorArea = ({ setOpenAreaText, onsubmit }) => {
     </div>
 }
 
-export const SOPEditor = ({ sesstionId, setIsLoading }) => {
+export const SOPEditor = ({ versionId, setIsLoading }) => {
     const [openAreaText, setOpenAreaText] = useState(false)
     const { getLinsight, updateLinsight } = useLinsightManager()
     const markdownRef = useRef(null)
 
-    const { sop, tools, isExecuting } = useMemo(() => {
-        const linsight = getLinsight(sesstionId)
-        if (linsight) {
-            const { sop, sop_map, status } = linsight
-            return { sop, sop_map, isExecuting: status === 'running' }
-        } else {
-            return { sop: '', tools: [], isExecuting: false }
-        }
-    }, [getLinsight, sesstionId])
+    const linsight = useMemo(() => {
+        const linsight = getLinsight(versionId)
+        return linsight || { sop: '', question: '', tools: [], status: '' }
+    }, [getLinsight, versionId])
 
-    console.log('sop :>> ', sop, tools, isExecuting);
 
     // start
     const handleRun = () => {
-        const { sop, sop_map } = markdownRef.current.getValue()
-        updateLinsight(sesstionId, { sop, sop_map, status: 'running' })
+        const { sop } = markdownRef.current.getValue()
+        // TODO sop替换变量
+        saveSop({
+            sop_content: sop,
+            linsight_session_version_id: versionId
+        }).then(res => {
+            if (res.status_code === 200) {
+                startLinsight(versionId).then(res => {
+                    if (res.status_code === 200) {
+                        updateLinsight(versionId, { sop, status: SopStatus.Running })
+                    }
+                })
+            }
+        }).catch(err => {
+            console.error('err :>> ', err);
+        })
     }
 
+
+    const { setLinsightSubmission } = useLinsightSessionManager(versionId)
     const handleReExcute = (prompt) => {
-        setIsLoading(true)
-        // api
-        updateLinsight(sesstionId, { sop: '# hahahaha' })
-
-        setTimeout(() => {
-            setIsLoading(false)
-        }, 1000);
+        setLinsightSubmission(versionId, {
+            isNew: false,
+            files: [],
+            question: linsight.question,
+            feedback: prompt,
+            tools: [],
+            model: 'gpt-4',
+            enableWebSearch: false,
+            useKnowledgeBase: true
+        });
     }
+
+    const showSopEdit = [SopStatus.Running, SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(linsight.status)
+
 
     return (
         <motion.div
-            className={`${isExecuting ? 'w-[30%]' : 'w-[70%]'} flex flex-col h-full relative rounded-2xl border border-[#E8E9ED] bg-white overflow-hidden`}
-            initial={{ width: isExecuting ? '30%' : '30%' }}
-            animate={{ width: isExecuting ? '30%' : '70%' }}
+            className={`${showSopEdit ? 'w-[30%]' : 'w-[70%]'} flex flex-col h-full relative rounded-2xl border border-[#E8E9ED] bg-white overflow-hidden`}
+            initial={{ width: showSopEdit ? '30%' : '30%' }}
+            animate={{ width: showSopEdit ? '30%' : '70%' }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
         >
             <div className='flex items-center gap-2 border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780]'>
@@ -93,10 +126,10 @@ export const SOPEditor = ({ sesstionId, setIsLoading }) => {
             </div>
 
             <div className='p-8 linsight-markdown flex-1 pb-40 min-h-0 overflow-hidden overflow-y-auto'>
-                <Markdown ref={markdownRef} value={sop} tools={tools} isExecuting={isExecuting} />
+                <Markdown ref={markdownRef} value={linsight.sop} tools={linsight.tools} edit={showSopEdit} />
             </div>
 
-            {!isExecuting && (
+            {linsight.status === SopStatus.SopGenerated && (
                 <AnimatePresence>
                     <motion.div
                         className='absolute bottom-6 w-full'
@@ -110,7 +143,10 @@ export const SOPEditor = ({ sesstionId, setIsLoading }) => {
                                     确认是否可以按照 SOP 执⾏任务
                                 </p>
                                 <div className='absolute right-4 bottom-4 flex gap-2'>
-                                    <Button variant="outline" className="px-3" onClick={() => setOpenAreaText(true)}>
+                                    <Button variant="outline" className="px-3" onClick={() => {
+                                        const { sop } = markdownRef.current.getValue()
+                                        sop?.trim() === '' ? handleReExcute('') : setOpenAreaText(true)
+                                    }}>
                                         重新生成 SOP
                                     </Button>
                                     <Button className="px-6" onClick={handleRun}>
