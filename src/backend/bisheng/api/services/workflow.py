@@ -197,6 +197,7 @@ class WorkFlowService(BaseService):
             message_id=chat_response.message_id,
             status='end',
             node_id=chat_response.message.get('node_id'),
+            node_name=chat_response.message.get('node_name'),
             node_execution_id=chat_response.message.get('unique_id'),
         )
         match workflow_event.event:
