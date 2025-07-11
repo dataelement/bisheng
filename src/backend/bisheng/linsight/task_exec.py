@@ -231,12 +231,16 @@ class LinsightWorkflowTask:
 
     async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List,
                             file_dir: str) -> LinsightAgent:
+
+        workbench_conf = await LLMService.get_workbench_llm()
+
         """创建智能体"""
         return LinsightAgent(
             llm=llm,
             query=session_model.question,
             tools=tools,
-            file_dir=file_dir
+            file_dir=file_dir,
+            task_mode=workbench_conf.linsight_executor_mode
         )
 
     # ==================== 任务执行 ====================
