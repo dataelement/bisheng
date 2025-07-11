@@ -202,8 +202,9 @@ class LinsightWorkbenchImpl(object):
                 "event": "error",
                 "data": "未配置任务执行模型"
             }
+            return
 
-        # 创建 BishengLLM
+            # 创建 BishengLLM
         llm = BishengLLM(model_id=workbench_conf.task_model.id)
 
         linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
@@ -212,65 +213,72 @@ class LinsightWorkbenchImpl(object):
                 "event": "error",
                 "data": "灵思会话版本不存在"
             }
+            return
+        try:
+            tools: List[BaseTool] = []
+            # TODO: 获取工具合集
+            if linsight_session_version_model.tools:
+                tool_ids = []
+                for tool in linsight_session_version_model.tools:
+                    if tool.get("children"):
+                        for child in tool["children"]:
+                            tool_ids.append(child.get("id"))
+                tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
 
-        tools: List[BaseTool] = []
-        # TODO: 获取工具合集
-        if linsight_session_version_model.tools:
-            tool_ids = []
-            for tool in linsight_session_version_model.tools:
-                if tool.get("children"):
-                    for child in tool["children"]:
-                        tool_ids.append(child.get("id"))
-            tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
+            history_summary = []
 
-        history_summary = []
+            # 如果需要重新执行任务，则查询所有执行任务信息
+            if reexecute and previous_session_version_id:
+                # 查询所有执行任务信息
+                execute_task_models = await cls.get_execute_task_detail(previous_session_version_id)
 
-        # 如果需要重新执行任务，则查询所有执行任务信息
-        if reexecute and previous_session_version_id:
-            # 查询所有执行任务信息
-            execute_task_models = await cls.get_execute_task_detail(previous_session_version_id)
+                for execute_task_model in execute_task_models:
+                    if execute_task_model.result:
+                        answer = execute_task_model.result.get("answer", "")
+                        if answer:
+                            history_summary.append(answer)
 
-            for execute_task_model in execute_task_models:
-                if execute_task_model.result:
-                    answer = execute_task_model.result.get("answer", "")
-                    if answer:
-                        history_summary.append(answer)
+                previous_session_version_model = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
+                feedback_content = previous_session_version_model.execute_feedback if previous_session_version_model.execute_feedback else feedback_content
 
-            previous_session_version_model = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
-            feedback_content = previous_session_version_model.execute_feedback if previous_session_version_model.execute_feedback else feedback_content
+            linsight_agent = LinsightAgent(file_dir="",
+                                           query=linsight_session_version_model.question,
+                                           llm=llm,
+                                           tools=tools)
+            content = ""
 
-        linsight_agent = LinsightAgent(file_dir="",
-                                       query=linsight_session_version_model.question,
-                                       llm=llm,
-                                       tools=tools)
-        content = ""
+            # 没有反馈内容
+            if feedback_content is None:
 
-        # 没有反馈内容
-        if feedback_content is None:
+                # 检索SOP模板
+                sop_template = await SOPManageService.search_sop(query=linsight_session_version_model.question)
+                sop_template = sop_template[0].page_content if sop_template else ""
 
-            # 检索SOP模板
-            sop_template = await SOPManageService.search_sop(query=linsight_session_version_model.question)
-            sop_template = sop_template[0].page_content if sop_template else ""
+                async for res in linsight_agent.generate_sop(sop=sop_template):
+                    content += res.content
+                    yield {
+                        "event": "generate_sop_content",
+                        "data": res.model_dump_json()
+                    }
 
-            async for res in linsight_agent.generate_sop(sop=sop_template):
-                content += res.content
-                yield {
-                    "event": "generate_sop_content",
-                    "data": res.model_dump_json()
-                }
+            else:
 
-        else:
+                sop_template = linsight_session_version_model.sop if linsight_session_version_model.sop else ""
 
-            sop_template = linsight_session_version_model.sop if linsight_session_version_model.sop else ""
-
-            async for res in linsight_agent.feedback_sop(sop=sop_template,
-                                                         feedback=feedback_content,
-                                                         history_summary=history_summary if history_summary else None):
-                content += res.content
-                yield {
-                    "event": "generate_sop_content",
-                    "data": res.model_dump_json()
-                }
+                async for res in linsight_agent.feedback_sop(sop=sop_template,
+                                                             feedback=feedback_content,
+                                                             history_summary=history_summary if history_summary else None):
+                    content += res.content
+                    yield {
+                        "event": "generate_sop_content",
+                        "data": res.model_dump_json()
+                    }
+        except Exception as e:
+            yield {
+                "event": "error",
+                "data": str(e)
+            }
+            return
 
         # 更新SOP内容
         await LinsightSessionVersionDao.modify_sop_content(
@@ -291,64 +299,69 @@ class LinsightWorkbenchImpl(object):
         workbench_conf = await LLMService.get_workbench_llm()
         if not workbench_conf and not workbench_conf.task_model:
             logger.error("未配置任务执行模型")
+            return
 
-        # 创建 BishengLLM
-        llm = BishengLLM(model_id=workbench_conf.task_model.id)
+        try:
+            # 创建 BishengLLM
+            llm = BishengLLM(model_id=workbench_conf.task_model.id)
 
-        tools: List[BaseTool] = []
-        # TODO: 获取工具合集
-        if session_version_model.tools:
-            tool_ids = []
-            for tool in session_version_model.tools:
-                if tool.get("children"):
-                    for child in tool["children"]:
-                        tool_ids.append(child.get("id"))
-            tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
+            tools: List[BaseTool] = []
+            # TODO: 获取工具合集
+            if session_version_model.tools:
+                tool_ids = []
+                for tool in session_version_model.tools:
+                    if tool.get("children"):
+                        for child in tool["children"]:
+                            tool_ids.append(child.get("id"))
+                tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
 
-        history_summary = []
-        # 查询所有执行任务信息
-        execute_task_models = await cls.get_execute_task_detail(session_version_model.id)
+            history_summary = []
+            # 查询所有执行任务信息
+            execute_task_models = await cls.get_execute_task_detail(session_version_model.id)
 
-        for execute_task_model in execute_task_models:
-            if execute_task_model.result:
-                answer = execute_task_model.result.get("answer", "")
-                if answer:
-                    history_summary.append(answer)
+            for execute_task_model in execute_task_models:
+                if execute_task_model.result:
+                    answer = execute_task_model.result.get("answer", "")
+                    if answer:
+                        history_summary.append(answer)
 
-        linsight_agent = LinsightAgent(file_dir="",
-                                       query=session_version_model.question,
-                                       llm=llm,
-                                       tools=tools)
-        sop_content = ""
-        async for res in linsight_agent.feedback_sop(sop=session_version_model.sop if session_version_model.sop else "",
-                                                     feedback=feedback,
-                                                     history_summary=history_summary if history_summary else None):
-            sop_content += res.content
+            linsight_agent = LinsightAgent(file_dir="",
+                                           query=session_version_model.question,
+                                           llm=llm,
+                                           tools=tools)
+            sop_content = ""
+            async for res in linsight_agent.feedback_sop(
+                    sop=session_version_model.sop if session_version_model.sop else "",
+                    feedback=feedback,
+                    history_summary=history_summary if history_summary else None):
+                sop_content += res.content
 
-        sop_summary = await LinsightWorkflowTask.generate_sop_summary(sop_content, llm)
+            sop_summary = await LinsightWorkflowTask.generate_sop_summary(sop_content, llm)
 
-        # 更新SOP内容
-        sop_model = await LinsightSOPDao.get_sop_by_session_id(session_version_model.session_id)
-        if sop_model:
-            sop_update_obj = SOPManagementUpdateSchema(
-                id=sop_model.id,
-                content=sop_content,
-                name=sop_summary["sop_title"],
-                description=sop_summary["sop_description"],
-                rating=session_version_model.score,
-                linsight_session_id=session_version_model.session_id
-            )
-            await SOPManageService.update_sop(sop_update_obj)
-        else:
-            sop_create_obj = SOPManagementSchema(
-                content=sop_content,
-                name=sop_summary["sop_title"],
-                description=sop_summary["sop_description"],
-                rating=session_version_model.score,
-                linsight_session_id=session_version_model.session_id
-            )
+            # 更新SOP内容
+            sop_model = await LinsightSOPDao.get_sop_by_session_id(session_version_model.session_id)
+            if sop_model:
+                sop_update_obj = SOPManagementUpdateSchema(
+                    id=sop_model.id,
+                    content=sop_content,
+                    name=sop_summary["sop_title"],
+                    description=sop_summary["sop_description"],
+                    rating=session_version_model.score,
+                    linsight_session_id=session_version_model.session_id
+                )
+                await SOPManageService.update_sop(sop_update_obj)
+            else:
+                sop_create_obj = SOPManagementSchema(
+                    content=sop_content,
+                    name=sop_summary["sop_title"],
+                    description=sop_summary["sop_description"],
+                    rating=session_version_model.score,
+                    linsight_session_id=session_version_model.session_id
+                )
 
-            await SOPManageService.add_sop(sop_create_obj, user_id=session_version_model.user_id)
+                await SOPManageService.add_sop(sop_create_obj, user_id=session_version_model.user_id)
+        except Exception as e:
+            logger.error(f"反馈重新生成SOP任务失败: {str(e)}")
 
     @classmethod
     async def get_execute_task_detail(cls, session_version_id: str,
