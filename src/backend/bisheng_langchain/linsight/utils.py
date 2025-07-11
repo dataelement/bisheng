@@ -74,7 +74,7 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
         try:
             model_name = getattr(llm, "model_name")
         except AttributeError:
-            model_name = getattr(llm, "azure_deployment", "unknown_model")
+            model_name = getattr(llm, "deployment_name", "unknown_model")
 
     debug_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "linsightdebug"))
     os.makedirs(debug_path, exist_ok=True)

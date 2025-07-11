@@ -140,13 +140,14 @@ class BaseTask(BaseModel):
                                                  subtask=[one.get_task_info() for one in self.children]))
         if not self.children:
             raise ValueError("No sub-tasks generated for the loop task.")
-        _ = await asyncio.gather(*[one.ainvoke() for one in self.children])
-
         # 如果是循环任务，子任务执行完毕后需要将结果合并。目前
         all_failed = True
         answer = []
         error = ""
+        # _ = await asyncio.gather(*[one.ainvoke() for one in self.children])
+
         for one in self.children:
+            await one.ainvoke()
             if one.status == TaskStatus.SUCCESS.value:
                 all_failed = False
                 answer.append(one.get_finally_answer())

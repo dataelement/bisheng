@@ -109,9 +109,9 @@ class LinsightAgent(BaseModel):
         """
         # Add main functionality logic here
         if not self.task_manager:
-            self.task_manager = TaskManage(tasks=tasks, tools=self.tools)
+            self.task_manager = TaskManage(tasks=tasks, tools=self.tools, task_mode=self.task_mode)
             self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop,
-                                            mode=self.task_mode, debug=self.debug, debug_id=self.debug_id)
+                                            debug=self.debug, debug_id=self.debug_id)
 
         async for one in self.task_manager.ainvoke_task():
             yield one
