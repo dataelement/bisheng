@@ -7,6 +7,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
 
+from langchain_core.runnables import run_in_executor
+
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.llm import LLMService
@@ -309,9 +311,7 @@ class LinsightWorkflowTask:
             """终止监控任务"""
             while True:
                 await asyncio.sleep(0.5)  # 每0.5秒检查一次
-                if self._is_terminated:
-                    logger.info("检测到终止信号，准备终止智能体任务")
-                    raise UserTerminationError("任务被用户终止")
+                self._check_termination()
 
         try:
             # 创建两个并发任务
@@ -477,6 +477,7 @@ class LinsightWorkflowTask:
     def _check_termination(self):
         """检查是否被终止"""
         if self._is_terminated:
+            logger.info("检测到终止信号，准备终止智能体任务")
             raise UserTerminationError("任务被用户终止")
 
     async def _start_termination_monitor(self, session_model: LinsightSessionVersion):
@@ -557,10 +558,49 @@ class LinsightWorkflowTask:
         # 读取文件目录文件详情
         file_details = await self._read_file_directory(file_dir)
 
-        logger.debug(f"读取文件目录文件详情: {file_details}")
+        logger.debug(f"读取文件目录文件详情读取文件目录文件详情: {file_details}")
+
+        # 最终结果文件
+        final_result_files = []
+
+        for file_info in file_details:
+            file_name: str = file_info["file_name"]
+            # 判断文件名是否在self._final_result.answer字符串中
+            if file_name in self._final_result.answer:
+                # 如果文件名在答案中，添加到答案中
+                final_result_files.append({
+                    "file_name": file_name,
+                    "file_path": file_info["file_path"],
+                    "file_md5": file_info["file_md5"],
+                    "file_id": file_info["file_id"]
+                })
+
+        # 上传minio
+        def upload_file_to_minio(final_file_info: Dict) -> Optional[dict]:
+            """上传文件到MinIO并返回文件信息"""
+            try:
+                object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
+                minio_client.upload_minio(
+                    bucket_name=settings.minio_conf.bucket,
+                    object_name=object_name,
+                    file_path=final_file_info["file_path"]
+                )
+                return
+            except Exception as e:
+                logger.error(f"上传文件到MinIO失败 {file_info['file_name']}: {e}")
+                return None
+
+        # 上传文件到MinIO
+
+        for final_file_info in final_result_files:
+            upload_result = await run_in_executor(None, upload_file_to_minio, final_file_info)
+            if upload_result:
+                final_file_info["file_url"] = upload_result
+            else:
+                logger.error(f"上传文件失败: {final_file_info['file_name']}")
 
         session_model.status = SessionVersionStatusEnum.COMPLETED
-        session_model.output_result = {"answer": self._final_result.answer}
+        session_model.output_result = {"answer": self._final_result.answer, "final_files": final_result_files}
 
         await self._state_manager.set_session_version_info(session_model)
         await self._state_manager.push_message(
