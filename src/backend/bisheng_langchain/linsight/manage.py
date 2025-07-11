@@ -50,16 +50,14 @@ class TaskManage(BaseModel):
                                      task_manager=self,
                                      llm=llm,
                                      file_dir=file_dir,
-                                     finally_sop=sop,
-                                     mode=mode)
+                                     finally_sop=sop)
             else:
                 task_instance = ReactTask(**task,
                                           query=query,
                                           task_manager=self,
                                           llm=llm,
                                           file_dir=file_dir,
-                                          finally_sop=sop,
-                                          mode=mode)
+                                          finally_sop=sop)
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue
