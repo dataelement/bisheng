@@ -172,11 +172,11 @@ class LinsightWorkflowTask:
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
         """初始化文件目录"""
-        if not session_model.files:
-            return ""
-
         file_dir = os.path.join(CACHE_DIR, "linsight", session_model.id)
         os.makedirs(file_dir, exist_ok=True)
+
+        if not session_model.files:
+            return file_dir
 
         # 并发下载文件
         download_tasks = [

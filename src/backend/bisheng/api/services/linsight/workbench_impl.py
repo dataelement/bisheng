@@ -262,7 +262,7 @@ class LinsightWorkbenchImpl(object):
 
                 # 检索SOP模板
                 sop_template = await SOPManageService.search_sop(query=linsight_session_version_model.question, k=3)
-                sop_template = "\n\n".join([sop.page_content for sop in sop_template if sop.page_content])
+                sop_template = "\n\n".join([f"例子:\n\n{sop.page_content}" for sop in sop_template if sop.page_content])
 
                 async for res in linsight_agent.generate_sop(sop=sop_template):
                     content += res.content
@@ -274,6 +274,8 @@ class LinsightWorkbenchImpl(object):
             else:
 
                 sop_template = linsight_session_version_model.sop if linsight_session_version_model.sop else ""
+                if sop_template:
+                    sop_template = f"例子:\n\n{sop_template}"
 
                 async for res in linsight_agent.feedback_sop(sop=sop_template,
                                                              feedback=feedback_content,
@@ -349,8 +351,9 @@ class LinsightWorkbenchImpl(object):
                                            debug=settings.linsight_conf.debug,
                                            debug_id=session_version_model.id)
             sop_content = ""
+            sop_template = session_version_model.sop if session_version_model.sop else ""
             async for res in linsight_agent.feedback_sop(
-                    sop=session_version_model.sop if session_version_model.sop else "",
+                    sop=sop_template,
                     feedback=feedback,
                     history_summary=history_summary if history_summary else None):
                 sop_content += res.content
