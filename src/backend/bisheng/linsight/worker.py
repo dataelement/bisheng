@@ -8,7 +8,9 @@ from typing import Optional
 from bisheng.cache.redis import RedisClient, redis_client
 from bisheng.core.app_context import app_ctx
 from bisheng.linsight.task_exec import LinsightWorkflowTask
+from bisheng.settings import settings
 from bisheng.utils import util
+from bisheng.utils.logger import configure
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,8 @@ if __name__ == '__main__':
     parser.add_argument('--worker_num', type=int, default=4, help='进程数量，默认为4')
 
     args = parser.parse_args()
+
+    configure(settings.logger_conf)
 
     try:
         processes = start_schedule_center_process(worker_num=args.worker_num)

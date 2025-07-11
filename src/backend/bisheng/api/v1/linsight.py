@@ -68,17 +68,26 @@ async def submit_linsight_workbench(
     :param login_user:
     :return:
     """
-    message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(submit_obj,
-                                                                                                             login_user)
 
     async def event_generator():
         """
         事件生成器，用于生成SSE事件
         """
-        response_data = {
-            "message_session": message_session_model.model_dump(),
-            "linsight_session_version": linsight_session_version_model.model_dump()
-        }
+        try:
+            message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
+                submit_obj,
+                login_user)
+
+            response_data = {
+                "message_session": message_session_model.model_dump(),
+                "linsight_session_version": linsight_session_version_model.model_dump()
+            }
+        except Exception as e:
+            yield {
+                "event": "error",
+                "data": "提交灵思用户问题失败: " + str(e)
+            }
+            return
 
         yield {
             "event": "linsight_workbench_submit",
@@ -89,6 +98,9 @@ async def submit_linsight_workbench(
         title_data = await LinsightWorkbenchImpl.task_title_generate(question=submit_obj.question,
                                                                      chat_id=message_session_model.chat_id,
                                                                      login_user=login_user)
+
+        linsight_session_version_model.title = title_data.get("task_title")
+        await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
         yield {
             "event": "linsight_workbench_title_generate",

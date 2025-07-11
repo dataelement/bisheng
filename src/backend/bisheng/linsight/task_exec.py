@@ -262,6 +262,14 @@ class LinsightWorkflowTask:
             await LinsightExecuteTaskDao.batch_create_tasks(tasks)
             await self._state_manager.set_execution_tasks(tasks)
 
+            # 推送生成任务消息
+            await self._state_manager.push_message(MessageData(
+                event_type=MessageEventType.TASK_GENERATE,
+                data={"tasks": [task.model_dump() for task in tasks]}
+            ))
+
+            logger.info(f"Set {len(tasks)} execution tasks")
+
         except Exception as e:
             logger.error(f"保存任务信息失败: {e}")
             raise TaskExecutionError(f"保存任务信息失败: {e}")

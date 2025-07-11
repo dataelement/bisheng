@@ -36,6 +36,7 @@ class LinsightSessionVersionBase(SQLModelSerializable):
                                                                         index=True))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     question: str = Field(..., description='用户问题', sa_type=Text, nullable=False)
+    title: Optional[str] = Field(None, description='会话标题', sa_type=Text, nullable=True)
     tools: Optional[List[Dict]] = Field(None, description='可用的工具列表', sa_type=JSON, nullable=True)
     # 个人知识库
     personal_knowledge_enabled: bool = Field(False, description='是否启用个人知识库', sa_type=Boolean)
