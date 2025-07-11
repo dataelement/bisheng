@@ -16,6 +16,6 @@ class TaskStatus(Enum):
 
 
 # 任务执行模式
-class TaskMode(Enum):
+class TaskMode(str, Enum):
     REACT = 'react'  # React 模式
     FUNCTION = 'func_call'  # func call 模式
