@@ -1,17 +1,13 @@
 // components/ToolSelector.tsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
-// import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
 import { Plus, X, AlignJustify, User, Star, CpuIcon } from 'lucide-react';
-
 import { SearchInput } from '../bs-ui/input';
-// import { LoadIcon } from '../bs-ui/loading';
 import { Button } from '../bs-ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
-import { LoadIcon } from '../bs-icons/loading';
 import { Check, Minus } from "lucide-react";
+import { LoadIcon } from '../bs-icons/loading';
 
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
@@ -34,6 +30,112 @@ const ToolSelector = ({
   setManuallyExpandedItems,
   toggleGroup,
 }) => {
+  const [scrollToParentId, setScrollToParentId] = useState<string | null>(null);
+  const [isExpanding, setIsExpanding] = useState(false);
+  const [targetCategory, setTargetCategory] = useState<string | null>(null);
+  const scrollAttempts = useRef(0);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+ const activeTabElement = document.querySelector('.space-y-1 button.bg-blue-100');
+
+  // 处理左侧工具项的点击
+  const handleSelectedToolClick = (tool) => {
+    setShowToolSelector(true);
+    
+    // 获取当前激活标签页对应的分类名称
+    let currentCategoryName = "";
+    switch (activeToolTab) {
+      case 'builtin':
+        currentCategoryName = "内置工具";
+        break;
+      case 'api':
+        currentCategoryName = "API工具";
+        break;
+      case 'mcp':
+        currentCategoryName = "MCP工具";
+        break;
+      default:
+        currentCategoryName = "内置工具";
+    }
+
+    if (tool.children) {
+      let toolCategory = 'builtin';
+      console.log(currentCategoryName);
+      
+      if (currentCategoryName === 'API工具') toolCategory = 'api';
+      else if (currentCategoryName === 'MCP工具') toolCategory = 'mcp';
+      
+      setTargetCategory(toolCategory);
+      
+      if (activeToolTab !== toolCategory) {
+        setActiveToolTab(toolCategory);
+      } else {
+        scrollToTool(tool.id);
+      }
+      
+      if (!expandedItems.includes(tool.id)) {
+        setIsExpanding(true);
+        setManuallyExpandedItems([...expandedItems, tool.id]);
+      } else {
+        scrollToTool(tool.id);
+      }
+    }
+  };
+  const scrollToTool = (toolId: string) => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    
+    scrollAttempts.current = 0;
+    const tryScroll = () => {
+      scrollAttempts.current++;
+      const element = document.getElementById(`tool-${toolId}`);
+      
+      if (element) {
+        const container = document.querySelector('.w-2\\/3.p-4.max-h-\\[400px\\].overflow-y-auto');
+        if (container) {
+          const elementRect = element.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          
+          const offsetTop = elementRect.top - containerRect.top + container.scrollTop;
+          
+          container.scrollTo({
+            top: offsetTop - 100,
+            behavior: 'smooth'
+          });
+        }
+        setTimeout(() => {
+          element.classList.remove('bg-blue-50');
+        }, 2000);
+      }
+    };
+    
+    scrollTimeoutRef.current = setTimeout(tryScroll, 100);
+  };
+
+  useEffect(() => {
+    if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
+      scrollToTool(scrollToParentId);
+      setTargetCategory(null);
+    }
+  }, [activeToolTab, targetCategory]);
+
+  useEffect(() => {
+    if (isExpanding && scrollToParentId) {
+      setTimeout(() => {
+        scrollToTool(scrollToParentId);
+        setIsExpanding(false);
+      }, 500);
+    }
+  }, [isExpanding, scrollToParentId]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const getGroupState = (group): CheckboxState => {
     const parent = selectedTools.find(t => t.id === group.id);
     if (!parent) return 'unchecked';
@@ -85,8 +187,10 @@ const ToolSelector = ({
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                           {...provided.dragHandleProps}
-                          className={`flex items-center justify-between p-3 py-2 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
-                            }`}
+                          className={`flex items-center justify-between p-3 py-2 rounded-lg ${
+                            snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                          }`}
+                          onClick={() => handleSelectedToolClick(tool)}
                         >
                           <div className="flex items-center">
                             <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
@@ -102,7 +206,10 @@ const ToolSelector = ({
                             </TooltipProvider>
                           </div>
                           <button
-                            onClick={() => removeTool(index)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeTool(index);
+                            }}
                             className="text-red-500 hover:text-red-700 ml-2"
                           >
                             <X className="w-4 h-4" />
@@ -190,7 +297,12 @@ const ToolSelector = ({
                 }}
               >
                 {filteredTools.map((tool) => (
-                  <AccordionItem key={tool.id} value={tool.id}>
+                  <AccordionItem 
+                    key={tool.id} 
+                    value={tool.id} 
+                    id={`tool-${tool.id}`}
+                    className={expandedItems.includes(tool.id) ? 'bg-gray-50' : ''}
+                  >
                     <div className="flex items-center gap-2">
                       <AccordionTrigger className="p-0 w-4 hover:no-underline">
                       </AccordionTrigger>
@@ -221,12 +333,13 @@ const ToolSelector = ({
                     <AccordionContent>
                       {tool.children?.map(child => (
                         <div
+                          key={child.id}
+                          id={`tool-child-${child.id}`}
                           className="flex items-center gap-2 ml-10 p-2 hover:bg-gray-50 cursor-pointer"
                           onClick={() => toggleTool(tool, child)}
                         >
-
                           <div className={`w-4 h-4 border rounded flex items-center justify-center 
-    ${isToolSelected(tool.id, child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
+                            ${isToolSelected(tool.id, child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
                             {isToolSelected(tool.id, child.id) && <Check className="w-3 h-3" style={{ color: 'white' }} />}
                           </div>
                           <div className="min-w-0">
@@ -261,7 +374,6 @@ const ToolSelector = ({
                               </TooltipProvider>
                             )}
                           </div>
-
                         </div>
                       ))}
                     </AccordionContent>
