@@ -514,7 +514,7 @@ class LinsightWorkflowTask:
     async def _save_sop(self, session_model: LinsightSessionVersion, llm: BishengLLM):
         """保存SOP"""
         try:
-            sop_summary = await self._generate_sop_summary(session_model.sop, llm)
+            sop_summary = await self.generate_sop_summary(session_model.sop, llm)
 
             sop_obj = SOPManagementSchema(
                 name=sop_summary["sop_title"],
@@ -529,7 +529,8 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.error(f"保存SOP失败: {e}")
 
-    async def _generate_sop_summary(self, sop_content: str, llm: BishengLLM) -> Dict[str, str]:
+    @staticmethod
+    async def generate_sop_summary(sop_content: str, llm: BishengLLM) -> Dict[str, str]:
         """生成SOP摘要"""
         default_summary = {"sop_title": "SOP名称", "sop_description": "SOP描述"}
 

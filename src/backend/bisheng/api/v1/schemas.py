@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union, Literal
 
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -14,6 +14,7 @@ from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.llm_server import LLMModelBase, LLMServerBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
+from bisheng_langchain.linsight.const import TaskMode
 
 
 class CaptchaInput(BaseModel):
@@ -458,6 +459,7 @@ class LinsightConfig(BaseModel):
     input_placeholder: str = Field(..., description='输入框提示语')
     tools: Optional[List[Dict]] = Field(None, description='灵思可选工具列表')
 
+
 class WorkbenchModelConfig(BaseModel):
     """
     灵思模型配置
@@ -466,6 +468,8 @@ class WorkbenchModelConfig(BaseModel):
     task_model: Optional[WSModel] = Field(None, description='任务执行模型')
     # 检索embedding模型
     embedding_model: Optional[WSModel] = Field(None, description='embedding模型')
+    # 灵思执行模式
+    linsight_executor_mode: Optional[TaskMode] = Field(None, description='灵思执行模式')
 
 
 class WorkstationConfig(BaseModel):

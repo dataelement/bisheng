@@ -2,7 +2,7 @@ import json
 import logging
 from typing import List, Literal
 
-from fastapi import APIRouter, Depends, Body, Query, UploadFile, File
+from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
 from sse_starlette import EventSourceResponse
 from starlette.websockets import WebSocket
@@ -16,7 +16,8 @@ from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPMan
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
-from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
+from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
+    LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
 
@@ -101,11 +102,13 @@ async def submit_linsight_workbench(
 @router.post("/workbench/generate-sop", summary="生成与重新规划灵思SOP", response_model=UnifiedResponseModel)
 async def generate_sop(
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
+        previous_session_version_id: str = Body(None, description="上一个灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
         reexecute: bool = Body(False, description="是否重新执行生成SOP"),
         login_user: UserPayload = Depends(get_login_user)) -> EventSourceResponse:
     """
     生成与重新规划灵思SOP
+    :param previous_session_version_id:
     :param reexecute:
     :param linsight_session_version_id:
     :param feedback_content:
@@ -120,6 +123,7 @@ async def generate_sop(
         # 生成SOP
         sop_generate = LinsightWorkbenchImpl.generate_sop(
             linsight_session_version_id=linsight_session_version_id,
+            previous_session_version_id=previous_session_version_id,
             feedback_content=feedback_content,
             reexecute=reexecute,
             login_user=login_user
@@ -202,6 +206,7 @@ async def user_input(
 # workbench 提交执行结果反馈
 @router.post("/workbench/submit-feedback", summary="提交执行结果反馈", response_model=UnifiedResponseModel)
 async def submit_feedback(
+        background_tasks: BackgroundTasks,
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
         feedback: str = Body(None, description="用户反馈意见"),
         score: int = Body(None, ge=1, le=5, description="用户评分，1-5分"),
@@ -210,6 +215,7 @@ async def submit_feedback(
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     提交执行结果反馈
+    :param background_tasks:
     :param cancel_feedback:
     :param linsight_session_version_id:
     :param feedback:
@@ -218,7 +224,74 @@ async def submit_feedback(
     :param login_user:
     :return:
     """
-    # TODO: 实现提交执行结果反馈的逻辑，如果有提交反馈信息，则根据反馈信息重新生成SOP并保存
+
+    session_version_model = await LinsightSessionVersionDao.get_by_id(
+        linsight_session_version_id=linsight_session_version_id)
+
+    if not session_version_model:
+        return resp_500(code=404, message="灵思会话版本不存在")
+
+    # score 不为空，且大于3，cancel_feedback 为 False feedback 为 None 或空字符串
+    if score is not None and score > 3 and (feedback is None or feedback.strip() == "") and cancel_feedback is False:
+        session_version_model.score = score
+        session_version_model.execute_feedback = "评分大于3，未提供反馈"
+        # 获取sop
+        sop_model = await LinsightSOPDao.get_sop_by_session_id(session_version_model.session_id)
+        if sop_model:
+            sop_model.rating = score
+            await LinsightSOPDao.create_sop(sop_model)
+        # 更新会话版本
+        await LinsightSessionVersionDao.insert_one(session_version_model)
+
+        return resp_200(data=True, message="评分已提交，感谢您的反馈")
+
+    # score 小于等于3，且没有取消反馈 feedback 不为空
+    if score is not None and score <= 3 and (
+            feedback is not None and feedback.strip() != "") and cancel_feedback is False and is_reexecute is False:
+        # 反馈并重新生成SOP
+        session_version_model.score = score
+        session_version_model.execute_feedback = feedback
+        await LinsightSessionVersionDao.insert_one(session_version_model)
+
+        # 执行重新生成SOP任务
+        background_tasks.add_task(
+            LinsightWorkbenchImpl.feedback_regenerate_sop_task,
+            session_version_model,
+            feedback
+        )
+
+        return resp_200(data=True, message="反馈已提交，正在重新生成SOP")
+
+    # score 小于等于3，且没有取消反馈 feedback 不为空 is_reexecute 为 True
+    if score is not None and score <= 3 and (
+            feedback is not None and feedback.strip() != "") and cancel_feedback is False and is_reexecute is True:
+        # 重新执行灵思的逻辑
+        session_version_model.score = score
+        session_version_model.execute_feedback = feedback
+        await LinsightSessionVersionDao.insert_one(session_version_model)
+
+        # 灵思会话版本
+        linsight_session_version_model = LinsightSessionVersion(
+            session_id=session_version_model.session_id,
+            user_id=login_user.user_id,
+            question=session_version_model.question,
+            tools=session_version_model.tools,
+            org_knowledge_enabled=session_version_model.org_knowledge_enabled,
+            personal_knowledge_enabled=session_version_model.personal_knowledge_enabled,
+            files=session_version_model.files
+        )
+        linsight_session_version_model = await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
+
+        return resp_200(data=linsight_session_version_model.model_dump(),
+                        message="重新执行灵思任务。")
+    # 取消反馈
+    if cancel_feedback:
+        # 取消反馈的逻辑
+        session_version_model.execute_feedback = "用户取消了反馈"
+        await LinsightSessionVersionDao.insert_one(session_version_model)
+
+        return resp_200(data=True, message="反馈已取消")
+    return resp_500(code=400, message="参数错误，请检查输入的参数是否正确")
 
 
 # workbench 终止执行
@@ -342,7 +415,7 @@ async def update_sop(
 
     if not login_user.is_admin():
         return UnAuthorizedError.return_resp()
-    return await SOPManageService.update_sop(sop_obj, login_user)
+    return await SOPManageService.update_sop(sop_obj)
 
 
 @router.get("/sop/list", summary="获取灵思SOP列表", response_model=UnifiedResponseModel)

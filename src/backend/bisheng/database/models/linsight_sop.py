@@ -136,3 +136,14 @@ class LinsightSOPDao(LinsightSOPBase):
             await session.commit()
             logger.info(f"Deleted {result.rowcount} SOP(s) with IDs: {sop_ids}")
             return True
+
+    @classmethod
+    async def get_sop_by_session_id(cls, session_id: str) -> Optional[LinsightSOP]:
+        """
+        根据灵思会话ID获取SOP
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightSOP).where(LinsightSOP.linsight_session_id == session_id)
+            result = await session.exec(statement)
+            sop = result.first()
+            return sop if sop else None

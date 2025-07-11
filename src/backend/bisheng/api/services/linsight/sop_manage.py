@@ -82,7 +82,7 @@ class SOPManageService:
         return resp_200(data=sop_model)
 
     @staticmethod
-    async def update_sop(sop_obj: SOPManagementUpdateSchema, login_user: UserPayload) -> UnifiedResponseModel | None:
+    async def update_sop(sop_obj: SOPManagementUpdateSchema) -> UnifiedResponseModel | None:
         """
         更新SOP
         :param login_user:
