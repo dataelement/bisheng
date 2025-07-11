@@ -77,12 +77,15 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
-        self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency)
+
         self.queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
+        for _ in range(10000):
+            self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency)
+            try:
+                asyncio.run(self.async_run())
+            except Exception as e:
+                logger.error(f"Error in ScheduleCenterProcess run method: {e}")
 
-        loop = app_ctx.get_event_loop()
-
-        util.run_async(self.async_run(), loop)
 
 
 def start_schedule_center_process(worker_num: int = 4) -> Optional[list[ScheduleCenterProcess]]:

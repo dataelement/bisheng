@@ -117,9 +117,6 @@ class LinsightStateMessageManager:
         """
         从Redis列表中弹出一条消息
 
-        Args:
-            timeout: 阻塞超时时间（秒），0表示不阻塞
-
         Returns:
             消息模型或None
         """

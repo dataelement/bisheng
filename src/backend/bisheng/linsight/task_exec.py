@@ -21,6 +21,7 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.settings import settings
+from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng_langchain.linsight.agent import LinsightAgent
@@ -133,7 +134,7 @@ class LinsightWorkflowTask:
         success = await self._execute_agent_tasks(agent, task_info, session_model)
 
         if success:
-            await self._handle_task_completion(session_model, llm)
+            await self._handle_task_completion(session_model, llm, file_dir)
         else:
             raise UserTerminationError("任务被用户终止")
 
@@ -171,11 +172,11 @@ class LinsightWorkflowTask:
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
         """初始化文件目录"""
-        if not session_model.files:
-            return ""
-
         file_dir = os.path.join(CACHE_DIR, "linsight", session_model.id)
         os.makedirs(file_dir, exist_ok=True)
+
+        if not session_model.files:
+            return file_dir
 
         # 并发下载文件
         download_tasks = [
@@ -349,7 +350,8 @@ class LinsightWorkflowTask:
         task_data = await self._state_manager.update_execution_task_status(
             task_id=event.task_id,
             status=status,
-            result={"answer": event.answer}
+            result={"answer": event.answer},
+            task_data=event.data
         )
 
         await self._state_manager.push_message(
@@ -489,19 +491,25 @@ class LinsightWorkflowTask:
 
     # ==================== 任务完成处理 ====================
 
-    async def _handle_task_completion(self, session_model: LinsightSessionVersion, llm: BishengLLM):
+    async def _handle_task_completion(self, session_model: LinsightSessionVersion, llm: BishengLLM, file_dir: str):
         """处理任务完成"""
         if not self._final_result:
             logger.error("没有找到最终任务结果")
             return
 
         if self._final_result.status == TaskStatus.SUCCESS.value:
-            await self._handle_task_success(session_model, llm)
+            await self._handle_task_success(session_model, llm, file_dir)
         else:
             await self._handle_task_failure(session_model, "任务执行失败")
 
-    async def _handle_task_success(self, session_model: LinsightSessionVersion, llm: BishengLLM):
+    async def _handle_task_success(self, session_model: LinsightSessionVersion, llm: BishengLLM, file_dir: str):
         """处理任务成功"""
+
+        # 读取文件目录文件详情
+        file_details = await self._read_file_directory(file_dir)
+
+        logger.debug(f"读取文件目录文件详情: {file_details}")
+
         session_model.status = SessionVersionStatusEnum.COMPLETED
         session_model.output_result = {"answer": self._final_result.answer}
 
@@ -528,6 +536,26 @@ class LinsightWorkflowTask:
             await self._handle_task_failure(session_model, str(error))
         except Exception as e:
             logger.error(f"处理执行错误失败: {e}")
+
+    # 读取文件目录文件详情
+    @staticmethod
+    async def _read_file_directory(file_dir: str) -> List[Dict[str, str]]:
+        """读取文件目录中的文件详情"""
+        if not file_dir or not os.path.exists(file_dir):
+            return []
+
+        files = util.read_files_in_directory(file_dir)
+        file_details = []
+        for file in files:
+            file_md5 = await util.async_calculate_md5(file)
+            file_details.append({
+                "file_name": os.path.basename(file),
+                "file_path": file,
+                "file_md5": file_md5,
+                "file_id": os.path.basename(file).split('.')[0]
+            })
+
+        return file_details
 
     # ==================== SOP处理 ====================
 

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PYTHONPATH="./"
+
 start_mode=${1:-api}
 
 if [ $start_mode = "api" ]; then

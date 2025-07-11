@@ -389,7 +389,8 @@ def retry_async(num_retries=3, delay=0.5, return_exceptions=False):
                 try:
                     return await func(*args, **kwargs)
                 except Exception as e:
-                    logger.info(f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
+                    logger.info(
+                        f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
                     if i == num_retries - 1:
                         if return_exceptions:
                             # 返回异常的参数 将e.args拆分成元组
@@ -412,7 +413,8 @@ def retry_sync(num_retries=3, delay=0.5, return_exceptions=False):
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    logger.info(f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
+                    logger.info(
+                        f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
                     if i == num_retries - 1:
                         if return_exceptions:
                             # 返回异常的参数 将e.args拆分成元组
@@ -446,3 +448,53 @@ def calculate_md5(file: Union[str, bytes]):
                 md5_hash.update(chunk)
 
         return md5_hash.hexdigest()
+
+async def async_calculate_md5(file: Union[str, bytes]):
+    """异步计算文档的 MD5 值。
+    Returns:
+        str: 文档的 MD5 值。
+    """
+    import aiofiles
+
+    md5_hash = hashlib.md5()
+
+    if isinstance(file, bytes):
+        md5_hash.update(file)
+        return md5_hash.hexdigest()
+
+    else:
+        # 以二进制形式异步读取文件
+        async with aiofiles.open(file, "rb") as f:
+            # 按块异步读取文件，避免大文件占用过多内存
+            while True:
+                chunk = await f.read(4096)
+                if not chunk:
+                    break
+                md5_hash.update(chunk)
+
+        return md5_hash.hexdigest()
+
+
+
+
+# 读取目录下的所有文件
+def read_files_in_directory(path: str):
+    """
+    读取目录下的所有文件，并返回文件名列表。
+    Args:
+        path (str): 目录路径。
+    Returns:
+        list: 文件名列表。
+    """
+    import os
+
+    if not os.path.exists(path):
+        logger.error(f"Path {path} does not exist.")
+        return []
+
+    files = []
+    for root, _, filenames in os.walk(path):
+        for filename in filenames:
+            files.append(os.path.join(root, filename))
+    return files
+
