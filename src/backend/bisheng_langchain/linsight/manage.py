@@ -38,7 +38,8 @@ class TaskManage(BaseModel):
         self.tool_map = {tool.name: tool for tool in self.tools}
         return self
 
-    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str, mode: str) -> None:
+    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str, mode: str, debug=bool,
+                      debug_id=str) -> None:
         res = []
         child_map = {}  # task_id: [child_task]
         for task in self.tasks:
@@ -50,14 +51,18 @@ class TaskManage(BaseModel):
                                      task_manager=self,
                                      llm=llm,
                                      file_dir=file_dir,
-                                     finally_sop=sop)
+                                     finally_sop=sop,
+                                     debug=debug,
+                                     debug_id=debug_id)
             else:
                 task_instance = ReactTask(**task,
                                           query=query,
                                           task_manager=self,
                                           llm=llm,
                                           file_dir=file_dir,
-                                          finally_sop=sop)
+                                          finally_sop=sop,
+                                          debug=debug,
+                                          debug_id=debug_id)
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue
@@ -114,8 +119,8 @@ class TaskManage(BaseModel):
         res.append({
             "type": "function",
             "function": {
-                "name": "call_user_input",
-                "description": "When the model needs to ask the user for input, it will call this tool.",
+                "name": "call_user_help",
+                "description": "在你需要用户帮助或确认内容的时候调用此工具，例如解决问题的规划，执行一个比较耗时的操作，并且请说明需要人类确认的原因。",
                 "parameters": {
                     "properties": {
                         "_call_reason": {
@@ -206,7 +211,7 @@ class TaskManage(BaseModel):
         """ 获取某个步骤的答案 """
         if step_id not in self.task_step_map:
             return ""
-        return self.task_step_map[step_id].answer
+        return self.task_step_map[step_id].get_answer()
 
     def get_processed_steps(self):
         """Get the steps that have been processed."""
@@ -231,7 +236,7 @@ class TaskManage(BaseModel):
             await task.ainvoke()
         except Exception as e:
             task.status = TaskStatus.FAILED.value
-            task.answer = str(e)[:-100]
+            task.answer.append(str(e)[:-100])
             raise e
 
     async def ainvoke_task(self) -> AsyncIterator[BaseEvent]:
@@ -246,7 +251,7 @@ class TaskManage(BaseModel):
                 res = await self.aqueue.get()
                 yield res
             if task.status == TaskStatus.FAILED.value:
-                raise Exception(f"Task {task.step_id} failed with error: {task.answer}")
+                raise Exception(f"Task {task.step_id} failed with error: {task.get_answer()}")
 
     async def continue_task(self, task_id: str, user_input: str) -> None:
         """

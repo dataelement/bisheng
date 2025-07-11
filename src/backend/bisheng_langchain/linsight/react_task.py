@@ -129,7 +129,8 @@ class ReactTask(BaseTask):
                                               params=params,
                                               output=observation,
                                               status="end"))
-
+        elif action and action == "回答":
+            self.answer.append(str(generate_content))
         if step_type == "固定步骤":
             result_dict = {
                 "结束": is_end,
@@ -176,10 +177,11 @@ class ReactTask(BaseTask):
         if is_end and isinstance(self.history[-1], AIMessage):
             self.status = TaskStatus.SUCCESS.value
             result_json = json.loads(self.history[-1].content)
-            self.answer = str(result_json.get("观察", "") or result_json.get("生成内容", "处理完成，但未获得最终答案"))
+            self.answer.append(
+                str(result_json.get("观察", "") or result_json.get("生成内容", "处理完成，但未获得最终答案")))
         else:
             self.status = TaskStatus.FAILED.value
-            self.answer = "task exec over max steps and not generate answer"
+            self.answer.append("task exec over max steps and not generate answer")
         return None
 
     async def generate_sub_tasks(self) -> list['ReactTask']:

@@ -4,8 +4,6 @@ from enum import Enum
 DefaultToolBuffer = 20000
 # 单个任务最大执行步骤数，防止死循环
 MaxSteps = 50
-# 是否是调试模式。开启后会记录llm的输入和输出
-Debug = False
 
 
 class TaskStatus(Enum):

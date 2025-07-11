@@ -55,7 +55,11 @@ def generate_uuid_str() -> str:
     return uuid.uuid4().hex
 
 
-def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_usage: Any, cost_time: float):
+def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_usage: Any, cost_time: float,
+                      debug_id: str):
+    if not debug_id:
+        return
+
     generate_tokens_num = 0
     prompt_tokens_num = 0
     cached_tokens_num = 0
@@ -71,7 +75,10 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
         except AttributeError:
             model_name = getattr(llm, "azure_deployment", "unknown_model")
 
-    with open('./linsight_llm_call.jsonl', 'a') as f:
+    debug_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "linsightdebug"))
+    os.makedirs(debug_path, exist_ok=True)
+    file_path = os.path.join(debug_path, f"{debug_id}.jsonl")
+    with open(f'{file_path}', 'a') as f:
         f.write(
             json.dumps({
                 "model": model_name,

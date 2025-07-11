@@ -8,7 +8,7 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, HumanMessage, AIMessage
 from pydantic import BaseModel, Field, ConfigDict
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, Debug
+from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt
@@ -32,9 +32,11 @@ class BaseTask(BaseModel):
     tool_buffer: int = Field(default=DefaultToolBuffer, description='工具缓冲区，用于存储工具调用的结果')
     history: List[BaseMessage] = Field(default_factory=list, description='原始聊天记录，包含user、tool、AI消息')
     status: str = Field(TaskStatus.WAITING.value, description='任务状态')
-    answer: str = Field(default='', description='任务答案，最终的结果')
+    answer: list[Any] = Field(default_factory=list, description='任务答案，最终的结果')
     task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
     user_input: Optional[str] = Field(default=None, description='用户输入的内容')
+    debug: bool = Field(default=False, description='是否是调试模式。开启后会记录llm的输入和输出')
+    debug_id: Optional[str] = Field(default=None, description='调试记录唯一ID, 用来写唯一的文件')
 
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
@@ -53,7 +55,7 @@ class BaseTask(BaseModel):
     original_query: Optional[str] = Field(default='', description='整体任务目标')
     original_method: Optional[str] = Field(default='', description='整体任务方法')
     original_done: Optional[str] = Field(default='', description='已完成的内容')
-    last_answer: Optional[str] = Field(default='', description='上一步骤的答案')
+    last_answer: Optional[str] = Field(default='', description='上一步骤的答案，暂无用处')
 
     def get_task_info(self) -> dict:
         return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
@@ -81,9 +83,9 @@ class BaseTask(BaseModel):
         tool_args = self.task_manager.get_all_tool_schema
         start_time = time.time()
         res = await self.llm.ainvoke(messages, tools=tool_args)
-        if Debug and res:
+        if self.debug and res:
             record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                              res.response_metadata.get('token_usage', None), time.time() - start_time)
+                              res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
         return res
 
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
@@ -94,9 +96,9 @@ class BaseTask(BaseModel):
         """
         start_time = time.time()
         res = await self.llm.ainvoke(messages)
-        if Debug and res:
+        if self.debug and res:
             record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                              res.response_metadata.get('token_usage', None), time.time() - start_time)
+                              res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
         return res
 
     async def handle_user_input(self, user_input: str) -> None:
@@ -142,16 +144,16 @@ class BaseTask(BaseModel):
 
         # 如果是循环任务，子任务执行完毕后需要将结果合并。目前
         all_failed = True
-        answer = ""
+        answer = []
         error = ""
         for one in self.children:
             if one.status == TaskStatus.SUCCESS.value:
                 all_failed = False
-                answer += one.answer + "\n"
+                answer.append(one.get_finally_answer())
             else:
-                error += one.answer + "\n"
+                error += one.get_finally_answer() + "\n"
         self.status = TaskStatus.FAILED.value if all_failed else TaskStatus.SUCCESS.value
-        self.answer = error if all_failed else answer
+        self.answer.append(error) if all_failed else self.answer.extend(answer)
         return None
 
     async def _get_sub_tasks(self) -> List[dict]:
@@ -172,7 +174,7 @@ class BaseTask(BaseModel):
         try:
             sub_task = json.loads(json_str)
         except json.decoder.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format in response: {json_str}")
+            raise ValueError(f"Invalid JSON format in sub task response: {res.content}")
         original_query = sub_task.get("总体任务目标", "")
         original_method = f'{sub_task.get("总体方法", "")}\n{sub_task.get("可用资源", "")}'
         original_done = sub_task.get("已经完成的内容", "")
@@ -184,6 +186,10 @@ class BaseTask(BaseModel):
             target = f'{one.get("当前目标", "")}\n{one.get("输出方法", "")}'
             if one.get("标题层级", ""):
                 target += f"\n标题层级要求: {one.get('标题层级', '')}"
+            if one.get("标题层级类型", ""):
+                target += f"\n标题层级类型: {one.get('标题层级类型', '')}"
+            if one.get("思考", ""):
+                target += f"\n思考: {one.get('思考', '')}"
             parent_info.update({
                 "original_query": original_query,
                 "original_method": original_method,
@@ -211,10 +217,26 @@ class BaseTask(BaseModel):
             await self._ainvoke()
         except Exception as e:
             self.status = TaskStatus.FAILED.value
-            self.answer = f"task exec failed: {str(e)[-100:]}"
+            self.answer.append(f"task exec failed: {str(e)[-100:]}")
             raise e
         finally:
-            await self.put_event(TaskEnd(task_id=self.id, status=self.status, name=self.profile, answer=self.answer))
+            await self.put_event(
+                TaskEnd(task_id=self.id, status=self.status, name=self.profile, answer=self.get_finally_answer()))
+
+    def get_answer(self) -> str:
+        if self.answer:
+            return "\n".join([str(one) for one in self.answer])
+        return ""
+
+    def get_finally_answer(self) -> str:
+        """
+        Get the final answer of the task.
+        This method returns the last answer in the answer list.
+        :return: The final answer as a string.
+        """
+        if self.answer:
+            return str(self.answer[-1])
+        return ""
 
 
 class Task(BaseTask):
@@ -341,10 +363,10 @@ class Task(BaseTask):
                 break
         if isinstance(self.history[-1], AIMessage):
             self.status = TaskStatus.SUCCESS.value
-            self.answer = self.history[-1].content
+            self.answer.append(self.history[-1].content)
         else:
             self.status = TaskStatus.FAILED.value
-            self.answer = "task exec over max steps and not generate answer"
+            self.answer.append("task exec over max steps and not generate answer")
         return None
 
     async def generate_sub_tasks(self) -> list['Task']:

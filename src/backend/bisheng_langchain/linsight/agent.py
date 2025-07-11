@@ -9,7 +9,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
-from bisheng_langchain.linsight.const import TaskMode, Debug
+from bisheng_langchain.linsight.const import TaskMode
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
@@ -30,6 +30,8 @@ class LinsightAgent(BaseModel):
                                                description='Task manager for handling tasks and workflows')
     task_mode: str = Field(default=TaskMode.FUNCTION.value,
                            description="Mode of the task execute")
+    debug: Optional[bool] = Field(default=False, description='是否是调试模式。开启后会记录llm的输入和输出')
+    debug_id: Optional[str] = Field(default=None, description='调试记录唯一ID, 用来写唯一的文件')
 
     async def generate_sop(self, sop: str) -> AsyncIterator[ChatGenerationChunk]:
         """
@@ -46,9 +48,9 @@ class LinsightAgent(BaseModel):
         async for one in self.llm.astream(sop_prompt):
             yield one
             answer += f"{one.content}"
-        if Debug and one:
+        if self.debug and one:
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
-                              time.time() - start_time)
+                              time.time() - start_time, self.debug_id)
 
     async def feedback_sop(self, sop: str, feedback: str, history_summary: list[str] = None) -> AsyncIterator[
         ChatGenerationChunk]:
@@ -66,6 +68,8 @@ class LinsightAgent(BaseModel):
         else:
             history_summary = ""
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
+        if sop:
+            sop = f"已有SOP：{sop}"
 
         sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
                                               history_summary=history_summary)
@@ -74,18 +78,18 @@ class LinsightAgent(BaseModel):
         answer = ''
         async for one in self.llm.astream(sop_prompt):
             yield one
-        if Debug and one:
+        if self.debug and one:
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
-                              time.time() - start_time)
+                              time.time() - start_time, self.debug_id)
 
     async def generate_task(self, sop: str) -> list[dict]:
         current_time = datetime.now().isoformat()
         prompt = GenerateTaskPrompt.format(query=self.query, sop=sop, file_dir=self.file_dir, current_time=current_time)
         start_time = time.time()
         res = await self.llm.ainvoke(prompt)
-        if Debug and res:
+        if self.debug and res:
             record_llm_prompt(self.llm, prompt, res.content, res.response_metadata.get('token_usage', None),
-                              time.time() - start_time)
+                              time.time() - start_time, self.debug_id)
 
         # 解析生成的任务json数据
         json_str = extract_code_blocks(res.content)
@@ -107,7 +111,7 @@ class LinsightAgent(BaseModel):
         if not self.task_manager:
             self.task_manager = TaskManage(tasks=tasks, tools=self.tools)
             self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop,
-                                            mode=self.task_mode)
+                                            mode=self.task_mode, debug=self.debug, debug_id=self.debug_id)
 
         async for one in self.task_manager.ainvoke_task():
             yield one
