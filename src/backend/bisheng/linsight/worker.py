@@ -6,10 +6,8 @@ from multiprocessing import Process
 from typing import Optional
 
 from bisheng.cache.redis import RedisClient, redis_client
-from bisheng.core.app_context import app_ctx
 from bisheng.linsight.task_exec import LinsightWorkflowTask
 from bisheng.settings import settings
-from bisheng.utils import util
 from bisheng.utils.logger import configure
 
 logger = logging.getLogger(__name__)

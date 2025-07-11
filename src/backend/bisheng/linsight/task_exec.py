@@ -81,8 +81,8 @@ class LinsightWorkflowTask:
             await self._stop_termination_monitor()
 
             # 清理文件目录
-            if file_dir and os.path.exists(file_dir):
-                shutil.rmtree(file_dir, ignore_errors=True)
+            # if file_dir and os.path.exists(file_dir):
+            #     shutil.rmtree(file_dir, ignore_errors=True)
 
         except Exception as e:
             logger.error(f"资源清理失败: {e}")
@@ -291,13 +291,62 @@ class LinsightWorkflowTask:
                 return task["id"]
         return None
 
-    async def _execute_agent_tasks(self, agent: LinsightAgent, task_info: List[dict],
-                                   session_model: LinsightSessionVersion) -> bool:
-        """执行智能体任务"""
+    async def _execute_agent_tasks(self, agent, task_info: List[dict],
+                                   session_model) -> bool:
+        """执行智能体任务 - 修改版本支持用户终止"""
+
+        async def agent_execution():
+            """智能体执行任务"""
+            try:
+                async for event in agent.ainvoke(task_info, session_model.sop):
+                    await self._handle_event(agent, event, session_model)
+                return True
+            except Exception as e:
+                logger.error(f"智能体执行异常: {e}")
+                raise
+
+        async def termination_monitor():
+            """终止监控任务"""
+            while True:
+                await asyncio.sleep(0.5)  # 每0.5秒检查一次
+                if self._is_terminated:
+                    logger.info("检测到终止信号，准备终止智能体任务")
+                    raise UserTerminationError("任务被用户终止")
+
         try:
-            async for event in agent.ainvoke(task_info, session_model.sop):
-                self._check_termination()
-                await self._handle_event(agent, event, session_model)
+            # 创建两个并发任务
+            agent_task = asyncio.create_task(agent_execution())
+            monitor_task = asyncio.create_task(termination_monitor())
+
+            # 等待任何一个任务完成
+            done, pending = await asyncio.wait(
+                [agent_task, monitor_task],
+                return_when=asyncio.FIRST_COMPLETED
+            )
+
+            # 取消未完成的任务
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    logger.debug("成功取消挂起的任务")
+                    pass
+
+            # 检查完成的任务结果
+            for task in done:
+                if task.exception():
+                    if isinstance(task.exception(), UserTerminationError):
+                        logger.info("智能体任务被用户终止")
+                        return False
+                    else:
+                        raise task.exception()
+                else:
+                    # 如果是智能体任务正常完成
+                    if task == agent_task:
+                        logger.info("智能体任务正常完成")
+                        return True
+
             return True
 
         except UserTerminationError:
