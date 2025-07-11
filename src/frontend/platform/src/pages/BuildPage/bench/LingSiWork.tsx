@@ -613,7 +613,7 @@ export default function index() {
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
                             label="输入框提示语"
-                            value={formData.inputPlaceholder}
+                            value={""}
                             placeholder={formData.inputPlaceholder}
                             maxLength={1000}
                             onChange={(v) => {

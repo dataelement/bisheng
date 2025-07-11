@@ -55,7 +55,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
     const [form, setForm] = useState({
         sourceModelId: null,
         extractModelId: null,
-        executionMode: 'function_call'
+        executionMode: 'ReAct'
     });
     const lastSaveFormDataRef = useRef(null)
     const [loading, setLoading] = useState(true)
@@ -71,7 +71,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
             const data = {
                 task_model: { id: String(extractModelId) },
                 embedding_model: { id: String(sourceModelId) },
-                 execution_mode: executionMode
+                 linsight_executor_mode: executionMode
             };
 
             await updateLinsightModelConfig(data);
@@ -80,13 +80,13 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
             setForm({
                 sourceModelId: linsightConfig?.embedding_model?.id || null,
                 extractModelId: linsightConfig?.task_model?.id || null,
-                executionMode: linsightConfig?.execution_mode || 'function_call'
+                executionMode: linsightConfig?.linsight_executor_mode || 'ReAct'
             });
 
             lastSaveFormDataRef.current = {
                 task_model: { id: linsightConfig?.task_model?.id },
                 embedding_model: { id: linsightConfig?.embedding_model?.id },
-                 execution_mode: linsightConfig?.execution_mode || 'function_call',
+                 linsight_executor_mode: linsightConfig?.linsight_executor_mode || 'ReAct',
                 abstract_prompt: linsightConfig?.abstract_prompt || defalutPrompt
             };
 
@@ -132,13 +132,13 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                     task_model: null,
                     embedding_model: null,
                     abstract_prompt: defalutPrompt,
-                    execution_mode: 'function_call', // 默认执行模式
+                    linsight_executor_mode: 'ReAct', // 默认执行模式
                 };
 
                 setForm({
                     sourceModelId: safeLinsightConfig.embedding_model?.id || null,
                     extractModelId: safeLinsightConfig.task_model?.id || null,
-                     executionMode: safeLinsightConfig.execution_mode || 'function_call'
+                     executionMode: safeLinsightConfig.linsight_executor_mode || 'ReAct'
                 });
 
                 lastSaveFormDataRef.current = {
@@ -146,7 +146,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                     embedding_model: {
                         id: safeLinsightConfig.embedding_model?.id
                     },
-                    execution_mode: safeLinsightConfig.execution_mode || 'function_call', 
+                    linsight_executor_mode: safeLinsightConfig.linsight_executor_mode || 'ReAct', 
                     abstract_prompt: safeLinsightConfig.abstract_prompt || defalutPrompt
                 };
 

@@ -10,7 +10,6 @@ interface WebSearchConfig {
   jina: { api_key: string }
   serp: { api_key: string; engine: string }
   tavily: { api_key: string }
-  cloudsway: { api_key: string; base_url: string; endpoint: string }
   prompt: string
 }
 
