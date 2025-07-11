@@ -1,43 +1,29 @@
 import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField, SelectField } from "./InputField";
 import { Label } from '@/components/bs-ui/label';
 import { useWebSearchStore } from '../webSearchStore'
 import { toast, useToast } from '@/components/bs-ui/toast/use-toast';
+
 const defaultToolParams = {
     bing: {
-        type: 'bing',
-        config: {
-            api_key: '',
-            base_url: 'https://api.bing.microsoft.com/v7.0/search'
-        }
+        api_key: '',
+        base_url: 'https://api.bing.microsoft.com/v7.0/search'
     },
     bocha: {
-        type: 'bocha',
-        config: {
-            api_key: ''
-        }
+        api_key: ''
     },
     jina: {
-        type: 'jina',
-        config: {
-            api_key: ''
-        }
+        api_key: ''
     },
     serp: {
-        type: 'serp',
-        config: {
-            api_key: '',
-            engine: ''
-        }
+        api_key: '',
+        engine: ''
     },
     tavily: {
-        type: 'tavily',
-        config: {
-            api_key: ''
-        }
+        api_key: ''
     }
 };
 
@@ -46,44 +32,43 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const { toast } = useToast();
     const { config: webSearchData, setConfig } = useWebSearchStore();
     
-    // 初始化所有工具配置
-    const [allToolsConfig, setAllToolsConfig] = useState(() => ({
-        bing: {
-            type: 'bing',
-            config: { 
-                ...defaultToolParams.bing.config,
-                ...(webSearchData?.bing?.config || {})
+    const [allToolsConfig, setAllToolsConfig] = useState(() => {
+        const initialConfig = {
+            bing: {
+                ...defaultToolParams.bing,
+                ...(webSearchData?.bing?.config || webSearchData?.bing || {})
+            },
+            bocha: {
+                ...defaultToolParams.bocha,
+                ...(webSearchData?.bocha?.config || webSearchData?.bocha || {})
+            },
+            jina: {
+                ...defaultToolParams.jina,
+                ...(webSearchData?.jina?.config || webSearchData?.jina || {})
+            },
+            serp: {
+                ...defaultToolParams.serp,
+                ...(webSearchData?.serp?.config || webSearchData?.serp || {})
+            },
+            tavily: {
+                ...defaultToolParams.tavily,
+                ...(webSearchData?.tavily?.config || webSearchData?.tavily || {})
             }
-        },
-        bocha: {
-            type: 'bocha',
-            config: { 
-                ...defaultToolParams.bocha.config,
-                ...(webSearchData?.bocha?.config || {})
+        };
+        
+        // 清理可能存在的config嵌套
+        Object.keys(initialConfig).forEach(tool => {
+            if (initialConfig[tool]?.config) {
+                initialConfig[tool] = {
+                    ...initialConfig[tool],
+                    ...initialConfig[tool].config
+                };
+                delete initialConfig[tool].config;
             }
-        },
-        jina: {
-            type: 'jina',
-            config: { 
-                ...defaultToolParams.jina.config,
-                ...(webSearchData?.jina?.config || {})
-            }
-        },
-        serp: {
-            type: 'serp',
-            config: { 
-                ...defaultToolParams.serp.config,
-                ...(webSearchData?.serp?.config || {})
-            }
-        },
-        tavily: {
-            type: 'tavily',
-            config: { 
-                ...defaultToolParams.tavily.config,
-                ...(webSearchData?.tavily?.config || {})
-            }
-        }
-    }));
+        });
+        
+        return initialConfig;
+    });
 
     const [selectedTool, setSelectedTool] = useState(webSearchData?.tool || 'bing');
     const [formErrors, setFormErrors] = useState({});
@@ -98,10 +83,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
             ...prev,
             [selectedTool]: {
                 ...prev[selectedTool],
-                config: {
-                    ...prev[selectedTool].config,
-                    [name]: value
-                }
+                [name]: value
             }
         }));
     };
@@ -109,15 +91,14 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         const newConfig = {
-            ...webSearchData,
-            tool: selectedTool,
-            [selectedTool]: allToolsConfig[selectedTool],
-            ...Object.keys(allToolsConfig).reduce((acc, tool) => {
-                if (tool !== selectedTool) {
-                    acc[tool] = allToolsConfig[tool];
-                }
-                return acc;
-            }, {})
+            type: selectedTool,
+            config: {
+            bing: allToolsConfig.bing,
+            bocha: allToolsConfig.bocha,
+            jina: allToolsConfig.jina,
+            serp: allToolsConfig.serp,
+            tavily: allToolsConfig.tavily
+        }
         };
 
         try {
@@ -140,8 +121,6 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
         const currentTool = allToolsConfig[selectedTool];
         if (!currentTool) return null;
 
-        const { config } = currentTool;
-
         switch (selectedTool) {
             case 'bing':
                 return (
@@ -152,7 +131,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             type="password"
                             name="api_key"
                             placeholder={t('build.enterSubscriptionKey')}
-                            value={config?.api_key || ''}
+                            value={currentTool?.api_key || ''}
                             onChange={handleParamChange}
                             error={formErrors.api_key}
                             id="bing-api-key"
@@ -162,7 +141,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             label="Bing Search URL"
                             name="base_url"
                             placeholder={t('build.enterSearchUrl')}
-                            value={config?.base_url || defaultToolParams.bing.config.base_url}
+                            value={currentTool?.base_url || defaultToolParams.bing.base_url}
                             onChange={handleParamChange}
                             error={formErrors.base_url}
                             id="bing-base-url"
@@ -177,7 +156,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                         type="password"
                         name="api_key"
                         placeholder={t('build.enterApiKey')}
-                        value={config?.api_key || ''}
+                        value={currentTool?.api_key || ''}
                         onChange={handleParamChange}
                         error={formErrors.api_key}
                         id="bocha-api-key"
@@ -191,7 +170,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                         type="password"
                         name="api_key"
                         placeholder={t('build.enterApiKey')}
-                        value={config?.api_key || ''}
+                        value={currentTool?.api_key || ''}
                         onChange={handleParamChange}
                         error={formErrors.api_key}
                         id="jina-api-key"
@@ -206,7 +185,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             type="password"
                             name="api_key"
                             placeholder={t('build.enterApiKey')}
-                            value={config?.api_key || ''}
+                            value={currentTool?.api_key || ''}
                             onChange={handleParamChange}
                             error={formErrors.api_key}
                             id="serp-api-key"
@@ -216,7 +195,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             label="Search Engine"
                             name="engine"
                             placeholder="google, bing, etc."
-                            value={config?.engine || ''}
+                            value={currentTool?.engine || ''}
                             onChange={handleParamChange}
                             error={formErrors.engine}
                             id="serp-engine"
@@ -231,7 +210,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                         type="password"
                         name="api_key"
                         placeholder={t('build.enterApiKey')}
-                        value={config?.api_key || ''}
+                        value={currentTool?.api_key || ''}
                         onChange={handleParamChange}
                         error={formErrors.api_key}
                         id="tavily-api-key"

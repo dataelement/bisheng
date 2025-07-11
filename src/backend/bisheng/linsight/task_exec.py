@@ -20,6 +20,7 @@ from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.settings import settings
 from bisheng.utils.minio_client import minio_client
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng_langchain.linsight.agent import LinsightAgent
@@ -240,7 +241,9 @@ class LinsightWorkflowTask:
             query=session_model.question,
             tools=tools,
             file_dir=file_dir,
-            task_mode=workbench_conf.linsight_executor_mode
+            task_mode=workbench_conf.linsight_executor_mode,
+            debug=settings.linsight_conf.debug,
+            debug_id=session_model.id
         )
 
     # ==================== 任务执行 ====================
@@ -389,8 +392,8 @@ class LinsightWorkflowTask:
             task_model = await self._wait_for_input_completion(event.task_id)
 
             if task_model is None:
-                logger.info(f"任务 {event.task_id} 在等待用户输入时被终止")
-                return
+                logger.error(f"任务 {event.task_id} 在等待用户输入时未找到")
+                raise TaskExecutionError(f"任务 {event.task_id} 在等待用户输入时未找到任务信息")
 
             # 推送输入完成事件
             await self._state_manager.push_message(

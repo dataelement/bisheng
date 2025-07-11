@@ -98,20 +98,18 @@ class LinsightSOPDao(LinsightSOPBase):
             statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.create_time).asc())
         else:
             statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.create_time).desc())
-        statement = statement.offset((page - 1) * page_size).limit(page_size)
+
 
         async with async_session_getter() as session:
-            result = await session.exec(statement)
-            sop_list = result.all()
-            sop_list_dict = [sop.model_dump() for sop in sop_list]
-
             total_count = await async_get_count(session, statement)
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+            result = (await session.exec(statement)).all()
 
         return {
             "total": total_count,
             "current_page": page,
             "page_size": page_size,
-            "items": sop_list_dict
+            "items": [result.model_dump() for result in result]
         }
 
     @classmethod

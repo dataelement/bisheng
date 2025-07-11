@@ -5,8 +5,9 @@ from typing import Dict, List
 
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
-from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOP
+from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
@@ -216,7 +217,7 @@ class LinsightWorkbenchImpl(object):
             return
         try:
             tools: List[BaseTool] = []
-            # TODO: 获取工具合集
+            # 获取工具合集
             if linsight_session_version_model.tools:
                 tool_ids = []
                 for tool in linsight_session_version_model.tools:
@@ -251,15 +252,17 @@ class LinsightWorkbenchImpl(object):
                                            query=linsight_session_version_model.question,
                                            llm=llm,
                                            tools=tools,
-                                           task_mode=workbench_conf.linsight_executor_mode)
+                                           task_mode=workbench_conf.linsight_executor_mode,
+                                           debug=settings.linsight_conf.debug,
+                                           debug_id=linsight_session_version_model.id)
             content = ""
 
             # 没有反馈内容
             if feedback_content is None:
 
                 # 检索SOP模板
-                sop_template = await SOPManageService.search_sop(query=linsight_session_version_model.question)
-                sop_template = sop_template[0].page_content if sop_template else ""
+                sop_template = await SOPManageService.search_sop(query=linsight_session_version_model.question, k=3)
+                sop_template = "\n\n".join([sop.page_content for sop in sop_template if sop.page_content])
 
                 async for res in linsight_agent.generate_sop(sop=sop_template):
                     content += res.content
@@ -342,7 +345,9 @@ class LinsightWorkbenchImpl(object):
                                            query=session_version_model.question,
                                            llm=llm,
                                            tools=tools,
-                                           task_mode=workbench_conf.linsight_executor_mode)
+                                           task_mode=workbench_conf.linsight_executor_mode,
+                                           debug=settings.linsight_conf.debug,
+                                           debug_id=session_version_model.id)
             sop_content = ""
             async for res in linsight_agent.feedback_sop(
                     sop=session_version_model.sop if session_version_model.sop else "",
