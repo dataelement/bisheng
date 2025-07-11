@@ -1,7 +1,9 @@
 import logging
+import os
 import uuid
 from typing import Dict, List
 
+from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOP
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -20,7 +22,7 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import save_file_to_folder
+from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
@@ -225,6 +227,12 @@ class LinsightWorkbenchImpl(object):
                             tool_ids.append(child.get("id"))
                 tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
 
+            root_path = os.path.join(CACHE_DIR, "linsight", linsight_session_version_model.id)
+            os.makedirs(root_path, exist_ok=True)
+
+            linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
+            tools.extend(linsight_tools)
+
             history_summary = []
 
             # 如果需要重新执行任务，则查询所有执行任务信息
@@ -314,6 +322,12 @@ class LinsightWorkbenchImpl(object):
                         for child in tool["children"]:
                             tool_ids.append(child.get("id"))
                 tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
+
+            root_path = os.path.join(CACHE_DIR, "linsight", session_version_model.id)
+            os.makedirs(root_path, exist_ok=True)
+
+            linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
+            tools.extend(linsight_tools)
 
             history_summary = []
             # 查询所有执行任务信息

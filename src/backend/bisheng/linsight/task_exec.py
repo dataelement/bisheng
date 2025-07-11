@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Callable
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema
 from bisheng.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.app_context import app_ctx
@@ -113,7 +114,11 @@ class LinsightWorkflowTask:
 
         # 初始化执行组件
         llm = await self._get_llm()
+        # 生成工具列表
         tools = await self._generate_tools(session_model, llm)
+        linsight_tools = await ToolServices.init_linsight_tools(root_path=file_dir)
+        tools.extend(linsight_tools)
+        # 创建智能体
         agent = await self._create_agent(session_model, llm, tools, file_dir)
 
         # 检查是否在初始化过程中被终止
