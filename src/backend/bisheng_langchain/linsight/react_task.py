@@ -19,7 +19,7 @@ class ReactTask(BaseTask):
         tool_messages = []
         remain_messages = []
         for one in self.history:
-            history_str += "\n" + json.dumps(one.model_dump(), ensure_ascii=False, indent=2)
+            history_str += "\n" + one.content
             if isinstance(one, ToolMessage) or "tool_calls" in one.additional_kwargs:
                 tool_messages.append(one)
             else:
@@ -40,7 +40,7 @@ class ReactTask(BaseTask):
     async def build_messages_with_history(self) -> list[BaseMessage]:
         """Build messages with history for the React task."""
         # It should return a prompt that will be used in the React task.
-        current_time = datetime.now().isoformat()
+        current_time = datetime.now().strftime("%Y-%m-%d %H")
         tools_json = self.task_manager.get_all_tool_schema_str
         history_str = await self.get_history_str()
 
@@ -98,9 +98,30 @@ class ReactTask(BaseTask):
                 params = {}
 
         # 说明是工具执行, 执行工具
-        if action and action not in ["回答", "生成规划"]:
+
+        if action and action == "回答":
+            self.answer.append(str(generate_content))
+
+        if step_type == "固定步骤":
+            result_dict = {
+                "结束": is_end,
+                "思考": thinking,
+                "类型": step_type,
+                "行动": action,
+                "参数": params,
+                "生成内容": generate_content,
+            }
+            await self.put_event(ExecStep(task_id=self.id,
+                                          call_id=generate_uuid_str(),
+                                          call_reason=thinking,
+                                          name=action,
+                                          params=params,
+                                          output=str(generate_content),
+                                          status="end"))
+            message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
+        else:
             # 等待用户输入的特殊工具调用
-            if action == "call_user_input":
+            if action == "call_user_help":
                 # 等待用户输入
                 self.status = TaskStatus.INPUT.value
                 await self.put_event(NeedUserInput(task_id=self.id, call_reason=thinking))
@@ -129,30 +150,10 @@ class ReactTask(BaseTask):
                                               params=params,
                                               output=observation,
                                               status="end"))
-        elif action and action == "回答":
-            self.answer.append(str(generate_content))
-        if step_type == "固定步骤":
             result_dict = {
                 "结束": is_end,
-                "类型": step_type,
                 "思考": thinking,
-                "行动": action,
-                "参数": params,
-                "生成内容": generate_content,
-            }
-            await self.put_event(ExecStep(task_id=self.id,
-                                          call_id=generate_uuid_str(),
-                                          call_reason=thinking,
-                                          name=action,
-                                          params=params,
-                                          output=str(generate_content),
-                                          status="end"))
-            message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
-        else:
-            result_dict = {
-                "结束": is_end,
                 "类型": "工具",
-                "思考": thinking,
                 "行动": action,
                 "参数": params,
                 "观察": observation,
@@ -176,9 +177,6 @@ class ReactTask(BaseTask):
                 break
         if is_end and isinstance(self.history[-1], AIMessage):
             self.status = TaskStatus.SUCCESS.value
-            result_json = json.loads(self.history[-1].content)
-            self.answer.append(
-                str(result_json.get("观察", "") or result_json.get("生成内容", "处理完成，但未获得最终答案")))
         else:
             self.status = TaskStatus.FAILED.value
             self.answer.append("task exec over max steps and not generate answer")

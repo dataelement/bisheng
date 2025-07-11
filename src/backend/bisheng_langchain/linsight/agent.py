@@ -83,7 +83,7 @@ class LinsightAgent(BaseModel):
                               time.time() - start_time, self.debug_id)
 
     async def generate_task(self, sop: str) -> list[dict]:
-        current_time = datetime.now().isoformat()
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         prompt = GenerateTaskPrompt.format(query=self.query, sop=sop, file_dir=self.file_dir, current_time=current_time)
         start_time = time.time()
         res = await self.llm.ainvoke(prompt)

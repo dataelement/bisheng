@@ -252,7 +252,7 @@ class Task(BaseTask):
         Build the system message for the task.
         :return: The system message as a BaseMessage object.
         """
-        current_time = datetime.datetime.now().isoformat()
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H")
         # 说明是二级子任务
         if self.node_loop and self.parent_id:
             prompt = LoopAgentPrompt.format(profile=self.profile,
@@ -267,7 +267,7 @@ class Task(BaseTask):
                                             target=self.target)
         else:
             prompt = SingleAgentPrompt.format(profile=self.profile,
-                                              current_time=datetime.datetime.now().isoformat(),
+                                              current_time=current_time,
                                               file_dir=self.file_dir,
                                               query=self.query,
                                               sop=self.finally_sop,
