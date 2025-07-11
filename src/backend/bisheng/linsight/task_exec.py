@@ -576,7 +576,7 @@ class LinsightWorkflowTask:
                 })
 
         # 上传minio
-        def upload_file_to_minio(final_file_info: Dict) -> Optional[dict]:
+        def upload_file_to_minio(final_file_info: Dict) -> str | None:
             """上传文件到MinIO并返回文件信息"""
             try:
                 object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
@@ -585,7 +585,7 @@ class LinsightWorkflowTask:
                     object_name=object_name,
                     file_path=final_file_info["file_path"]
                 )
-                return
+                return object_name
             except Exception as e:
                 logger.error(f"上传文件到MinIO失败 {file_info['file_name']}: {e}")
                 return None
