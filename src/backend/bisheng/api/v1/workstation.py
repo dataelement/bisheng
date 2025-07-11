@@ -11,16 +11,18 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from bisheng.api.services import knowledge_imp
+from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
-                                              WorkstationMessage, WorkStationService, SearchTool)
+                                              WorkstationMessage, WorkStationService)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
@@ -243,13 +245,13 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     联网搜索
     """
-    if web_search_config.params:
-        tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.params)
-    else:
-        # 兼容旧版的配置
-        tool = SearchTool.init_search_tool('bing', api_key=web_search_config.bingKey,
-                                           base_url=web_search_config.bingUrl)
-    return tool.invoke(query)
+    web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
+    if not web_search_info:
+        raise Exception(f"No web_search tool found in database")
+    web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
+    if not web_search_tool:
+        raise Exception(f"No web_search tool found in gpts tools")
+    return web_search_tool[0].invoke(input={"query": query})
 
 
 def getFileContent(filepath):
