@@ -108,6 +108,11 @@ class CeleryConf(BaseModel):
         return value
 
 
+class LinsightConf(BaseModel):
+    debug: bool = Field(default=False, description='是否开启debug模式')
+    max_concurrency: int = Field(default=32, description='单个worker最大并发数')
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 
@@ -144,6 +149,7 @@ class Settings(BaseModel):
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}
+    linsight_conf: LinsightConf = LinsightConf()
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
     system_login_method: SystemLoginMethod = {}

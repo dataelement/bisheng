@@ -15,7 +15,6 @@ from bisheng.utils.logger import configure
 logger = logging.getLogger(__name__)
 
 
-
 # Redis 队列
 class RedisQueue(object):
     def __init__(self, name, namespace, redis):
@@ -78,7 +77,7 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
-        self.semaphore = asyncio.Semaphore(32)
+        self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency)
         self.queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
 
         loop = app_ctx.get_event_loop()
