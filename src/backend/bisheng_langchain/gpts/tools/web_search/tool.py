@@ -1,4 +1,5 @@
 from abc import abstractmethod, ABC
+from typing import Type
 
 import requests
 from langchain_community.utilities import BingSearchAPIWrapper
@@ -64,7 +65,7 @@ class WebSearchTool(BaseTool):
     """web search tools."""
     name: str = "web_search"
     description: str = "使用 query 进行联网检索并返回结果。"
-    args_schema: SearchInput
+    args_schema: Type[BaseModel] = SearchInput
     api_wrapper: SearchTool = Field(..., description="The search API wrapper to use for web search.")
 
     def _run(self, query: str, **kwargs) -> str:
