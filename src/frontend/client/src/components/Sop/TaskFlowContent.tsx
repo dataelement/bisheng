@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Download, LucideLoaderCircle, PauseCircle } from 'lucide-react';
+import { Check, ChevronDown, Download, Hourglass, LucideLoaderCircle, Pause, PauseCircle } from 'lucide-react';
 import React, { useEffect } from 'react';
 import { SendIcon } from '~/components/svg';
 import { Button, Textarea } from '../ui';
@@ -8,6 +8,7 @@ import { Button, Textarea } from '../ui';
 import { useState } from 'react';
 import Markdown from '../ui/icon/Markdown';
 import { playDing } from '~/utils';
+import { SopStatus } from './SOPEditor';
 
 const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
     const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
@@ -18,14 +19,14 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
         switch (task.status) {
             // case "not_started":
             case "user_input":
-                return <PauseCircle size={16} className='p-0.5 rounded-full mr-2' />;
+                return <Pause size={16} className='min-w-4 p-0.5 rounded-full mr-2' />;
             case "user_input_completed":
             case "in_progress":
-                return <LucideLoaderCircle size={16} className='text-primary mr-2 animate-spin' />;
+                return <LucideLoaderCircle size={16} className='min-w-4 text-primary mr-2 animate-spin' />;
             case "success":
-                return <Check size={16} className='bg-gray-300 p-0.5 rounded-full text-white mr-2' />;
+                return <Check size={16} className='min-w-4 bg-gray-300 p-0.5 rounded-full text-white mr-2' />;
             default:
-                return null;
+                return <Hourglass size={16} className='min-w-4 bg-gray-300 p-0.5 rounded-full text-white mr-2 animate-pulse' />;
         }
     };
 
@@ -54,6 +55,9 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
             playDing()
         }
     }, [task.status])
+
+    // TODO history start end
+
 
     return (
         <div className="mb-4">
@@ -120,7 +124,7 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
 };
 
 
-export const TaskFlowContent = ({ tasks, summary, files, sendInput }) => {
+export const TaskFlowContent = ({ tasks, status, summary, files, sendInput }) => {
     console.log('TaskFlowContent tasks :>> ', tasks, files);
 
 
@@ -132,7 +136,7 @@ export const TaskFlowContent = ({ tasks, summary, files, sendInput }) => {
 
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
-            {!tasks?.length && <LucideLoaderCircle size={16} className='text-primary mr-2 animate-spin' />}
+            {!tasks?.length && status === SopStatus.Running && <LucideLoaderCircle size={16} className='text-primary mr-2 animate-spin' />}
             {
                 tasks?.map((task, i) => <Task key={task.id} que={i + 1} lvl1 task={task} sendInput={sendInput} >
                     {

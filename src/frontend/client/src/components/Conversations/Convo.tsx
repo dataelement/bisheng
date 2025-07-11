@@ -212,7 +212,8 @@ export default function Conversation({
               setRenaming(true);
             }}
           >
-            {title} [灵思]
+            {title}
+            {conversation?.flowType === 20 && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-3.5 inline-block ml-1' alt="" />}
           </div>
           {isActiveConvo ? (
             <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l" />

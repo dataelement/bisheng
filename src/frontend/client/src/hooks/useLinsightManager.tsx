@@ -22,36 +22,36 @@ export const useLinsightManager = () => {
     const setActiveSessionId = useSetRecoilState(activeSessionIdState);
 
     // 创建新会话信息
-    const createLinsight = useCallback((sessionId: string, initialData: Omit<LinsightInfo, 'id'>) => {
+    const createLinsight = useCallback((versionId: string, initialData: Omit<LinsightInfo, 'id'>) => {
         const newLinsight: LinsightInfo = {
-            id: sessionId,
+            id: versionId,
             ...initialData
         };
 
         setLinsightMap(prevMap => {
             const newMap = new Map(prevMap);
-            newMap.set(sessionId, newLinsight);
+            newMap.set(versionId, newLinsight);
             return newMap;
         });
 
-        setActiveSessionId(sessionId);
-        return sessionId;
+        setActiveSessionId(versionId);
+        return versionId;
     }, [setLinsightMap, setActiveSessionId]);
 
     // 更新会话信息
-    const updateLinsight = useCallback((sessionId: string, update: Partial<LinsightInfo> | ((current: LinsightInfo) => Partial<LinsightInfo>)) => {
+    const updateLinsight = useCallback((versionId: string, update: Partial<LinsightInfo> | ((current: LinsightInfo) => Partial<LinsightInfo>)) => {
         setLinsightMap(prevMap => {
-            if (!prevMap.has(sessionId)) return prevMap;
+            if (!prevMap.has(versionId)) return prevMap;
 
             const newMap = new Map(prevMap);
-            const current = newMap.get(sessionId)!;
+            const current = newMap.get(versionId)!;
 
             // 处理update为函数的情况
             const updatedValue = typeof update === 'function'
                 ? update(current)
                 : update;
 
-            newMap.set(sessionId, {
+            newMap.set(versionId, {
                 ...current,
                 ...updatedValue
             });
@@ -60,20 +60,60 @@ export const useLinsightManager = () => {
     }, [setLinsightMap]);
 
     // 获取会话信息
-    const getLinsight = useCallback((sessionId: string) => {
-        return linsightMap.get(sessionId) || null;
+    const getLinsight = useCallback((versionId: string) => {
+        return linsightMap.get(versionId) || null;
     }, [linsightMap]);
 
     // 切换当前会话
-    const switchSession = useCallback((sessionId: string) => {
-        setActiveSessionId(sessionId);
+    const switchSession = useCallback((versionId: string) => {
+        setActiveSessionId(versionId);
     }, [setActiveSessionId]);
+
+    // 切换会话，更新会话信息
+    const switchAndUpdateLinsight = useCallback((versionId: string, update: any) => {
+        const linsight = getLinsight(versionId)
+        console.log('update :>> ', update);
+        if (linsight) return;
+
+        const { status, execute_feedback, output_result, tasks, files, ...params } = update
+        let newStatus = ''
+        switch (status) {
+            case 'not_started':
+                newStatus = SopStatus.SopGenerated;
+                break;
+            case 'in_progress':
+                newStatus = SopStatus.Running;
+                break;
+            case 'completed':
+                newStatus = execute_feedback ? SopStatus.FeedbackCompleted : SopStatus.completed;
+                break;
+            case 'terminated':
+                newStatus = SopStatus.Stoped;
+                break;
+            default:
+                newStatus = status; // 或设置默认值
+                break;
+        }
+        const data = {
+            ...params,
+            output_result,
+            execute_feedback,
+            summary: output_result?.answer,
+            status: newStatus,
+            files: files.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })),
+            tasks: buildTaskTree(tasks),
+            file_list: []
+        }
+
+        createLinsight(versionId, data);
+    }, [])
 
     return {
         createLinsight,
         updateLinsight,
         getLinsight,
         switchSession,
+        switchAndUpdateLinsight,
         linsightMap
     };
 };
@@ -249,13 +289,18 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                         id: versionId,
                         name: linsight_session_version.version
                     }, ...prevVersions])
+
+                    // replaceUrl
+                    window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/sop/${linsight_session_version.session_id}`);
+
                     createLinsight(versionId, {
                         status: SopStatus.SopGenerating, //linsight_session_version.status,
                         tools: tools, // TODO 补充文件
-                        files: linsightSubmission.files,
+                        files: linsight_session_version.files.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })),
                         user_id: linsight_session_version.user_id,
                         question: linsightSubmission.question,
-                        knowledge_enabled: false, // xx
+                        org_knowledge_enabled: false,
+                        personal_knowledge_enabled: false,
                         sop: '',
                         execute_feedback: null,
                         version: versionId,
@@ -265,7 +310,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                         score: null,
                         has_reexecute: false,
                         update_time: linsight_session_version.update_time,
-                        title: "New Chat",
+                        title: message_session.flow_name,
                         tasks: [],
                         summary: '',
                         file_list: []
@@ -288,6 +333,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                             endpoint: null,
                             endpointType: null,
                             model: "",
+                            flowType: 20,
                             title: data.task_title,
                             tools: [],
                             updatedAt: ""
@@ -355,7 +401,55 @@ const convertTools = (tools) => {
 }
 
 
+function buildTaskTree(tasks) {
+    // 创建任务ID到任务的映射
+    const taskMap = new Map();
+    tasks.forEach(task => taskMap.set(task.id, task));
 
+    // 存储根任务（一级任务）
+    const rootTasks: any[] = [];
+    // 存储二级任务（按parent_task_id分组）
+    const childTasksMap = new Map();
+
+    // 第一次遍历：分离一级和二级任务
+    tasks.forEach(task => {
+        if (task.parent_task_id === null) {
+            // 一级任务
+            rootTasks.push({
+                id: task.id,
+                name: task.task_data?.target || '',
+                status: task.status,
+                history: task.history.map(el => el.call_reason) || [],
+                event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
+                call_reason: '',
+                children: []  // 初始化子任务数组
+            });
+        } else {
+            // 二级任务（按父ID分组）
+            const parentId = task.parent_task_id;
+            if (!childTasksMap.has(parentId)) {
+                childTasksMap.set(parentId, []);
+            }
+            childTasksMap.get(parentId).push({
+                id: task.id,
+                name: task.task_data?.target || '',
+                status: task.status,
+                history: task.history.map(el => el.call_reason) || [],
+                event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
+                call_reason: ''
+                // 二级任务没有children字段
+            });
+        }
+    });
+
+    // 第二次遍历：将二级任务挂载到一级任务
+    rootTasks.forEach(rootTask => {
+        const children = childTasksMap.get(rootTask.id) || [];
+        rootTask.children = children;
+    });
+
+    return rootTasks;
+}
 
 const mockContent = `
 # SOP: 中美贸易逆顺差分析

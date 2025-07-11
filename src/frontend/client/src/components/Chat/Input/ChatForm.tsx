@@ -207,9 +207,8 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
 
 
   const accept = useMemo(() => {
-    const etl4lm = true  // TODO bgconfig
     if (isLingsi) {
-      return etl4lm
+      return bsConfig?.enable_etl4lm
         ? '.pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.doc,.png,.jpg,.jpeg,.bmp'
         : '.pdf,.txt,.docx,.doc,.ppt,.pptx,.md,.html,.xls,.xlsx'
     }
