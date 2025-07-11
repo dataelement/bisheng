@@ -7,6 +7,7 @@ from urllib.parse import urlparse, unquote
 from pathlib import Path
 from uuid import uuid4
 from loguru import logger
+from typing import Dict, List, Tuple, Any
 
 from bisheng.utils.minio_client import MinioClient
 from bisheng.utils.docx_temp import DocxTemplateRender
@@ -25,6 +26,8 @@ class ReportNode(BaseNode):
         if not self._file_name.endswith('.docx'):
             self._file_name += '.docx'
         self._minio_client = MinioClient()
+        # 存储下载的文件信息，用于后续插入文档
+        self._downloaded_files: Dict[str, str] = {}
 
     def _is_valid_url(self, url: str) -> bool:
         """检查是否为有效的URL"""
@@ -34,7 +37,7 @@ class ReportNode(BaseNode):
         except ValueError:
             return False
 
-    def _download_file(self, url: str) -> tuple[str, bool]:
+    def _download_file(self, url: str) -> Tuple[str, bool]:
         """
         下载文件到临时目录
         
@@ -90,18 +93,18 @@ class ReportNode(BaseNode):
             logger.error(f"下载文件失败: {url}, 错误: {str(e)}")
             return "", False
 
-    def _process_variable_value(self, value: str) -> str:
+    def _extract_and_download_resources(self, value: str) -> Tuple[str, Dict[str, Any]]:
         """
-        处理变量值，按照优先级匹配和下载图片、Excel文件
+        从变量值中提取并下载资源文件
         
         Args:
             value: 原始变量值
             
         Returns:
-            str: 处理后的变量值
+            tuple: (处理后的变量值, 资源信息字典)
         """
         if not isinstance(value, str):
-            return str(value)
+            return str(value), {}
         
         # 定义正则表达式模式
         patterns = {
@@ -117,6 +120,11 @@ class ReportNode(BaseNode):
         }
         
         processed_value = value
+        resources = {
+            'images': [],
+            'excel_files': [],
+            'markdown_tables': []
+        }
         
         # 1. 处理图片 - 本地路径优先
         # 1.1 Markdown格式图片（本地）
@@ -124,28 +132,54 @@ class ReportNode(BaseNode):
         for alt_text, img_path in markdown_images:
             if not self._is_valid_url(img_path):  # 本地路径
                 if os.path.exists(img_path):
-                    # 本地文件存在，保持原样
-                    continue
+                    # 本地文件存在，记录到资源列表
+                    placeholder = f"__IMAGE_PLACEHOLDER_{len(resources['images'])}__"
+                    resources['images'].append({
+                        'original_path': img_path,
+                        'local_path': img_path,
+                        'alt_text': alt_text,
+                        'placeholder': placeholder,
+                        'type': 'local'
+                    })
+                    # 在文档中用占位符替换
+                    processed_value = processed_value.replace(f"![{alt_text}]({img_path})", placeholder)
+                    logger.info(f"识别到本地图片: {img_path}")
                 else:
-                    # 本地文件不存在，尝试作为相对路径处理
                     logger.warning(f"本地图片文件不存在: {img_path}")
         
-        # 1.2 本地路径图片
+        # 1.2 本地路径图片（非Markdown格式）
         local_images = re.findall(patterns['local_image'], processed_value, re.IGNORECASE)
         for img_path in local_images:
             if not self._is_valid_url(img_path) and not img_path.startswith('minio://'):
-                if os.path.exists(img_path):
-                    # 转换为Markdown格式
-                    processed_value = processed_value.replace(img_path, f"![图片]({img_path})")
-                else:
-                    logger.warning(f"本地图片文件不存在: {img_path}")
+                # 避免重复处理已经在Markdown中的图片
+                if not any(img['original_path'] == img_path for img in resources['images']):
+                    if os.path.exists(img_path):
+                        placeholder = f"__IMAGE_PLACEHOLDER_{len(resources['images'])}__"
+                        resources['images'].append({
+                            'original_path': img_path,
+                            'local_path': img_path,
+                            'alt_text': '图片',
+                            'placeholder': placeholder,
+                            'type': 'local'
+                        })
+                        processed_value = processed_value.replace(img_path, placeholder)
+                        logger.info(f"识别到本地图片: {img_path}")
+                    else:
+                        logger.warning(f"本地图片文件不存在: {img_path}")
         
         # 1.3 MinIO路径图片
         minio_images = re.findall(patterns['minio_image'], processed_value, re.IGNORECASE)
         for img_path in minio_images:
-            # MinIO路径保持原样或转换为Markdown格式
-            if not re.search(patterns['markdown_image'], img_path):
-                processed_value = processed_value.replace(img_path, f"![图片]({img_path})")
+            placeholder = f"__IMAGE_PLACEHOLDER_{len(resources['images'])}__"
+            resources['images'].append({
+                'original_path': img_path,
+                'local_path': img_path,  # MinIO路径保持原样，由后续处理决定是否下载
+                'alt_text': '图片',
+                'placeholder': placeholder,
+                'type': 'minio'
+            })
+            processed_value = processed_value.replace(img_path, placeholder)
+            logger.info(f"识别到MinIO图片: {img_path}")
         
         # 2. 处理网络路径图片
         # 2.1 Markdown格式的网络图片
@@ -153,50 +187,117 @@ class ReportNode(BaseNode):
         for alt_text, img_url in markdown_net_images:
             if self._is_valid_url(img_url):
                 local_path, success = self._download_file(img_url)
+                placeholder = f"__IMAGE_PLACEHOLDER_{len(resources['images'])}__"
+                
                 if success:
-                    # 下载成功，替换为本地路径
-                    old_markdown = f"![{alt_text}]({img_url})"
-                    new_markdown = f"![{alt_text}]({local_path})"
-                    processed_value = processed_value.replace(old_markdown, new_markdown)
-                    logger.info(f"图片下载成功，已替换: {img_url} -> {local_path}")
+                    resources['images'].append({
+                        'original_path': img_url,
+                        'local_path': local_path,
+                        'alt_text': alt_text,
+                        'placeholder': placeholder,
+                        'type': 'downloaded'
+                    })
+                    logger.info(f"网络图片下载成功: {img_url} -> {local_path}")
                 else:
-                    logger.warning(f"图片下载失败，保持原样: {img_url}")
+                    # 下载失败，但仍记录原URL，后续可能仍需处理
+                    resources['images'].append({
+                        'original_path': img_url,
+                        'local_path': img_url,
+                        'alt_text': alt_text,
+                        'placeholder': placeholder,
+                        'type': 'failed'
+                    })
+                    logger.warning(f"网络图片下载失败: {img_url}")
+                
+                processed_value = processed_value.replace(f"![{alt_text}]({img_url})", placeholder)
         
         # 2.2 直接的HTTP/HTTPS图片链接
         http_images = re.findall(patterns['http_image'], processed_value, re.IGNORECASE)
         for img_url in http_images:
-            # 检查是否已经在Markdown格式中
-            if not re.search(rf'!\[[^\]]*\]\({re.escape(img_url)}\)', processed_value):
+            # 检查是否已经在Markdown格式中处理过
+            if not any(img['original_path'] == img_url for img in resources['images']):
                 local_path, success = self._download_file(img_url)
+                placeholder = f"__IMAGE_PLACEHOLDER_{len(resources['images'])}__"
+                
                 if success:
-                    # 下载成功，替换为Markdown格式的本地路径
-                    processed_value = processed_value.replace(img_url, f"![图片]({local_path})")
-                    logger.info(f"图片下载成功，已替换: {img_url} -> {local_path}")
+                    resources['images'].append({
+                        'original_path': img_url,
+                        'local_path': local_path,
+                        'alt_text': '图片',
+                        'placeholder': placeholder,
+                        'type': 'downloaded'
+                    })
+                    logger.info(f"网络图片下载成功: {img_url} -> {local_path}")
                 else:
-                    # 下载失败，转换为Markdown格式但保持原URL
-                    processed_value = processed_value.replace(img_url, f"![图片]({img_url})")
-                    logger.warning(f"图片下载失败，保持原URL: {img_url}")
+                    resources['images'].append({
+                        'original_path': img_url,
+                        'local_path': img_url,
+                        'alt_text': '图片',
+                        'placeholder': placeholder,
+                        'type': 'failed'
+                    })
+                    logger.warning(f"网络图片下载失败: {img_url}")
+                
+                processed_value = processed_value.replace(img_url, placeholder)
         
         # 3. 处理Excel表格文件
         excel_files = re.findall(patterns['excel_file'], processed_value, re.IGNORECASE)
         for excel_path in excel_files:
+            placeholder = f"__EXCEL_PLACEHOLDER_{len(resources['excel_files'])}__"
+            
             if self._is_valid_url(excel_path):
                 # 网络Excel文件
                 local_path, success = self._download_file(excel_path)
                 if success:
-                    processed_value = processed_value.replace(excel_path, local_path)
-                    logger.info(f"Excel文件下载成功，已替换: {excel_path} -> {local_path}")
+                    resources['excel_files'].append({
+                        'original_path': excel_path,
+                        'local_path': local_path,
+                        'placeholder': placeholder,
+                        'type': 'downloaded'
+                    })
+                    logger.info(f"Excel文件下载成功: {excel_path} -> {local_path}")
                 else:
-                    logger.warning(f"Excel文件下载失败，保持原样: {excel_path}")
-            elif not os.path.exists(excel_path):
-                logger.warning(f"本地Excel文件不存在: {excel_path}")
+                    resources['excel_files'].append({
+                        'original_path': excel_path,
+                        'local_path': excel_path,
+                        'placeholder': placeholder,
+                        'type': 'failed'
+                    })
+                    logger.warning(f"Excel文件下载失败: {excel_path}")
+            else:
+                # 本地Excel文件
+                if os.path.exists(excel_path):
+                    resources['excel_files'].append({
+                        'original_path': excel_path,
+                        'local_path': excel_path,
+                        'placeholder': placeholder,
+                        'type': 'local'
+                    })
+                    logger.info(f"识别到本地Excel文件: {excel_path}")
+                else:
+                    resources['excel_files'].append({
+                        'original_path': excel_path,
+                        'local_path': excel_path,
+                        'placeholder': placeholder,
+                        'type': 'missing'
+                    })
+                    logger.warning(f"本地Excel文件不存在: {excel_path}")
+            
+            processed_value = processed_value.replace(excel_path, placeholder)
         
-        # 4. 检测Markdown表格（保持原样，不需要特殊处理）
+        # 4. 处理Markdown表格
         markdown_tables = re.findall(patterns['markdown_table'], processed_value, re.MULTILINE)
-        if markdown_tables:
-            logger.info(f"检测到 {len(markdown_tables)} 个Markdown表格")
+        for table_content in markdown_tables:
+            placeholder = f"__TABLE_PLACEHOLDER_{len(resources['markdown_tables'])}__"
+            resources['markdown_tables'].append({
+                'content': table_content,
+                'placeholder': placeholder,
+                'type': 'markdown'
+            })
+            processed_value = processed_value.replace(table_content, placeholder)
+            logger.info(f"识别到Markdown表格，行数: {table_content.count('|')}")
         
-        return processed_value
+        return processed_value, resources
 
     def _run(self, unique_id: str):
         # 下载报告模板文件
@@ -208,15 +309,26 @@ class ReportNode(BaseNode):
         # 获取所有的节点变量
         all_variables = self.graph_state.get_all_variables()
         template_def = []
+        all_resources = {
+            'images': [],
+            'excel_files': [],
+            'markdown_tables': []
+        }
         
         # 处理每个变量值
         for key, value in all_variables.items():
-            # 处理变量值（检测并下载图片、Excel文件等）
-            processed_value = self._process_variable_value(str(value))
+            # 提取并下载资源文件
+            processed_value, resources = self._extract_and_download_resources(str(value))
+            
+            # 合并资源信息
+            all_resources['images'].extend(resources.get('images', []))
+            all_resources['excel_files'].extend(resources.get('excel_files', []))
+            all_resources['markdown_tables'].extend(resources.get('markdown_tables', []))
+            
             template_def.append(["{{" + key + "}}", processed_value])
 
-        # 将变量渲染到docx模板文件
-        output_doc = doc_parse.render(template_def)
+        # 将变量和资源信息一起渲染到docx模板文件
+        output_doc = doc_parse.render(template_def, all_resources)
         output_content = io.BytesIO()
         output_doc.save(output_content)
         output_content.seek(0)
