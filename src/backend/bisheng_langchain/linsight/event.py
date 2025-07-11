@@ -36,3 +36,4 @@ class TaskEnd(BaseEvent):
     name: str = Field(..., description='任务名称')
     status: str = Field(..., description='任务状态')
     answer: str = Field(..., description='任务最终结果')
+    data: Any = Field(..., description='任务数据')

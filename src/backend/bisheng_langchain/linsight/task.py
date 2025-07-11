@@ -221,7 +221,8 @@ class BaseTask(BaseModel):
             raise e
         finally:
             await self.put_event(
-                TaskEnd(task_id=self.id, status=self.status, name=self.profile, answer=self.get_finally_answer()))
+                TaskEnd(task_id=self.id, status=self.status, name=self.profile, answer=self.get_finally_answer(),
+                        data=self.get_task_info()))
 
     def get_answer(self) -> str:
         if self.answer:
