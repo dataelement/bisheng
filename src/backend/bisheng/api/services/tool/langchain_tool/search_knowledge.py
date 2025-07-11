@@ -15,7 +15,7 @@ from bisheng.utils.embedding import decide_embeddings
 class ToolInput(BaseModel):
     query: str = Field(..., description='需要检索的关键词')
     file_id: Optional[str] = Field(default=None, description='文件储存在语义检索库中的id')
-    knowledge_id: Optional[str] = Field(default=None, description='需要检索的知识库id')
+    knowledge_id: Optional[str] = Field(default=None, description='知识库储存在语义检索库中的id')
     limit: Optional[int] = Field(default=2, description='返回结果的最大数量')
 
 
@@ -31,10 +31,10 @@ class SearchKnowledgeBase(BaseTool):
 
     async def _arun(self, query: str, file_id: Optional[str] = None, knowledge_id: Optional[str] = None,
                     **kwargs) -> str:
-        limit = kwargs.get('limit', None) or self.limit
+        limit = kwargs.get('limit', None) or 2
         if not query:
             return ""
-        if file_id.strip():
+        if file_id and file_id.strip():
             return await self.search_linsight_file(query, file_id, limit)
         return await self.search_knowledge(query, knowledge_id, limit)
 

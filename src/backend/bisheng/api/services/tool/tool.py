@@ -218,7 +218,6 @@ class ToolServices(BaseModel):
 
     @classmethod
     async def get_linsight_tools(cls) -> list[GptsToolsTypeRead]:
-        tools = await cls.init_linsight_tools("/app")
         return [
             GptsToolsTypeRead(
                 id=100000,
