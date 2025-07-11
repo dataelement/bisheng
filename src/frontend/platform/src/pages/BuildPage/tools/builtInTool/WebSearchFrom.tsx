@@ -1,6 +1,6 @@
 import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField, SelectField } from "./InputField";
 import { Label } from '@/components/bs-ui/label';
@@ -24,50 +24,37 @@ const defaultToolParams = {
     },
     tavily: {
         api_key: ''
-    }
+    },
 };
 
 const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const { t } = useTranslation();
     const { toast } = useToast();
     const { config: webSearchData, setConfig } = useWebSearchStore();
-    
+
     const [allToolsConfig, setAllToolsConfig] = useState(() => {
-        const initialConfig = {
+        return {
             bing: {
                 ...defaultToolParams.bing,
-                ...(webSearchData?.bing?.config || webSearchData?.bing || {})
+                ...(webSearchData?.bing || {})
             },
             bocha: {
                 ...defaultToolParams.bocha,
-                ...(webSearchData?.bocha?.config || webSearchData?.bocha || {})
+                ...(webSearchData?.bocha || {})
             },
             jina: {
                 ...defaultToolParams.jina,
-                ...(webSearchData?.jina?.config || webSearchData?.jina || {})
+                ...(webSearchData?.jina || {})
             },
             serp: {
                 ...defaultToolParams.serp,
-                ...(webSearchData?.serp?.config || webSearchData?.serp || {})
+                ...(webSearchData?.serp || {})
             },
             tavily: {
                 ...defaultToolParams.tavily,
-                ...(webSearchData?.tavily?.config || webSearchData?.tavily || {})
-            }
+                ...(webSearchData?.tavily || {})
+            },
         };
-        
-        // 清理可能存在的config嵌套
-        Object.keys(initialConfig).forEach(tool => {
-            if (initialConfig[tool]?.config) {
-                initialConfig[tool] = {
-                    ...initialConfig[tool],
-                    ...initialConfig[tool].config
-                };
-                delete initialConfig[tool].config;
-            }
-        });
-        
-        return initialConfig;
     });
 
     const [selectedTool, setSelectedTool] = useState(webSearchData?.tool || 'bing');
@@ -76,7 +63,27 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const handleToolChange = (tool) => {
         setSelectedTool(tool);
     };
-
+    useEffect(() => {
+        if (webSearchData) {
+            setAllToolsConfig({
+                bing: { ...defaultToolParams.bing, ...webSearchData.bing },
+                bocha: { ...defaultToolParams.bocha, ...webSearchData.bocha },
+                jina: {
+                    ...defaultToolParams.jina,
+                    ...webSearchData?.jina
+                },
+                serp: {
+                    ...defaultToolParams.serp,
+                    ...webSearchData?.serp
+                },
+                tavily: {
+                    ...defaultToolParams.tavily,
+                    ...webSearchData?.tavily
+                },
+            });
+            setSelectedTool(webSearchData.tool || 'bing');
+        }
+    }, [webSearchData]);
     const handleParamChange = (e) => {
         const { name, value } = e.target;
         setAllToolsConfig(prev => ({
@@ -90,19 +97,16 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+
         const newConfig = {
-            type: selectedTool,
-            config: {
-            bing: allToolsConfig.bing,
-            bocha: allToolsConfig.bocha,
-            jina: allToolsConfig.jina,
-            serp: allToolsConfig.serp,
-            tavily: allToolsConfig.tavily
-        }
+            tool: selectedTool,
+            ...allToolsConfig
         };
 
         try {
             setConfig(newConfig);
+            console.log('提交的数据:', newConfig);
+
             toast({
                 title: "保存成功",
                 variant: "success",
@@ -216,8 +220,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                         id="tavily-api-key"
                     />
                 );
-            default:
-                return null;
+             return null;
         }
     };
 
@@ -232,7 +235,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                     { value: 'bocha', label: '博查websearch' },
                     { value: 'jina', label: 'Jina 深度搜索' },
                     { value: 'serp', label: 'Serp API' },
-                    { value: 'tavily', label: 'Tavily' }
+                    { value: 'tavily', label: 'Tavily' },
                 ]}
                 id="search-tool-selector"
                 name="search_tool"
