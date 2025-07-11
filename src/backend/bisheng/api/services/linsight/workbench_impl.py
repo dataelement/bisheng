@@ -7,7 +7,6 @@ from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOP
 from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.linsight.task_exec import LinsightWorkflowTask
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
@@ -31,7 +30,6 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils.embedding import decide_embeddings
-from bisheng_langchain.linsight.agent import LinsightAgent
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +246,7 @@ class LinsightWorkbenchImpl(object):
 
                 previous_session_version_model = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
                 feedback_content = previous_session_version_model.execute_feedback if previous_session_version_model.execute_feedback else feedback_content
-
+            from bisheng_langchain.linsight.agent import LinsightAgent
             linsight_agent = LinsightAgent(file_dir="",
                                            query=linsight_session_version_model.question,
                                            llm=llm,
@@ -338,7 +336,7 @@ class LinsightWorkbenchImpl(object):
                     answer = execute_task_model.result.get("answer", "")
                     if answer:
                         history_summary.append(answer)
-
+            from bisheng_langchain.linsight.agent import LinsightAgent
             linsight_agent = LinsightAgent(file_dir="",
                                            query=session_version_model.question,
                                            llm=llm,
@@ -349,6 +347,8 @@ class LinsightWorkbenchImpl(object):
                     feedback=feedback,
                     history_summary=history_summary if history_summary else None):
                 sop_content += res.content
+
+            from bisheng.linsight.task_exec import LinsightWorkflowTask
 
             sop_summary = await LinsightWorkflowTask.generate_sop_summary(sop_content, llm)
 
