@@ -144,7 +144,7 @@ class ReactTask(BaseTask):
                                           call_reason=thinking,
                                           name=action,
                                           params=params,
-                                          output=generate_content,
+                                          output=str(generate_content),
                                           status="end"))
             message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
         else:
@@ -176,7 +176,7 @@ class ReactTask(BaseTask):
         if is_end and isinstance(self.history[-1], AIMessage):
             self.status = TaskStatus.SUCCESS.value
             result_json = json.loads(self.history[-1].content)
-            self.answer = result_json.get("观察", "") or result_json.get("生成内容", "处理完成，但未获得最终答案")
+            self.answer = str(result_json.get("观察", "") or result_json.get("生成内容", "处理完成，但未获得最终答案"))
         else:
             self.status = TaskStatus.FAILED.value
             self.answer = "task exec over max steps and not generate answer"

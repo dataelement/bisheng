@@ -1,17 +1,19 @@
 import asyncio
 import datetime
 import json
+import time
 from typing import List, Optional, Any
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, HumanMessage, AIMessage
 from pydantic import BaseModel, Field, ConfigDict
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
+from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, Debug
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt
-from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks, generate_uuid_str
+from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks, generate_uuid_str, \
+    record_llm_prompt
 
 
 class BaseTask(BaseModel):
@@ -77,7 +79,12 @@ class BaseTask(BaseModel):
         """
         # get tool schema
         tool_args = self.task_manager.get_all_tool_schema
-        return await self.llm.ainvoke(messages, tools=tool_args)
+        start_time = time.time()
+        res = await self.llm.ainvoke(messages, tools=tool_args)
+        if Debug and res:
+            record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
+                              res.response_metadata.get('token_usage', None), time.time() - start_time)
+        return res
 
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
         """
@@ -85,7 +92,12 @@ class BaseTask(BaseModel):
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
-        return await self.llm.ainvoke(messages)
+        start_time = time.time()
+        res = await self.llm.ainvoke(messages)
+        if Debug and res:
+            record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
+                              res.response_metadata.get('token_usage', None), time.time() - start_time)
+        return res
 
     async def handle_user_input(self, user_input: str) -> None:
         """

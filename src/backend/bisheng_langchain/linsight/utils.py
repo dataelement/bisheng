@@ -1,7 +1,10 @@
+import json
 import os
 import re
 import uuid
+from typing import Any
 
+from langchain_core.language_models import BaseLanguageModel
 from transformers import AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained(os.path.join(os.path.dirname(__file__), "resource/model_tokenizer"),
@@ -50,3 +53,33 @@ def generate_uuid_str() -> str:
     :return: A UUID string.
     """
     return uuid.uuid4().hex
+
+
+def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_usage: Any, cost_time: float):
+    generate_tokens_num = 0
+    prompt_tokens_num = 0
+    cached_tokens_num = 0
+    if token_usage:
+        generate_tokens_num = token_usage.get('output_tokens', 0)
+        prompt_tokens_num = token_usage.get('input_tokens', 0)
+        cached_tokens_num = token_usage.get('cached_tokens', 0)
+    try:
+        model_name = getattr(llm, "model")
+    except AttributeError:
+        try:
+            model_name = getattr(llm, "model_name")
+        except AttributeError:
+            model_name = getattr(llm, "azure_deployment", "unknown_model")
+
+    with open('./linsight_llm_call.jsonl', 'a') as f:
+        f.write(
+            json.dumps({
+                "model": model_name,
+                "prompt": prompt,
+                "response": answer,
+                "generate_tokens_num": generate_tokens_num,
+                "prompt_tokens_num": prompt_tokens_num,
+                "cached_tokens_num": cached_tokens_num,
+                "time": cost_time
+            }, ensure_ascii=False) + "\n"
+        )

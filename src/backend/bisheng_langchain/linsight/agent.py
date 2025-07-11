@@ -1,4 +1,5 @@
 import json
+import time
 from datetime import datetime
 from typing import Optional, AsyncIterator
 
@@ -8,11 +9,11 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
-from bisheng_langchain.linsight.const import TaskMode
+from bisheng_langchain.linsight.const import TaskMode, Debug
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
-from bisheng_langchain.linsight.utils import extract_code_blocks
+from bisheng_langchain.linsight.utils import extract_code_blocks, record_llm_prompt
 
 
 class LinsightAgent(BaseModel):
@@ -39,8 +40,15 @@ class LinsightAgent(BaseModel):
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
         sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str)
         # Add logic to process the SOP string
+        start_time = time.time()
+        one = None
+        answer = ''
         async for one in self.llm.astream(sop_prompt):
             yield one
+            answer += f"{one.content}"
+        if Debug and one:
+            record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
+                              time.time() - start_time)
 
     async def feedback_sop(self, sop: str, feedback: str, history_summary: list[str] = None) -> AsyncIterator[
         ChatGenerationChunk]:
@@ -61,13 +69,23 @@ class LinsightAgent(BaseModel):
 
         sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
                                               history_summary=history_summary)
+        start_time = time.time()
+        one = None
+        answer = ''
         async for one in self.llm.astream(sop_prompt):
             yield one
+        if Debug and one:
+            record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
+                              time.time() - start_time)
 
     async def generate_task(self, sop: str) -> list[dict]:
         current_time = datetime.now().isoformat()
         prompt = GenerateTaskPrompt.format(query=self.query, sop=sop, file_dir=self.file_dir, current_time=current_time)
+        start_time = time.time()
         res = await self.llm.ainvoke(prompt)
+        if Debug and res:
+            record_llm_prompt(self.llm, prompt, res.content, res.response_metadata.get('token_usage', None),
+                              time.time() - start_time)
 
         # 解析生成的任务json数据
         json_str = extract_code_blocks(res.content)

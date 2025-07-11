@@ -2,6 +2,7 @@ import asyncio
 import os
 
 from langchain_community.chat_models import ChatTongyi
+from langchain_openai import AzureChatOpenAI
 from pydantic import SecretStr
 
 from bisheng_langchain.gpts.load_tools import load_tools
@@ -13,6 +14,7 @@ from bisheng_langchain.linsight.event import NeedUserInput, TaskStart, TaskEnd, 
 def get_linsight_agent():
     bing_api_key = os.environ.get('bing_api_key')
     qwen_api_key = os.environ.get('qwen_api_key')
+    azure_api_key = os.environ.get('azure_api_key')
     file_dir = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
 
     used_tools = load_tools({
@@ -32,6 +34,10 @@ def get_linsight_agent():
     print("used tools:", used_tools)
     chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
                       model_kwargs={'incremental_output': True})
+    chat = AzureChatOpenAI(azure_endpoint="https://ai-aoai05215744ai338141519445.cognitiveservices.azure.com/",
+                           api_key=azure_api_key,
+                           api_version="2024-12-01-preview",
+                           azure_deployment="gpt-4.1")
 
     # 获取本地文件相关工具
     query = "分析该目录下的简历文件（仅限txt格式），挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
@@ -61,7 +67,16 @@ async def async_main():
     print(f"task_info: {task_info}")
 
     async for event in agent.ainvoke(task_info, sop):
-        print(event)
+        if isinstance(event, NeedUserInput):
+            print("============ need user input ============")
+            user_input = input(f"需要用户输入，原因：{event.call_reason} (任务ID: {event.task_id}): ")
+            await agent.continue_task(event.task_id, user_input)
+        elif isinstance(event, TaskStart):
+            print(f"============ task start ============ {event}")
+        elif isinstance(event, TaskEnd):
+            print(f"============ task end ============ {event}")
+        elif isinstance(event, ExecStep):
+            print(f"============ exec step ============ {event}")
 
     all_task_info = await agent.get_all_task_info()
     print(all_task_info)
@@ -70,114 +85,86 @@ async def async_main():
 async def only_exec_task():
     agent = get_linsight_agent()
 
-    sop = """### 标准操作流程 (SOP)
+    sop = """标准操作流程（SOP）：  
+基于目录简历筛选大模型岗位候选人
 
-#### 问题概述
-本SOP旨在指导大模型分析指定目录下的简历文件（仅限txt格式），筛选出符合以下要求的简历：
-- Python代码能力强
-- 有大模型相关项目经验
-- 热情高、主动性高  
-输出结果将以Markdown格式呈现，便于阅读和理解。
+---
 
-#### 所需的工具和资源
-1. **工具**：
-   - @search_files：用于搜索指定目录中的txt文件。
-   - @read_text_file：读取简历文件内容。
-   - @write_text_file：将筛选结果写入Markdown文件。
-2. **最佳实践**：
-   - 使用`search_files`时，设置正则表达式匹配`.txt`文件。
-   - 每次读取文件内容时，限制行数为50行以提高效率。
-   - 输出结果文件命名为`resume_analysis_results.md`。
+**1. 问题概述**  
+本流程用于在指定目录下，从所有txt格式的简历文件中，自动筛选出满足如下岗位能力要求的候选人：  
+- Python代码能力强  
+- 有大模型相关项目经验  
+- 具备热情、主动性高等软素质  
+适用于批量简历文件筛查，输出筛选结果报告。
 
-#### 步骤说明
-1. **搜索简历文件**  
-   使用@search_files工具，在指定目录中搜索所有`.txt`文件。  
-   参数示例：
-   ```json
-   {
-     "directory_path": "./resumes",
-     "pattern": "*.txt"
-   }
-   ```
+---
 
-2. **初始化结果文件**  
-   使用@write_text_file工具，创建一个空的Markdown文件`resume_analysis_results.md`，并写入标题和表头。  
-   参数示例：
-   ```json
-   {
-     "file_path": "./resume_analysis_results.md",
-     "content": "# 符合要求的简历列表\n\n| 文件名 | 符合条件 |\n|--------|----------|\n",
-     "start_line": 0
-   }
-   ```
+**2. 所需的工具和资源**  
+- @list_files：用于列出目录下所有txt文件  
+- @read_text_file：用于读取简历内容  
+- @search_text_in_file：辅助定位关键词  
+- @write_text_file：生成和写入筛选结果  
+**最佳实践：**优先批量处理文件，高效检索软硬技能，多维度关键词搜索。
 
-3. **逐个分析简历文件**  
-   对每个找到的简历文件执行以下步骤：
-   - 使用@read_text_file工具读取文件内容。  
-     参数示例：
-     ```json
-     {
-       "file_path": "./resumes/resume1.txt",
-       "start_line": 1,
-       "num_lines": 50
-     }
-     ```
-   - 检查文件内容是否包含关键词：“Python”、“大模型”、“热情”、“主动性”。  
-     如果全部关键词均存在，则判定该简历符合条件。
+---
 
-4. **记录符合条件的简历**  
-   如果简历符合条件，使用@write_text_file工具将文件名和结果追加到`resume_analysis_results.md`中。  
-   参数示例：
-   ```json
-   {
-     "file_path": "./resume_analysis_results.md",
-     "content": "| resume1.txt | 是 |\n",
-     "start_line": -1
-   }
-   ```
+**3. 步骤说明**
 
-5. **完成分析并总结**  
-   当所有文件分析完成后，使用@write_text_file工具在结果文件末尾添加总结信息。  
-   参数示例：
-   ```json
-   {
-     "file_path": "./resume_analysis_results.md",
-     "content": "\n## 总结\n本次共分析了X份简历，其中Y份符合要求。",
-     "start_line": -1
-   }
-   ```
+1. 使用@list_files获取指定目录下所有*.txt简历文件路径。
+2. 对于每个txt简历文件：  
+   a. 利用@read_text_file整段读取简历内容。  
+   b. 分别搜索硬性条件关键词，例如“Python”，“编程”，“大模型”，“LLM”，“NLP”等，判断是否具备技术要求（可通过@search_text_in_file辅助确认）。  
+   c. 搜索软性素质相关关键词如“热情”、“主动”、“自我驱动”、“积极”等。  
+3. 对所有满足上述三项筛选条件的简历，收集关键信息（如文件名、命中条件摘要）。
+4. 结果输出：将筛选通过简历的关键信息，以Markdown格式写入到筛选报告（如筛选结果.md），便于后续查阅。
+5. 最终输出“筛选结果.md”文件即为筛查结果报告。
 
-#### 输出内容
-最终输出的文件`resume_analysis_results.md`将包含以下内容：
-- 符合要求的简历列表（文件名及是否符合条件）。
-- 总结信息，包括总分析数量和符合条件的数量。"""
+---
+
+**示例输出结构（Markdown）**  
+```markdown
+# 简历筛选结果
+
+## 满足条件的候选人列表
+
+### 1. 文件名：resume_zhangsan.txt
+- 技能：Python、NLP、大模型项目
+- 软素质：热情、主动
+
+### 2. 文件名：resume_lisi.txt
+- 技能：Python、LLM开发
+- 软素质：自我驱动、积极
+...
+```
+
+---
+
+**注意事项**  
+- 关键词匹配可适当使用同义词扩展，以防遗漏。  
+- 文件处理应确保不会丢失原始简历。  
+- 报告内容简明，利于人工后续甄别。
+
+（本SOP适用于批量文本简历基于技术与素质条件的快速筛查任务）"""
     task_info = [
-        {'step_id': 'step_1', 'description': '搜索指定目录下的所有txt格式简历文件。', 'profile': '文件搜索机器人',
-         'target': '找到所有符合条件的txt文件路径。', 'sop': '使用@search_files工具，在指定目录中搜索所有`.txt`文件。',
-         'prompt': '在目录`./resumes`中搜索所有`.txt`文件。', 'input': ['query'], 'node_loop': False,
-         'id': 'd14b9b85e6034fca99654cc7bed719a6', 'next_id': ['93b9c295918a40958148e4e4df5526be']},
-        {'step_id': 'step_2', 'description': '初始化结果文件，创建一个空的Markdown文件并写入标题和表头。',
-         'profile': '文件初始化机器人', 'target': '创建并初始化`resume_analysis_results.md`文件。',
-         'sop': '使用@write_text_file工具，创建一个空的Markdown文件`resume_analysis_results.md`，并写入标题和表头。',
-         'prompt': '创建文件`resume_analysis_results.md`并写入标题和表头：`# 符合要求的简历列表\n\n| 文件名 | 符合条件 |\n|--------|----------|\n`。',
-         'input': ['query'], 'node_loop': False, 'id': '172221cd302d42b9a7dbb99273045ab1'},
-        {'step_id': 'step_3', 'description': '逐个分析简历文件内容，检查是否符合筛选条件。', 'profile': '简历分析机器人',
-         'target': '分析每个简历文件内容，判断是否包含关键词：Python、大模型、热情、主动性。',
-         'sop': '对每个简历文件，使用@read_text_file工具读取文件内容，并检查是否包含关键词。',
-         'prompt': '对于每个简历文件，读取前50行内容并检查是否包含以下关键词：Python、大模型、热情、主动性。如果全部关键词均存在，则判定该简历符合条件。',
-         'input': ['step_1'], 'node_loop': True, 'id': '93b9c295918a40958148e4e4df5526be',
-         'next_id': ['75ac818d7ee14eff882058831b63c892', '7314747c11534165b302fb379ea6fd4e']},
-        {'step_id': 'step_4', 'description': '记录符合条件的简历到结果文件中。', 'profile': '结果记录机器人',
-         'target': '将符合条件的简历信息追加到`resume_analysis_results.md`文件中。',
-         'sop': '使用@write_text_file工具，将符合条件的简历文件名和结果追加到`resume_analysis_results.md`中。',
-         'prompt': '如果简历符合条件，将其文件名和结果追加到`resume_analysis_results.md`中，格式为：`| 文件名 | 是 |\n`。',
-         'input': ['step_3'], 'node_loop': True, 'id': '7314747c11534165b302fb379ea6fd4e',
-         'next_id': ['75ac818d7ee14eff882058831b63c892']},
-        {'step_id': 'step_5', 'description': '完成分析并总结，添加总结信息到结果文件。', 'profile': '总结机器人',
-         'target': '在结果文件末尾添加总结信息，包括总分析数量和符合条件的数量。',
-         'sop': '使用@write_text_file工具，在结果文件末尾添加总结信息。',
-         'prompt': '在`resume_analysis_results.md`文件末尾添加总结信息：`## 总结\n本次共分析了X份简历，其中Y份符合要求。`。',
-         'input': ['step_3', 'step_4'], 'node_loop': False, 'id': '75ac818d7ee14eff882058831b63c892'}]
+        {'step_id': 'step_1', 'description': '获取指定目录下所有txt格式的简历文件路径。', 'profile': '文件检索机器人',
+         'target': '列出/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data下的所有txt格式简历文件路径',
+         'sop': '使用@list_files工具，检索所给目录下所有txt文件，返回完整路径列表。',
+         'prompt': '请使用@list_files工具列出/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data目录下所有txt后缀简历文件的路径。',
+         'input': ['query'], 'node_loop': False, 'id': 'c984c953e8fd4c4bbee14d6090cf8718',
+         'next_id': ['85e43a1507b94ffabf7195f5559a9209']},
+        {'step_id': 'step_2', 'description': '批量读取每个简历文件内容并筛查是否符合岗位要求，收集通过的简历关键信息。',
+         'profile': '简历筛查机器人',
+         'target': '判断每份简历是否同时符合技术与软素质要求，并汇总关键信息（文件名、命中条件等）',
+         'sop': "对step_1返回的所有txt文件，依次读取原文，划分为：\n1. 检查是否包含Python相关技能与代码经验（如‘Python’、‘编程’、‘开发’等关键词）。\n2. 检查是否有大模型、LLM、NLP、Transformer、深度学习等相关项目或经验描述。\n3. 检查内容中是否有'热情'、'主动'、'自我驱动'、'积极'等软素质词语。\n4. 对三个条件全部满足的简历，提取文件名及命中关键词说明，组织成结构化信息。\n（检索与写作合并，避免大量细节传递）",
+         'prompt': '你需要读取step_1中每个txt简历，判断：\n- 是否包含Python代码能力、NLP、大模型、LLM等关键词，并描述相关项目经验；\n- 是否具备热情、主动、自我驱动等软素质（可扩展同义表达）；\n对全部符合的简历，记录文件名、技能关键词、软素质关键词。\n返回一个用于报告的结构化信息列表。',
+         'input': ['step_1'], 'node_loop': True, 'id': '85e43a1507b94ffabf7195f5559a9209',
+         'next_id': ['380b4b7693c14568a45500c4a77f9413']},
+        {'step_id': 'step_3', 'description': '将筛查通过的简历结构化信息按Markdown格式输出为筛选结果报告。',
+         'profile': '报告生成机器人', 'target': '生成并写入筛查通过简历的报告文件（筛选结果.md）',
+         'sop': '根据step_2输出的信息，整理并生成符合指定模板的Markdown格式报告：\n1. 标题：简历筛选结果。\n2. 下设‘满足条件的候选人列表’，每个候选人包含文件名、技能命中、软素质命中。\n3. 调用@write_text_file将该内容写入‘筛选结果.md’。',
+         'prompt': '将step_2中收集到的通过简历关键信息，按如下Markdown格式生成报告内容，并写入筛选结果.md：\n# 简历筛选结果\n## 满足条件的候选人列表\n### 1. 文件名：xxx\n- 技能：xxx\n- 软素质：xxx\n...',
+         'input': ['step_2'], 'node_loop': False, 'id': '380b4b7693c14568a45500c4a77f9413'}]
+
     async for event in agent.ainvoke(task_info, sop):
         if isinstance(event, NeedUserInput):
             print("============ need user input ============")
