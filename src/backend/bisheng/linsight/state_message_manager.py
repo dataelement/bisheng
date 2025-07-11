@@ -125,7 +125,7 @@ class LinsightStateMessageManager:
         """
         try:
 
-            message_data= await self._redis_client.ablpop(self._keys['messages'])
+            message_data = await self._redis_client.ablpop(self._keys['messages'])
 
             if message_data:
                 return MessageData.model_validate(message_data)
@@ -171,14 +171,23 @@ class LinsightStateMessageManager:
         Returns:
             会话版本信息模型或None
         """
-        info = await self._handle_redis_operation(
-            self._redis_client.aget,
-            self._keys['session_version_info']
-        )
+        try:
+            info = await self._handle_redis_operation(
+                self._redis_client.aget,
+                self._keys['session_version_info']
+            )
+            if not info:
+                self._logger.warning(f"No session version info found for {self._session_version_id}")
+                session_version_model = await LinsightSessionVersionDao.get_by_id(self._session_version_id)
+                await self.set_session_version_info(session_version_model)
+                return session_version_model
 
-        if info:
             return LinsightSessionVersion.model_validate(info)
-        return None
+        except Exception as e:
+            self._logger.error(f"Failed to get session version info: {e}")
+            session_version_model = await LinsightSessionVersionDao.get_by_id(self._session_version_id)
+            await self.set_session_version_info(session_version_model)
+            return session_version_model
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def set_execution_tasks(self, tasks: List[LinsightExecuteTask]) -> None:
@@ -201,14 +210,6 @@ class LinsightStateMessageManager:
 
             await self._redis_client.amset(tasks_mapping, expiration=self.DEFAULT_EXPIRATION)
 
-            # 推送生成任务消息
-            message_data = MessageData(
-                event_type=MessageEventType.TASK_GENERATE,
-                data={"tasks": [task.model_dump() for task in tasks]}
-            )
-
-            await self.push_message(message_data)
-            self._logger.info(f"Set {len(tasks)} execution tasks")
 
         except Exception as e:
             self._logger.error(f"Failed to set execution tasks: {e}")
@@ -280,7 +281,7 @@ class LinsightStateMessageManager:
 
             # 使用事务确保数据一致性
             async with self._redis_client.async_pipeline() as pipe:
-                await pipe.set(task_key, pickle.dumps(task_model.model_dump()),ex= self.DEFAULT_EXPIRATION)
+                await pipe.set(task_key, pickle.dumps(task_model.model_dump()), ex=self.DEFAULT_EXPIRATION)
                 await pipe.execute()
 
             # 更新数据库
@@ -314,7 +315,11 @@ class LinsightStateMessageManager:
 
             if task_data:
                 return LinsightExecuteTask.model_validate(task_data)
-            return None
+
+            # 如果Redis中没有数据，从数据库获取
+            task_model = await LinsightExecuteTaskDao.get_by_id(task_id)
+            await self.set_execution_tasks([task_model])
+            return task_model
 
         except Exception as e:
             self._logger.error(f"Failed to get execution task {task_id}: {e}")
@@ -332,7 +337,7 @@ class LinsightStateMessageManager:
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
         try:
-            task_data = await self._redis_client.aget(task_key)
+            task_data = await self.get_execution_task(task_id)
 
             if not task_data:
                 raise ValueError(f"Task with ID {task_id} not found in Redis.")

@@ -250,7 +250,8 @@ class LinsightWorkbenchImpl(object):
             linsight_agent = LinsightAgent(file_dir="",
                                            query=linsight_session_version_model.question,
                                            llm=llm,
-                                           tools=tools)
+                                           tools=tools,
+                                           task_mode=workbench_conf.linsight_executor_mode)
             content = ""
 
             # 没有反馈内容
@@ -340,7 +341,8 @@ class LinsightWorkbenchImpl(object):
             linsight_agent = LinsightAgent(file_dir="",
                                            query=session_version_model.question,
                                            llm=llm,
-                                           tools=tools)
+                                           tools=tools,
+                                           task_mode=workbench_conf.linsight_executor_mode)
             sop_content = ""
             async for res in linsight_agent.feedback_sop(
                     sop=session_version_model.sop if session_version_model.sop else "",

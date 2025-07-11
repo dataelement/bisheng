@@ -231,12 +231,16 @@ class LinsightWorkflowTask:
 
     async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List,
                             file_dir: str) -> LinsightAgent:
+
+        workbench_conf = await LLMService.get_workbench_llm()
+
         """创建智能体"""
         return LinsightAgent(
             llm=llm,
             query=session_model.question,
             tools=tools,
-            file_dir=file_dir
+            file_dir=file_dir,
+            task_mode=workbench_conf.linsight_executor_mode
         )
 
     # ==================== 任务执行 ====================
@@ -261,6 +265,14 @@ class LinsightWorkflowTask:
 
             await LinsightExecuteTaskDao.batch_create_tasks(tasks)
             await self._state_manager.set_execution_tasks(tasks)
+
+            # 推送生成任务消息
+            await self._state_manager.push_message(MessageData(
+                event_type=MessageEventType.TASK_GENERATE,
+                data={"tasks": [task.model_dump() for task in tasks]}
+            ))
+
+            logger.info(f"Set {len(tasks)} execution tasks")
 
         except Exception as e:
             logger.error(f"保存任务信息失败: {e}")
