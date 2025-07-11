@@ -1,14 +1,16 @@
 // src/stores/webSearchStore.ts
 import { create } from 'zustand'
 
+// webSearchStore.ts
 interface WebSearchConfig {
   enabled: boolean
   tool: string
-  bing: { type: string; config: { api_key: string; base_url: string } }
-  bocha: { type: string; config: { api_key: string } }
-   jina: { type: string; config: { api_key: string } }
-    serp: { type: string; config: { api_key: string;  engine: string } }
-     tavily: { type: string; config: { api_key: string } }
+  bing: { api_key: string; base_url: string }
+  bocha: { api_key: string }
+  jina: { api_key: string }
+  serp: { api_key: string; engine: string }
+  tavily: { api_key: string }
+  cloudsway: { api_key: string; base_url: string; endpoint: string }
   prompt: string
 }
 
