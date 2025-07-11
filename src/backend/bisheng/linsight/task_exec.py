@@ -581,7 +581,7 @@ class LinsightWorkflowTask:
             try:
                 object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
                 minio_client.upload_minio(
-                    bucket_name=settings.minio_conf.bucket,
+                    bucket_name=minio_client.bucket,
                     object_name=object_name,
                     file_path=final_file_info["file_path"]
                 )
