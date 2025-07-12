@@ -200,7 +200,7 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                     <SelectValue placeholder="选择执行模式" />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="function_call">Function Call</SelectItem>
+                    <SelectItem value="func_call">Function Call</SelectItem>
                     <SelectItem value="react">ReAct</SelectItem>
                 </SelectContent>
             </Select>
