@@ -10,6 +10,7 @@ import {
 import { SSE } from 'sse.js';
 import { SopStatus } from '~/components/Sop/SOPEditor';
 import { ConversationData, QueryKeys } from '~/data-provider/data-provider/src';
+import { useToastContext } from '~/Providers';
 import { activeSessionIdState, LinsightInfo, linsightMapState, submissionState, SubmissionState } from '~/store/linsight';
 import {
     addConversation,
@@ -102,7 +103,7 @@ export const useLinsightManager = () => {
             status: newStatus,
             files: files.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })),
             tasks: buildTaskTree(tasks),
-            file_list: []
+            file_list: output_result?.final_files || []
         }
 
         createLinsight(versionId, data);
@@ -167,6 +168,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
     const { linsightSubmission, clearLinsightSubmission } = useLinsightSessionManager(versionId)
     const { createLinsight, updateLinsight } = useLinsightManager()
     const queryClient = useQueryClient();
+    const { showToast } = useToastContext();
 
     const mockGenerateSop = (versionId: string, feedback?: string) => {
         console.log('Mock SSE started for version:', versionId, linsightSubmission);
@@ -248,6 +250,14 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
         sse.addEventListener('error', async (e: MessageEvent) => {
             console.error('object :>> ', e);
+            showToast({
+                message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
+                status: 'error',
+            });
+            setLoading(false)
+            updateLinsight(versionId, {
+                status: SopStatus.SopGenerating,
+            })
         })
         sse.stream();
     }
@@ -349,6 +359,14 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
                 sse.addEventListener('error', async (e: MessageEvent) => {
                     console.error('object :>> ', e);
+                    showToast({
+                        message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
+                        status: 'error',
+                    });
+                    setLoading(false)
+                    updateLinsight(versionId, {
+                        status: SopStatus.SopGenerating,
+                    })
                 })
                 sse.stream();
             } else {
@@ -419,7 +437,7 @@ function buildTaskTree(tasks) {
                 id: task.id,
                 name: task.task_data?.target || '',
                 status: task.status,
-                history: task.history.map(el => el.call_reason) || [],
+                history: task.history || [],
                 event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
                 call_reason: '',
                 children: []  // 初始化子任务数组
@@ -434,7 +452,7 @@ function buildTaskTree(tasks) {
                 id: task.id,
                 name: task.task_data?.target || '',
                 status: task.status,
-                history: task.history.map(el => el.call_reason) || [],
+                history: task.history || [],
                 event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
                 call_reason: ''
                 // 二级任务没有children字段

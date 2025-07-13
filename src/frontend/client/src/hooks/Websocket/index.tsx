@@ -204,8 +204,7 @@ export const useLinsightWebSocket = (versionId) => {
                             if (task.id === taskData.data.task_id) {
                                 return {
                                     ...task,
-                                    history: [...task.history, taskData.data.call_reason]
-                                    // history: [...task.history, taskData.data.output + '||' + taskData.data.call_reason]
+                                    history: [...task.history, taskData.data]
                                 };
                             } else {
                                 return {
@@ -214,8 +213,7 @@ export const useLinsightWebSocket = (versionId) => {
                                         if (child.id === taskData.data.task_id) {
                                             return {
                                                 ...child,
-                                                history: [...child.history, taskData.data.call_reason]
-                                                // history: [...child.history, taskData.data.output + '||' + taskData.data.call_reason]
+                                                history: [...child.history, taskData.data]
                                             };
                                         }
                                         return child;
@@ -232,6 +230,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'final_result':
                     updateLinsight(id, {
                         summary: taskData.data.output_result.answer,
+                        file_list: taskData.data.output_result.final_files || [],
                         status: SopStatus.completed
                     })
                     toggleNav(true)

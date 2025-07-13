@@ -1,13 +1,10 @@
-import { Check, ChevronDown, Download, Hourglass, LucideLoaderCircle, Pause, PauseCircle } from 'lucide-react';
-import React, { useEffect } from 'react';
+import axios from 'axios';
+import { Check, ChevronDown, Download, Hourglass, LucideLoaderCircle, Pause } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SendIcon } from '~/components/svg';
-import { Button, Textarea } from '../ui';
-
-
-// 二级任务
-import { useState } from 'react';
-import Markdown from '../ui/icon/Markdown';
 import { playDing } from '~/utils';
+import { Button, Textarea } from '../ui';
+import Markdown from '../ui/icon/Markdown';
 import { SopStatus } from './SOPEditor';
 
 const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
@@ -56,8 +53,40 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
         }
     }, [task.status])
 
-    // TODO history start end
+    const history = useMemo(() => {
+        const result = [];
+        const startMap = new Map(); // 存储未匹配的 start 消息: call_id -> message
+        for (const msg of task.history) {
+            if (msg.status === 'start') {
+                // 存储或覆盖同 call_id 的 start
+                startMap.set(msg.call_id, msg);
+            } else if (msg.status === 'end') {
+                // 检查是否有匹配的 start
+                if (startMap.has(msg.call_id)) {
+                    // 移除对应的 start
+                    startMap.delete(msg.call_id);
+                }
+                // 总是添加 end 消息
+                result.push(msg.call_reason);
+            }
+        }
 
+        // 添加所有未匹配的 start 消息
+        for (const startMsg of startMap.values()) {
+            result.push(startMsg.call_reason);
+        }
+
+        return result;
+    }, [task.history])
+
+    const historyContainerRef = useRef(null);
+
+    useEffect(() => {
+        if (isHistoryExpanded && historyContainerRef.current) {
+            // 滚动到底部
+            historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight;
+        }
+    }, [isHistoryExpanded, history]);
 
     return (
         <div className="mb-4">
@@ -70,7 +99,7 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
             </div>
 
             {/* 历史记录部分 - 可折叠 */}
-            {task.history?.length !== 0 && (
+            {history?.length !== 0 && (
                 <div className='mt-2'>
                     <div
                         className='flex'
@@ -81,11 +110,11 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
                             className={`text-gray-500 cursor-pointer transition-transform ${isHistoryExpanded ? 'rotate-180' : ''}`}
                         />
                         {
-                            isHistoryExpanded ? <div className='w-full text-sm text-gray-400 ml-2 leading-6 max-h-24 overflow-auto'>
-                                {task.history.map((history, index) => (
-                                    <p key={index}>{history}</p>
+                            isHistoryExpanded ? <div ref={historyContainerRef} className='w-full text-sm text-gray-400 ml-2 leading-6 max-h-60 overflow-auto'>
+                                {history.map((_history, index) => (
+                                    <p key={index}>{_history}</p>
                                 ))}
-                            </div> : <span className='w-full text-sm text-gray-400 ml-2 leading-6'>{task.history[task.history.length - 1]}</span>
+                            </div> : <span className='w-full text-sm text-gray-400 ml-2 leading-6'>{history[history.length - 1]}</span>
                         }
                     </div>
                 </div>
@@ -129,10 +158,17 @@ export const TaskFlowContent = ({ tasks, status, summary, files, sendInput }) =>
 
 
     const downloadFile = (file) => {
-        const { name, url } = file;
-        console.log('name, url :>> ', name, url);
+        const { file_name, file_url } = file;
+        const url = `${__APP_ENV__.BASE_URL}/bisheng/${file_url}`
+        return axios.get(url, { responseType: "blob" }).then((res: any) => {
+            const blob = new Blob([res.data]);
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = file_name;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }).catch(console.error);
     }
-    //
 
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
@@ -155,16 +191,16 @@ export const TaskFlowContent = ({ tasks, status, summary, files, sendInput }) =>
 
             {files && files.length > 0 &&
                 <div>
-                    <p className='text-sm text-gray-500'>xxxxxxxxxxxxxxxxx</p>
+                    {/* <p className='text-sm text-gray-500'>xxxxxxxxxxxxxxxxx</p> */}
                     <div className='mt-5 flex flex-wrap gap-3'>
-                        {files?.map((file, i) => (
-                            <div key={i} className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2]'>
+                        {files?.map((file) => (
+                            <div key={file.file_id} className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2]'>
                                 <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
                                     <Markdown className='size-24 mx-auto opacity-20' />
                                 </div>
                                 <div className='relative flex pt-3 gap-2 items-center'>
                                     <Markdown className='size-4 min-w-4' />
-                                    <span className='text-sm truncate pr-6'>{file.name}</span>
+                                    <span className='text-sm truncate pr-6'>{file.file_name}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
                                         <Download size={16} onClick={() => downloadFile(file)} />
                                     </Button>
