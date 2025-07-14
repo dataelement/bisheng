@@ -7,7 +7,6 @@ from bisheng.workflow.nodes.input.input import InputNode
 from bisheng.workflow.nodes.llm.llm import LLMNode
 from bisheng.workflow.nodes.output.output import OutputNode
 from bisheng.workflow.nodes.qa_retriever.qa_retriever import QARetrieverNode
-from bisheng.workflow.nodes.question_predict.question_predict import QuestionPredictNode
 from bisheng.workflow.nodes.rag.rag import RagNode
 from bisheng.workflow.nodes.report.report import ReportNode
 from bisheng.workflow.nodes.start.start import StartNode

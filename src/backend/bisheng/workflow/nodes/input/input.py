@@ -42,7 +42,7 @@ class InputNode(BaseNode):
         if self.is_dialog_input():
             new_node_params['user_input'] = self.node_params['user_input']
             new_node_params['dialog_files_content'] = self.node_params.get('dialog_files_content', [])
-            predict_config = self.node_params["input_prediction_config"] 
+            predict_config = self.node_params.get("input_prediction_config", {})
             if predict_config.get("open", False):
                 self._predict_input_open = True
                 self._predict_count = predict_config.get("predict_count", 3)
@@ -53,6 +53,8 @@ class InputNode(BaseNode):
                     temperature=predict_config.get("temperature", 0.7),
                     cache=False,
                 )
+            else:
+                self._predict_input_open = False
         else:
             for value_info in self.node_params['form_input']:
                 new_node_params[value_info['key']] = value_info['value']
