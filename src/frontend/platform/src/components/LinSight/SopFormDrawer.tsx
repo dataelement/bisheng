@@ -171,7 +171,8 @@ const SopFormDrawer = ({
 
               <div className="flex-shrink-0 px-4 py-4 border-t border-gray-200 flex justify-end space-x-3">
                 <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
-                <Button type="submit">{isEditing ? '更新' : '创建'}</Button>
+                {/* <Button type="submit">{isEditing ? '更新' : '创建'}</Button> */}
+                 <Button type="submit">保存</Button>
               </div>
             </form>
           </div>

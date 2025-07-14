@@ -35,51 +35,34 @@ const ToolSelector = ({
   const [targetCategory, setTargetCategory] = useState<string | null>(null);
   const scrollAttempts = useRef(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
- const activeTabElement = document.querySelector('.space-y-1 button.bg-blue-100');
+const handleSelectedToolClick = (tool) => {
+  setShowToolSelector(true);
+  console.log(tool);
+  
+  let toolCategory = 'builtin'; 
+  if (tool.is_preset === 0) {
+    toolCategory = 'api';
+  } else if (tool.is_preset === 2) {
+    toolCategory = 'mcp';
+  }
+console.log(toolCategory,123);
 
-  // 处理左侧工具项的点击
-  const handleSelectedToolClick = (tool) => {
-    setShowToolSelector(true);
-    
-    // 获取当前激活标签页对应的分类名称
-    let currentCategoryName = "";
-    switch (activeToolTab) {
-      case 'builtin':
-        currentCategoryName = "内置工具";
-        break;
-      case 'api':
-        currentCategoryName = "API工具";
-        break;
-      case 'mcp':
-        currentCategoryName = "MCP工具";
-        break;
-      default:
-        currentCategoryName = "内置工具";
-    }
-
-    if (tool.children) {
-      let toolCategory = 'builtin';
-      console.log(currentCategoryName);
-      
-      if (currentCategoryName === 'API工具') toolCategory = 'api';
-      else if (currentCategoryName === 'MCP工具') toolCategory = 'mcp';
-      
-      setTargetCategory(toolCategory);
-      
-      if (activeToolTab !== toolCategory) {
-        setActiveToolTab(toolCategory);
-      } else {
-        scrollToTool(tool.id);
-      }
-      
-      if (!expandedItems.includes(tool.id)) {
-        setIsExpanding(true);
-        setManuallyExpandedItems([...expandedItems, tool.id]);
-      } else {
-        scrollToTool(tool.id);
-      }
-    }
-  };
+  setTargetCategory(toolCategory);
+  setScrollToParentId(tool.id);
+  
+  if (activeToolTab !== toolCategory) {
+    setActiveToolTab(toolCategory);
+  } else {
+    scrollToTool(tool.id);
+  }
+  
+  if (!expandedItems.includes(tool.id)) {
+    setIsExpanding(true);
+    setManuallyExpandedItems([...expandedItems, tool.id]);
+  } else {
+    scrollToTool(tool.id);
+  }
+};
   const scrollToTool = (toolId: string) => {
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
