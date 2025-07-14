@@ -1,17 +1,19 @@
 import { motion } from 'framer-motion';
-import { useGetBsConfig } from '~/data-provider';
-import { TaskControls } from './TaskControls';
-import { TaskFlowContent } from './TaskFlowContent';
+import cloneDeep from 'lodash/cloneDeep';
 import { useMemo } from 'react';
+import { submitLinsightFeedback } from '~/api/linsight';
+import { useGetBsConfig } from '~/data-provider';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
+import { useToastContext } from '~/Providers';
 import { SopStatus } from './SOPEditor';
-import { submitLinsightFeedback } from '~/api/linsight';
+import { TaskControls } from './TaskControls';
+import { TaskFlowContent } from './TaskFlowContent';
 
 export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
-    const { getLinsight, updateLinsight } = useLinsightManager()
-
+    const { createLinsight, getLinsight, updateLinsight } = useLinsightManager()
+    const { showToast } = useToastContext();
     const { stop, sendInput } = useLinsightWebSocket(versionId)
 
     const linsight = useMemo(() => {
@@ -42,12 +44,24 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             cancel_feedback: cancel
         }).then(res => {
             console.log('res :>> ', res);
-
-            // setVersions()
-            //  setVersionId()
-            // 切换版本
+            const newVersionId = res.data.id
             updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
-            check && !cancel && setLinsightSubmission(versionId, {
+            showToast({ status: 'success', message: res.status_message })
+            // 克隆当前版本
+            const cloneLinsight = cloneDeep(linsight)
+            createLinsight(newVersionId, {
+                ...cloneLinsight,
+                id: newVersionId,
+                version: res.data.version,
+                tasks: [],
+                summary: '',
+                status: SopStatus.NotStarted
+            })
+
+            setVersions((prve) => [{ id: newVersionId, name: res.data.version.replace('T', ' ') }, ...prve])
+            setVersionId(newVersionId)
+            // 切换版本
+            check && !cancel && setLinsightSubmission(newVersionId, {
                 isNew: false,
                 files: [],
                 question: linsight.question,
@@ -86,6 +100,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 )}
                 {
                     showTask && <TaskFlowContent
+                        status={linsight.status}
                         tasks={linsight.tasks}
                         summary={linsight?.summary}
                         files={linsight?.file_list}

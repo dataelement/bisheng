@@ -6,7 +6,8 @@ export type LinsightInfo = {
     title: string;
     user_id: number;
     question: string;
-    knowledge_enabled: boolean;
+    org_knowledge_enabled: boolean;
+    personal_knowledge_enabled: boolean;
     sop: null | string;
     // sop_map: { [key in string]: string };
     status: string;

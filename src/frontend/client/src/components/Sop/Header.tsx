@@ -1,18 +1,18 @@
 import { FileText, MessageCircleMoreIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
+import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
-import { useLinsightManager } from '~/hooks/useLinsightManager';
 
-export const Header = ({ isLoading, sesstionId, versionId, versions }) => {
+export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
     const [open2, setOpen2] = useState(false);
     const { getLinsight } = useLinsightManager()
     const linsight = useMemo(() => {
-        return getLinsight(sesstionId)
-    }, [getLinsight, sesstionId])
+        return getLinsight(versionId)
+    }, [getLinsight, versionId])
 
-    // console.log('linsight :>> ', linsight);
+    console.log('linsight :>> ', linsight);
 
     return (
         <div className="flex items-center justify-between p-4">
@@ -47,16 +47,16 @@ export const Header = ({ isLoading, sesstionId, versionId, versions }) => {
                 </Popover>
 
                 {
-                    versions.length > 0 && <Select onValueChange={() => console.log('切换版本 :>> ')}>
+                    versions.length > 0 && <Select value={versionId} onValueChange={setVersionId}>
                         <SelectTrigger className="h-7 rounded-lg px-3 border bg-white hover:bg-gray-50 data-[state=open]:border-blue-500">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-normal text-gray-600">{versions.find(task => task.id === versionId)?.name}</span>
+                                <span className="text-xs font-normal text-gray-600">任务版本 {versions.find(task => task.id === versionId)?.name}</span>
                             </div>
                         </SelectTrigger>
                         <SelectContent className="bg-white rounded-lg p-2 w-52 shadow-md">
                             {
-                                versions.map(task => <SelectItem key={task.id} value="option1" className="text-xs px-3 py-2 hover:bg-gray-50">
-                                    任务版本 {task.name}
+                                versions.map(task => <SelectItem key={task.id} value={task.id} className="text-xs px-3 py-2 hover:bg-gray-50">
+                                    {task.name}
                                 </SelectItem>)
                             }
                         </SelectContent>

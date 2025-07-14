@@ -72,6 +72,7 @@ const Nav = ({
       },
       { enabled: isAuthenticated },
     );
+
   useEffect(() => {
     // When a tag is selected, refetch the list of conversations related to that tag
     refetch();

@@ -20,7 +20,7 @@ export default function SopToolsDown({
             value: string;
         }[];
     }[];
-    onChange: (value: string) => void;
+    onChange: (value: any) => void;
     onClose: () => void;
 }) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -69,7 +69,7 @@ export default function SopToolsDown({
         // 如果没有子菜单，直接选中并关闭菜单
         if (!option.children || option.children.length === 0) {
             if (option.value) {
-                onChange(option.value);
+                onChange(option);
                 onClose();
             }
             return;
@@ -80,9 +80,9 @@ export default function SopToolsDown({
     };
 
     // 处理二级菜单点击
-    const handleChildClick = (childValue: string, e: React.MouseEvent) => {
+    const handleChildClick = (obj: any, e: React.MouseEvent) => {
         e.stopPropagation();
-        onChange(childValue);
+        onChange(obj);
         onClose();
     };
 
@@ -104,7 +104,7 @@ export default function SopToolsDown({
 
     return (
         <div
-            className="absolute z-50 bg-white shadow-lg rounded-md border border-gray-200"
+            className="absolute z-[999] bg-white shadow-lg rounded-md border border-gray-200"
             style={{ top: position.top, left: position.left }}
             onClick={(e) => e.stopPropagation()}
             onMouseEnter={() => setIsHoveringMenu(true)}
@@ -139,15 +139,15 @@ export default function SopToolsDown({
                 </div>
 
                 {/* 二级菜单 */}
-                {hoverIndex !== null && options[hoverIndex]?.children && (
-                    <div className="w-40">
+                {hoverIndex !== null && options[hoverIndex]?.children?.length > 0 && (
+                    <div className="w-40 max-h-96 overflow-y-auto">
                         {options[hoverIndex].children?.map((child, childIndex) => (
                             <div
                                 key={childIndex}
                                 className={`
                                     px-3 py-2 cursor-pointer transition-colors hover:bg-blue-50
                                     `}
-                                onClick={(e) => handleChildClick(child.value, e)}
+                                onClick={(e) => handleChildClick(child, e)}
                             >
                                 <div className="truncate">{child.label}</div>
                             </div>

@@ -8,6 +8,8 @@ import { saveSop, startLinsight } from '~/api/linsight';
 
 
 export const enum SopStatus {
+    /* 未开始 */
+    NotStarted = 'not_started',
     /* SOP生成中 */
     SopGenerating = 'sopGenerating',
     /* SOP生成完成 */
@@ -74,11 +76,10 @@ export const SOPEditor = ({ versionId, setIsLoading }) => {
         return linsight || { sop: '', question: '', tools: [], status: '' }
     }, [getLinsight, versionId])
 
-
     // start
     const handleRun = () => {
-        const { sop } = markdownRef.current.getValue()
-        // TODO sop替换变量
+        const sop = markdownRef.current.getValue()
+
         saveSop({
             sop_content: sop,
             linsight_session_version_id: versionId
@@ -115,18 +116,18 @@ export const SOPEditor = ({ versionId, setIsLoading }) => {
 
     return (
         <motion.div
-            className={`${showSopEdit ? 'w-[30%]' : 'w-[70%]'} flex flex-col h-full relative rounded-2xl border border-[#E8E9ED] bg-white overflow-hidden`}
+            className={`${showSopEdit ? 'w-[30%]' : 'w-[70%]'} flex flex-col h-full relative rounded-2xl border border-[#E8E9ED] bg-white`}
             initial={{ width: showSopEdit ? '30%' : '30%' }}
             animate={{ width: showSopEdit ? '30%' : '70%' }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
         >
-            <div className='flex items-center gap-2 border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780]'>
+            <div className='flex items-center gap-2 border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780] rounded-t-2xl'>
                 <PencilLineIcon size={14} />
                 SOP编辑器
             </div>
 
-            <div className='p-8 linsight-markdown flex-1 pb-40 min-h-0 overflow-hidden overflow-y-auto'>
-                <Markdown ref={markdownRef} value={linsight.sop} tools={linsight.tools} edit={showSopEdit} />
+            <div className='p-8 linsight-markdown flex-1 pb-40 min-h-0'>
+                <Markdown ref={markdownRef} value={linsight.sop} files={linsight.files} tools={linsight.tools} edit={showSopEdit} />
             </div>
 
             {linsight.status === SopStatus.SopGenerated && (
@@ -137,14 +138,14 @@ export const SOPEditor = ({ versionId, setIsLoading }) => {
                     >
                         {!openAreaText ? (
                             <div className='linsight-card w-10/12 mx-auto relative'>
-                                <span className='text-lg'>SOP</span>
+                                {/* <span className='text-lg'>SOP</span> */}
                                 <p className='mt-3 text-sm flex gap-2'>
                                     <div className="size-5 rounded-full bg-[radial-gradient(circle_at_center,_white_0%,_white_10%,_#143BFF_80%,_#143BFF_100%)] shadow-xl"></div>
                                     确认是否可以按照 SOP 执⾏任务
                                 </p>
                                 <div className='absolute right-4 bottom-4 flex gap-2'>
                                     <Button variant="outline" className="px-3" onClick={() => {
-                                        const { sop } = markdownRef.current.getValue()
+                                        const sop = markdownRef.current.getValue()
                                         sop?.trim() === '' ? handleReExcute('') : setOpenAreaText(true)
                                     }}>
                                         重新生成 SOP
@@ -163,3 +164,4 @@ export const SOPEditor = ({ versionId, setIsLoading }) => {
         </motion.div>
     );
 };
+

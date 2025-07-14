@@ -55,7 +55,7 @@ export function userStopLinsightEvent(linsight_session_version_id: string): Prom
   });
 }
 
-
+// 反馈
 export function submitLinsightFeedback(versionid, data: {
   feedback: string,
   score: number,
@@ -64,4 +64,21 @@ export function submitLinsightFeedback(versionid, data: {
 }): Promise<any> {
   return request.post('/api/v1/linsight/workbench/submit-feedback', { linsight_session_version_id: versionid, ...data }
   )
+}
+
+
+// 获取灵思工具
+export function getLinsightTools(): Promise<any> {
+  return request.get('/api/v1/tool/linsight/preset');
+}
+
+
+// 获取个人知识库信息
+export function getPersonalKnowledgeInfo(): Promise<any> {
+  return request.get('/api/v1/knowledge/personal_knowledge_info');
+}
+
+// 获取组织知识库
+export function getKnowledgeInfo(): Promise<any> {
+  return request.get('/api/v1/knowledge?page_num=1&page_size=200&type=0');
 }

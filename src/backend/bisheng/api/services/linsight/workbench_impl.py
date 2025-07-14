@@ -4,6 +4,7 @@ import uuid
 from typing import Dict, List
 
 from bisheng.api.services.tool import ToolServices
+from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -216,15 +217,7 @@ class LinsightWorkbenchImpl(object):
             }
             return
         try:
-            tools: List[BaseTool] = []
-            # 获取工具合集
-            if linsight_session_version_model.tools:
-                tool_ids = []
-                for tool in linsight_session_version_model.tools:
-                    if tool.get("children"):
-                        for child in tool["children"]:
-                            tool_ids.append(child.get("id"))
-                tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
+            tools = await cls.init_linsight_config_tools(linsight_session_version_model, llm)
 
             root_path = os.path.join(CACHE_DIR, "linsight", linsight_session_version_model.id)
             os.makedirs(root_path, exist_ok=True)
@@ -248,7 +241,7 @@ class LinsightWorkbenchImpl(object):
                 previous_session_version_model = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
                 feedback_content = previous_session_version_model.execute_feedback if previous_session_version_model.execute_feedback else feedback_content
             from bisheng_langchain.linsight.agent import LinsightAgent
-            linsight_agent = LinsightAgent(file_dir="",
+            linsight_agent = LinsightAgent(file_dir=root_path,
                                            query=linsight_session_version_model.question,
                                            llm=llm,
                                            tools=tools,
@@ -317,15 +310,7 @@ class LinsightWorkbenchImpl(object):
             # 创建 BishengLLM
             llm = BishengLLM(model_id=workbench_conf.task_model.id)
 
-            tools: List[BaseTool] = []
-            # TODO: 获取工具合集
-            if session_version_model.tools:
-                tool_ids = []
-                for tool in session_version_model.tools:
-                    if tool.get("children"):
-                        for child in tool["children"]:
-                            tool_ids.append(child.get("id"))
-                tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
+            tools = await cls.init_linsight_config_tools(session_version_model, llm)
 
             root_path = os.path.join(CACHE_DIR, "linsight", session_version_model.id)
             os.makedirs(root_path, exist_ok=True)
@@ -343,7 +328,7 @@ class LinsightWorkbenchImpl(object):
                     if answer:
                         history_summary.append(answer)
             from bisheng_langchain.linsight.agent import LinsightAgent
-            linsight_agent = LinsightAgent(file_dir="",
+            linsight_agent = LinsightAgent(file_dir=root_path,
                                            query=session_version_model.question,
                                            llm=llm,
                                            tools=tools,
@@ -518,3 +503,39 @@ class LinsightWorkbenchImpl(object):
         )
 
         return parse_result
+
+    # 初始化灵思配置的工具
+    @classmethod
+    async def init_linsight_config_tools(cls, session_version_model: LinsightSessionVersion, llm: BishengLLM) -> List[
+        BaseTool]:
+        """
+        初始化灵思配置的工具
+        :param llm:
+        :param session_version_model:
+        :return: 工具列表
+        """
+        tools: List[BaseTool] = []
+        # 获取工具合集
+        if session_version_model.tools:
+            tool_ids = []
+            for tool in session_version_model.tools:
+                if tool.get("children"):
+                    for child in tool["children"]:
+                        tool_ids.append(child.get("id"))
+
+            wsConfig = await WorkStationService.aget_config()
+
+            config_tools = wsConfig.linsightConfig.tools
+            config_tool_ids = []
+            if config_tools:
+                for tool in config_tools:
+                    if tool.get("children"):
+                        for child in tool["children"]:
+                            config_tool_ids.append(child.get("id"))
+
+            # 过滤掉工作台配置中不存在的工具
+            tool_ids = [tool_id for tool_id in tool_ids if tool_id in config_tool_ids]
+
+            tools.extend(await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm))
+
+        return tools

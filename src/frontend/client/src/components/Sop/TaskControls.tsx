@@ -148,6 +148,7 @@ const FeedbackComponent = ({ onFeedback }: FeedbackComponentProps) => {
                             </Button>
                             <Button
                                 className=""
+                                disabled={comment === ''}
                                 onClick={handleSubmitFeedback}
                             >
                                 提交反馈

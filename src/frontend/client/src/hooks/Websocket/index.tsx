@@ -1,10 +1,11 @@
 import { Children, useCallback, useEffect, useMemo } from "react";
 import { useLinsightManager } from "../useLinsightManager";
 import { MockWebSocket } from "./mock";
-import { submitLinsightFeedback, userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
+import { userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus } from "~/components/Sop/SOPEditor";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
+const MOCK = false
 
 // 每个会话单独分配一个 WebSocket实例
 const connections: Record<string, WebSocket> = {};
@@ -16,7 +17,7 @@ export const useLinsightWebSocket = (versionId) => {
     const task = useMemo(() => {
         const linsight = getLinsight(versionId);
         return linsight
-            ? { versionId, running: linsight.status === 'running' }
+            ? { versionId, running: linsight.status === SopStatus.Running }
             : { versionId, running: false };
     }, [getLinsight, versionId]);
 
@@ -49,8 +50,8 @@ export const useLinsightWebSocket = (versionId) => {
             return `${url}${normalizedPath}`;
         }
 
-        const websocket = new WebSocket(getWebSocketUrl(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/task-message-stream?session_version_id=${id}`));
-        // const websocket = new MockWebSocket(`wss://your-api-endpoint/sessions/${id}`);
+        const websocket = MOCK ? new MockWebSocket(`xx`)
+            : new WebSocket(getWebSocketUrl(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/task-message-stream?session_version_id=${id}`));
         connections[id] = websocket;
 
         websocket.onopen = () => {
@@ -203,8 +204,7 @@ export const useLinsightWebSocket = (versionId) => {
                             if (task.id === taskData.data.task_id) {
                                 return {
                                     ...task,
-                                    history: [...task.history, taskData.data.call_reason]
-                                    // history: [...task.history, taskData.data.output + '||' + taskData.data.call_reason]
+                                    history: [...task.history, taskData.data]
                                 };
                             } else {
                                 return {
@@ -213,8 +213,7 @@ export const useLinsightWebSocket = (versionId) => {
                                         if (child.id === taskData.data.task_id) {
                                             return {
                                                 ...child,
-                                                history: [...child.history, taskData.data.call_reason]
-                                                // history: [...child.history, taskData.data.output + '||' + taskData.data.call_reason]
+                                                history: [...child.history, taskData.data]
                                             };
                                         }
                                         return child;
@@ -231,6 +230,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'final_result':
                     updateLinsight(id, {
                         summary: taskData.data.output_result.answer,
+                        file_list: taskData.data.output_result.final_files || [],
                         status: SopStatus.completed
                     })
                     toggleNav(true)
@@ -271,21 +271,26 @@ export const useLinsightWebSocket = (versionId) => {
     }, [task])
 
     const stop = useCallback(() => {
-        // const ws = connections[versionId];
-        // if (ws && ws.readyState === WebSocket.OPEN) {
-        //     ws.send(JSON.stringify({ action: 'stop' }));
-        // }
-        userStopLinsightEvent(versionId)
-
+        if (MOCK) {
+            const ws = connections[versionId];
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'stop' }));
+            }
+        } else {
+            userStopLinsightEvent(versionId)
+        }
         toggleNav(true)
     }, [versionId])
 
     const sendInput = useCallback(({ task_id, user_input }) => {
-        // const ws = connections[versionId];
-        // if (ws && ws.readyState === WebSocket.OPEN) {
-        //     ws.send(JSON.stringify({ user_input }));
-        // }
-        userInputLinsightEvent(versionId, task_id, user_input)
+        if (MOCK) {
+            const ws = connections[versionId];
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ user_input }));
+            }
+        } else {
+            userInputLinsightEvent(versionId, task_id, user_input)
+        }
     }, [versionId]);
 
     return { stop, sendInput };

@@ -6,10 +6,8 @@ from multiprocessing import Process
 from typing import Optional
 
 from bisheng.cache.redis import RedisClient, redis_client
-from bisheng.core.app_context import app_ctx
 from bisheng.linsight.task_exec import LinsightWorkflowTask
 from bisheng.settings import settings
-from bisheng.utils import util
 from bisheng.utils.logger import configure
 
 logger = logging.getLogger(__name__)
@@ -48,6 +46,13 @@ class ScheduleCenterProcess(Process):
         # 信号量
         self.semaphore: Optional[asyncio.Semaphore] = None
 
+    @staticmethod
+    def handle_task_result(task: asyncio.Task):
+        try:
+            result = task.result()  # 如果有异常，这里会抛出
+        except Exception as e:
+            logger.error(f"Task failed with exception: {e}")
+
     async def async_run(self):
         """
         异步运行方法，监听 Redis 队列并执行任务
@@ -64,9 +69,12 @@ class ScheduleCenterProcess(Process):
 
                 logger.info(f"Processing session_version_id: {session_version_id}")
 
-                asyncio.create_task(
+                task = asyncio.create_task(
                     exec_task.async_run(session_version_id)
                 )
+
+                task.add_done_callback(self.handle_task_result)  # 添加回调处理任务结果
+
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess: {e}")
                 continue
@@ -77,7 +85,6 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
-
         self.queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
         for _ in range(10000):
             self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency)
@@ -85,7 +92,6 @@ class ScheduleCenterProcess(Process):
                 asyncio.run(self.async_run())
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess run method: {e}")
-
 
 
 def start_schedule_center_process(worker_num: int = 4) -> Optional[list[ScheduleCenterProcess]]:

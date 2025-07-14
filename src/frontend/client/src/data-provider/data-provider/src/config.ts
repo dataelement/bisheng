@@ -534,6 +534,7 @@ export type TStartupConfig = {
 };
 
 export type BsConfig = {
+  enable_etl4lm: boolean;
   sidebarIcon: {
     enabled: boolean;
     image: string;
