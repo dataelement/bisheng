@@ -143,8 +143,8 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def get_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
+        statement = select(GptsTools).where(GptsTools.id.in_(tool_ids)).where(GptsTools.is_delete == 0)
         with session_getter() as session:
-            statement = select(GptsTools).where(GptsTools.id.in_(tool_ids))
             return session.exec(statement).all()
 
     @classmethod
