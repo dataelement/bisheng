@@ -29,6 +29,9 @@ export function transformEvent(event: string): string {
         case 'delete_role': return '删除角色';
         case 'update_role': return '编辑角色';
         case 'user_login': return '用户登录';
+        case 'create_api_key': return '新建API Key';
+        case 'delete_api_key': return '删除API Key';
+        case 'update_api_key': return '编辑API Key';
         default: return '转换失败'
     }
 }
@@ -44,6 +47,7 @@ export function transformObjectType(object: string): string {
         case 'user_conf': return '用户配置'
         case 'user_group_conf': return '用户组配置'
         case 'role_conf': return '角色配置'
+        case 'api_key_conf': return 'API Key配置'
         default: return '转换失败'
     }
 }
