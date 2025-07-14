@@ -141,11 +141,10 @@ class LinsightWorkbenchImpl:
             chat_id: 会话ID
         """
         source_object_name = file_info.get("markdown_file_path")
-
         if source_object_name:
             original_filename = file_info.get("original_filename")
             markdown_filename = f"{original_filename.split('.')[0]}.md"
-            new_object_name = f"linsight/{chat_id}/{markdown_filename}"
+            new_object_name = f"linsight/{chat_id}/{source_object_name}"
             minio_client.copy_object(
                 source_object_name=source_object_name,
                 target_object_name=new_object_name,

@@ -84,11 +84,6 @@ class ScheduleCenterProcess(Process):
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess: {e}")
                 continue
-            finally:
-                if self.semaphore:
-                    if self.semaphore.locked():
-                        logger.info("Semaphore is still locked, releasing it.")
-                        self.semaphore.release()
 
     def run(self):
         """
