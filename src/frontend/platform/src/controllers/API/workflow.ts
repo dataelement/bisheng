@@ -221,6 +221,20 @@ const workflowTemplate = [
                         "help": "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
                     },
                     {
+                        "key": "input_prediction_config",
+                        "label": "输入预测配置",
+                        "type": "input_prediction_config",
+                        "tab": "dialog_input",
+                        "value": {
+                            "open": false,
+                            "model_id": "",
+                            "temperature": 0.7,
+                            "predict_count": 3,
+                            "history_count": 10
+                        },
+                        "help": "根据历史消息预测用户下一个可能的输入内容。"
+                    },
+                    {
                         "key": "form_input",
                         "global": "item:form_input",
                         "label": "+ 添加表单项",
@@ -954,6 +968,20 @@ const workflowTemplateEN = [
                         "type": "var",
                         "tab": "dialog_input",
                         "help": "Extract the image file from the uploaded file. When the assistant or large model node uses the MultiModal Machine Learning large model, this image can be passed in."
+                    },
+                    {
+                        "key": "input_prediction_config",
+                        "label": "Input Prediction Configuration",
+                        "type": "input_prediction_config",
+                        "tab": "dialog_input",
+                        "value": {
+                            "open": false,
+                            "model_id": "",
+                            "temperature": 0.7,
+                            "predict_count": 3,
+                            "history_count": 10
+                        },
+                        "help": "Predict the user's next possible input based on message history."
                     },
                     {
                         "global": "item:form_input",

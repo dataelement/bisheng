@@ -24,7 +24,7 @@ NODE_CLASS_MAP = {
     NodeType.CONDITION.value: ConditionNode,
     NodeType.AGENT.value: AgentNode,
     NodeType.CODE.value: CodeNode,
-    NodeType.LLM.value: LLMNode
+    NodeType.LLM.value: LLMNode,
 }
 
 
