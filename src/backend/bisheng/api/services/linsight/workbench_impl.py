@@ -1,8 +1,7 @@
-import logging
 import os
 import uuid
 from typing import Dict, List, Optional, AsyncGenerator, Tuple
-
+from loguru import logger
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
@@ -31,8 +30,6 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils.embedding import decide_embeddings
-
-logger = logging.getLogger(__name__)
 
 
 class LinsightWorkbenchImpl:
