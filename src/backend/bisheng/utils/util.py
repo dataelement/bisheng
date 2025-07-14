@@ -1,4 +1,5 @@
 import asyncio
+import functools
 import hashlib
 import importlib
 import inspect
@@ -449,6 +450,7 @@ def calculate_md5(file: Union[str, bytes]):
 
         return md5_hash.hexdigest()
 
+
 async def async_calculate_md5(file: Union[str, bytes]):
     """异步计算文档的 MD5 值。
     Returns:
@@ -475,8 +477,6 @@ async def async_calculate_md5(file: Union[str, bytes]):
         return md5_hash.hexdigest()
 
 
-
-
 # 读取目录下的所有文件
 def read_files_in_directory(path: str):
     """
@@ -498,3 +498,12 @@ def read_files_in_directory(path: str):
             files.append(os.path.join(root, filename))
     return files
 
+
+def sync_func_to_async(func, executor=None):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        loop = asyncio.get_running_loop()
+        bound_func = functools.partial(func, *args, **kwargs)
+        return await loop.run_in_executor(executor, bound_func)
+
+    return wrapper

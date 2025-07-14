@@ -11,6 +11,7 @@ from langchain_core.runnables import run_in_executor
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.linsight.sop_manage import SOPManageService
+from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema
@@ -26,6 +27,7 @@ from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
+from bisheng.utils.util import sync_func_to_async
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
@@ -83,8 +85,8 @@ class LinsightWorkflowTask:
             await self._stop_termination_monitor()
 
             # 清理文件目录
-            # if file_dir and os.path.exists(file_dir):
-            #     shutil.rmtree(file_dir, ignore_errors=True)
+            if file_dir and os.path.exists(file_dir):
+                shutil.rmtree(file_dir, ignore_errors=True)
 
         except Exception as e:
             logger.error(f"资源清理失败: {e}")
@@ -224,14 +226,7 @@ class LinsightWorkflowTask:
         if not session_model.tools:
             return []
 
-        tool_ids = []
-        for tool in session_model.tools:
-            children = tool.get("children", [])
-            tool_ids.extend(child.get("id") for child in children if child.get("id"))
-
-        if tool_ids:
-            return await AssistantAgent.init_tools_by_tool_ids(tool_ids, llm=llm)
-        return []
+        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version_model=session_model, llm=llm)
 
     async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List,
                             file_dir: str) -> LinsightAgent:
@@ -554,61 +549,89 @@ class LinsightWorkflowTask:
 
     async def _handle_task_success(self, session_model: LinsightSessionVersion, llm: BishengLLM, file_dir: str):
         """处理任务成功"""
+        try:
+            # 读取文件目录文件详情
+            file_details = await self._read_file_directory(file_dir)
+            logger.debug(f"读取文件目录文件详情: {file_details}")
 
-        # 读取文件目录文件详情
-        file_details = await self._read_file_directory(file_dir)
+            # 最终结果文件
+            final_result_files = []
 
-        logger.debug(f"读取文件目录文件详情读取文件目录文件详情: {file_details}")
+            for file_info in file_details:
+                file_name: str = file_info["file_name"]
+                # 判断文件名是否在self._final_result.answer字符串中
+                if file_name in self._final_result.answer:
+                    # 如果文件名在答案中，添加到答案中
+                    final_result_files.append({
+                        "file_name": file_name,
+                        "file_path": file_info["file_path"],
+                        "file_md5": file_info["file_md5"],
+                        "file_id": file_info["file_id"]
+                    })
 
-        # 最终结果文件
-        final_result_files = []
+            async def upload_file_to_minio(final_file_info: Dict) -> dict | None:
+                """上传文件到MinIO并返回文件信息"""
+                try:
+                    object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
+                    # Use async upload if available, otherwise wrap sync call
+                    await sync_func_to_async(minio_client.upload_minio)(
+                        bucket_name=minio_client.bucket,
+                        object_name=object_name,
+                        file_path=final_file_info["file_path"]
+                    )
+                    final_file_info["file_url"] = object_name
+                    return final_file_info
+                except Exception as e:
+                    logger.error(f"上传文件到MinIO失败 {final_file_info['file_name']}: {e}")
+                    return None
 
-        for file_info in file_details:
-            file_name: str = file_info["file_name"]
-            # 判断文件名是否在self._final_result.answer字符串中
-            if file_name in self._final_result.answer:
-                # 如果文件名在答案中，添加到答案中
-                final_result_files.append({
-                    "file_name": file_name,
-                    "file_path": file_info["file_path"],
-                    "file_md5": file_info["file_md5"],
-                    "file_id": file_info["file_id"]
-                })
+            # 上传文件到MinIO (并行处理)
+            if final_result_files:
+                upload_tasks = [
+                    upload_file_to_minio(final_file_info)
+                    for final_file_info in final_result_files
+                ]
 
-        # 上传minio
-        def upload_file_to_minio(final_file_info: Dict) -> str | None:
-            """上传文件到MinIO并返回文件信息"""
-            try:
-                object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
-                minio_client.upload_minio(
-                    bucket_name=minio_client.bucket,
-                    object_name=object_name,
-                    file_path=final_file_info["file_path"]
+                upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
+
+                # 过滤掉失败的上传结果
+                final_result_files = [
+                    result for result in upload_results
+                    if result is not None and not isinstance(result, Exception)
+                ]
+
+                # 记录失败的上传
+                failed_uploads = [
+                    result for result in upload_results
+                    if isinstance(result, Exception)
+                ]
+                if failed_uploads:
+                    logger.warning(f"部分文件上传失败: {len(failed_uploads)} 个文件")
+
+            # 更新会话状态
+            session_model.status = SessionVersionStatusEnum.COMPLETED
+            session_model.output_result = {
+                "answer": self._final_result.answer,
+                "final_files": final_result_files
+            }
+
+            # 保存会话信息并推送消息
+            await self._state_manager.set_session_version_info(session_model)
+            await self._state_manager.push_message(
+                MessageData(
+                    event_type=MessageEventType.FINAL_RESULT,
+                    data=session_model.model_dump()
                 )
-                return object_name
-            except Exception as e:
-                logger.error(f"上传文件到MinIO失败 {file_info['file_name']}: {e}")
-                return None
+            )
 
-        # 上传文件到MinIO
+            # 保存SOP
+            await self._save_sop(session_model, llm)
 
-        for final_file_info in final_result_files:
-            upload_result = await run_in_executor(None, upload_file_to_minio, final_file_info)
-            if upload_result:
-                final_file_info["file_url"] = upload_result
-            else:
-                logger.error(f"上传文件失败: {final_file_info['file_name']}")
+            logger.info(f"任务成功完成，处理了 {len(final_result_files)} 个文件")
 
-        session_model.status = SessionVersionStatusEnum.COMPLETED
-        session_model.output_result = {"answer": self._final_result.answer, "final_files": final_result_files}
-
-        await self._state_manager.set_session_version_info(session_model)
-        await self._state_manager.push_message(
-            MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
-        )
-
-        # 保存SOP
-        await self._save_sop(session_model, llm)
+        except Exception as e:
+            logger.error(f"处理任务成功时发生错误: {e}")
+            raise TaskExecutionError(f"处理任务成功时发生错误: {e}")
 
     async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
         """处理任务失败"""
