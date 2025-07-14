@@ -65,10 +65,12 @@ class ScheduleCenterProcess(Process):
         logger.info("ScheduleCenterProcess started...")
         while True:
             try:
+                await self.semaphore.acquire()  # 获取信号量，限制并发数
                 session_version_id = await self.queue.get_wait()
                 if session_version_id is None:
+                    logger.info("No session_version_id found in queue, waiting...")
+                    self.semaphore.release()
                     continue
-                await self.semaphore.acquire()  # 获取信号量，限制并发数
                 exec_task = LinsightWorkflowTask()
 
                 logger.info(f"Processing session_version_id: {session_version_id}")
@@ -82,6 +84,11 @@ class ScheduleCenterProcess(Process):
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess: {e}")
                 continue
+            finally:
+                if self.semaphore:
+                    if self.semaphore.locked():
+                        logger.info("Semaphore is still locked, releasing it.")
+                        self.semaphore.release()
 
     def run(self):
         """

@@ -185,7 +185,7 @@ class SOPManageService:
             workbench_conf = await LLMService.get_workbench_llm()
             if workbench_conf.embedding_model is None or not workbench_conf.embedding_model.id:
                 vector_search = False
-                error_msg = "提示请联系管理员检查工作台向量检索模型状态"
+                error_msg = "请联系管理员检查工作台向量检索模型状态"
 
             # 创建文本分割器
             text_splitter = RecursiveCharacterTextSplitter()
