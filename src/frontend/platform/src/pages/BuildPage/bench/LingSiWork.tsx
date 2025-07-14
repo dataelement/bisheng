@@ -557,40 +557,44 @@ export default function index() {
         setIsDrawerOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        bsConfirm({
-            title: '删除确认',
-            desc: '确认删除该SOP吗？',
-            showClose: true,
-            okTxt: '确认删除',
-            canelTxt: '取消',
-            onOk(next) {
-                sopApi.deleteSop(id)
-                    .then(() => {
-                        toast({
-                            variant: 'success',
-                            description: 'SOP删除成功'
-                        });
-                        if (datalist.length === 1 && page > 1) {
-                            setPage(page - 1);
-                        } else {
-                            fetchData();
-                        }
-                        next();
-                    })
-                    .catch(error => {
-                        console.error('删除SOP失败:', error);
-                        toast({
-                            variant: 'error',
-                            description: '删除失败',
-                            details: error.message || '请稍后重试'
-                        });
+ const handleDelete = (id: string) => {
+    bsConfirm({
+        title: '删除确认',
+        desc: '确认删除该SOP吗？',
+        showClose: true,
+        okTxt: '确认删除',
+        canelTxt: '取消',
+        onOk(next) {
+            sopApi.deleteSop(id)
+                .then(() => {
+                    toast({
+                        variant: 'success',
+                        description: 'SOP删除成功'
                     });
-            },
-            onCancel() {
-            }
-        });
-    };
+
+                    // 从 selectedItems 中移除被删除的 SOP ID
+                    setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
+                    if (datalist.length === 1 && page > 1) {
+                        setPage(page - 1);
+                    } else {
+                        fetchData();
+                    }
+                    next();
+                })
+                .catch(error => {
+                    console.error('删除SOP失败:', error);
+                    toast({
+                        variant: 'error',
+                        description: '删除失败',
+                        details: error.message || '请稍后重试'
+                    });
+                });
+        },
+        onCancel() {
+        }
+    });
+};
+
     const toggleGroup = useCallback((group: any, checked: boolean) => {
         setSelectedTools(prev => {
             const tools = prev.filter(t => t.id !== group.id);
