@@ -96,7 +96,7 @@ class WorkflowConf(BaseModel):
 
 
 class CeleryConf(BaseModel):
-    task_routers: Optional[dict] = Field(default_factory=dict, description='任务路由配置')
+    task_routers: Optional[dict] = Field(default_factory=dict, validate_default=True, description='任务路由配置')
 
     @field_validator('task_routers', mode='before')
     def handle_routers(cls, value):
