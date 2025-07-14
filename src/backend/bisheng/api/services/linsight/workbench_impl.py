@@ -170,7 +170,7 @@ class LinsightWorkbenchImpl:
             workbench_conf = await cls._get_workbench_config()
 
             # 创建LLM实例
-            llm = BishengLLM(model_id=workbench_conf.task_model.id)
+            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
 
             # 生成prompt
             prompt = await cls._generate_title_prompt(question)
@@ -288,7 +288,7 @@ class LinsightWorkbenchImpl:
             session_version = await cls._get_session_version(linsight_session_version_id)
 
             # 创建LLM和工具
-            llm = BishengLLM(model_id=workbench_conf.task_model.id)
+            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
             tools = await cls._prepare_tools(session_version, llm)
 
             # 准备历史摘要
@@ -633,7 +633,7 @@ class LinsightWorkbenchImpl:
             workbench_conf = await cls._get_workbench_config()
 
             # 创建LLM和工具
-            llm = BishengLLM(model_id=workbench_conf.task_model.id)
+            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
             tools = await cls._prepare_tools(session_version_model, llm)
 
             # 获取历史摘要

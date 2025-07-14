@@ -164,7 +164,7 @@ class LinsightWorkflowTask:
         """获取LLM实例"""
         try:
             workbench_conf = await LLMService.get_workbench_llm()
-            return BishengLLM(model_id=workbench_conf.task_model.id)
+            return BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
         except Exception as e:
             raise TaskExecutionError(f"LLM初始化失败: {e}")
 
