@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import cloneDeep from 'lodash/cloneDeep';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { submitLinsightFeedback } from '~/api/linsight';
 import { useGetBsConfig } from '~/data-provider';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
@@ -47,6 +47,8 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             const newVersionId = res.data.id
             updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
             showToast({ status: 'success', message: res.status_message })
+            if (res.data === true) return
+
             // 克隆当前版本
             const cloneLinsight = cloneDeep(linsight)
             createLinsight(newVersionId, {
@@ -55,6 +57,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 version: res.data.version,
                 tasks: [],
                 summary: '',
+                file_list: [],
                 status: SopStatus.NotStarted
             })
 
@@ -74,6 +77,13 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
         })
     }
 
+    const flowScrollRef = useRef(null)
+    useEffect(() => {
+        if ([SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(linsight.status) && flowScrollRef.current) {
+            flowScrollRef.current.scrollTop = flowScrollRef.current.scrollHeight;
+        }
+    }, [linsight.status, versionId])
+
     return (
         <motion.div
             className={`${showTask ? 'w-[70%]' : 'flex-1'} relative flex flex-col h-full rounded-2xl border border-[#E8E9ED] bg-white overflow-hidden`}
@@ -85,7 +95,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 任务流
             </div>
 
-            <div className='relative flex-1 pb-40 min-h-0 overflow-auto'>
+            <div ref={flowScrollRef} className='relative flex-1 pb-40 min-h-0 overflow-auto'>
                 {!showTask && (
                     <div className='flex flex-col h-full justify-center text-center bg-gradient-to-b from-[#F4F8FF] to-white'>
                         <div className='size-10 mx-auto'>

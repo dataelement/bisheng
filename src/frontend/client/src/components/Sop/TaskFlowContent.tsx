@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { SendIcon } from '~/components/svg';
 import { playDing } from '~/utils';
 import { Button, Textarea } from '../ui';
-import Markdown from '../ui/icon/Markdown';
+import MarkdownIcon from '../ui/icon/Markdown';
 import { SopStatus } from './SOPEditor';
+import Markdown from '../Chat/Messages/Content/Markdown';
 
 const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
     const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
@@ -184,7 +185,7 @@ export const TaskFlowContent = ({ tasks, status, summary, files, sendInput }) =>
 
             {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6'>
-                    <p>{summary}</p>
+                    <Markdown content={summary} isLatestMessage={true} webContent={false} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>
             }
@@ -196,10 +197,10 @@ export const TaskFlowContent = ({ tasks, status, summary, files, sendInput }) =>
                         {files?.map((file) => (
                             <div key={file.file_id} className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2]'>
                                 <div className='bg-[#F4F6FB] h-24 p-4 rounded-lg overflow-hidden'>
-                                    <Markdown className='size-24 mx-auto opacity-20' />
+                                    <MarkdownIcon className='size-24 mx-auto opacity-20' />
                                 </div>
                                 <div className='relative flex pt-3 gap-2 items-center'>
-                                    <Markdown className='size-4 min-w-4' />
+                                    <MarkdownIcon className='size-4 min-w-4' />
                                     <span className='text-sm truncate pr-6'>{file.file_name}</span>
                                     <Button variant="ghost" className='absolute right-1 -bottom-1 w-6 h-6 p-0'>
                                         <Download size={16} onClick={() => downloadFile(file)} />

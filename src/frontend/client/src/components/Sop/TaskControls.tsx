@@ -132,6 +132,7 @@ const FeedbackComponent = ({ onFeedback }: FeedbackComponentProps) => {
                     <Textarea
                         placeholder="请告诉我们如何改进，您的反馈将用于下次任务优化"
                         value={comment}
+                        className='resize-y'
                         onChange={(e) => setComment(e.target.value)}
                     />
                     <div className="flex justify-between items-center">

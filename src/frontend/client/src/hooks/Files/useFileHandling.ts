@@ -129,12 +129,14 @@ const useFileHandling = (params?: UseFileHandling) => {
         const error = _error as TError | undefined;
         console.log('upload error', error);
         const file_id = body.get('file_id');
+        const file_name = body.get('file_name');
         clearUploadTimer(file_id as string);
         deleteFileById(file_id as string);
         const errorMessage =
           error?.code === 'ERR_CANCELED'
             ? 'com_error_files_upload_canceled'
-            : (error?.response?.data?.message ?? 'com_error_files_upload');
+            : file_name + ' 解析失败';
+        // : (error?.response?.data?.message ?? 'com_error_files_upload');
         setError(errorMessage);
       },
     },
@@ -149,6 +151,7 @@ const useFileHandling = (params?: UseFileHandling) => {
     formData.append('endpoint', endpoint);
     formData.append('file', extendedFile.file as File, encodeURIComponent(filename));
     formData.append('file_id', extendedFile.file_id);
+    formData.append('file_name', extendedFile.file?.name ?? '');
 
     const width = extendedFile.width ?? 0;
     const height = extendedFile.height ?? 0;
