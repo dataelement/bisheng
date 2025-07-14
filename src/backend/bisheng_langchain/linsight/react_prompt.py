@@ -81,7 +81,7 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 已经执行的步骤：
 {history}
 
-只生成下一步的操作："""
+只生成下一步的操作，如果下一步是最后一步，回答需要明确当前任务的产出内容是什么："""
 
 # 二级子任务的prompt模板
 # variables -> profile: agent的角色；current_time: 当前时间；file_dir: 用户上传的文件路径；tools_json: 可用的工具列表；
@@ -162,4 +162,4 @@ ReactLoopAgentPrompt = """你是一个强大的{profile}，可以使用以下工
 已经执行的步骤：
 {history}
 
-只生成下一步的操作："""
+只生成下一步的操作，如果下一步是最后一步，回答需要明确当前任务的产出内容是什么："""
