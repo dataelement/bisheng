@@ -47,6 +47,13 @@ class LinsightWorkbenchImpl:
         """Linsight相关错误"""
         pass
 
+    class SearchSOPError(Exception):
+        """SOP检索错误"""
+
+        def __init__(self, message: str):
+            super().__init__(message)
+            self.message = message
+
     @classmethod
     async def submit_user_question(cls, submit_obj: LinsightQuestionSubmitSchema,
                                    login_user: UserPayload) -> tuple[MessageSession, LinsightSessionVersion]:
@@ -135,9 +142,8 @@ class LinsightWorkbenchImpl:
         """
         source_object_name = file_info.get("markdown_file_path")
 
-        original_filename = file_info.get("original_filename")
-
         if source_object_name:
+            original_filename = file_info.get("original_filename")
             markdown_filename = f"{original_filename.split('.')[0]}.md"
             new_object_name = f"linsight/{chat_id}/{markdown_filename}"
             minio_client.copy_object(
@@ -201,7 +207,7 @@ class LinsightWorkbenchImpl:
         """获取并验证工作台配置"""
         workbench_conf = await LLMService.get_workbench_llm()
         if not workbench_conf or not workbench_conf.task_model:
-            raise ValueError("未配置灵思生成摘要模型，请从工作台配置中设置")
+            raise ValueError("任务已终止，请联系管理员检查灵思任务执行模型状态")
         return workbench_conf
 
     @classmethod
@@ -301,6 +307,10 @@ class LinsightWorkbenchImpl:
             async for res in cls._generate_sop_content(
                     agent, session_version, feedback_content, history_summary
             ):
+                if isinstance(res, cls.SearchSOPError):
+                    yield {"event": "search_sop_error", "data": str(res.message)}
+                    continue
+
                 content += res.content
                 yield {
                     "event": "generate_sop_content",
@@ -382,9 +392,14 @@ class LinsightWorkbenchImpl:
         """生成SOP内容"""
         if feedback_content is None:
             # 检索SOP模板
-            sop_template = await SOPManageService.search_sop(
+            sop_template, search_sop_error_msg = await SOPManageService.search_sop(
                 query=session_version.question, k=3
             )
+
+            if search_sop_error_msg:
+                logger.error(f"检索SOP模板失败: {search_sop_error_msg}")
+                yield cls.SearchSOPError(message=search_sop_error_msg)
+
             sop_template = "\n\n".join([
                 f"例子:\n\n{sop.page_content}"
                 for sop in sop_template if sop.page_content

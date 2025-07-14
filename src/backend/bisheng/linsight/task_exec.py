@@ -48,8 +48,7 @@ class LinsightWorkflowTask:
 
     USER_TERMINATION_CHECK_INTERVAL = 2
 
-    def __init__(self, semaphore: asyncio.Semaphore):
-        self.semaphore = semaphore
+    def __init__(self):
         self._state_manager: Optional[LinsightStateMessageManager] = None
         self._is_terminated = False
         self._termination_task: Optional[asyncio.Task] = None
@@ -88,10 +87,6 @@ class LinsightWorkflowTask:
 
         except Exception as e:
             logger.error(f"资源清理失败: {e}")
-        finally:
-            # 释放信号量
-            if self.semaphore.locked():
-                self.semaphore.release()
 
     # ==================== 核心执行逻辑 ====================
 
