@@ -1,8 +1,7 @@
-import logging
 import os
 import uuid
 from typing import Dict, List, Optional, AsyncGenerator, Tuple
-
+from loguru import logger
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
@@ -31,8 +30,6 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils.embedding import decide_embeddings
-
-logger = logging.getLogger(__name__)
 
 
 class LinsightWorkbenchImpl:
@@ -141,11 +138,10 @@ class LinsightWorkbenchImpl:
             chat_id: 会话ID
         """
         source_object_name = file_info.get("markdown_file_path")
-
         if source_object_name:
             original_filename = file_info.get("original_filename")
             markdown_filename = f"{original_filename.split('.')[0]}.md"
-            new_object_name = f"linsight/{chat_id}/{markdown_filename}"
+            new_object_name = f"linsight/{chat_id}/{source_object_name}"
             minio_client.copy_object(
                 source_object_name=source_object_name,
                 target_object_name=new_object_name,
@@ -174,7 +170,7 @@ class LinsightWorkbenchImpl:
             workbench_conf = await cls._get_workbench_config()
 
             # 创建LLM实例
-            llm = BishengLLM(model_id=workbench_conf.task_model.id)
+            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
 
             # 生成prompt
             prompt = await cls._generate_title_prompt(question)
@@ -292,7 +288,7 @@ class LinsightWorkbenchImpl:
             session_version = await cls._get_session_version(linsight_session_version_id)
 
             # 创建LLM和工具
-            llm = BishengLLM(model_id=workbench_conf.task_model.id)
+            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
             tools = await cls._prepare_tools(session_version, llm)
 
             # 准备历史摘要
@@ -637,7 +633,7 @@ class LinsightWorkbenchImpl:
             workbench_conf = await cls._get_workbench_config()
 
             # 创建LLM和工具
-            llm = BishengLLM(model_id=workbench_conf.task_model.id)
+            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
             tools = await cls._prepare_tools(session_version_model, llm)
 
             # 获取历史摘要
