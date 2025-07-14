@@ -64,8 +64,8 @@ class ScheduleCenterProcess(Process):
         """
         logger.info("ScheduleCenterProcess started...")
         while True:
+            await self.semaphore.acquire()  # 获取信号量，限制并发数
             try:
-                await self.semaphore.acquire()  # 获取信号量，限制并发数
                 session_version_id = await self.queue.get_wait()
                 if session_version_id is None:
                     logger.info("No session_version_id found in queue, waiting...")
@@ -83,6 +83,10 @@ class ScheduleCenterProcess(Process):
 
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess: {e}")
+                if self.semaphore:
+                    if self.semaphore._value < settings.linsight_conf.max_concurrency:
+                        logger.info("Releasing semaphore due to error.")
+                        self.semaphore.release()
                 continue
 
     def run(self):
