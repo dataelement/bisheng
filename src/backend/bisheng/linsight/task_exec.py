@@ -227,7 +227,7 @@ class LinsightWorkflowTask:
         if not session_model.tools:
             return []
 
-        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version_model=session_model, llm=llm)
+        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm)
 
     async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List,
                             file_dir: str) -> LinsightAgent:
