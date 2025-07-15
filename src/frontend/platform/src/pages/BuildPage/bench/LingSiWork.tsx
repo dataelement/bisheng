@@ -98,7 +98,7 @@ export default function index() {
     const [showToolSelector, setShowToolSelector] = useState(false);
     const [toolSearchTerm, setToolSearchTerm] = useState('');
     const [pageInputValue, setPageInputValue] = useState('1');
-    const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('builtin');
+    const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('api');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
@@ -144,6 +144,10 @@ export default function index() {
         fileUpload: {
             enabled: true,
             prompt: ''
+        },
+        linsightConfig: {
+            input_placeholder: '请输入你的任务目标，然后交给 BISHENG 灵思',
+            tools: []
         }
     };
     const [formData, setFormData] = useState<ChatConfigForm>(defaultFormValues);
@@ -325,28 +329,25 @@ export default function index() {
         const loadInitialData = async () => {
             try {
                 const config = await getWorkstationConfigApi();
-
                 if (config) {
                     setFormData({
                         ...defaultFormValues,
                         ...config,
-                        inputPlaceholder: config?.linsightConfig?.input_placeholder || defaultFormValues.inputPlaceholder
+                        inputPlaceholder: config.inputPlaceholder ||
+                            config.linsightConfig?.input_placeholder ||
+                            defaultFormValues.inputPlaceholder,
+                        linsightConfig: {
+                            ...defaultFormValues.linsightConfig,
+                            ...config.linsightConfig,
+                            input_placeholder: config.linsightConfig.input_placeholder ||
+                                '',
+                        }
                     });
 
                     if (config?.linsightConfig?.tools) {
-                        // const tools = processToolsConfig(config.linsightConfig.tools);
                         setSelectedTools(config.linsightConfig.tools);
                     }
                 }
-
-                const [sops, defaultTools] = await Promise.all([
-                    sopApi.getSopList({ page_size: 10, page: 1, keywords: '' }),
-                    getAssistantToolsApi('default')
-                ]);
-
-                setDatalist(sops.items || []);
-                setToolsData(prev => ({ ...prev, builtin: defaultTools || [] }));
-
             } catch (error) {
                 toast({ variant: 'error', description: '初始化数据加载失败' });
             } finally {
@@ -557,43 +558,43 @@ export default function index() {
         setIsDrawerOpen(true);
     };
 
- const handleDelete = (id: string) => {
-    bsConfirm({
-        title: '删除确认',
-        desc: '确认删除该SOP吗？',
-        showClose: true,
-        okTxt: '确认删除',
-        canelTxt: '取消',
-        onOk(next) {
-            sopApi.deleteSop(id)
-                .then(() => {
-                    toast({
-                        variant: 'success',
-                        description: 'SOP删除成功'
-                    });
+    const handleDelete = (id: string) => {
+        bsConfirm({
+            title: '删除确认',
+            desc: '确认删除该SOP吗？',
+            showClose: true,
+            okTxt: '确认删除',
+            canelTxt: '取消',
+            onOk(next) {
+                sopApi.deleteSop(id)
+                    .then(() => {
+                        toast({
+                            variant: 'success',
+                            description: 'SOP删除成功'
+                        });
 
-                    // 从 selectedItems 中移除被删除的 SOP ID
-                    setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
-                    if (datalist.length === 1 && page > 1) {
-                        setPage(page - 1);
-                    } else {
-                        fetchData();
-                    }
-                    next();
-                })
-                .catch(error => {
-                    console.error('删除SOP失败:', error);
-                    toast({
-                        variant: 'error',
-                        description: '删除失败',
-                        details: error.message || '请稍后重试'
+                        // 从 selectedItems 中移除被删除的 SOP ID
+                        setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
+                        if (datalist.length === 1 && page > 1) {
+                            setPage(page - 1);
+                        } else {
+                            fetchData();
+                        }
+                        next();
+                    })
+                    .catch(error => {
+                        console.error('删除SOP失败:', error);
+                        toast({
+                            variant: 'error',
+                            description: '删除失败',
+                            details: error.message || '请稍后重试'
+                        });
                     });
-                });
-        },
-        onCancel() {
-        }
-    });
-};
+            },
+            onCancel() {
+            }
+        });
+    };
 
     const toggleGroup = useCallback((group: any, checked: boolean) => {
         setSelectedTools(prev => {
@@ -617,8 +618,8 @@ export default function index() {
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
                             label="输入框提示语"
-                            value={""}
-                            placeholder={formData.inputPlaceholder}
+                            value={formData.linsightConfig.input_placeholder}
+                            placeholder="请输入你的任务目标，然后交给 BISHENG 灵思"
                             maxLength={1000}
                             onChange={(v) => {
                                 setFormData(prev => ({
@@ -785,6 +786,20 @@ const useChatConfig = (
         const currentTools = Array.isArray(toolsData[activeToolTab])
             ? toolsData[activeToolTab]
             : [];
+        const processedTools = selectedTools.map(tool => {
+            const processedTool = {
+                ...tool,
+                extra: undefined
+            };
+
+            if (tool.children) {
+                processedTool.children = tool.children.map(child => ({
+                    ...child,
+                    extra: undefined
+                }));
+            }
+            return processedTool;
+        });
         const dataToSave = {
             ...formData,
             sidebarSlogan: formData.sidebarSlogan?.trim() || '',
@@ -794,8 +809,8 @@ const useChatConfig = (
             maxTokens: formData.maxTokens || 15000,
             linsightConfig: {
                 ...formData.linsightConfig,
-                input_placeholder: formData.linsightConfig?.input_placeholder || formData.inputPlaceholder,
-                tools: selectedTools.reduce((acc, tool) => {
+                input_placeholder: formData.linsightConfig?.input_placeholder || '',
+                tools: processedTools.reduce((acc, tool) => {
                     const parentTool = currentTools.find(parent =>
                         parent?.children?.some(child => child.id === tool.id)
                     );

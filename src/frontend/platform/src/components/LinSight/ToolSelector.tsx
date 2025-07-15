@@ -1,5 +1,5 @@
 // components/ToolSelector.tsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { Plus, X, AlignJustify, User, Star, CpuIcon } from 'lucide-react';
@@ -35,65 +35,113 @@ const ToolSelector = ({
   const [targetCategory, setTargetCategory] = useState<string | null>(null);
   const scrollAttempts = useRef(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-const handleSelectedToolClick = (tool) => {
-  setShowToolSelector(true);
-  console.log(tool);
-  
-  let toolCategory = 'builtin'; 
-  if (tool.is_preset === 0) {
-    toolCategory = 'api';
-  } else if (tool.is_preset === 2) {
-    toolCategory = 'mcp';
-  }
-console.log(toolCategory,123);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const rightContentRef = useRef<HTMLDivElement>(null);
 
-  setTargetCategory(toolCategory);
-  setScrollToParentId(tool.id);
-  
-  if (activeToolTab !== toolCategory) {
-    setActiveToolTab(toolCategory);
-  } else {
-    scrollToTool(tool.id);
-  }
-  
-  if (!expandedItems.includes(tool.id)) {
-    setIsExpanding(true);
-    setManuallyExpandedItems([...expandedItems, tool.id]);
-  } else {
-    scrollToTool(tool.id);
-  }
-};
-  const scrollToTool = (toolId: string) => {
+  const [rightMaxHeight, setRightMaxHeight] = useState<number | null>(null);
+
+  const syncPanelHeights = useCallback(() => {
+    if (leftPanelRef.current && rightContentRef.current) {
+      const leftHeight = leftPanelRef.current.scrollHeight;
+      const rightContentHeight = rightContentRef.current.scrollHeight;
+
+      // 如果右侧内容小于左侧高度，则不限制高度
+      if (rightContentHeight < leftHeight) {
+        setRightMaxHeight(null);
+      } else {
+        setRightMaxHeight(leftHeight);
+      }
+    }
+  }, []);
+  // 增加对 requestIdleCallback 的判断和使用
+  useEffect(() => {
+    if (showToolSelector && filteredTools.length > 0) {
+      const handle = requestIdleCallback(() => {
+        syncPanelHeights();
+      }, { timeout: 1000 });
+      return () => cancelIdleCallback(handle);
+    }
+  }, [showToolSelector, filteredTools, syncPanelHeights]);
+  useEffect(() => {
+    if (showToolSelector) {
+      const id = requestAnimationFrame(() => {
+        syncPanelHeights();
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [showToolSelector, syncPanelHeights]);
+  useEffect(() => {
+    syncPanelHeights();
+  }, [syncPanelHeights, selectedTools, filteredTools, expandedItems, showToolSelector]);
+
+  const handleSelectedToolClick = (tool) => {
+    setShowToolSelector(true);
+    console.log(tool);
+
+    let toolCategory = 'builtin';
+    if (tool.is_preset === 0) {
+      toolCategory = 'api';
+    } else if (tool.is_preset === 2) {
+      toolCategory = 'mcp';
+    }
+    console.log(toolCategory, 123);
+
+    setTargetCategory(toolCategory);
+    setScrollToParentId(tool.id);
+
+    if (activeToolTab !== toolCategory) {
+      setActiveToolTab(toolCategory);
+    } else {
+      scrollToTool(tool.id);
+    }
+
+    if (!expandedItems.includes(tool.id)) {
+      setIsExpanding(true);
+      setManuallyExpandedItems([...expandedItems, tool.id]);
+    } else {
+      scrollToTool(tool.id);
+    }
+  };
+  const scrollToTool = useCallback((toolId: string) => {
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
-    
+
     scrollAttempts.current = 0;
+
     const tryScroll = () => {
       scrollAttempts.current++;
       const element = document.getElementById(`tool-${toolId}`);
-      
-      if (element) {
-        const container = document.querySelector('.w-2\\/3.p-4.max-h-\\[400px\\].overflow-y-auto');
-        if (container) {
-          const elementRect = element.getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-          
-          const offsetTop = elementRect.top - containerRect.top + container.scrollTop;
-          
-          container.scrollTo({
-            top: offsetTop - 100,
-            behavior: 'smooth'
-          });
-        }
+
+      if (element && rightContentRef.current) {
+        // 使用ref获取容器而不是querySelector
+        const container = rightContentRef.current;
+
+        // 计算元素相对于容器的位置
+        const elementTop = element.offsetTop;
+        const containerTop = container.offsetTop;
+        const scrollPosition = elementTop - containerTop - 20; // 减去20px作为缓冲
+
+        // 平滑滚动到目标位置
+        container.scrollTo({
+          top: scrollPosition,
+          behavior: 'smooth'
+        });
+
+        // 高亮显示目标元素
+        element.classList.add('bg-blue-50');
         setTimeout(() => {
           element.classList.remove('bg-blue-50');
         }, 2000);
+      } else if (scrollAttempts.current < 5) {
+        // 如果元素未找到，重试最多5次
+        scrollTimeoutRef.current = setTimeout(tryScroll, 200);
       }
     };
-    
+
+    // 初始尝试
     scrollTimeoutRef.current = setTimeout(tryScroll, 100);
-  };
+  }, []);
 
   useEffect(() => {
     if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
@@ -142,12 +190,13 @@ console.log(toolCategory,123);
   return (
     <div className="flex gap-4">
       {/* 已选工具面板 */}
-      <div className="w-1/3 flex border rounded-lg bg-white">
+      <div
+        className="w-1/3 flex border rounded-lg bg-white">
         <div className="flex-1 p-4">
           <h3 className="text-sm font-medium">已选工具</h3>
           {selectedTools.length === 0 && (
             <button
-              onClick={() => setShowToolSelector(!showToolSelector)}
+              onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
               className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
             >
               <Plus className="inline w-4 h-4 mr-1" />
@@ -170,9 +219,8 @@ console.log(toolCategory,123);
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                           {...provided.dragHandleProps}
-                          className={`flex items-center justify-between p-3 py-2 rounded-lg ${
-                            snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
-                          }`}
+                          className={`flex items-center justify-between p-3 py-2 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                            }`}
                           onClick={() => handleSelectedToolClick(tool)}
                         >
                           <div className="flex items-center">
@@ -210,7 +258,7 @@ console.log(toolCategory,123);
           {selectedTools.length > 0 && (
             <Button
               variant='outline'
-              onClick={() => setShowToolSelector(!showToolSelector)}
+              onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
             >
               <Plus className="inline w-4 h-4 mr-1" />
               添加更多工具
@@ -221,12 +269,17 @@ console.log(toolCategory,123);
 
       {/* 工具选择器 */}
       {showToolSelector && (
-        <div className="w-2/3 flex border rounded-lg bg-white">
-          <div className="w-1/3 border-r bg-gray-50 flex flex-col">
+        <div
+          className="w-2/3 flex border rounded-lg bg-white overflow-hidden transition-all duration-300 ease-in-out"
+          key={activeToolTab}
+        >
+          {/* 左侧分类栏 - 固定宽度 */}
+          <div
+            ref={leftPanelRef}
+            className="w-1/3 border-r bg-gray-50 flex flex-col h-full">
             <div className="p-2 border-b">
-              <h3 className="font-medium">工具分类</h3>
+              <h3 className="font-medium">全量工具</h3>
             </div>
-
             <div className="relative p-2 border-b">
               <SearchInput
                 placeholder="搜索工具..."
@@ -263,7 +316,15 @@ console.log(toolCategory,123);
             </div>
           </div>
 
-          <div className="w-2/3 p-4 max-h-[400px] overflow-y-auto">
+          <div
+            ref={rightContentRef}
+            className="right-content w-2/3 flex flex-col"
+            style={{
+              maxHeight: rightMaxHeight ? `${rightMaxHeight}px` : undefined,
+              overflowY: rightMaxHeight ? 'auto' : 'visible',
+              transition: 'max-height 0.3s ease-out',
+            }}
+          >
             {loading ? (
               <div className="flex justify-center items-center h-full">
                 <LoadIcon className="animate-spin" />
@@ -271,7 +332,7 @@ console.log(toolCategory,123);
             ) : filteredTools.length > 0 ? (
               <Accordion
                 type="multiple"
-                className="w-full"
+                className="w-full p-4"
                 value={expandedItems}
                 onValueChange={(values) => {
                   if (!toolSearchTerm) {
@@ -280,9 +341,9 @@ console.log(toolCategory,123);
                 }}
               >
                 {filteredTools.map((tool) => (
-                  <AccordionItem 
-                    key={tool.id} 
-                    value={tool.id} 
+                  <AccordionItem
+                    key={tool.id}
+                    value={tool.id}
                     id={`tool-${tool.id}`}
                     className={expandedItems.includes(tool.id) ? 'bg-gray-50' : ''}
                   >
@@ -348,7 +409,7 @@ console.log(toolCategory,123);
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <p className="text-xs text-gray-500 truncate max-w-[180px]">{child.desc}</p>
+                                    <p className="text-xs text-gray-500 truncate max-w-[260px]">{child.desc}</p>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>{child.desc}</p>
