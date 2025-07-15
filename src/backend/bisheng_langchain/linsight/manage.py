@@ -245,7 +245,7 @@ class TaskManage(BaseModel):
 
     async def ainvoke_task(self) -> AsyncIterator[BaseEvent]:
         for task in self.tasks:
-            asyncio.create_task(self.catch_task_exception(task))
+            async_task = asyncio.create_task(self.catch_task_exception(task))
             while task.status not in [TaskStatus.SUCCESS.value, TaskStatus.FAILED.value]:
                 while not self.aqueue.empty():
                     res = await self.aqueue.get()
@@ -254,6 +254,8 @@ class TaskManage(BaseModel):
             while not self.aqueue.empty():
                 res = await self.aqueue.get()
                 yield res
+            if task_exception := async_task.exception():
+                raise task_exception
             if task.status == TaskStatus.FAILED.value:
                 raise Exception(f"Task {task.step_id} failed with error: {task.get_answer()}")
 

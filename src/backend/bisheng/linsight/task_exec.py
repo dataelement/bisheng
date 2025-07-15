@@ -3,10 +3,12 @@ import json
 import os
 import shutil
 import uuid
-from loguru import logger
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
+
+from loguru import logger
+
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.llm import LLMService
@@ -21,10 +23,10 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
-from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.utils.util import sync_func_to_async
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus
@@ -101,7 +103,7 @@ class LinsightWorkflowTask:
             except UserTerminationError:
                 logger.info(f"任务被用户主动终止: session_version_id={session_version_id}")
             except Exception as e:
-                logger.error(f"任务执行失败: session_version_id={session_version_id}, error={e}")
+                logger.exception(f"任务执行失败: session_version_id={session_version_id}")
                 await self._handle_execution_error(session_version_id, e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion, file_dir: str):
