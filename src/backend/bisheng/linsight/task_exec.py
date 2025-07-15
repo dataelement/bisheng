@@ -105,7 +105,7 @@ class LinsightWorkflowTask:
     async def async_run(self, session_version_id: str) -> None:
         """异步任务执行入口"""
 
-        with logger.contextualize(trace_id=uuid.uuid4().hex):
+        with logger.contextualize(trace_id=session_version_id):
             logger.info(f"开始执行任务: session_version_id={session_version_id}")
 
             try:
