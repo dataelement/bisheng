@@ -72,9 +72,9 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
         model_name = getattr(llm, "model")
     except AttributeError:
         try:
-            model_name = getattr(llm, "model_name")
+            model_name = getattr(llm, "model_name") or getattr(llm, "deployment_name", "unknown_model")
         except AttributeError:
-            model_name = getattr(llm, "deployment_name", "unknown_model")
+            model_name = "unknown_model"
 
     debug_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "linsightdebug"))
     os.makedirs(debug_path, exist_ok=True)
