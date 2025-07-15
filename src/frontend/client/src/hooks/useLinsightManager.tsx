@@ -416,53 +416,75 @@ const convertTools = (tools) => {
 
 
 function buildTaskTree(tasks) {
-    // 创建任务ID到任务的映射
-    const taskMap = new Map();
-    tasks.forEach(task => taskMap.set(task.id, task));
-
-    // 存储根任务（一级任务）
-    const rootTasks: any[] = [];
-    // 存储二级任务（按parent_task_id分组）
-    const childTasksMap = new Map();
-
-    // 第一次遍历：分离一级和二级任务
-    tasks.forEach(task => {
-        if (task.parent_task_id === null) {
-            // 一级任务
-            rootTasks.push({
-                id: task.id,
-                name: task.task_data?.target || '',
-                status: task.status,
-                history: task.history || [],
-                event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-                call_reason: '',
-                children: []  // 初始化子任务数组
-            });
-        } else {
-            // 二级任务（按父ID分组）
-            const parentId = task.parent_task_id;
-            if (!childTasksMap.has(parentId)) {
-                childTasksMap.set(parentId, []);
-            }
-            childTasksMap.get(parentId).push({
-                id: task.id,
-                name: task.task_data?.target || '',
-                status: task.status,
-                history: task.history || [],
-                event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-                call_reason: ''
-                // 二级任务没有children字段
-            });
+    const newTasks = tasks.map(task => {
+        return {
+            id: task.id,
+            name: task.task_data?.target || '',
+            status: task.status,
+            history: task.history || [],
+            event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
+            call_reason: '',
+            children: task.children?.map(child => {
+                return {
+                    id: child.id,
+                    name: child.task_data?.target || '',
+                    status: child.status,
+                    history: child.history || [],
+                    event_type: child.status === 'waiting_for_user_input' ? 'user_input' : '',
+                    call_reason: ''
+                }
+            }) || []
         }
-    });
+    })
+    return newTasks
 
-    // 第二次遍历：将二级任务挂载到一级任务
-    rootTasks.forEach(rootTask => {
-        const children = childTasksMap.get(rootTask.id) || [];
-        rootTask.children = children;
-    });
+    // 创建任务ID到任务的映射
+    // const taskMap = new Map();
+    // tasks.forEach(task => taskMap.set(task.id, task));
 
-    return rootTasks;
+    // // 存储根任务（一级任务）
+    // const rootTasks: any[] = [];
+    // // 存储二级任务（按parent_task_id分组）
+    // const childTasksMap = new Map();
+
+    // // 第一次遍历：分离一级和二级任务
+    // tasks.forEach(task => {
+    //     if (task.parent_task_id === null) {
+    //         // 一级任务
+    //         rootTasks.push({
+    //             id: task.id,
+    //             name: task.task_data?.target || '',
+    //             status: task.status,
+    //             history: task.history || [],
+    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
+    //             call_reason: '',
+    //             children: []  // 初始化子任务数组
+    //         });
+    //     } else {
+    //         // 二级任务（按父ID分组）
+    //         const parentId = task.parent_task_id;
+    //         if (!childTasksMap.has(parentId)) {
+    //             childTasksMap.set(parentId, []);
+    //         }
+    //         childTasksMap.get(parentId).push({
+    //             id: task.id,
+    //             name: task.task_data?.target || '',
+    //             status: task.status,
+    //             history: task.history || [],
+    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
+    //             call_reason: ''
+    //             // 二级任务没有children字段
+    //         });
+    //     }
+    // });
+
+    // // 第二次遍历：将二级任务挂载到一级任务
+    // rootTasks.forEach(rootTask => {
+    //     const children = childTasksMap.get(rootTask.id) || [];
+    //     rootTask.children = children;
+    // });
+
+    // return rootTasks;
 }
 
 const mockContent = `
