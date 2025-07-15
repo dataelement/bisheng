@@ -221,7 +221,7 @@ class TaskManage(BaseModel):
         for task in self.tasks:
             if task.status == TaskStatus.SUCCESS.value:
                 success_steps.append(task.step_id)
-        return ','.join(success_steps)
+        return "你现在已经完成了" + ",".join(success_steps) if success_steps else ''
 
     def get_workflow(self):
         res = []
@@ -231,7 +231,7 @@ class TaskManage(BaseModel):
             res.append({
                 'step_id': task.step_id,
                 'target': task.target,
-                'description': task.status
+                'description': task.description
             })
         return res
 
