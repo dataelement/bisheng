@@ -1,58 +1,60 @@
 import asyncio
 import os
 
-from langchain_community.chat_models import ChatTongyi
 from langchain_openai import AzureChatOpenAI
-from pydantic import SecretStr
 
-from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.services.linsight.sop_manage import SOPManageService
+from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
+from bisheng.api.services.tool import ToolServices
+from bisheng.api.services.workstation import WorkStationService
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskMode
 from bisheng_langchain.linsight.event import NeedUserInput, TaskStart, TaskEnd, ExecStep
 
 
-def get_linsight_agent():
-    bing_api_key = os.environ.get('bing_api_key')
-    qwen_api_key = os.environ.get('qwen_api_key')
+async def get_linsight_agent():
     azure_api_key = os.environ.get('azure_api_key')
-    file_dir = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
+    root_path = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
 
-    used_tools = load_tools({
-        "bing_search": {
-            "bing_subscription_key": bing_api_key,
-            "bing_search_url": "https://api.bing.microsoft.com/v7.0/search",
-        },
-        "get_current_time": {},
-        "list_files": {"root_path": file_dir},
-        "get_file_details": {"root_path": file_dir},
-        "search_files": {"root_path": file_dir},
-        "search_text_in_file": {"root_path": file_dir},
-        "read_text_file": {"root_path": file_dir},
-        "write_text_file": {"root_path": file_dir},
-        "replace_file_lines": {"root_path": file_dir},
-    })
-    print("used tools:", used_tools)
-    chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
-                      model_kwargs={'incremental_output': True})
     chat = AzureChatOpenAI(azure_endpoint="https://ai-aoai05215744ai338141519445.cognitiveservices.azure.com/",
                            api_key=azure_api_key,
                            api_version="2024-12-01-preview",
                            azure_deployment="gpt-4.1")
 
+    # 获取工作台配置的工具
+    ws_config = await WorkStationService.aget_config()
+    config_tool_ids = LinsightWorkbenchImpl._extract_tool_ids(ws_config.linsightConfig.tools or [])
+    tools = await AssistantAgent.init_tools_by_tool_ids(config_tool_ids, llm=chat)
+    # 获取灵思预置的工具，本地文件处理和知识库检索
+    linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
+    used_tools = linsight_tools + tools
+
     # 获取本地文件相关工具
     query = "分析该目录下的简历文件（仅限txt格式），挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
 
-    agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=file_dir, task_mode=TaskMode.REACT.value,
+    agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=root_path, task_mode=TaskMode.REACT.value,
                           debug=True, debug_id="zgq_test")
     return agent
 
 
 async def async_main():
-    agent = get_linsight_agent()
+    agent = await get_linsight_agent()
 
-    # 生成sop
+    # 检索sop
+    sop_documents, error_msg = await SOPManageService.search_sop("基于目录简历筛选大模型岗位候选人", 3)
+    if not sop_documents:
+        print("没有找到相关的SOP模板")
+        return
+    print(f"找到 {len(sop_documents)} 个相关SOP模板")
+    print(f"sop_documents: {sop_documents}")
+    sop_template = "\n\n".join([
+        f"例子:\n\n{sop.page_content}"
+        for sop in sop_documents if sop.page_content
+    ])
+
     sop = ""
-    async for one in agent.generate_sop(""):
+    async for one in agent.generate_sop(sop_template):
         sop += one.content
     print(f"first sop: {sop}")
 
@@ -84,7 +86,7 @@ async def async_main():
 
 
 async def only_exec_task():
-    agent = get_linsight_agent()
+    agent = await get_linsight_agent()
 
     sop = """标准操作流程（SOP）：  
 基于目录简历筛选大模型岗位候选人
@@ -182,5 +184,5 @@ async def only_exec_task():
 
 
 if __name__ == '__main__':
-    # asyncio.run(async_main())
-    asyncio.run(only_exec_task())
+    asyncio.run(async_main())
+    # asyncio.run(only_exec_task())
