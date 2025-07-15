@@ -2,6 +2,7 @@ import asyncio
 import logging
 import pickle
 from enum import Enum
+from loguru import logger
 from typing import List, Dict, Any, Optional
 
 from pydantic import BaseModel, Field
@@ -12,8 +13,6 @@ from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum,
 from bisheng.database.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
 from bisheng.utils.util import retry_async
 from bisheng_langchain.linsight.event import ExecStep
-
-logger = logging.getLogger(__name__)
 
 
 class MessageEventType(str, Enum):

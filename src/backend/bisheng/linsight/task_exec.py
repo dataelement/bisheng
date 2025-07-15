@@ -1,12 +1,12 @@
 import asyncio
 import json
-import logging
 import os
 import shutil
+import uuid
+from loguru import logger
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
-
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.llm import LLMService
@@ -30,8 +30,6 @@ from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
 
-logger = logging.getLogger(__name__)
-
 
 class TaskExecutionError(Exception):
     """任务执行异常"""
@@ -48,8 +46,7 @@ class LinsightWorkflowTask:
 
     USER_TERMINATION_CHECK_INTERVAL = 2
 
-    def __init__(self, semaphore: asyncio.Semaphore):
-        self.semaphore = semaphore
+    def __init__(self):
         self._state_manager: Optional[LinsightStateMessageManager] = None
         self._is_terminated = False
         self._termination_task: Optional[asyncio.Task] = None
@@ -88,27 +85,24 @@ class LinsightWorkflowTask:
 
         except Exception as e:
             logger.error(f"资源清理失败: {e}")
-        finally:
-            # 释放信号量
-            if self.semaphore.locked():
-                self.semaphore.release()
 
     # ==================== 核心执行逻辑 ====================
 
     async def async_run(self, session_version_id: str) -> None:
         """异步任务执行入口"""
 
-        logger.info(f"开始执行任务: session_version_id={session_version_id}")
+        with logger.contextualize(trace_id=uuid.uuid4().hex):
+            logger.info(f"开始执行任务: session_version_id={session_version_id}")
 
-        try:
-            async with self._managed_execution(session_version_id) as (session_model, file_dir):
-                await self._execute_workflow(session_model, file_dir)
+            try:
+                async with self._managed_execution(session_version_id) as (session_model, file_dir):
+                    await self._execute_workflow(session_model, file_dir)
 
-        except UserTerminationError:
-            logger.info(f"任务被用户主动终止: session_version_id={session_version_id}")
-        except Exception as e:
-            logger.error(f"任务执行失败: session_version_id={session_version_id}, error={e}")
-            await self._handle_execution_error(session_version_id, e)
+            except UserTerminationError:
+                logger.info(f"任务被用户主动终止: session_version_id={session_version_id}")
+            except Exception as e:
+                logger.error(f"任务执行失败: session_version_id={session_version_id}, error={e}")
+                await self._handle_execution_error(session_version_id, e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion, file_dir: str):
         """执行工作流的核心逻辑"""
@@ -170,7 +164,7 @@ class LinsightWorkflowTask:
         """获取LLM实例"""
         try:
             workbench_conf = await LLMService.get_workbench_llm()
-            return BishengLLM(model_id=workbench_conf.task_model.id)
+            return BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
         except Exception as e:
             raise TaskExecutionError(f"LLM初始化失败: {e}")
 
@@ -202,7 +196,7 @@ class LinsightWorkflowTask:
     async def _download_file(self, file_info: dict, target_dir: str) -> str:
         """下载单个文件"""
         object_name = file_info["markdown_file_path"]
-        file_name = os.path.basename(object_name)
+        file_name = file_info.get("markdown_file_name", os.path.basename(object_name))
         file_path = os.path.join(target_dir, file_name)
 
         try:
@@ -719,7 +713,6 @@ class LinsightWorkflowTask:
 
             response = await llm.ainvoke(prompt)
             if not response.content:
-                logger.error("LLM返回内容为空")
                 return default_summary
 
             return json.loads(response.content)

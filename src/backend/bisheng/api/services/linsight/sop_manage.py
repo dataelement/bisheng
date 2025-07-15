@@ -3,6 +3,7 @@ import uuid
 from typing import List
 
 from langchain_core.documents import Document
+from llama_index.readers.deeplake import vector_search
 
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -169,7 +170,7 @@ class SOPManageService:
 
     # sop 库检索
     @classmethod
-    async def search_sop(cls, query: str, k: int = 1) -> List[Document]:
+    async def search_sop(cls, query: str, k: int = 1) -> (List[Document], str | None):
         """
         搜索SOP
         :param k:
@@ -177,27 +178,68 @@ class SOPManageService:
         :return: 搜索结果
         """
         # 获取当前全局配置的embedding模型
-        workbench_conf = await LLMService.get_workbench_llm()
-        emb_model_id = workbench_conf.embedding_model.id
-        embeddings = decide_embeddings(emb_model_id)
+        try:
+            vector_search = True
+            es_search = True
+            error_msg = None
+            workbench_conf = await LLMService.get_workbench_llm()
+            if workbench_conf.embedding_model is None or not workbench_conf.embedding_model.id:
+                vector_search = False
+                error_msg = "请联系管理员检查工作台向量检索模型状态"
 
-        vector_client: Milvus = decide_vectorstores(
-            SOPManageService.collection_name, "Milvus", embeddings
-        )
+            # 创建文本分割器
+            text_splitter = RecursiveCharacterTextSplitter()
+            retrievers = []
+            if vector_search and es_search:
+                emb_model_id = workbench_conf.embedding_model.id
+                embeddings = decide_embeddings(emb_model_id)
 
-        es_client: ElasticKeywordsSearch = decide_vectorstores(
-            SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
-        )
+                vector_client: Milvus = decide_vectorstores(
+                    SOPManageService.collection_name, "Milvus", embeddings
+                )
 
-        # 创建检索器
-        text_splitter = RecursiveCharacterTextSplitter()
-        keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": k},
-                                             text_splitter=text_splitter)
-        baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client, search_kwargs={"k": k},
-                                                            text_splitter=text_splitter)
-        retriever = EnsembleRetriever(retrievers=[keyword_retriever, baseline_vector_retriever], weights=[0.7, 0.3])
+                es_client: ElasticKeywordsSearch = decide_vectorstores(
+                    SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
+                )
 
-        # 执行检索
-        results = await retriever.ainvoke(input=query)
+                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": k},
+                                                     text_splitter=text_splitter)
+                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client, search_kwargs={"k": k},
+                                                                    text_splitter=text_splitter)
 
-        return results
+                retrievers = [keyword_retriever, baseline_vector_retriever]
+
+            elif es_search and not vector_search:
+                # 仅使用关键词检索
+                es_client: ElasticKeywordsSearch = decide_vectorstores(
+                    SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
+                )
+                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": k},
+                                                     text_splitter=text_splitter)
+                retrievers = [keyword_retriever]
+
+            elif vector_search and not es_search:
+                # 仅使用向量检索
+                emb_model_id = workbench_conf.embedding_model.id
+                embeddings = decide_embeddings(emb_model_id)
+
+                vector_client: Milvus = decide_vectorstores(
+                    SOPManageService.collection_name, "Milvus", embeddings
+                )
+
+                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client, search_kwargs={"k": k},
+                                                                    text_splitter=text_splitter)
+                retrievers = [baseline_vector_retriever]
+            else:
+                error_msg = "SOP检索失败，向量检索与关键词检索均不可用"
+                return [], error_msg
+
+            retriever = EnsembleRetriever(retrievers=retrievers, weights=[0.5, 0.5] if len(retrievers) > 1 else [1.0])
+
+            # 执行检索
+            results = await retriever.ainvoke(input=query)
+
+            return results, error_msg
+        except Exception as e:
+            logger.error(f"搜索SOP失败: {str(e)}")
+            return [], f"SOP检索失败: {str(e)}"

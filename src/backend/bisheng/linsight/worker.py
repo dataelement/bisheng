@@ -46,12 +46,16 @@ class ScheduleCenterProcess(Process):
         # 信号量
         self.semaphore: Optional[asyncio.Semaphore] = None
 
-    @staticmethod
-    def handle_task_result(task: asyncio.Task):
+    def handle_task_result(self, task: asyncio.Task):
         try:
             result = task.result()  # 如果有异常，这里会抛出
         except Exception as e:
             logger.error(f"Task failed with exception: {e}")
+        finally:
+            # 释放信号量
+            if self.semaphore:
+                logger.info("Releasing semaphore after task completion.")
+                self.semaphore.release()
 
     async def async_run(self):
         """
@@ -60,12 +64,14 @@ class ScheduleCenterProcess(Process):
         """
         logger.info("ScheduleCenterProcess started...")
         while True:
+            await self.semaphore.acquire()  # 获取信号量，限制并发数
             try:
                 session_version_id = await self.queue.get_wait()
                 if session_version_id is None:
+                    logger.info("No session_version_id found in queue, waiting...")
+                    self.semaphore.release()
                     continue
-                await self.semaphore.acquire()  # 获取信号量，限制并发数
-                exec_task = LinsightWorkflowTask(semaphore=self.semaphore)
+                exec_task = LinsightWorkflowTask()
 
                 logger.info(f"Processing session_version_id: {session_version_id}")
 
@@ -77,6 +83,10 @@ class ScheduleCenterProcess(Process):
 
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess: {e}")
+                if self.semaphore:
+                    if self.semaphore._value < settings.linsight_conf.max_concurrency:
+                        logger.info("Releasing semaphore due to error.")
+                        self.semaphore.release()
                 continue
 
     def run(self):

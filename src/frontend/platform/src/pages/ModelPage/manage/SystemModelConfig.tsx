@@ -7,7 +7,7 @@ import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
 import KnowledgeModle from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
-import WorkbenchModel from "./tabs/workbenchModel";
+import WorkbenchModel from "./tabs/WorkbenchModel";
 
 export default function SystemModelConfig({ data, onBack }) {
     const { t } = useTranslation('model')

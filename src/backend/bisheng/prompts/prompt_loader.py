@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 from enum import Enum
@@ -87,7 +88,7 @@ class PromptLoader(object):
         :return: Prompt对象
         """
         if namespace in self.prompts_storage:
-            return self.prompts_storage[namespace].get(prompt_name)
+            return copy.deepcopy(self.prompts_storage[namespace].get(prompt_name, None))
         else:
             raise KeyError(f"Namespace '{namespace}' not found in prompts storage.")
 
