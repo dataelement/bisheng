@@ -116,8 +116,11 @@ class LinsightWorkflowTask:
                 logger.info(f"任务被用户主动终止: session_version_id={session_version_id}")
             except TaskAlreadyInProgressError:
                 logger.warning(f"任务已在进行中: session_version_id={session_version_id}")
-            except Exception as e:
+            except TaskExecutionError as e:
                 logger.exception(f"任务执行失败: session_version_id={session_version_id}")
+                await self._handle_execution_error(session_version_id, e)
+            except Exception as e:
+                logger.exception(f"未知错误: session_version_id={session_version_id}, error={e}")
                 await self._handle_execution_error(session_version_id, e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion, file_dir: str):
