@@ -1,7 +1,6 @@
-import logging
 import uuid
 from typing import List
-
+from loguru import logger
 from langchain_core.documents import Document
 from llama_index.readers.deeplake import vector_search
 
@@ -20,8 +19,6 @@ from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils.embedding import decide_embeddings
-
-logger = logging.getLogger(__name__)
 
 
 class SOPManageService:

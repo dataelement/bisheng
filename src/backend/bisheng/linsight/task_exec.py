@@ -519,6 +519,17 @@ class LinsightWorkflowTask:
 
         await self._state_manager.set_session_version_info(session_model)
 
+        # 获取所有执行任务
+        execution_tasks = await self._state_manager.get_execution_tasks()
+
+        for task in execution_tasks:
+            # 更新每个任务状态为已终止
+            if task.status not in [ExecuteTaskStatusEnum.TERMINATED, ExecuteTaskStatusEnum.SUCCESS,
+                                   ExecuteTaskStatusEnum.FAILED]:
+                await self._state_manager.update_execution_task_status(task_id=task.id,
+                                                                       status=ExecuteTaskStatusEnum.TERMINATED)
+
+        # 推送终止消息
         await self._state_manager.push_message(
             MessageData(
                 event_type=MessageEventType.TASK_TERMINATED,
@@ -632,6 +643,7 @@ class LinsightWorkflowTask:
     async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
         """处理任务失败"""
         session_model.status = SessionVersionStatusEnum.TERMINATED
+        session_model.output_result = {"error_message": error_msg}
         await self._state_manager.set_session_version_info(session_model)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.ERROR_MESSAGE, data={"error": error_msg})

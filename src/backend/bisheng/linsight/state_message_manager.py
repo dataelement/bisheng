@@ -365,6 +365,31 @@ class LinsightStateMessageManager:
             self._logger.error(f"Failed to add step to task {task_id}: {e}")
             raise
 
+    async def get_execution_tasks(self):
+        """
+        获取所有执行任务
+
+        Returns:
+            执行任务列表
+        """
+        try:
+            pattern = f"{self._keys['execution_tasks']}*"
+            task_keys = await self._redis_client.async_connection.keys(pattern)
+
+            if not task_keys:
+                return []
+
+            tasks_data = await self._redis_client.amget(*task_keys)
+            tasks = [LinsightExecuteTask.model_validate(task) for task in tasks_data if task]
+
+            if not tasks:
+                tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id=self._session_version_id)
+            return tasks
+
+        except Exception as e:
+            self._logger.error(f"Failed to get execution tasks: {e}")
+            return []
+
     async def cleanup_session_data(self) -> None:
         """
         清理会话相关的Redis数据
