@@ -370,7 +370,7 @@ class LinsightWorkbenchImpl:
         history_summary = []
 
         if reexecute and previous_session_version_id:
-            execute_tasks = await cls.get_execute_task_detail(previous_session_version_id)
+            execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(previous_session_version_id)
 
             for task in execute_tasks:
                 if task.result:
@@ -774,7 +774,7 @@ class LinsightWorkbenchImpl:
     async def _get_history_summary(cls, session_version_id: str) -> List[str]:
         """获取历史摘要"""
         history_summary = []
-        execute_tasks = await cls.get_execute_task_detail(session_version_id)
+        execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
 
         for task in execute_tasks:
             if task.result:
