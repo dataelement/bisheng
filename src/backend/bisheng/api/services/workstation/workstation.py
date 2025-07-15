@@ -3,6 +3,10 @@ import json
 from datetime import datetime
 from typing import Optional, Any
 
+from fastapi import BackgroundTasks, Request
+from langchain_core.messages import AIMessage, HumanMessage
+from loguru import logger
+from openai import BaseModel
 from pydantic import field_validator
 
 from bisheng.api.services import knowledge_imp, llm
@@ -12,13 +16,10 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
-from fastapi import BackgroundTasks, Request
-from langchain_core.messages import AIMessage, HumanMessage
-from loguru import logger
-from openai import BaseModel
 
 
 class WorkStationService(BaseService):
@@ -37,9 +38,7 @@ class WorkStationService(BaseService):
         return data
 
     @classmethod
-    def get_config(cls) -> WorkstationConfig | None:
-        """ 获取工作台的默认配置 """
-        config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
+    def parse_config(cls, config: Any) -> Optional[WorkstationConfig]:
         if config:
             ret = json.loads(config.value)
             ret = WorkstationConfig(**ret)
@@ -52,29 +51,30 @@ class WorkStationService(BaseService):
             if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
                 ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
-
+            # 判断工具是否被删除
+            if ret.linsightConfig.tools:
+                tool_type_ids = [t.get("id") for t in ret.linsightConfig.tools]
+                tool_type_info = GptsToolsDao.get_list_by_type(tool_type_ids)
+                exists_tool_type = {t.id: True for t in tool_type_info}
+                new_tools = []
+                for one in ret.linsightConfig.tools:
+                    if one.get("id") in exists_tool_type:
+                        new_tools.append(one)
+                ret.linsightConfig.tools = new_tools
             return ret
         return None
+
+    @classmethod
+    def get_config(cls) -> WorkstationConfig | None:
+        """ 获取工作台的默认配置 """
+        config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
+        return cls.parse_config(config)
 
     @classmethod
     async def aget_config(cls) -> WorkstationConfig | None:
         """ 异步获取工作台的默认配置 """
         config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION)
-        if config:
-            ret = json.loads(config.value)
-            ret = WorkstationConfig(**ret)
-            if ret.assistantIcon and ret.assistantIcon.relative_path:
-                ret.assistantIcon.image = cls.get_logo_share_link(ret.assistantIcon.relative_path)
-            if ret.sidebarIcon and ret.sidebarIcon.relative_path:
-                ret.sidebarIcon.image = cls.get_logo_share_link(ret.sidebarIcon.relative_path)
-
-            # 兼容旧的websearch配置
-            if ret.webSearch and not ret.webSearch.params:
-                ret.webSearch.tool = 'bing'
-                ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
-
-            return ret
-        return None
+        return cls.parse_config(config)
 
     @classmethod
     async def uploadPersonalKnowledge(
