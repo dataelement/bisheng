@@ -247,17 +247,21 @@ class LinsightWorkflowTask:
         """保存任务信息"""
         try:
             tasks = []
-            for info in task_info:
-                previous_task_id = self._find_previous_task_id(info["id"], task_info)
 
+            sorted_data = sorted(task_info, key=lambda x: int(x['step_id'].split('_')[1]))
+
+            for index, task_info in enumerate(sorted_data):
+                previous_task_id = sorted_data[index - 1]["id"] if index > 0 else None
+                next_task_id = sorted_data[index + 1]["id"] if index < len(sorted_data) - 1 else None
                 task = LinsightExecuteTask(
-                    id=info["id"],
-                    parent_task_id=info.get("parent_id"),
+                    id=task_info["id"],
+                    parent_task_id=task_info.get("parent_id"),
                     session_version_id=session_model.id,
                     previous_task_id=previous_task_id,
-                    next_task_id=info.get("next_id", [None])[0],
-                    task_type=ExecuteTaskTypeEnum.COMPOSITE if info.get("node_loop") else ExecuteTaskTypeEnum.SINGLE,
-                    task_data=info
+                    next_task_id=next_task_id,
+                    task_type=ExecuteTaskTypeEnum.COMPOSITE if task_info.get(
+                        "node_loop") else ExecuteTaskTypeEnum.SINGLE,
+                    task_data=task_info
                 )
                 tasks.append(task)
 
@@ -275,15 +279,6 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.error(f"保存任务信息失败: {e}")
             raise TaskExecutionError(f"保存任务信息失败: {e}")
-
-    def _find_previous_task_id(self, target_task_id: str, task_info: List[dict]) -> Optional[str]:
-        """查找前置任务ID"""
-        for task in task_info:
-            if task["id"] == target_task_id:
-                continue
-            if target_task_id in task.get("next_id", []):
-                return task["id"]
-        return None
 
     async def _execute_agent_tasks(self, agent, task_info: List[dict],
                                    session_model) -> bool:
