@@ -54,7 +54,7 @@ class WorkStationService(BaseService):
             # 判断工具是否被删除
             if ret.linsightConfig.tools:
                 tool_type_ids = [t.get("id") for t in ret.linsightConfig.tools]
-                tool_type_info = GptsToolsDao.get_list_by_type(tool_type_ids)
+                tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
                 exists_tool_type = {t.id: True for t in tool_type_info}
                 new_tools = []
                 for one in ret.linsightConfig.tools:
