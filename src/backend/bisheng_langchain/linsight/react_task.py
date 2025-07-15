@@ -120,11 +120,12 @@ class ReactTask(BaseTask):
                                           status="end"))
             message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
         else:
+            _call_reason = params.pop("_call_reason", "")
             # 等待用户输入的特殊工具调用
             if action == "call_user_help":
                 # 等待用户输入
                 self.status = TaskStatus.INPUT.value
-                await self.put_event(NeedUserInput(task_id=self.id, call_reason=thinking))
+                await self.put_event(NeedUserInput(task_id=self.id, call_reason=_call_reason))
                 # 等待用户输入
                 while self.status != TaskStatus.INPUT_OVER.value:
                     await asyncio.sleep(0.5)
@@ -138,14 +139,14 @@ class ReactTask(BaseTask):
                 call_id = generate_uuid_str()
                 await self.put_event(ExecStep(task_id=self.id,
                                               call_id=call_id,
-                                              call_reason=thinking,
+                                              call_reason=_call_reason,
                                               name=action,
                                               params=params,
                                               status="start"))
                 observation = await self.task_manager.ainvoke_tool(action, params)
                 await self.put_event(ExecStep(task_id=self.id,
                                               call_id=call_id,
-                                              call_reason=thinking,
+                                              call_reason=_call_reason,
                                               name=action,
                                               params=params,
                                               output=observation,
