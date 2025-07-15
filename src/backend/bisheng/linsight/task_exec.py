@@ -43,6 +43,12 @@ class UserTerminationError(Exception):
     pass
 
 
+# 任务已在进行中异常
+class TaskAlreadyInProgressError(Exception):
+    """任务已在进行中异常"""
+    pass
+
+
 class LinsightWorkflowTask:
     """工作流任务执行器 - 负责管理整个任务的生命周期"""
 
@@ -60,9 +66,15 @@ class LinsightWorkflowTask:
     async def _managed_execution(self, session_version_id: str):
         """管理执行资源的上下文管理器"""
         file_dir = None
+
+        self._state_manager = LinsightStateMessageManager(session_version_id)
+        session_model = await self._get_session_model(session_version_id)
+
+        # 检查会话状态
+        if await self._is_session_in_progress(session_model):
+            raise TaskAlreadyInProgressError("任务已在进行中")
+
         try:
-            self._state_manager = LinsightStateMessageManager(session_version_id)
-            session_model = await self._get_session_model(session_version_id)
 
             # 启动终止监控
             await self._start_termination_monitor(session_model)
@@ -102,15 +114,14 @@ class LinsightWorkflowTask:
 
             except UserTerminationError:
                 logger.info(f"任务被用户主动终止: session_version_id={session_version_id}")
+            except TaskAlreadyInProgressError:
+                logger.warning(f"任务已在进行中: session_version_id={session_version_id}")
             except Exception as e:
                 logger.exception(f"任务执行失败: session_version_id={session_version_id}")
                 await self._handle_execution_error(session_version_id, e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion, file_dir: str):
         """执行工作流的核心逻辑"""
-        # 检查会话状态
-        if await self._is_session_in_progress(session_model):
-            return
 
         # 更新会话状态为进行中
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
@@ -286,13 +297,9 @@ class LinsightWorkflowTask:
 
         async def agent_execution():
             """智能体执行任务"""
-            try:
-                async for event in agent.ainvoke(task_info, session_model.sop):
-                    await self._handle_event(agent, event, session_model)
-                return True
-            except Exception as e:
-                logger.error(f"智能体执行异常: {e}")
-                raise
+            async for event in agent.ainvoke(task_info, session_model.sop):
+                await self._handle_event(agent, event, session_model)
+            return True
 
         async def termination_monitor():
             """终止监控任务"""
