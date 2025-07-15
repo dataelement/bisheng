@@ -94,6 +94,7 @@ class EvaluationService:
             if one.result_score:
                 evaluation_item['result_score'] = json.loads(one.result_score)
 
+            # 处理任务进度
             if one.status != EvaluationTaskStatus.running.value:
                 evaluation_item['progress'] = f'100%'
             elif redis_client.exists(EvaluationService.get_redis_key(one.id)):
@@ -101,6 +102,8 @@ class EvaluationService:
             else:
                 evaluation_item['progress'] = f'0%'
 
+            # 确保错误描述信息能够返回给前端
+            evaluation_item['description'] = one.description or ''
             evaluation_item['user_name'] = cls.get_user_name(one.user_id)
             data.append(evaluation_item)
 
@@ -346,5 +349,6 @@ def add_evaluation_task(evaluation_id: int):
     except Exception as e:
         logger.exception(f'evaluation task failed id={evaluation_id} {str(e)}')
         evaluation.status = EvaluationTaskStatus.failed.value
+        evaluation.description = str(e)[:500]  # 限制错误描述长度，避免过长
         EvaluationDao.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)

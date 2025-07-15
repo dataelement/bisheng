@@ -31,6 +31,7 @@ class EvaluationBase(SQLModelSerializable):
     prompt: str = Field(default='', sa_column=Column(Text), description='评测指令文本')
     result_file_path: str = Field(default='', description='评测结果的 minio 地址')
     result_score: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
+    description: str = Field(default='', sa_column=Column(Text), description='错误描述信息')
     is_delete: int = Field(default=0, description='是否删除')
     create_time: Optional[datetime] = Field(default=None,
                                             sa_column=Column(DateTime, nullable=False,
