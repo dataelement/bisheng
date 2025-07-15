@@ -145,6 +145,7 @@ export const useLinsightWebSocket = (versionId) => {
                             } else {
                                 return {
                                     ...task,
+                                    status: taskData.event_type,
                                     children: task.children.map(child => {
                                         if (child.id === task_id) {
                                             // 更新子任务
@@ -236,6 +237,7 @@ export const useLinsightWebSocket = (versionId) => {
                     toggleNav(true)
                     break;
                 case 'task_terminated':
+
                     updateLinsight(id, {
                         status: SopStatus.Stoped
                     })
@@ -278,6 +280,19 @@ export const useLinsightWebSocket = (versionId) => {
             }
         } else {
             userStopLinsightEvent(versionId)
+            updateLinsight(versionId, (prev) => ({
+                ...prev,
+                tasks: prev.tasks.map(task => ({
+                    ...task,
+                    status: task.status === "in_progress" ? "terminated" : task.status,
+                    children: task.children
+                        ? task.children.map(child => ({
+                            ...child,
+                            status: child.status === "in_progress" ? "terminated" : child.status,
+                        }))
+                        : [],
+                })),
+            }));
         }
         toggleNav(true)
     }, [versionId])

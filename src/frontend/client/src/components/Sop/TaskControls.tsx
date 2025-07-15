@@ -40,15 +40,17 @@ export const TaskControls = ({ onStop, onFeedback, current, tasks, status }) => 
                     <div className='relative w-10/12 mx-auto'>
                         <div className={`${!showOverview && 'hidden'} absolute bottom-10 p-6 pb-14 w-full border rounded-2xl bg-white transition-all overflow-hidden`}>
                             <h1 className='font-bold mb-3'>任务规划</h1>
-                            {tasks?.map(task => <p key={task.id} className='text-sm leading-7'>{task.name}</p>)}
+                            {tasks?.map((task, i) => <p key={task.id} className='text-sm leading-7'>{i + 1}. {task.name}</p>)}
                         </div>
 
                         {status === SopStatus.Running ? <div className='linsight-card w-full relative'>
                             <div className='flex justify-between'>
                                 <div className='flex items-center'>
-                                    <span className='whitespace-nowrap bg-[#EEF3FF] border border-[#9EAEFF] px-2 py-1 rounded-md text-primary text-xs'>
-                                        任务阶段 {step}/{tasks?.length}
-                                    </span>
+                                    {
+                                        tasks?.length > 0 && <span className='whitespace-nowrap bg-[#EEF3FF] border border-[#9EAEFF] px-2 py-1 rounded-md text-primary text-xs'>
+                                            任务阶段 {step}/{tasks?.length}
+                                        </span>
+                                    }
                                     <span className="pl-4 text-sm">{current?.name || ''}</span>
                                 </div>
 
@@ -63,14 +65,21 @@ export const TaskControls = ({ onStop, onFeedback, current, tasks, status }) => 
                                 </div>
                             </div>
                         </div> :
-                            <div className='linsight-card w-full relative'>
-                                <div className='flex items-center text-sm'>
-                                    <Check size={16} className='bg-emerald-500 p-0.5 rounded-full text-white mr-2' />
-                                    <span>任务已完成，评价任务帮助下次做得更好。</span>
+                            <div className='relative'>
+                                <div className={`absolute bottom-14 p-6 pt-3 pb-14 w-full border rounded-3xl bg-gradient-to-r from-[#C0FDD4] to-[#DFFFED]`}>
+                                    <div className='flex items-center text-sm'>
+                                        <Check size={16} className='bg-emerald-500 p-0.5 rounded-full text-white mr-2' />
+                                        <span>任务已完成</span>
+                                    </div>
                                 </div>
-                                <FeedbackComponent
-                                    onFeedback={feedback}
-                                />
+                                <div className='linsight-card w-full relative'>
+                                    <div className='flex items-center text-sm'>
+                                        <span>请评价任务，帮助灵思下次做得更好。</span>
+                                    </div>
+                                    <FeedbackComponent
+                                        onFeedback={feedback}
+                                    />
+                                </div>
                             </div>
                         }
                     </div>
