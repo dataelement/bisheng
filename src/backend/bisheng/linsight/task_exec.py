@@ -198,7 +198,7 @@ class LinsightWorkflowTask:
     async def _download_file(self, file_info: dict, target_dir: str) -> str:
         """下载单个文件"""
         object_name = file_info["markdown_file_path"]
-        file_name = file_info.get("markdown_file_name", os.path.basename(object_name))
+        file_name = file_info.get("markdown_filename", os.path.basename(object_name))
         file_path = os.path.join(target_dir, file_name)
 
         try:
