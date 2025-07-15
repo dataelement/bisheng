@@ -183,6 +183,15 @@ class SOPManageService:
             if workbench_conf.embedding_model is None or not workbench_conf.embedding_model.id:
                 vector_search = False
                 error_msg = "请联系管理员检查工作台向量检索模型状态"
+            else:
+                try:
+                    emb_model_id = workbench_conf.embedding_model.id
+                    embeddings = decide_embeddings(emb_model_id)
+                    await embeddings.aembed_query("test")
+                except Exception as e:
+                    logger.error(f"向量检索模型初始化失败: {str(e)}")
+                    vector_search = False
+                    error_msg = "请联系管理员检查工作台向量检索模型状态"
 
             # 创建文本分割器
             text_splitter = RecursiveCharacterTextSplitter()
