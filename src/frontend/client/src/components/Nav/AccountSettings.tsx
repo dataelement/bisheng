@@ -35,17 +35,19 @@ function AccountSettings() {
       >
         <div>12</div>
       </Select.Select> */}
+      <div className='h-4'></div>
       <div
-        className="border flex gap-2 text-sm px-3 py-2 mb-2 items-center rounded-xl border-[#4d6bfe] cursor-pointer hover:bg-[#eff6ff] dark:text-gray-50 dark:hover:bg-[#1e293b]"
+        className="flex gap-2 text-sm px-3 py-2 mb-2 items-center rounded-xl cursor-pointer hover:bg-[#EBEFF8]"
         onClick={() => setShowKnowledge(true)}
       >
         <FileText className="icon-md" />
         <div>个人知识库</div>
       </div>
+      <div className='h-[1px] bg-gray-200'></div>
       <Select.Select
         aria-label={localize('com_nav_account_settings')}
         data-testid="nav-user"
-        className="mt-text-sm flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-accent"
+        className="mt-text-sm mt-2 flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-[#EBEFF8]"
       >
         <div className="-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0">
           <div className="relative flex">

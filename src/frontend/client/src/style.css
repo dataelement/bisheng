@@ -2767,7 +2767,7 @@ button.scroll-convo {
   animation: rotate-border 3s linear infinite;
 }
 
-.linsight-vditor .vditor-toolbar{
+.linsight-vditor .vditor-toolbar {
   display: none;
 }
 
@@ -2779,18 +2779,31 @@ button.scroll-convo {
   padding: 2px 4px !important;
   word-break: break-all !important;
 }
-.linsight-vditor .vditor-reset{
-	font-size: 14px;
-	padding: 0 20px 40px 0 !important;
+
+.linsight-vditor .vditor-reset {
+  font-size: 14px;
+  padding: 0 20px 160px 0 !important;
+  scrollbar-color: transparent transparent;
 }
-.linsight-vditor .vditor-content{
-	min-height: 20px;
+
+.linsight-vditor .vditor-reset:hover{
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
 }
-.linsight-vditor .vditor-content p{
-	margin-bottom: 6px;
+.linsight-vditor .vditor-reset .vditor-wysiwyg__preview code.hljs {
+  /* display: none; */
+  color: #333;
+}
+
+.linsight-vditor .vditor-content {
+  min-height: 20px;
+}
+
+.linsight-vditor .vditor-content p {
+  margin-bottom: 6px;
   color: #343538;
 }
-.linsight-vditor pre.vditor-reset:focus{
+
+.linsight-vditor pre.vditor-reset:focus {
   background-color: transparent !important;
 }
 
@@ -2800,6 +2813,37 @@ button.scroll-convo {
   font-size: 14px;
   padding: 0 6px;
   border-radius: 4px;
+}
+
+/* hover展示滚动条 */
+.scroll-hover {
+  overflow: auto;
+  scrollbar-width: thin;
+  /* Firefox */
+  scrollbar-color: transparent transparent;
+  /* 滚动条滑块和轨道都透明 */
+}
+
+/* Webkit浏览器样式 */
+.scroll-hover::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: transparent;
+}
+
+.scroll-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+/* 悬停时显示滚动条 */
+.scroll-hover:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.scroll-hover:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+  /* Firefox悬停样式 */
 }
 
 @keyframes rotate-border {

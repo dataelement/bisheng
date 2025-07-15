@@ -101,7 +101,7 @@ export const useLinsightManager = () => {
             execute_feedback,
             summary: output_result?.answer,
             status: newStatus,
-            files: files.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })),
+            files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: buildTaskTree(tasks),
             file_list: output_result?.final_files || []
         }
@@ -172,48 +172,35 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
     const mockGenerateSop = (versionId: string, feedback?: string) => {
         console.log('Mock SSE started for version:', versionId, linsightSubmission);
-
-        // Mock generate_sop_content events
-        let content = '';
-        const mockContentInterval = setInterval(() => {
-            const mockData = { content: 'Mock SOP content chunk. @' };
-            content += mockData.content;
-            console.log('Mock generate_sop_content event:', mockData);
-            updateLinsight(versionId, {
-                sop: mockContent // content
-            });
-        }, 1000);
-
-        // Mock completion after 3 content chunks
-        setTimeout(() => {
-            clearInterval(mockContentInterval);
-            console.log('Mock sop_generate_complete event');
-            updateLinsight(versionId, {
-                status: SopStatus.SopGenerated,
-            });
-        }, 2000);
-
-        // Mock opening immediately
-        console.log('Mock connection opened');
-        setLoading(false);
+        setLoading(false)
         updateLinsight(versionId, {
             status: SopStatus.SopGenerating,
         })
 
-        // Return a cleanup function
-        return () => {
-            clearInterval(mockContentInterval);
-            console.log('Mock SSE cleanup');
-        };
+        setTimeout(() => {
+            updateLinsight(versionId, {
+                sop: mockContent
+            })
+        }, 2000)
+
+        setTimeout(() => {
+            updateLinsight(versionId, {
+                status: SopStatus.SopGenerated,
+            })
+        }, 3000)
     };
 
     // 生成会话
-    const generateSop = (versionId, feedback?: string) => {
-        // return mockGenerateSop(versionId, feedback)  // mock
+    const generateSop = (_versionId, feedback?: string) => {
+        // return mockGenerateSop(_versionId, feedback)  // mock
         const payload = {
-            linsight_session_version_id: versionId,
+            linsight_session_version_id: _versionId,
             feedback_content: feedback,
-            reexecute: !!feedback
+            reexecute: false
+        }
+        if (feedback) {
+            payload.previous_session_version_id = versionId
+            payload.reexecute = true
         }
 
         const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/generate-sop`, {
@@ -228,22 +215,31 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
         sse.addEventListener('generate_sop_content', (e: MessageEvent) => {
             const data = JSON.parse(e.data);
             content += data.content
-            updateLinsight(versionId, {
+            updateLinsight(_versionId, {
                 sop: content.replace('```markdown\n', '')
             })
         })
 
         sse.addEventListener('sop_generate_complete', (e: MessageEvent) => {
             // const data = JSON.parse(e.data);
-            updateLinsight(versionId, {
+            updateLinsight(_versionId, {
                 status: SopStatus.SopGenerated,
             })
+        })
+
+
+        sse.addEventListener('search_sop_error', (e: MessageEvent) => {
+            // const data = JSON.parse(e.data);
+            showToast({
+                message: e.data,
+                status: 'warning',
+            });
         })
 
         sse.addEventListener('open', () => {
             console.log('connection is opened');
             setLoading(false)
-            updateLinsight(versionId, {
+            updateLinsight(_versionId, {
                 status: SopStatus.SopGenerating,
             })
         });
@@ -255,7 +251,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                 status: 'error',
             });
             setLoading(false)
-            updateLinsight(versionId, {
+            updateLinsight(_versionId, {
                 status: SopStatus.SopGenerating,
             })
         })
@@ -297,7 +293,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                     setVersionId(versionId)
                     setVersions((prevVersions) => [{
                         id: versionId,
-                        name: linsight_session_version.version
+                        name: linsight_session_version.version.replace('T', ' ')
                     }, ...prevVersions])
 
                     // replaceUrl
@@ -305,8 +301,8 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
                     createLinsight(versionId, {
                         status: SopStatus.SopGenerating, //linsight_session_version.status,
-                        tools: tools, // TODO 补充文件
-                        files: linsight_session_version.files.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })),
+                        tools: tools,
+                        files: linsight_session_version.files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
                         user_id: linsight_session_version.user_id,
                         question: linsightSubmission.question,
                         org_knowledge_enabled: false,

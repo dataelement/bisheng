@@ -95,7 +95,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 任务流
             </div>
 
-            <div ref={flowScrollRef} className='relative flex-1 pb-40 min-h-0 overflow-auto'>
+            <div ref={flowScrollRef} className='relative flex-1 pb-40 min-h-0 scroll-hover'>
                 {!showTask && (
                     <div className='flex flex-col h-full justify-center text-center bg-gradient-to-b from-[#F4F8FF] to-white'>
                         <div className='size-10 mx-auto'>
