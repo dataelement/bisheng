@@ -125,6 +125,7 @@ class TaskManage(BaseModel):
                 "name": "call_user_help",
                 "description": "在你需要用户帮助或确认内容的时候调用此工具，例如解决问题的规划，执行一个比较耗时的操作，并且请说明需要人类确认的原因。",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "_call_reason": {
                             "type": "string",
@@ -134,8 +135,7 @@ class TaskManage(BaseModel):
                 },
                 "required": [
                     "_call_reason"
-                ],
-                "type": "object"
+                ]
             }
         })
         return res
