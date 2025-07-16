@@ -356,7 +356,7 @@ const fetchData = async (params: {
     }, [activeToolTab, initialized]);
 
     const [selectedItems, setSelectedItems] = useState([]);
-    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: '' });
     const handleSearch = (keyword: string, resetPage: boolean = false) => {
         const newKeywords = keyword;
         const newPage = resetPage || newKeywords.trim() === '' ? 1 : page;
@@ -453,6 +453,7 @@ const handlePageChange = (newPage: number) => {
         keyword: keywords,
         pageSize
     };
+console.log(sortConfig);
 
     if (sortConfig && sortConfig.direction) {
         requestParams.sort = sortConfig.direction;
