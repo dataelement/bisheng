@@ -132,9 +132,9 @@ const SopTable = ({
                                                     {item.description}
                                                 </div>
                                             </TooltipTrigger>
-                                            <TooltipContent>
-                                                <p>{item.description}</p>
-                                            </TooltipContent>
+                                               <TooltipContent className="max-w-[900px] break-words whitespace-normal">
+                                                    <p className="text-sm">{item.description}</p>
+                                                </TooltipContent>
                                         </Tooltip>
                                     </TooltipProvider>
                                 </td>

@@ -226,11 +226,14 @@ const fetchData = async (params: {
             page_size: params.pageSize,
             page: params.page,
             keywords: params.keyword || keywords,
-            sort: params.sort // 传递排序参数
+            sort: params.sort,
         });
 
         setDatalist(res.items || []);
-        setTotal(res.total || 0);
+
+            const hasItems = res.items && res.items.length > 0;
+            const calculatedTotal = hasItems ? Math.max(res.total || 0, (params.page || page) * pageSize) : 0;
+              setTotal(calculatedTotal);
     } catch (error) {
         console.error('请求失败:', error);
         toast({ variant: 'error', description: '请求失败，请稍后重试' });
@@ -466,25 +469,24 @@ const handleBatchDelete = async () => {
         const newTotalPages = Math.ceil(newTotal / pageSize);
         let newPage = page;
 
-        // 如果当前页所有数据都被删除
         if (datalist.length === selectedItems.length) {
             if (page > 1) {
                 newPage = page - 1;
             } else if (newTotal > 0) {
-                newPage = 1; // 首页还有数据
+                newPage = 1;
             }
         }
 
         setTotal(newTotal);
         setSelectedItems([]);
-
-        // 更新页码输入框的值
         setPageInputValue(newPage.toString());
 
+        // 确保传递所有必要参数
         fetchData({
             page: newPage,
-            pageSize,
+            pageSize: pageSize,
             keyword: keywords,
+            sort: sortConfig?.direction
         });
 
         toast({ variant: 'success', description: `成功删除 ${selectedItems.length} 个 SOP` });
@@ -542,7 +544,12 @@ const handleSelectAll = useCallback(() => {
             }
 
             setIsDrawerOpen(false);
-            fetchData(); // 刷新列表
+               fetchData({ 
+            page: 1, 
+            pageSize: 10, 
+            keyword: keywords,
+            sort: sortConfig?.direction 
+        }); // 刷新列表
             resetSopForm(); // 重置表单
         } catch (error) {
             console.error('保存SOP失败:', error);
@@ -573,43 +580,55 @@ const handleSelectAll = useCallback(() => {
         setIsDrawerOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        bsConfirm({
-            title: '删除确认',
-            desc: '确认删除该SOP吗？',
-            showClose: true,
-            okTxt: '确认删除',
-            canelTxt: '取消',
-            onOk(next) {
-                sopApi.deleteSop(id)
-                    .then(() => {
-                        toast({
-                            variant: 'success',
-                            description: 'SOP删除成功'
-                        });
-
-                        // 从 selectedItems 中移除被删除的 SOP ID
-                        setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
-                        if (datalist.length === 1 && page > 1) {
-                            setPage(page - 1);
-                        } else {
-                            fetchData();
-                        }
-                        next();
-                    })
-                    .catch(error => {
-                        console.error('删除SOP失败:', error);
-                        toast({
-                            variant: 'error',
-                            description: '删除失败',
-                            details: error.message || '请稍后重试'
-                        });
+ const handleDelete = (id: string) => {
+    bsConfirm({
+        title: '删除确认',
+        desc: '确认删除该SOP吗？',
+        showClose: true,
+        okTxt: '确认删除',
+        canelTxt: '取消',
+        onOk(next) {
+            sopApi.deleteSop(id)
+                .then(() => {
+                    toast({
+                        variant: 'success',
+                        description: 'SOP删除成功'
                     });
-            },
-            onCancel() {
-            }
-        });
-    };
+
+                    setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
+                    
+                    // 修复这里 - 确保传递正确的参数
+                    if (datalist.length === 1 && page > 1) {
+                        setPage(page - 1);
+                        fetchData({
+                            page: page - 1,
+                            pageSize: pageSize,
+                            keyword: keywords,
+                            sort: sortConfig?.direction
+                        });
+                    } else {
+                        fetchData({
+                            page: page,
+                            pageSize: pageSize,
+                            keyword: keywords,
+                            sort: sortConfig?.direction
+                        });
+                    }
+                    next();
+                })
+                .catch(error => {
+                    console.error('删除SOP失败:', error);
+                    toast({
+                        variant: 'error',
+                        description: '删除失败',
+                        details: error.message || '请稍后重试'
+                    });
+                });
+        },
+        onCancel() {
+        }
+    });
+};
 
     const toggleGroup = useCallback((group: any, checked: boolean) => {
         setSelectedTools(prev => {
