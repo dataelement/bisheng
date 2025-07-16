@@ -579,3 +579,7 @@
 .bs-mkdown :where(.bs-mkdown > :last-child):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
     margin-bottom: 0;
 }
+
+.bs-mkdown svg g[data-mml-node="merror"], .bs-mkdown .mathjax-error {
+    opacity: 0;
+}

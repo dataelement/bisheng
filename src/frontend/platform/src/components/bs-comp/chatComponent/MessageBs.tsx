@@ -1,20 +1,16 @@
+import { ToastIcon } from "@/components/bs-icons";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
-import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
+import { cname } from "@/components/bs-ui/utils";
+import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeMathjax from "rehype-mathjax";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { ChevronDown } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
-import { ChevronDown } from "lucide-react";
-import { cname } from "@/components/bs-ui/utils";
-import { ToastIcon } from "@/components/bs-icons";
 
 // 颜色列表
 const colorList = [
@@ -65,49 +61,9 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
     ]
 
     const message = useMemo(() => {
-        const msg = data.message[data.chatKey] || data.message
-        return msg.replaceAll('$$', '$')
+        return data.message[data.chatKey] || data.message
     }, [data.message])
 
-    const mkdown = useMemo(
-        () => (
-            <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeMathjax]}
-                linkTarget="_blank"
-                className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer "
-                components={{
-                    code: ({ node, inline, className, children, ...props }) => {
-                        if (children.length) {
-                            if (children[0] === "▍") {
-                                return (<span className="form-modal-markdown-span"> ▍ </span>);
-                            }
-
-                            if (typeof children[0] === "string") {
-                                children[0] = children[0].replace("▍", "▍");
-                            }
-                        }
-
-                        const match = /language-(\w+)/.exec(className || "");
-
-                        return !inline ? (
-                            <CodeBlock
-                                key={Math.random()}
-                                language={(match && match[1]) || ""}
-                                value={String(children).replace(/\n$/, "")}
-                                {...props}
-                            />
-                        ) : (
-                            <code className={className} {...props}> {children} </code>
-                        );
-                    },
-                }}
-            >
-                {message}
-            </ReactMarkdown>
-        ),
-        [data.message]
-    )
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
@@ -137,7 +93,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                             </div>}
                         {data.message.toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {mkdown}
+                                {<MessageMarkDown message={message} />}
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                                 {/* 光标 */}
