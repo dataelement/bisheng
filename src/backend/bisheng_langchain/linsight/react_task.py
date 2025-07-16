@@ -107,7 +107,7 @@ class ReactTask(BaseTask):
             }
             await self.put_event(ExecStep(task_id=self.id,
                                           call_id=generate_uuid_str(),
-                                          call_reason=thinking,
+                                          call_reason=response_json.get("调用原因", ""),
                                           name=action,
                                           params=params,
                                           output=str(generate_content),
