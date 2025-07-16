@@ -214,28 +214,30 @@ export default function index() {
         return [...new Set([...searchExpanded, ...manuallyExpandedItems])];
     }, [filteredTools, toolSearchTerm, manuallyExpandedItems]);
 
-    const fetchData = async (params = {}) => {
-        setLoading(true);
-        try {
-            const res = await sopApi.getSopList({
-                page_size: params.pageSize || pageSize,
-                page: params.page || page,
-                keywords: params.keyword || keywords
-            });
+const fetchData = async (params: {
+    page: number;
+    pageSize: number;
+    keyword?: string;
+    sort?: 'asc' | 'desc';
+}) => {
+    setLoading(true);
+    try {
+        const res = await sopApi.getSopList({
+            page_size: params.pageSize,
+            page: params.page,
+            keywords: params.keyword || keywords,
+            sort: params.sort // 传递排序参数
+        });
 
-            setDatalist(res.items || []);
-
-            const hasItems = res.items && res.items.length > 0;
-            const calculatedTotal = hasItems ? Math.max(res.total || 0, (params.page || page) * pageSize) : 0;
-
-            setTotal(calculatedTotal);
-        } catch (error) {
-            console.error('请求失败:', error);
-            toast({ variant: 'error', description: '搜索失败，请稍后重试' });
-        } finally {
-            setLoading(false);
-        }
-    };
+        setDatalist(res.items || []);
+        setTotal(res.total || 0);
+    } catch (error) {
+        console.error('请求失败:', error);
+        toast({ variant: 'error', description: '请求失败，请稍后重试' });
+    } finally {
+        setLoading(false);
+    }
+};
     useEffect(() => {
         fetchData({ page: 1, pageSize: 10, keyword: '' });
     }, []);
@@ -312,20 +314,6 @@ export default function index() {
             navigate('/build/apps');
             return;
         }
-        const processToolsConfig = (toolsConfig) => {
-            return toolsConfig.flatMap(tool => {
-                if (tool.children?.length) {
-                    return tool.children.map(child => ({
-                        ...child,
-                        parentId: tool.id
-                    }));
-                }
-                return {
-                    ...tool,
-                    parentId: null
-                };
-            });
-        };
         const loadInitialData = async () => {
             try {
                 const config = await getWorkstationConfigApi();
@@ -378,24 +366,12 @@ export default function index() {
 
         // 更新状态
         setKeywords(newKeywords);
+         setPageInputValue(newPage.toString());
         if (newPage !== page) {
             setPage(newPage);
         }
     };
-    const handlePageChange = (newPage: number) => {
-        if (newPage === page || loading) return;
-
-        const safeTotalPages = Math.max(1, Math.ceil(total / pageSize));
-
-        newPage = Math.max(1, Math.min(newPage, safeTotalPages));
-
-        setPage(newPage);
-        fetchData({
-            page: newPage,
-            keyword: keywords,
-            pageSize
-        });
-    };
+  
 
     const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -460,31 +436,70 @@ export default function index() {
                 setLoading(false);
             });
     };
+const handlePageChange = (newPage: number) => {
+    if (newPage === page || loading) return;
 
-    const handleBatchDelete = async () => {
-        try {
-            await sopApi.batchDeleteSop(selectedItems);
-            setSelectedItems([]);
-            toast({
-                variant: 'success',
-                description: `成功删除 ${selectedItems.length} 个SOP`
-            });
-            fetchData();
-        } catch (error) {
-            toast({
-                variant: 'error',
-                description: '删除失败，请稍后重试'
-            });
-        }
+    const safeTotalPages = Math.max(1, Math.ceil(total / pageSize));
+    newPage = Math.max(1, Math.min(newPage, safeTotalPages));
+
+    setPage(newPage);
+    setPageInputValue(newPage.toString());
+    
+    const requestParams: any = {
+        page: newPage,
+        keyword: keywords,
+        pageSize
     };
 
-    const handleSelectAll = () => {
-        if (selectedItems.length === datalist.length) {
-            setSelectedItems([]);
-        } else {
-            setSelectedItems(datalist.map(item => item.id));
+    if (sortConfig && sortConfig.direction) {
+        requestParams.sort = sortConfig.direction;
+
+    }
+
+    fetchData(requestParams);
+};
+const handleBatchDelete = async () => {
+    try {
+        await sopApi.batchDeleteSop(selectedItems);
+
+        const newTotal = total - selectedItems.length;
+        const newTotalPages = Math.ceil(newTotal / pageSize);
+        let newPage = page;
+
+        // 如果当前页所有数据都被删除
+        if (datalist.length === selectedItems.length) {
+            if (page > 1) {
+                newPage = page - 1;
+            } else if (newTotal > 0) {
+                newPage = 1; // 首页还有数据
+            }
         }
-    };
+
+        setTotal(newTotal);
+        setSelectedItems([]);
+
+        // 更新页码输入框的值
+        setPageInputValue(newPage.toString());
+
+        fetchData({
+            page: newPage,
+            pageSize,
+            keyword: keywords,
+        });
+
+        toast({ variant: 'success', description: `成功删除 ${selectedItems.length} 个 SOP` });
+    } catch (error) {
+        toast({ variant: 'error', description: '删除失败，请稍后重试' });
+    }
+};
+const handleSelectAll = useCallback(() => {
+    const currentPageIds = datalist.map(item => item.id);
+    if (currentPageIds.every(id => selectedItems.includes(id))) {
+        setSelectedItems(prev => prev.filter(id => !currentPageIds.includes(id)));
+    } else {
+        setSelectedItems(prev => [...new Set([...prev, ...currentPageIds])]);
+    }
+}, [datalist, selectedItems]);
     const [sopForm, setSopForm] = useState({
         id: '',
         name: '',
@@ -705,7 +720,7 @@ export default function index() {
                                         onClick={() => {
                                             bsConfirm({
                                                 title: '批量删除确认',
-                                                desc: `确认批量删除${selectedItems.length}个SOP吗？`,
+                                                desc: `确认批量删除所选SOP吗？`,
                                                 showClose: true,
                                                 okTxt: '确认删除',
                                                 canelTxt: '取消',
@@ -760,7 +775,7 @@ export default function index() {
                             <SopFormDrawer isDrawerOpen={isDrawerOpen} setIsDrawerOpen={setIsDrawerOpen} isEditing={isEditing} sopForm={sopForm} setSopForm={setSopForm} handleSaveSOP={handleSaveSOP} />
                         </div>
                     </div>
-                    <div className="flex justify-end gap-4 absolute bottom-4 right-4">
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={() => handleSave(formData)} />
                         <Button onClick={() => handleSave(formData)}>保存</Button>
                     </div>

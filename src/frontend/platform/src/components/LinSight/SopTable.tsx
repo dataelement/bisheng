@@ -47,7 +47,8 @@ const SopTable = ({
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <button
                                 type="button"
-                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 && selectedItems.length === datalist.length
+                                className={`h-4 w-4 rounded border flex items-center justify-center transition-colors ${datalist.length > 0 && 
+    datalist.every(item => selectedItems.includes(item.id)) 
                                         ? 'bg-blue-600 border-blue-600'
                                         : 'bg-white border-gray-300'
                                     }`}
@@ -55,9 +56,11 @@ const SopTable = ({
                                 onClick={(e) => {
                                     handleSelectAll();
                                 }}
-                                aria-pressed={datalist.length > 0 && selectedItems.length === datalist.length}
+                                aria-pressed={datalist.length > 0 && 
+    datalist.every(item => selectedItems.includes(item.id)) }
                             >
-                                {datalist.length > 0 && selectedItems.length === datalist.length && (
+                                {datalist.length > 0 && 
+    datalist.every(item => selectedItems.includes(item.id)) && (
                                     <Check className="w-3 h-3 text-white" />
                                 )}
                             </button>
