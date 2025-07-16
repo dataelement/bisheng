@@ -6,7 +6,7 @@ from typing import List, Optional, Any
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, HumanMessage, AIMessage
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
@@ -41,6 +41,7 @@ class BaseTask(BaseModel):
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
     target: str = Field(default='', description='任务目标')
+    display_target: str = Field(default='', validate_default=True, description='任务展示目标，给用户看的')
     sop: str = Field(default='', description='任务SOP，子任务的当前方法')
     node_loop: bool = Field(False, description='是否循环，循环的话需要生成子任务去执行')
     profile: str = Field(default='', description='任务角色')
@@ -56,6 +57,13 @@ class BaseTask(BaseModel):
     original_method: Optional[str] = Field(default='', description='整体任务方法')
     original_done: Optional[str] = Field(default='', description='已完成的内容')
     last_answer: Optional[str] = Field(default='', description='上一步骤的答案，暂无用处')
+
+    @field_validator("display_target", mode="before")
+    @classmethod
+    def auto_set_display_target(cls, v, values):
+        if v is None or v == "":
+            return values.data.get("target", "")
+        return v
 
     def get_task_info(self) -> dict:
         return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
@@ -180,6 +188,7 @@ class BaseTask(BaseModel):
         for one in sub_task_list:
             parent_info = self.model_dump(
                 exclude={"children", "history", "status", "target", "sop", "task_manager", "llm"})
+            display_target = one.get("当前目标", "")
             target = f'{one.get("当前目标", "")}\n{one.get("输出方法", "")}'
             if one.get("标题层级", ""):
                 target += f"\n标题层级要求: {one.get('标题层级', '')}"
@@ -197,6 +206,7 @@ class BaseTask(BaseModel):
                 "parent_id": self.id,
                 "task_manager": self.task_manager,
                 "llm": self.llm,
+                "display_target": display_target,
             })
             res.append(parent_info)
         return res
