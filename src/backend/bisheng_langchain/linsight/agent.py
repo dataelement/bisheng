@@ -13,7 +13,7 @@ from bisheng_langchain.linsight.const import TaskMode
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
-from bisheng_langchain.linsight.utils import extract_code_blocks, record_llm_prompt
+from bisheng_langchain.linsight.utils import record_llm_prompt, extract_json_from_markdown
 
 
 class LinsightAgent(BaseModel):
@@ -92,11 +92,7 @@ class LinsightAgent(BaseModel):
                               time.time() - start_time, self.debug_id)
 
         # 解析生成的任务json数据
-        json_str = extract_code_blocks(res.content)
-        try:
-            task = json.loads(json_str)
-        except json.decoder.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format in response: {res.content}")
+        task = extract_json_from_markdown(res.content)
         tasks = task.get('steps', [])
 
         return TaskManage.completion_task_tree_info(tasks)

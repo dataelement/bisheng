@@ -2,6 +2,7 @@
 import { Sheet, SheetContent, SheetTitle } from "@/components/bs-ui/sheet";
 import { Button } from '../bs-ui/button';
 import { useState, useRef, useEffect } from 'react';
+import { LoadIcon } from "../bs-icons/loading";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -22,7 +23,7 @@ const SopFormDrawer = ({
   });
   const nameInputRef = useRef(null);
   const contentInputRef = useRef(null);
-
+  const [isSubmitting, setIsSubmitting] = useState(false);
   // 各字段的最大字数限制
   const MAX_LENGTHS = {
     name: 500,      // 名称不超过500字
@@ -68,15 +69,18 @@ const SopFormDrawer = ({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (validateForm()) {
-      handleSaveSOP();
-    } else {
-      if (errors.name) {
-        nameInputRef.current?.focus();
-      } else if (errors.content) {
-        contentInputRef.current?.focus();
+      setIsSubmitting(true);
+      try {
+        await handleSaveSOP();
+      } catch (error) {
+        console.error('保存失败:', error);
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };
@@ -172,7 +176,19 @@ const SopFormDrawer = ({
               <div className="flex-shrink-0 px-4 py-4 border-t border-gray-200 flex justify-end space-x-3">
                 <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
                 {/* <Button type="submit">{isEditing ? '更新' : '创建'}</Button> */}
-                 <Button type="submit">保存</Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <LoadIcon className="animate-spin mr-2" />
+                      保存中...
+                    </>
+                  ) : (
+                    '保存'
+                  )}
+                </Button>
               </div>
             </form>
           </div>

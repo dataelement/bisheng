@@ -70,7 +70,7 @@ const LinsiTools = ({ tools, setTools }) => {
     //   const toolsRef = useRef<any>([])
     useEffect(() => {
         if (bsConfig) {
-            const tools = bsConfig.linsightConfig.tools
+            const tools = bsConfig.linsightConfig?.tools || []
             const newTools = tools.map(tool => ({
                 id: tool.id,
                 name: tool.name,

@@ -1,6 +1,7 @@
 import os
 import uuid
-from typing import Dict, List, Optional, AsyncGenerator, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
 from loguru import logger
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.workstation import WorkStationService
@@ -30,6 +31,23 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils.embedding import decide_embeddings
+
+
+@dataclass
+class TaskNode:
+    """任务节点，用于构建任务树"""
+    task: Any  # LinsightExecuteTask 对象
+    children: List['TaskNode'] = None
+
+    def __post_init__(self):
+        if self.children is None:
+            self.children = []
+
+    def to_dict(self) -> Dict:
+        """将任务节点转换为字典格式"""
+        task_dict = self.task.model_dump()
+        task_dict['children'] = [child.to_dict() for child in self.children]
+        return task_dict
 
 
 class LinsightWorkbenchImpl:
@@ -193,7 +211,7 @@ class LinsightWorkbenchImpl:
         except Exception as e:
             logger.error(f"生成任务标题失败: {str(e)}")
             return {
-                "task_title": None,
+                "task_title": "新对话",
                 "chat_id": chat_id,
                 "error_message": str(e)
             }
@@ -352,7 +370,7 @@ class LinsightWorkbenchImpl:
         history_summary = []
 
         if reexecute and previous_session_version_id:
-            execute_tasks = await cls.get_execute_task_detail(previous_session_version_id)
+            execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(previous_session_version_id)
 
             for task in execute_tasks:
                 if task.result:
@@ -417,7 +435,7 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def get_execute_task_detail(cls, session_version_id: str,
-                                      login_user: Optional[UserPayload] = None) -> List[LinsightExecuteTask]:
+                                      login_user: Optional[UserPayload] = None):
         """
         获取执行任务详情
 
@@ -429,7 +447,101 @@ class LinsightWorkbenchImpl:
             执行任务详情列表
         """
         execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
-        return execute_tasks or []
+
+        if not execute_tasks:
+            return []
+
+        # 1. 获取一级任务 parent_task_id 是 None 的任务
+        root_tasks = [task for task in execute_tasks if task.parent_task_id is None]
+
+        # 2. 根据previous_task_id与next_task_id排序一级任务
+        def sort_tasks_by_chain(tasks: List[Any]) -> List[Any]:
+            """
+            根据任务链排序任务列表
+            previous_task_id是None则是第一个任务，next_task_id是None则是最后一个任务
+            """
+            if not tasks:
+                return []
+
+            # 创建任务字典以便快速查找
+            task_dict = {task.id: task for task in tasks}
+
+            # 找到链的开始节点（previous_task_id 为 None）
+            start_tasks = [task for task in tasks if task.previous_task_id is None]
+
+            sorted_tasks = []
+
+            for start_task in start_tasks:
+                # 从每个开始节点构建任务链
+                current_task = start_task
+                chain = []
+
+                while current_task is not None:
+                    chain.append(current_task)
+                    # 通过next_task_id找到下一个任务
+                    next_task_id = current_task.next_task_id
+                    current_task = task_dict.get(next_task_id) if next_task_id else None
+
+                sorted_tasks.extend(chain)
+
+            # 处理可能存在的孤立任务（既没有previous也没有next指向它们）
+            processed_ids = {task.id for task in sorted_tasks}
+            orphan_tasks = [task for task in tasks if task.id not in processed_ids]
+            sorted_tasks.extend(orphan_tasks)
+
+            return sorted_tasks
+
+        # 排序一级任务
+        sorted_root_tasks = sort_tasks_by_chain(root_tasks)
+
+        # 3. 构建任务树 使用 parent_task_id 将子任务与父任务关联起来
+        def build_task_tree(parent_tasks: List[Any], all_tasks: List[Any]) -> List[TaskNode]:
+            """
+            构建任务树
+            """
+            # 创建任务映射
+            task_map = {task.id: task for task in all_tasks}
+
+            # 按父任务ID分组子任务
+            children_map = {}
+            for task in all_tasks:
+                if task.parent_task_id:
+                    if task.parent_task_id not in children_map:
+                        children_map[task.parent_task_id] = []
+                    children_map[task.parent_task_id].append(task)
+
+            def build_node(task: Any) -> TaskNode:
+                """递归构建任务节点"""
+                node = TaskNode(task=task)
+
+                # 获取子任务
+                child_tasks = children_map.get(task.id, [])
+
+                # 对子任务进行排序
+                sorted_child_tasks = sort_tasks_by_chain(child_tasks)
+
+                # 递归构建子节点
+                for child_task in sorted_child_tasks:
+                    child_node = build_node(child_task)
+                    node.children.append(child_node)
+
+                return node
+
+            # 构建根节点列表
+            root_nodes = []
+            for parent_task in parent_tasks:
+                root_node = build_node(parent_task)
+                root_nodes.append(root_node)
+
+            return root_nodes
+
+        # 构建任务树
+        task_tree = build_task_tree(sorted_root_tasks, execute_tasks)
+
+        # 4. 返回任务树的根节点列表
+        result = [node.to_dict() for node in task_tree]
+
+        return result
 
     @classmethod
     async def upload_file(cls, file: UploadFile) -> Dict:
@@ -662,7 +774,7 @@ class LinsightWorkbenchImpl:
     async def _get_history_summary(cls, session_version_id: str) -> List[str]:
         """获取历史摘要"""
         history_summary = []
-        execute_tasks = await cls.get_execute_task_detail(session_version_id)
+        execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
 
         for task in execute_tasks:
             if task.result:

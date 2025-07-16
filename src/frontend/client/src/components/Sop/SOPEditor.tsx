@@ -126,7 +126,7 @@ export const SOPEditor = ({ versionId, setIsLoading }) => {
                 SOP编辑器
             </div>
 
-            <div className='p-8 linsight-markdown flex-1 pb-40 min-h-0'>
+            <div className='p-8 linsight-markdown flex-1 min-h-0'>
                 <Markdown ref={markdownRef} value={linsight.sop} files={linsight.files} tools={linsight.tools} edit={showSopEdit} />
             </div>
 

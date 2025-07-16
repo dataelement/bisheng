@@ -235,6 +235,6 @@ SummarizeHistoryPrompt = """请基于以下对话历史记录尝试回答用户�
 {query}
 
 历史记录:
-{history}
+{history_str}
 
 回答："""
