@@ -260,6 +260,10 @@
 .file-vditor .vditor-content{
 	min-height: 20px;
 }
+/* 隐藏公式解析红字 */
+.vditor-reset--error{
+	opacity: 0; 
+}
 
 /* .react-flow.theme-attribution {
 	animation: scrollBackground 10s linear infinite;
