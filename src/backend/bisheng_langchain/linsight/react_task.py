@@ -98,7 +98,7 @@ class ReactTask(BaseTask):
 
         if step_type == "固定步骤":
             result_dict = {
-                "结束": is_end,
+                "结束": "True" if is_end else "False",
                 "思考": thinking,
                 "类型": step_type,
                 "行动": action,
@@ -146,7 +146,7 @@ class ReactTask(BaseTask):
                                               output=observation,
                                               status="end"))
             result_dict = {
-                "结束": is_end,
+                "结束": "True" if is_end else "False",
                 "思考": thinking,
                 "类型": "工具",
                 "行动": action,
