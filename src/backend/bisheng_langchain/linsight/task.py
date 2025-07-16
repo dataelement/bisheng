@@ -12,8 +12,8 @@ from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxS
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt
-from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks, generate_uuid_str, \
-    record_llm_prompt
+from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
+    record_llm_prompt, extract_json_from_markdown
 
 
 class BaseTask(BaseModel):
@@ -171,11 +171,7 @@ class BaseTask(BaseModel):
         messages = [HumanMessage(content=prompt)]
         res = await self._ainvoke_llm_without_tools(messages)
         # 解析生成的任务json数据
-        json_str = extract_code_blocks(res.content)
-        try:
-            sub_task = json.loads(json_str)
-        except json.decoder.JSONDecodeError:
-            raise ValueError(f"Invalid JSON format in sub task response: {res.content}")
+        sub_task = extract_json_from_markdown(res.content)
         original_query = sub_task.get("总体任务目标", "")
         original_method = f'{sub_task.get("总体方法", "")}\n{sub_task.get("可用资源", "")}'
         original_done = sub_task.get("已经完成的内容", "")

@@ -3,7 +3,7 @@ from enum import Enum
 # 工具 执行历史记录的buffer大小，token来计算
 DefaultToolBuffer = 20000
 # 单个任务最大执行步骤数，防止死循环
-MaxSteps = 50
+MaxSteps = 200
 
 
 class TaskStatus(Enum):

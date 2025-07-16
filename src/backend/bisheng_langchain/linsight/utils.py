@@ -11,6 +11,31 @@ tokenizer = AutoTokenizer.from_pretrained(os.path.join(os.path.dirname(__file__)
                                           trust_remote_code=True)
 
 
+def extract_json_from_markdown(markdown_code_block: str) -> dict:
+    """
+    从markdown代码块中提取JSON内容。
+    :param markdown_code_block: 包含JSON的markdown代码块字符串。
+    :return: 提取的JSON对象，如果没有找到则抛出异常。
+    """
+    # 定义正则表达式模式
+    json_pattern = r"```json\n(.*?)\n```"
+    # 使用 re.DOTALL 使 . 能够匹配换行符
+    matches = re.search(json_pattern, markdown_code_block, re.DOTALL)
+
+    if not matches:
+        try:
+            # 尝试直接解析整个markdown代码块为JSON
+            return json.loads(markdown_code_block)
+        except json.decoder.JSONDecodeError:
+            raise Exception(f"Invalid JSON format from response: {markdown_code_block}")
+
+    json_str = matches.group(1).strip()
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        raise Exception(f"Invalid JSON format from response: {json_str}")
+
+
 # 提取文本中的markdown代码块内容
 def extract_code_blocks(markdown_code_block: str) -> str | None:
     # 定义正则表达式模式

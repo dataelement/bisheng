@@ -25,7 +25,8 @@ class TaskManage(BaseModel):
     """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    tasks: list[dict | Task] = Field(default_factory=list, description='List of tasks managed by the task manager')
+    tasks: list[dict | Task] = Field(default_factory=list,
+                                     description='List of tasks managed by the task manager, not include sub task')
     task_map: dict[str, Task] = Field(default_factory=dict, description='Map of task IDs to Task instances')
     task_step_map: dict[str, Task] = Field(default_factory=dict, description='Map of step ID to Task instances')
     tools: list[BaseTool] = Field(default_factory=list, description='List of tools managed by the tool manager')
@@ -206,7 +207,6 @@ class TaskManage(BaseModel):
 
         """
         for task in tasks:
-            self.tasks.append(task)
             self.task_map[task.id] = task
 
     def get_step_answer(self, step_id: str) -> str:

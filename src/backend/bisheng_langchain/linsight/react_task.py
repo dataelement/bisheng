@@ -8,7 +8,8 @@ from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import NeedUserInput, ExecStep
 from bisheng_langchain.linsight.react_prompt import ReactSingleAgentPrompt, ReactLoopAgentPrompt
 from bisheng_langchain.linsight.task import BaseTask
-from bisheng_langchain.linsight.utils import encode_str_tokens, extract_code_blocks, generate_uuid_str
+from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
+    extract_json_from_markdown
 
 
 class ReactTask(BaseTask):
@@ -74,14 +75,7 @@ class ReactTask(BaseTask):
         return [HumanMessage(content=prompt)]
 
     async def parse_react_result(self, content: str) -> (BaseMessage, bool):
-        response_json = extract_code_blocks(content)
-        try:
-            response_json = json.loads(response_json)
-        except json.decoder.JSONDecodeError:
-            try:
-                response_json = json.loads(content)
-            except json.decoder.JSONDecodeError:
-                raise Exception("无法从模型返回的数据中提取出JSON格式的数据: " + content)
+        response_json = extract_json_from_markdown(content)
         step_type = response_json.get("类型", "未知")
         thinking = response_json.get("思考", "未提供思考过程")
         action = response_json.get("行动", "")
