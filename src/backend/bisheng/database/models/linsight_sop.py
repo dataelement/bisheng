@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List, Literal
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import Column, Text, DateTime, text, String, CHAR, ForeignKey
+from sqlalchemy import Column, Text, DateTime, text, CHAR, ForeignKey
 from sqlmodel import Field, select, delete, col
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
@@ -15,7 +15,7 @@ class LinsightSOPBase(SQLModelSerializable):
     """
     Inspiration SOP模型基类
     """
-    name: str = Field(..., description='SOP名称', sa_column=Column(String(256), index=True, nullable=False))
+    name: str = Field(..., description='SOP名称', sa_column=Column(Text, nullable=False))
     description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOP内容',
@@ -145,3 +145,14 @@ class LinsightSOPDao(LinsightSOPBase):
             result = await session.exec(statement)
             sop = result.first()
             return sop if sop else None
+
+    @classmethod
+    async def get_sop_by_vector_store_ids(cls, vector_store_ids: List[str]) -> List[LinsightSOP]:
+        """
+        根据向量存储ID列表获取SOP对象
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightSOP).where(col(LinsightSOP.vector_store_id).in_(vector_store_ids))
+            result = await session.exec(statement)
+            sop_list = result.all()
+            return sop_list

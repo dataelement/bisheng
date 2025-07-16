@@ -1,8 +1,8 @@
+import asyncio
 import uuid
 from typing import List
 from loguru import logger
 from langchain_core.documents import Document
-from llama_index.readers.deeplake import vector_search
 
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -167,7 +167,7 @@ class SOPManageService:
 
     # sop 库检索
     @classmethod
-    async def search_sop(cls, query: str, k: int = 1) -> (List[Document], str | None):
+    async def search_sop(cls, query: str, k: int = 3) -> (List[Document], str | None):
         """
         搜索SOP
         :param k:
@@ -208,9 +208,10 @@ class SOPManageService:
                     SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
                 )
 
-                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": k},
+                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": 100},
                                                      text_splitter=text_splitter)
-                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client, search_kwargs={"k": k},
+                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client,
+                                                                    search_kwargs={"k": 100},
                                                                     text_splitter=text_splitter)
 
                 retrievers = [keyword_retriever, baseline_vector_retriever]
@@ -220,7 +221,7 @@ class SOPManageService:
                 es_client: ElasticKeywordsSearch = decide_vectorstores(
                     SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
                 )
-                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": k},
+                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": 100},
                                                      text_splitter=text_splitter)
                 retrievers = [keyword_retriever]
 
@@ -233,7 +234,8 @@ class SOPManageService:
                     SOPManageService.collection_name, "Milvus", embeddings
                 )
 
-                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client, search_kwargs={"k": k},
+                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client,
+                                                                    search_kwargs={"k": 100},
                                                                     text_splitter=text_splitter)
                 retrievers = [baseline_vector_retriever]
             else:
@@ -245,7 +247,24 @@ class SOPManageService:
             # 执行检索
             results = await retriever.ainvoke(input=query)
 
+            if not results:
+                return [], error_msg
+
+            vector_store_ids = [doc.metadata.get("vector_store_id") for doc in results if
+                                doc.metadata.get("vector_store_id")]
+
+            # 根据vector_store_ids查询库中的sop
+            sop_models = await LinsightSOPDao.get_sop_by_vector_store_ids(vector_store_ids)
+            sop_model_vector_store_ids = [sop.vector_store_id for sop in sop_models]
+
+            # 过滤结果，确保只返回存在于数据库中的SOP
+            results = [doc for doc in results if doc.metadata.get("vector_store_id") in sop_model_vector_store_ids]
+
+            # 过滤完取前k条结果
+            results = results[:k]
+
             return results, error_msg
         except Exception as e:
             logger.error(f"搜索SOP失败: {str(e)}")
             return [], f"SOP检索失败: {str(e)}"
+
