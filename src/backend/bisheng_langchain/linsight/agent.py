@@ -77,6 +77,7 @@ class LinsightAgent(BaseModel):
         one = None
         answer = ''
         async for one in self.llm.astream(sop_prompt):
+            answer += f"{one.content}"
             yield one
         if self.debug and one:
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
