@@ -1100,7 +1100,7 @@
     "api_params": [
       {
         "name": "query",
-        "description": "query to look up in Bing search",
+        "description": "Search query",
         "in": "query",
         "required": true,
         "schema": {
