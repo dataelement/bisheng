@@ -387,7 +387,7 @@ class LinsightWorkbenchImpl:
         """创建Linsight代理"""
         from bisheng_langchain.linsight.agent import LinsightAgent
 
-        root_path = os.path.join(CACHE_DIR, "linsight", session_version.id)
+        root_path = os.path.join(CACHE_DIR, "linsight", session_version.id[:8])
 
         return LinsightAgent(
             file_dir=root_path,
