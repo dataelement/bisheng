@@ -6,7 +6,7 @@ DefaultToolBuffer = 20000
 MaxSteps = 200
 RetryNum = 3  # 重试次数
 RetrySleep = 5  # 重试间隔时间（秒）
-
+CallUserInputToolName = "call_user_input"
 
 class TaskStatus(Enum):
     WAITING = 'waiting'  # 待执行

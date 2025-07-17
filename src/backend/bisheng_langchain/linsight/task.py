@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMe
 from langchain_openai.chat_models.base import _convert_message_to_dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, RetryNum, RetrySleep
+from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, RetryNum, RetrySleep, CallUserInputToolName
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt, SummarizeAnswerPrompt
@@ -379,7 +379,7 @@ class Task(BaseTask):
                     call_reason = tool_args.pop("call_reason") if "call_reason" in tool_args else ""
 
                     # 等待用户输入的特殊工具调用
-                    if tool_name == "call_user_input":
+                    if tool_name == CallUserInputToolName:
                         # 等待用户输入
                         self.status = TaskStatus.INPUT.value
                         await self.put_event(NeedUserInput(task_id=self.id, call_reason=call_reason))

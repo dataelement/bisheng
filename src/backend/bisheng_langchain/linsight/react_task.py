@@ -4,7 +4,7 @@ from datetime import datetime
 
 from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
 
-from bisheng_langchain.linsight.const import TaskStatus, RetryNum
+from bisheng_langchain.linsight.const import TaskStatus, RetryNum, CallUserInputToolName
 from bisheng_langchain.linsight.event import NeedUserInput, ExecStep
 from bisheng_langchain.linsight.react_prompt import ReactSingleAgentPrompt, ReactLoopAgentPrompt
 from bisheng_langchain.linsight.task import BaseTask
@@ -116,7 +116,7 @@ class ReactTask(BaseTask):
         else:
             _call_reason = params.pop("call_reason", "")
             # 等待用户输入的特殊工具调用
-            if action == "call_user_help":
+            if action == CallUserInputToolName:
                 # 等待用户输入
                 self.status = TaskStatus.INPUT.value
                 await self.put_event(NeedUserInput(task_id=self.id, call_reason=_call_reason))
