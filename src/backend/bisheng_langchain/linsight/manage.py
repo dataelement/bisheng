@@ -109,6 +109,8 @@ class TaskManage(BaseModel):
         res = []
         for one in self.tools:
             schema = convert_to_openai_tool(one)
+            if "_call_reason" in schema["function"]["parameters"]["properties"]:
+                continue
             # 所有的工具都加一个调用原因的字段
             schema["function"]["parameters"]["properties"]["_call_reason"] = {
                 "type": "string",

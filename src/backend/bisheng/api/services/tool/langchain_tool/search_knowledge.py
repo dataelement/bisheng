@@ -1,3 +1,4 @@
+import json
 from typing import Optional, Type
 
 from langchain_core.tools import BaseTool
@@ -17,11 +18,23 @@ class ToolInput(BaseModel):
     file_id: Optional[str] = Field(default=None, description='文件储存在语义检索库中的id')
     knowledge_id: Optional[str] = Field(default=None, description='知识库储存在语义检索库中的id')
     limit: Optional[int] = Field(default=2, description='返回结果的最大数量')
+    _call_reason: str = Field(default='', description='调用该工具的原因，原因中不要使用id来描述文件或知识库')
 
 
 class SearchKnowledgeBase(BaseTool):
     name: str = "search_knowledge_base"
-    description: str = "检索组织知识库、个人知识库以及本地上传文件的内容。"
+    description: str = """在语义检索库中搜索相关内容。
+
+        用法：在你需要从大量文件中或大文件中进行语义搜索时，调用此工具。file_id和knowledge_id只能输入其中一个。
+
+        Args:
+            query: 需要检索的关键词
+            file_id: 文件储存在语义检索库中的id
+            knowledge_id: 知识库储存在语义检索库中的id
+            limit: 返回结果的最大数量，默认为2
+
+        Returns:
+            包含搜索结果（chunk的列表）的字典"""
     args_schema: Type[BaseModel] = ToolInput
 
     def _run(self, query: str, file_id: Optional[str] = None, knowledge_id: Optional[str] = None,
@@ -34,12 +47,15 @@ class SearchKnowledgeBase(BaseTool):
         limit = kwargs.get('limit', None) or 2
         if not query:
             return ""
+        if file_id and file_id.strip() and knowledge_id and knowledge_id.strip():
+            raise Exception("只能提供file_id或knowledge_id其中一个参数，不能同时提供")
+
         if file_id and file_id.strip():
             return await self.search_linsight_file(query, file_id, limit)
         elif knowledge_id and knowledge_id.strip():
             return await self.search_knowledge(query, knowledge_id, limit)
         else:
-            return "must provide either file_id or knowledge_id to search"
+            raise Exception("必须提供file_id或knowledge_id其中一个参数来进行检索")
 
     async def search_linsight_file(self, query: str, file_id: str, limit: int) -> str:
         """检索Linsight用户上传的文件"""
@@ -66,8 +82,13 @@ class SearchKnowledgeBase(BaseTool):
         if not documents:
             # "没有找到相关的知识内容"
             return '{"状态": "无结果", "错误信息":"没有找到相关的知识内容"}'
-        result = "".join([one.page_content for one in documents])
-        return '{"状态": "成功", "结果": "%s"}' % result.replace('"', '\\"').replace('\n', '\\n')
+        result = {
+            "状态": "成功",
+            "结果": [one.page_content for one in documents]
+        }
+        result = json.dumps(result, ensure_ascii=False, indent=2)
+
+        return result
 
     async def search_knowledge(self, query: str, knowledge_id: str, limit: int) -> str:
         knowledge_info = KnowledgeDao.query_by_id(int(knowledge_id))
@@ -88,5 +109,10 @@ class SearchKnowledgeBase(BaseTool):
         if not documents:
             # "没有找到相关的知识内容"
             return '{"状态": "无结果", "错误信息":"没有找到相关的知识内容"}'
-        result = "".join([one.page_content for one in documents])
-        return '{"状态": "成功", "结果": "%s"}' % result.replace('"', '\\"').replace('\n', '\\n')
+        result = {
+            "状态": "成功",
+            "结果": [one.page_content for one in documents]
+        }
+        result = json.dumps(result, ensure_ascii=False, indent=2)
+
+        return result
