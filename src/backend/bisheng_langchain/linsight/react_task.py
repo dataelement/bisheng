@@ -4,7 +4,7 @@ from datetime import datetime
 
 from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
 
-from bisheng_langchain.linsight.const import TaskStatus
+from bisheng_langchain.linsight.const import TaskStatus, RetryNum
 from bisheng_langchain.linsight.event import NeedUserInput, ExecStep
 from bisheng_langchain.linsight.react_prompt import ReactSingleAgentPrompt, ReactLoopAgentPrompt
 from bisheng_langchain.linsight.task import BaseTask
@@ -114,7 +114,7 @@ class ReactTask(BaseTask):
                                           status="end"))
             message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
         else:
-            _call_reason = params.pop("_call_reason", "")
+            _call_reason = params.pop("call_reason", "")
             # 等待用户输入的特殊工具调用
             if action == "call_user_help":
                 # 等待用户输入
@@ -174,7 +174,7 @@ class ReactTask(BaseTask):
             try:
                 message, is_end = await self.parse_react_result(res.content)
             except json.decoder.JSONDecodeError as e:
-                if json_decode_error >= 3:
+                if json_decode_error >= RetryNum:
                     raise e
                 json_decode_error += 1
                 continue

@@ -4,6 +4,8 @@ from enum import Enum
 DefaultToolBuffer = 20000
 # 单个任务最大执行步骤数，防止死循环
 MaxSteps = 200
+RetryNum = 3  # 重试次数
+RetrySleep = 5  # 重试间隔时间（秒）
 
 
 class TaskStatus(Enum):

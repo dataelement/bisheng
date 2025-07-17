@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMe
 from langchain_openai.chat_models.base import _convert_message_to_dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
+from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, RetryNum, RetrySleep
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt, SummarizeAnswerPrompt
@@ -85,7 +85,7 @@ class BaseTask(BaseModel):
             input_str = f"输入：\n{input_str}"
         return input_str
 
-    @retry_async(num_retries=3, delay=5, return_exceptions=False)
+    @retry_async(num_retries=RetryNum, delay=RetrySleep, return_exceptions=False)
     async def _ainvoke_llm(self, messages: list[BaseMessage]) -> BaseMessage:
         """
         Invoke the language model with the provided messages.
@@ -100,8 +100,8 @@ class BaseTask(BaseModel):
             record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
                               res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
         return res
-    
-    @retry_async(num_retries=3, delay=5, return_exceptions=False)
+
+    @retry_async(num_retries=RetryNum, delay=RetrySleep, return_exceptions=False)
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
         """
         Invoke the language model without tools.
@@ -183,9 +183,17 @@ class BaseTask(BaseModel):
                                              input_str=await self.get_input_str(),
                                              prompt=self.prompt)
         messages = [HumanMessage(content=prompt)]
-        res = await self._ainvoke_llm_without_tools(messages)
-        # 解析生成的任务json数据
-        sub_task = extract_json_from_markdown(res.content)
+        sub_task = None
+        for i in range(RetryNum):
+            res = await self._ainvoke_llm_without_tools(messages)
+            try:
+                # 解析生成的任务json数据
+                sub_task = extract_json_from_markdown(res.content)
+                break
+            except json.decoder.JSONDecodeError as e:
+                if i == RetryNum - 1:
+                    raise e
+                continue
         original_query = sub_task.get("总体任务目标", "")
         original_method = f'{sub_task.get("总体方法", "")}\n{sub_task.get("可用资源", "")}'
         original_done = str(sub_task.get("已经完成的内容", ""))
@@ -368,7 +376,7 @@ class Task(BaseTask):
                 for one in res.tool_calls:
                     tool_name = one.get("name")
                     tool_args = one.get("args")
-                    call_reason = tool_args.pop("_call_reason") if "_call_reason" in tool_args else ""
+                    call_reason = tool_args.pop("call_reason") if "call_reason" in tool_args else ""
 
                     # 等待用户输入的特殊工具调用
                     if tool_name == "call_user_input":

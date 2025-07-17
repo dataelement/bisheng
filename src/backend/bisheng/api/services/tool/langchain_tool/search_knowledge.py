@@ -18,7 +18,7 @@ class ToolInput(BaseModel):
     file_id: Optional[str] = Field(default=None, description='文件储存在语义检索库中的id')
     knowledge_id: Optional[str] = Field(default=None, description='知识库储存在语义检索库中的id')
     limit: Optional[int] = Field(default=2, description='返回结果的最大数量')
-    _call_reason: str = Field(default='', description='调用该工具的原因，原因中不要使用id来描述文件或知识库')
+    call_reason: str = Field(default='', description='调用该工具的原因，原因中不要使用id来描述文件或知识库')
 
 
 class SearchKnowledgeBase(BaseTool):
