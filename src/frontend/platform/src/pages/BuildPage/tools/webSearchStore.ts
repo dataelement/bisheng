@@ -3,14 +3,14 @@ import { create } from 'zustand'
 
 // webSearchStore.ts
 interface WebSearchConfig {
-  enabled: boolean
-  tool: string
-  bing: { api_key: string; base_url: string }
-  bocha: { api_key: string }
-  jina: { api_key: string }
-  serp: { api_key: string; engine: string }
-  tavily: { api_key: string }
-  prompt: string
+  type: string
+  config: {
+    bing: { api_key: string; base_url: string }
+    bocha: { api_key: string }
+    jina: { api_key: string }
+    serp: { api_key: string; engine: string }
+    tavily: { api_key: string }
+  }
 }
 
 interface WebSearchStore {

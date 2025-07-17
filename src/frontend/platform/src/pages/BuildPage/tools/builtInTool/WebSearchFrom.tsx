@@ -37,45 +37,30 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
             base_url: (value) => !value && 'Bing Search URL 不能为空'
         },
         bocha: {
-            api_key: (value) => !value && 'Bocha API Key 不能为空'
+            api_key: (value) => !value && 'API Key 不能为空'
         },
         jina: {
-            api_key: (value) => !value && 'Jina API Key 不能为空'
+            api_key: (value) => !value && 'API Key 不能为空'
         },
         serp: {
-            api_key: (value) => !value && 'Serp API Key 不能为空',
+            api_key: (value) => !value && 'API Key 不能为空',
             engine: (value) => !value && 'Search Engine 不能为空'
         },
         tavily: {
-            api_key: (value) => !value && 'Tavily API Key 不能为空'
+            api_key: (value) => !value && 'API Key 不能为空'
         }
         };
     const [allToolsConfig, setAllToolsConfig] = useState(() => {
-        return {
-            bing: {
-                ...defaultToolParams.bing,
-                ...(webSearchData?.bing || {})
-            },
-            bocha: {
-                ...defaultToolParams.bocha,
-                ...(webSearchData?.bocha || {})
-            },
-            jina: {
-                ...defaultToolParams.jina,
-                ...(webSearchData?.jina || {})
-            },
-            serp: {
-                ...defaultToolParams.serp,
-                ...(webSearchData?.serp || {})
-            },
-            tavily: {
-                ...defaultToolParams.tavily,
-                ...(webSearchData?.tavily || {})
-            },
+        return webSearchData?.config || {
+            bing: defaultToolParams.bing,
+            bocha: defaultToolParams.bocha,
+            jina: defaultToolParams.jina,
+            serp: defaultToolParams.serp,
+            tavily: defaultToolParams.tavily
         };
     });
 
-    const [selectedTool, setSelectedTool] = useState(webSearchData?.tool || 'bing');
+    const [selectedTool, setSelectedTool] = useState(webSearchData?.type || 'bing');
     const [formErrors, setFormErrors] = useState({});
 
  const handleToolChange = (tool) => {
@@ -84,23 +69,14 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
 };
     useEffect(() => {
         if (webSearchData) {
-            setAllToolsConfig({
-                bing: { ...defaultToolParams.bing, ...webSearchData.bing },
-                bocha: { ...defaultToolParams.bocha, ...webSearchData.bocha },
-                jina: {
-                    ...defaultToolParams.jina,
-                    ...webSearchData?.jina
-                },
-                serp: {
-                    ...defaultToolParams.serp,
-                    ...webSearchData?.serp
-                },
-                tavily: {
-                    ...defaultToolParams.tavily,
-                    ...webSearchData?.tavily
-                },
+            setAllToolsConfig(webSearchData.config || {
+                bing: defaultToolParams.bing,
+                bocha: defaultToolParams.bocha,
+                jina: defaultToolParams.jina,
+                serp: defaultToolParams.serp,
+                tavily: defaultToolParams.tavily
             });
-            setSelectedTool(webSearchData.tool || 'bing');
+            setSelectedTool(webSearchData.type || 'bing');
         }
     }, [webSearchData]);
 const handleParamChange = (e) => {
@@ -120,22 +96,23 @@ const handleParamChange = (e) => {
     }));
 };
 
-    const handleSubmit = (e) => {
+     const handleSubmit = (e) => {
         e.preventDefault();
-    const errors = {};
-    const currentToolRules = validationRules[selectedTool];
-    
-    Object.keys(currentToolRules).forEach(key => {
-        const error = currentToolRules[key](allToolsConfig[selectedTool][key]);
-        if (error) {
-            errors[key] = error;
-        }
-    });
+        const errors = {};
+        const currentToolRules = validationRules[selectedTool];
+        
+        Object.keys(currentToolRules).forEach(key => {
+            const error = currentToolRules[key](allToolsConfig[selectedTool][key]);
+            if (error) {
+                errors[key] = error;
+            }
+        });
 
-    if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
-        return;
-    }
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            return;
+        }
+
         const newConfig = {
             type: selectedTool,
             config: {
@@ -146,11 +123,10 @@ const handleParamChange = (e) => {
             tavily: allToolsConfig.tavily
         }
         };
-
         try {
             setConfig(newConfig);
             console.log('提交的数据:', newConfig);
-
+console.log("webSearchData 是否更新?", webSearchData);
             toast({
                 title: "保存成功",
                 variant: "success",
@@ -167,6 +143,8 @@ const handleParamChange = (e) => {
 
     const renderParams = () => {
         const currentTool = allToolsConfig[selectedTool];
+        console.log(currentTool,111);
+        
         if (!currentTool) return null;
 
         switch (selectedTool) {
