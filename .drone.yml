@@ -316,7 +316,6 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
 trigger:
   branch:
   - add_some_branch_you_need
-  - feat/2.0.0
   event:
   - push
    
