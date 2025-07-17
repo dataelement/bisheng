@@ -20,7 +20,7 @@ const defaultToolParams = {
     },
     serp: {
         api_key: '',
-        engine: ''
+        engine: 'baidu'
     },
     tavily: {
         api_key: ''
@@ -31,7 +31,25 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const { t } = useTranslation();
     const { toast } = useToast();
     const { config: webSearchData, setConfig } = useWebSearchStore();
-
+        const validationRules = {
+        bing: {
+            api_key: (value) => !value && 'Bing Subscription Key 不能为空',
+            base_url: (value) => !value && 'Bing Search URL 不能为空'
+        },
+        bocha: {
+            api_key: (value) => !value && 'Bocha API Key 不能为空'
+        },
+        jina: {
+            api_key: (value) => !value && 'Jina API Key 不能为空'
+        },
+        serp: {
+            api_key: (value) => !value && 'Serp API Key 不能为空',
+            engine: (value) => !value && 'Search Engine 不能为空'
+        },
+        tavily: {
+            api_key: (value) => !value && 'Tavily API Key 不能为空'
+        }
+        };
     const [allToolsConfig, setAllToolsConfig] = useState(() => {
         return {
             bing: {
@@ -60,9 +78,10 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const [selectedTool, setSelectedTool] = useState(webSearchData?.tool || 'bing');
     const [formErrors, setFormErrors] = useState({});
 
-    const handleToolChange = (tool) => {
-        setSelectedTool(tool);
-    };
+ const handleToolChange = (tool) => {
+    setSelectedTool(tool);
+    setFormErrors({});
+};
     useEffect(() => {
         if (webSearchData) {
             setAllToolsConfig({
@@ -84,23 +103,48 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
             setSelectedTool(webSearchData.tool || 'bing');
         }
     }, [webSearchData]);
-    const handleParamChange = (e) => {
-        const { name, value } = e.target;
-        setAllToolsConfig(prev => ({
-            ...prev,
-            [selectedTool]: {
-                ...prev[selectedTool],
-                [name]: value
-            }
-        }));
-    };
+const handleParamChange = (e) => {
+    const { name, value } = e.target;
+    setAllToolsConfig(prev => ({
+        ...prev,
+        [selectedTool]: {
+            ...prev[selectedTool],
+            [name]: value
+        }
+    }));
+    
+    // 清除当前字段的错误
+    setFormErrors(prev => ({
+        ...prev,
+        [name]: undefined
+    }));
+};
 
     const handleSubmit = (e) => {
         e.preventDefault();
+    const errors = {};
+    const currentToolRules = validationRules[selectedTool];
+    
+    Object.keys(currentToolRules).forEach(key => {
+        const error = currentToolRules[key](allToolsConfig[selectedTool][key]);
+        if (error) {
+            errors[key] = error;
+        }
+    });
 
+    if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        return;
+    }
         const newConfig = {
-            tool: selectedTool,
-            ...allToolsConfig
+            type: selectedTool,
+            config: {
+            bing: allToolsConfig.bing,
+            bocha: allToolsConfig.bocha,
+            jina: allToolsConfig.jina,
+            serp: allToolsConfig.serp,
+            tavily: allToolsConfig.tavily
+        }
         };
 
         try {
@@ -134,7 +178,6 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             label="Bing Subscription Key"
                             type="password"
                             name="api_key"
-                            placeholder={t('build.enterSubscriptionKey')}
                             value={currentTool?.api_key || ''}
                             onChange={handleParamChange}
                             error={formErrors.api_key}
@@ -144,7 +187,6 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             required
                             label="Bing Search URL"
                             name="base_url"
-                            placeholder={t('build.enterSearchUrl')}
                             value={currentTool?.base_url || defaultToolParams.bing.base_url}
                             onChange={handleParamChange}
                             error={formErrors.base_url}
@@ -156,10 +198,9 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                 return (
                     <InputField
                         required
-                        label="Bocha API Key"
+                        label="API Key"
                         type="password"
                         name="api_key"
-                        placeholder={t('build.enterApiKey')}
                         value={currentTool?.api_key || ''}
                         onChange={handleParamChange}
                         error={formErrors.api_key}
@@ -170,10 +211,9 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                 return (
                     <InputField
                         required
-                        label="Jina API Key"
+                        label="API Key"
                         type="password"
                         name="api_key"
-                        placeholder={t('build.enterApiKey')}
                         value={currentTool?.api_key || ''}
                         onChange={handleParamChange}
                         error={formErrors.api_key}
@@ -185,10 +225,9 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                     <>
                         <InputField
                             required
-                            label="Serp API Key"
+                            label="API Key"
                             type="password"
                             name="api_key"
-                            placeholder={t('build.enterApiKey')}
                             value={currentTool?.api_key || ''}
                             onChange={handleParamChange}
                             error={formErrors.api_key}
@@ -198,8 +237,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                             required
                             label="Search Engine"
                             name="engine"
-                            placeholder="google, bing, etc."
-                            value={currentTool?.engine || ''}
+                            value={currentTool?.engine || 'baidu'}
                             onChange={handleParamChange}
                             error={formErrors.engine}
                             id="serp-engine"
@@ -210,10 +248,9 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                 return (
                     <InputField
                         required
-                        label="Tavily API Key"
+                        label="API Key"
                         type="password"
                         name="api_key"
-                        placeholder={t('build.enterApiKey')}
                         value={currentTool?.api_key || ''}
                         onChange={handleParamChange}
                         error={formErrors.api_key}
@@ -227,7 +264,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <SelectField
-                label="联网搜索工具选择"
+                label="联网搜索引擎"
                 value={selectedTool}
                 onChange={handleToolChange}
                 options={[

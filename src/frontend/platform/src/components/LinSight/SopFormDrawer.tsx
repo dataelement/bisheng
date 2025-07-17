@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/bs-ui/sheet";
 import { Button } from '../bs-ui/button';
 import { useState, useRef, useEffect } from 'react';
 import { LoadIcon } from "../bs-icons/loading";
+import { Input, Textarea } from "../bs-ui/input";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -114,8 +115,10 @@ const SopFormDrawer = ({
                 <label htmlFor="sop-name" className="block text-sm font-medium text-gray-700">
                   SOP名称<span className="text-red-500">*</span>
                 </label>
-                <input
+                < Input
                   type="text"
+                  showCount
+                  maxLength={500}
                   id="sop-name"
                   ref={nameInputRef}
                   value={sopForm.name}
@@ -127,9 +130,6 @@ const SopFormDrawer = ({
                   {errors.name && (
                     <p className="mt-1 text-sm text-red-600">{errors.name}</p>
                   )}
-                  <p className={`text-xs ${charCount.name > MAX_LENGTHS.name ? 'text-red-500' : 'text-gray-500'} text-right`}>
-                    {charCount.name}/{MAX_LENGTHS.name}
-                  </p>
                 </div>
               </div>
 
@@ -137,25 +137,24 @@ const SopFormDrawer = ({
                 <label htmlFor="sop-description" className="block text-sm font-medium text-gray-700">
                   描述
                 </label>
-                <textarea
+                <Textarea
                   id="sop-description"
+                    maxLength={1000}
                   rows={3}
                   value={sopForm.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="请输入SOP描述"
                 />
-                <p className={`text-xs ${charCount.description > MAX_LENGTHS.description ? 'text-red-500' : 'text-gray-500'} text-right`}>
-                  {charCount.description}/{MAX_LENGTHS.description}
-                </p>
               </div>
 
               <div>
                 <label htmlFor="sop-content" className="block text-sm font-medium text-gray-700">
                   详细内容<span className="text-red-500">*</span>
                 </label>
-                <textarea
+                <Textarea
                   id="sop-content"
+                  maxLength={50000}
                   ref={contentInputRef}
                   rows={6}
                   value={sopForm.content}
@@ -167,9 +166,7 @@ const SopFormDrawer = ({
                   {errors.content && (
                     <p className="mt-1 text-sm text-red-600">{errors.content}</p>
                   )}
-                  <p className={`text-xs ${charCount.content > MAX_LENGTHS.content ? 'text-red-500' : 'text-gray-500'} text-right`}>
-                    {charCount.content}/{MAX_LENGTHS.content}
-                  </p>
+                  
                 </div>
               </div>
 
