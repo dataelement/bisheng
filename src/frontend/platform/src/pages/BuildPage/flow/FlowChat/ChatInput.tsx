@@ -49,7 +49,6 @@ export default function ChatInput({ autoRun, clear, form, wsUrl, onBeforSend, on
         insetNodeRun,
         setShowGuideQuestion
     } = useMessageStore()
-    console.log('ui messages :>> ', messages);
 
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)

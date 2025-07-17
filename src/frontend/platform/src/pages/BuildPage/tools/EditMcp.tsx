@@ -38,9 +38,10 @@ const TestDialog = forwardRef((props, ref) => {
 
     const handleTest = async () => {
         // 校验必填参数
-        const requiredParams = Object.entries(toolData.inputSchema.properties)
-            .filter(([_, schema]) => schema.required)
-            .map(([name]) => name);
+        // const requiredParams = Object.entries(toolData.inputSchema.properties)
+        //     .filter(([_, schema]) => schema.required)
+        //     .map(([name]) => name);
+        const requiredParams = toolData.inputSchema.required
 
         const errors = requiredParams.filter(name => !params[name]);
         if (errors.length > 0) {

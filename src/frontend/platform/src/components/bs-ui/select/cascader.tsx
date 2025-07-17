@@ -35,18 +35,18 @@ interface IProps {
 
 const Item = (props: {
     isAsync: boolean,
-    value: string,
+    isSelected: boolean, // 新增选中状态
     option: Option,
     isHovered: boolean,
     onHover: (o: Option, isLeaf: boolean) => void,
     onClick: (o: Option, isLeaf: boolean) => void
 }) => {
-    const { isAsync, value, option, isHovered, onHover, onClick } = props
+    const { isAsync, isSelected, option, isHovered, onHover, onClick } = props
     const [loading, setLoading] = useState(false)
     const isLeaf = option.isLeaf === false ? option.isLeaf : !option.children || option.children.length === 0
 
     const handleClick = () => {
-        const _isAsync = isAsync && !(option.children && option.children.length !== 0) // 需要异步加载
+        const _isAsync = isAsync && !(option.children && option.children.length !== 0)
         _isAsync && !isLeaf && setLoading(true)
         onClick(option, isLeaf)
     }
@@ -56,7 +56,7 @@ const Item = (props: {
     }, [option.children])
 
     return <div
-        data-focus={value === option.value}
+        data-focus={isSelected} // 使用选中状态
         data-hovered={isHovered}
         className="relative flex justify-between w-full select-none items-center rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] data-[hovered=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 dark:data-[hovered=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
         onMouseEnter={() => onHover(option, isLeaf)}
@@ -68,12 +68,12 @@ const Item = (props: {
 
 const Col = (props: {
     isAsync: boolean,
-    value: string,
+    selectedValue: string | null, // 改为传递选中值
     options: Option[],
     onHover: (o: Option, isLeaf: boolean) => void,
     onClick: (o: Option, isLeaf: boolean) => void
 }) => {
-    const { options, value, ...opros } = props
+    const { options, selectedValue, ...opros } = props
     const [hoveredOption, setHoveredOption] = useState<Option | null>(null)
 
     const handleHover = (option: Option, isLeaf: boolean) => {
@@ -88,6 +88,7 @@ const Col = (props: {
                     {...opros}
                     option={option}
                     key={option.value}
+                    isSelected={selectedValue === option.value} // 传递选中状态
                     isHovered={hoveredOption?.value === option.value}
                     onHover={handleHover}
                 />
@@ -121,12 +122,10 @@ export default function Cascader({ error = false, selectClass = '', close = fals
 
     const [cols, setCols] = useState(() => resetCols(defaultValue, options))
 
-
     const selectOptionsRef = useRef([...defaultValue])
     const handleHover = (option, isLeaf, colIndex) => {
         setIsHover(true)
-        // // setValues([]) // 从新选择清空值
-        const isAsync = loadData && !(option.children && option.children.length !== 0) // 需要异步加载
+        const isAsync = loadData && !(option.children && option.children.length !== 0)
         if (!(isAsync || isLeaf)) {
             setCols(cols => {
                 const newCols = [...cols].slice(0, colIndex + 1)
@@ -134,17 +133,15 @@ export default function Cascader({ error = false, selectClass = '', close = fals
                 return newCols
             })
         }
-        // 记录链
         selectOptionsRef.current.splice(colIndex + 1)
         selectOptionsRef.current[colIndex] = option
     }
 
-    // options -> cols
     useEffect(() => {
         updateCols.current?.(options)
         updateCols.current = null
     }, [options])
-    // 更新函数
+
     const updateCols = useRef(null)
     const handleClick = (option, isLeaf) => {
         if (!isLeaf) {
@@ -155,13 +152,9 @@ export default function Cascader({ error = false, selectClass = '', close = fals
             updateCols.current = (options) => {
                 setCols(resetCols(selectOptions, options))
             }
-            // 加载数据
             return loadData(option)
         }
         const vals = selectOptionsRef.current.map(el => el.value)
-        if (!selectOptionsRef.current[0]) {
-
-        }
         setValues([...selectOptionsRef.current])
         onChange?.(vals, selectOptionsRef.current)
         setOpen(false)
@@ -182,7 +175,6 @@ export default function Cascader({ error = false, selectClass = '', close = fals
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={handleClearClick}
             />}
-            {/* <SelectValue placeholder={selectPlaceholder} >123</SelectValue> */}
         </SelectTrigger>
         <SelectContent auto>
             {cols.length
@@ -191,7 +183,7 @@ export default function Cascader({ error = false, selectClass = '', close = fals
                         cols.map((_options, index) => {
                             return <Col
                                 isAsync={loadData}
-                                value={isHover ? '' : values[index]?.value || ''}
+                                selectedValue={values[index]?.value || null} // 直接传递选中值
                                 options={_options}
                                 onHover={(op, isLeaf) => handleHover(op, isLeaf, index)}
                                 onClick={handleClick}
@@ -205,7 +197,6 @@ export default function Cascader({ error = false, selectClass = '', close = fals
         </SelectContent>
     </Select>
 };
-
 
 
 // test

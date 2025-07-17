@@ -94,7 +94,10 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
                 && setFileViewUrl({ load: false, url: currentFile.filePath })
         }).then(res => {
-            if (!res) return setLoading(false)
+            if (!res) {
+                setFileViewUrl({ load: false, url: '' })
+                return setLoading(false)
+            }
             if (res === 'canceled') return
             console.log("previewFileSplitApi:", res)
             res && setChunks(res.chunks.map(chunk => ({

@@ -575,7 +575,7 @@ const useNodeEvent = (flow) => {
             ([inputNodeLs, outputNodeLs, branchNodeLs], line) => {
                 line.nodeIds.forEach(node => {
                     if (node.nodeId.startsWith('input')) {
-                        const inputNode = flow.nodes.find(_node => _node.id === node.nodeId && _node.data.tab.value === 'input');
+                        const inputNode = flow.nodes.find(_node => _node.id === node.nodeId && _node.data.tab.value === 'dialog_input');
                         // It is an input & ouput node and is different from the branch path in ids;
                         if (inputNode && !inputNodeLs.some(el => el.branch === inputNode.branch)) {
                             !nodeLMap[node.branch] && inputNodeLs.push(node);

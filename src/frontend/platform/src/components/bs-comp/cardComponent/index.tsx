@@ -184,10 +184,10 @@ export default function CardComponent<T>({
           ></Switch>
         </div>
       </div>
-      <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
+      <CardTitle className="truncate-doubleline leading-5 max-w-[280px]">{title}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
-      <CardDescription className="break-all">{description}</CardDescription>
+      <CardDescription className="break-all min-w-0">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2 self-end">
       {labelPannel}
