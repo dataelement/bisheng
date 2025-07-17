@@ -137,7 +137,10 @@ class ReactTask(BaseTask):
                                               name=action,
                                               params=params,
                                               status="start"))
-                observation = await self.task_manager.ainvoke_tool(action, params)
+                observation, flag = await self.task_manager.ainvoke_tool(action, params)
+                # 说明工具调用失败
+                if not flag:
+                    is_end = False
                 await self.put_event(ExecStep(task_id=self.id,
                                               call_id=call_id,
                                               call_reason=_call_reason,
@@ -170,7 +173,7 @@ class ReactTask(BaseTask):
             self.history.append(message)
             if is_end:
                 break
-        if is_end and isinstance(self.history[-1], AIMessage):
+        if is_end:
             self.status = TaskStatus.SUCCESS.value
         else:
             self.status = TaskStatus.FAILED.value

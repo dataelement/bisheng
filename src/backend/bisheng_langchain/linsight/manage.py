@@ -148,11 +148,12 @@ class TaskManage(BaseModel):
         """
         return json.dumps(self.get_all_tool_schema, ensure_ascii=False, indent=2)
 
-    async def ainvoke_tool(self, name: str, params: dict) -> str:
+    async def ainvoke_tool(self, name: str, params: dict) -> (str, bool):
         """
         Add a new tool to the tool manager.
         :param name: The name of the tool to be executed.
         :param params: The params of the tool to be invoked.
+        :return: A tuple containing the result of the tool execution and a boolean indicating success.
         """
         if name not in self.tool_map:
             return f"tool {name} exec error, because tool name is not found"
@@ -160,10 +161,10 @@ class TaskManage(BaseModel):
             res = await self.tool_map[name].ainvoke(input=params)
             if not isinstance(res, str):
                 res = str(res)
-            return res
+            return res, True
         except Exception as e:
             traceback.print_exc()
-            return f"tool {name} exec error, something went wrong: {str(e)[:20]}"
+            return f"tool {name} exec error, something went wrong: {str(e)[:20]}", False
 
     @classmethod
     def completion_task_tree_info(cls, original_task: list[dict]) -> list[dict]:
