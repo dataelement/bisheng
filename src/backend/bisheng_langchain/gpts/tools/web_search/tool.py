@@ -10,7 +10,7 @@ from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 
 
 class SearchInput(BaseModel):
-    query: str = Field(description="query to look up in Bing search")
+    query: str = Field(description="Search query")
 
 
 class SearchTool(ABC):
