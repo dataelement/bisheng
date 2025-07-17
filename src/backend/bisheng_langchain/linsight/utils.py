@@ -33,7 +33,7 @@ def extract_json_from_markdown(markdown_code_block: str) -> dict:
     try:
         return json.loads(json_str)
     except json.JSONDecodeError:
-        raise Exception(f"Invalid JSON format from response: {json_str}")
+        raise Exception(f"Invalid JSON format from json_str: {json_str}")
 
 
 # 提取文本中的markdown代码块内容

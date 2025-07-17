@@ -2,16 +2,18 @@ import asyncio
 import datetime
 import json
 import time
+from abc import abstractmethod
 from typing import List, Optional, Any
 
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage
+from langchain_openai.chat_models.base import _convert_message_to_dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
-    LoopAgentPrompt
+    LoopAgentPrompt, SummarizeAnswerPrompt
 from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
     record_llm_prompt, extract_json_from_markdown
 
@@ -33,6 +35,7 @@ class BaseTask(BaseModel):
     history: List[BaseMessage] = Field(default_factory=list, description='原始聊天记录，包含user、tool、AI消息')
     status: str = Field(TaskStatus.WAITING.value, description='任务状态')
     answer: list[Any] = Field(default_factory=list, description='任务答案，最终的结果')
+    summarize_answer: Optional[str] = Field(default=None, description='总结后的答案，主要用于其他任务获取最终结果')
     task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
     user_input: Optional[str] = Field(default=None, description='用户输入的内容')
     debug: bool = Field(default=False, description='是否是调试模式。开启后会记录llm的输入和输出')
@@ -68,14 +71,14 @@ class BaseTask(BaseModel):
     def get_task_info(self) -> dict:
         return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
 
-    def get_input_str(self) -> str:
+    async def get_input_str(self) -> str:
         if not self.input:
             return ""
         input_str = ""
         for key in self.input:
             if key == "query":
                 continue
-            step_answer = self.task_manager.get_step_answer(key)
+            step_answer = await self.task_manager.get_step_answer(key)
             input_str += f"{key}: \"{step_answer}\"\n"
         if input_str:
             input_str = f"输入：\n{input_str}"
@@ -174,7 +177,7 @@ class BaseTask(BaseModel):
         prompt = LoopAgentSplitPrompt.format(query=self.query, sop=self.sop,
                                              workflow=self.task_manager.get_workflow(),
                                              processed_steps=self.task_manager.get_processed_steps(),
-                                             input_str=self.get_input_str(),
+                                             input_str=await self.get_input_str(),
                                              prompt=self.prompt)
         messages = [HumanMessage(content=prompt)]
         res = await self._ainvoke_llm_without_tools(messages)
@@ -182,7 +185,7 @@ class BaseTask(BaseModel):
         sub_task = extract_json_from_markdown(res.content)
         original_query = sub_task.get("总体任务目标", "")
         original_method = f'{sub_task.get("总体方法", "")}\n{sub_task.get("可用资源", "")}'
-        original_done = sub_task.get("已经完成的内容", "")
+        original_done = str(sub_task.get("已经完成的内容", ""))
         sub_task_list = sub_task.get("任务列表", [])
         res = []
         for one in sub_task_list:
@@ -218,6 +221,10 @@ class BaseTask(BaseModel):
             raise RuntimeError('Task manager queue not initialized.')
         self.task_manager.aqueue.put_nowait(event)
 
+    @abstractmethod
+    async def _ainvoke(self):
+        raise NotImplementedError
+
     async def ainvoke(self) -> None:
         await self.put_event(TaskStart(task_id=self.id, name=self.profile))
         try:
@@ -231,10 +238,29 @@ class BaseTask(BaseModel):
                 TaskEnd(task_id=self.id, status=self.status, name=self.profile, answer=self.get_finally_answer(),
                         data=self.get_task_info()))
 
-    def get_answer(self) -> str:
-        if self.answer:
-            return "\n".join([str(one) for one in self.answer])
-        return ""
+    @abstractmethod
+    async def get_history_str(self) -> str:
+        raise NotImplementedError
+
+    async def get_answer(self) -> str:
+        if not self.answer:
+            return ""
+
+        if self.summarize_answer:
+            return self.summarize_answer
+
+        # 如果有子任务，直接返回子任务的答案即可
+        if self.children:
+            self.summarize_answer = "\n".join([str(one) for one in self.answer])
+            return self.summarize_answer
+
+        prompt_str = SummarizeAnswerPrompt.format(history_str=await self.get_history_str(),
+                                                  workflow=self.task_manager.get_workflow(),
+                                                  step_id=self.step_id,
+                                                  depend_step=self.task_manager.get_depend_step(self.step_id))
+        res = await self._ainvoke_llm_without_tools([HumanMessage(content=prompt_str)])
+        self.summarize_answer = res.content
+        return self.summarize_answer
 
     def get_finally_answer(self) -> str:
         """
@@ -254,7 +280,13 @@ class Task(BaseTask):
     including its ID, name, description, and status.
     """
 
-    def build_system_message(self) -> BaseMessage:
+    async def get_history_str(self) -> str:
+        history_list = await self.build_messages_with_history()
+        # 首条是sop的描述，不需要
+        history_list = history_list[1:]
+        return json.dumps([_convert_message_to_dict(one) for one in history_list], ensure_ascii=False, indent=2)
+
+    async def build_system_message(self) -> BaseMessage:
         """
         Build the system message for the task.
         :return: The system message as a BaseMessage object.
@@ -280,15 +312,15 @@ class Task(BaseTask):
                                               sop=self.finally_sop,
                                               workflow=self.task_manager.get_workflow(),
                                               processed_steps=self.task_manager.get_processed_steps(),
-                                              input_str=self.get_input_str(),
+                                              input_str=await self.get_input_str(),
                                               step_id=self.step_id,
                                               target=self.target,
                                               single_sop=self.sop)
-        return SystemMessage(content=prompt)
+        return HumanMessage(content=prompt)
 
     async def build_messages_with_history(self) -> list[BaseMessage]:
         messages = []
-        system_message = self.build_system_message()
+        system_message = await self.build_system_message()
         messages.append(system_message)
 
         if not self.history:

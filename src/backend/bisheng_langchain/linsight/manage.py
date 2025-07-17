@@ -209,11 +209,11 @@ class TaskManage(BaseModel):
         for task in tasks:
             self.task_map[task.id] = task
 
-    def get_step_answer(self, step_id: str) -> str:
+    async def get_step_answer(self, step_id: str) -> str:
         """ 获取某个步骤的答案 """
         if step_id not in self.task_step_map:
             return ""
-        return self.task_step_map[step_id].get_answer()
+        return await self.task_step_map[step_id].get_answer()
 
     def get_processed_steps(self):
         """Get the steps that have been processed."""
@@ -222,6 +222,13 @@ class TaskManage(BaseModel):
             if task.status == TaskStatus.SUCCESS.value:
                 success_steps.append(task.step_id)
         return "你现在已经完成了" + ",".join(success_steps) if success_steps else ''
+
+    def get_depend_step(self, step_id: str) -> str:
+        result = ""
+        for task in self.tasks:
+            if step_id in task.input:
+                result += f"{task.step_id},"
+        return result.rstrip(",")
 
     def get_workflow(self):
         res = []
