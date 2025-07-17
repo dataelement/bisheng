@@ -677,7 +677,7 @@ class LinsightWorkflowTask:
                 "file_name": os.path.basename(file),
                 "file_path": file,
                 "file_md5": file_md5,
-                "file_id": os.path.basename(file).split('.')[0]
+                "file_id": os.path.basename(file).rsplit('.', 1)[0]
             })
 
         return file_details
