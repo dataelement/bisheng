@@ -1,8 +1,7 @@
 import asyncio
 import os
 
-from langchain_community.chat_models import ChatTongyi
-from pydantic import SecretStr
+from langchain_openai import AzureChatOpenAI
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.linsight.sop_manage import SOPManageService
@@ -19,14 +18,14 @@ async def get_linsight_agent():
     qwen_api_key = os.environ.get('qwen_api_key')
     root_path = "/Users/zhangguoqing/works/bisheng/src/backend/bisheng_langchain/linsight/data"
 
-    chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
-                      model_kwargs={'incremental_output': True})
+    # chat = ChatTongyi(api_key=SecretStr(qwen_api_key), model="qwen-max-latest", streaming=True,
+    #                   model_kwargs={'incremental_output': True})
 
-    # chat = AzureChatOpenAI(azure_endpoint="https://ai-aoai05215744ai338141519445.cognitiveservices.azure.com/",
-    #                        api_key=azure_api_key,
-    #                        api_version="2024-12-01-preview",
-    #                        azure_deployment="gpt-4.1",
-    #                        max_retries=3)
+    chat = AzureChatOpenAI(azure_endpoint="https://ai-aoai05215744ai338141519445.cognitiveservices.azure.com/",
+                           api_key=azure_api_key,
+                           api_version="2024-12-01-preview",
+                           azure_deployment="gpt-4.1",
+                           max_retries=3)
 
     # 获取工作台配置的工具
     ws_config = await WorkStationService.aget_config()
@@ -40,7 +39,7 @@ async def get_linsight_agent():
     query = "分析该目录下的简历文件（仅限txt格式），挑选出符合要求的简历。要求包括：python代码能力强，有大模型相关项目经验，有热情、主动性高"
 
     agent = LinsightAgent(llm=chat, query=query, tools=used_tools, file_dir=root_path,
-                          task_mode=TaskMode.FUNCTION.value,
+                          task_mode=TaskMode.REACT.value,
                           debug=True, debug_id="zgq_test")
     return agent
 

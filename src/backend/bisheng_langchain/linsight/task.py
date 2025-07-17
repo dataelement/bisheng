@@ -249,9 +249,9 @@ class BaseTask(BaseModel):
         if self.summarize_answer:
             return self.summarize_answer
 
-        # 如果有子任务，直接返回子任务的答案即可
+        # 如果有子任务，拼接所有子任务的答案
         if self.children:
-            self.summarize_answer = "\n".join([str(one) for one in self.answer])
+            self.summarize_answer = "\n".join([await one.get_answer() for one in self.children])
             return self.summarize_answer
 
         prompt_str = SummarizeAnswerPrompt.format(history_str=await self.get_history_str(),
@@ -300,7 +300,7 @@ class Task(BaseTask):
                                             original_query=self.original_query,
                                             original_method=self.original_method,
                                             original_done=self.original_done,
-                                            last_answer="",
+                                            last_answer=await self.get_input_str(),
                                             single_sop=self.sop,
                                             step_id=self.step_id,
                                             target=self.target)
