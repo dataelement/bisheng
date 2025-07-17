@@ -290,7 +290,8 @@ async def submit_feedback(
             tools=session_version_model.tools,
             org_knowledge_enabled=session_version_model.org_knowledge_enabled,
             personal_knowledge_enabled=session_version_model.personal_knowledge_enabled,
-            files=session_version_model.files
+            files=session_version_model.files,
+            title=session_version_model.title
         )
         linsight_session_version_model = await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
