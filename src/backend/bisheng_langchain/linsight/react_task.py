@@ -166,10 +166,18 @@ class ReactTask(BaseTask):
             return await self.ainvoke_loop()
 
         is_end = False
+        # json解析失败重试三次
+        json_decode_error = 0
         for i in range(self.max_steps):
             messages = await self.build_messages_with_history()
             res = await self._ainvoke_llm_without_tools(messages)
-            message, is_end = await self.parse_react_result(res.content)
+            try:
+                message, is_end = await self.parse_react_result(res.content)
+            except json.decoder.JSONDecodeError as e:
+                if json_decode_error >= 3:
+                    raise e
+                json_decode_error += 1
+                continue
             self.history.append(message)
             if is_end:
                 break

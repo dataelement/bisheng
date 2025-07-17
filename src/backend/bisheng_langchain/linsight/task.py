@@ -16,6 +16,7 @@ from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistor
     LoopAgentPrompt, SummarizeAnswerPrompt
 from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
     record_llm_prompt, extract_json_from_markdown
+from bisheng_langchain.utils.wrap_function import retry_async
 
 
 class BaseTask(BaseModel):
@@ -84,6 +85,7 @@ class BaseTask(BaseModel):
             input_str = f"输入：\n{input_str}"
         return input_str
 
+    @retry_async(num_retries=3, delay=5, return_exceptions=False)
     async def _ainvoke_llm(self, messages: list[BaseMessage]) -> BaseMessage:
         """
         Invoke the language model with the provided messages.
@@ -98,7 +100,8 @@ class BaseTask(BaseModel):
             record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
                               res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
         return res
-
+    
+    @retry_async(num_retries=3, delay=5, return_exceptions=False)
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
         """
         Invoke the language model without tools.
