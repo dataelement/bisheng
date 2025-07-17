@@ -36,7 +36,10 @@ class SearchKnowledgeBase(BaseTool):
             return ""
         if file_id and file_id.strip():
             return await self.search_linsight_file(query, file_id, limit)
-        return await self.search_knowledge(query, knowledge_id, limit)
+        elif knowledge_id and knowledge_id.strip():
+            return await self.search_knowledge(query, knowledge_id, limit)
+        else:
+            return "must provide either file_id or knowledge_id to search"
 
     async def search_linsight_file(self, query: str, file_id: str, limit: int) -> str:
         """检索Linsight用户上传的文件"""
