@@ -53,7 +53,7 @@ class ReactTask(BaseTask):
                                                  original_query=self.original_query,
                                                  original_method=self.original_method,
                                                  original_done=self.original_done,
-                                                 last_answer="",
+                                                 last_answer=await self.get_input_str(),
                                                  single_sop=self.sop,
                                                  step_id=self.step_id,
                                                  target=self.target,
