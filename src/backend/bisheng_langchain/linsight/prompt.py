@@ -145,6 +145,20 @@ LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用
 5. 当前方法。当前方法要参考总体方法，例如使用工具的情况不能遗漏。
 6. 输出方法。例如总结回答，写入文件，生成图片路径等等,如果为写入文件，需要明确文件地址。
 
+
+用户最终问题: 
+{query}
+
+用户提供的完整SOP: 
+{sop}
+
+这是任务整体规划：
+{workflow}
+
+你现在已经完成了{processed_steps}
+
+{input_str}
+
 请用以下格式模板响应：
 ```json
 {{
@@ -174,19 +188,6 @@ LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用
   ]
 }}
 ```
-
-用户最终问题: 
-{query}
-
-用户提供的完整SOP: 
-{sop}
-
-这是任务整体规划：
-{workflow}
-
-你现在已经完成了{processed_steps}
-
-{input_str}
 
 阶段问题：
 {prompt}"""
