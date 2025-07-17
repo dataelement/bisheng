@@ -66,7 +66,7 @@ GenerateTaskPrompt = """你是一个任务规划专家，请根据用户的需�
             "description": "step_1的描述",
             "profile": "step_1的profile",
             "target": "step_1的target",
-            "sop": "step_1的sop",
+            "sop": "step_1的sop，需要包含资源（工具，完整文件路径等等），步骤（当前step的步骤）等信息",
             "prompt": "step_1的prompt",
             "input": [""]
             "node_loop": true/false
