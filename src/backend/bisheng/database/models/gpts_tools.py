@@ -43,7 +43,7 @@ class GptsToolsBase(SQLModelSerializable):
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
-    name: str = Field(default='', sa_column=Column(String(length=1024), index=True), description="工具类别名字")
+    name: str = Field(default='', sa_column=Column(String(length=1024)), description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
                                  description="工具类别的配置信息，用来存储工具类别所需的配置信息")
