@@ -65,9 +65,9 @@ class SOPManageService:
             es_client: ElasticKeywordsSearch = decide_vectorstores(
                 SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
             )
-
-            vector_client.add_texts([sop_obj.content], metadatas=[{"vector_store_id": vector_store_id}])
-            es_client.add_texts([sop_obj.content], ids=[vector_store_id])
+            metadatas = [{"vector_store_id": vector_store_id}]
+            vector_client.add_texts([sop_obj.content], metadatas=metadatas)
+            es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
         except Exception as e:
             return resp_500(code=500, message=f"添加SOP失败，向向量存储添加数据失败: {str(e)}")
 
@@ -326,3 +326,11 @@ class SOPManageService:
         except Exception as e:
             logger.exception(f"重建SOP向量存储失败: {str(e)}")
             return None
+
+
+# if __name__ == '__main__':
+#     # 测试代码
+#     results, error_msg = asyncio.run(SOPManageService.search_sop(query="投标文件编写指南", k=3))
+#
+#     print(results)
+#     print(error_msg)
