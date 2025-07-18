@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -6,8 +5,8 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, text, Text
 from sqlmodel import Field, select
 
-from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.base import session_getter, async_session_getter
+from bisheng.database.models.base import SQLModelSerializable
 
 
 class ConfigKeyEnum(Enum):
@@ -57,8 +56,6 @@ class ConfigDao(ConfigBase):
         with session_getter() as session:
             statement = select(Config).where(Config.key == key.value)
             config = session.exec(statement).first()
-            if config is None:
-                config = ConfigCreate(key=key.value, value='')
             return config
 
     @classmethod
@@ -67,8 +64,6 @@ class ConfigDao(ConfigBase):
             statement = select(Config).where(Config.key == key.value)
             config = await session.exec(statement)
             config = config.first()
-            if config is None:
-                config = Config(key=key.value, value=json.dumps({}))
             return config
 
     @classmethod

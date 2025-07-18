@@ -417,6 +417,8 @@ class LLMService:
         """
 
         config = await ConfigDao.aget_config(ConfigKeyEnum.LINSIGHT_LLM)
+        if not config:
+            config = Config(key=ConfigKeyEnum.LINSIGHT_LLM.value, value='{}')
 
         if config_obj.embedding_model:
             # 判断是否一致
@@ -432,10 +434,7 @@ class LLMService:
 
                 background_tasks.add_task(SOPManageService.rebuild_sop_vector_store_task, embeddings)
 
-        if config:
-            config.value = json.dumps(config_obj.model_dump())
-        else:
-            config = Config(key=ConfigKeyEnum.LINSIGHT_LLM.value, value=json.dumps(config_obj.model_dump()))
+        config.value = json.dumps(config_obj.model_dump(), ensure_ascii=False)
 
         await ConfigDao.async_insert_config(config)
 
