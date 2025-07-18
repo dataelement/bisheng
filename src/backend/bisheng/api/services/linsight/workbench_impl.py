@@ -307,6 +307,10 @@ class LinsightWorkbenchImpl:
             workbench_conf = await cls._get_workbench_config()
             session_version = await cls._get_session_version(linsight_session_version_id)
 
+            if login_user.user_id != session_version.user_id:
+                yield {"event": "error", "data": "无权限操作该会话版本"}
+                return
+
             # 创建LLM和工具
             llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
             tools = await cls._prepare_tools(session_version, llm)

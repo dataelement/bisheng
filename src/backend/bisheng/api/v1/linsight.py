@@ -167,6 +167,14 @@ async def modify_sop(
     :return:
     """
 
+    session_version_model = await LinsightSessionVersionDao.get_by_id(
+        linsight_session_version_id=linsight_session_version_id)
+
+    if not session_version_model:
+        return resp_500(code=404, message="灵思会话版本不存在")
+    if login_user.user_id != session_version_model.user_id:
+        return resp_500(code=403, message="无权限修改该灵思SOP")
+
     modify_res = await LinsightWorkbenchImpl.modify_sop(linsight_session_version_id=linsight_session_version_id,
                                                         sop_content=sop_content)
     return resp_200(modify_res)
@@ -183,8 +191,15 @@ async def start_execute_sop(
     :param login_user:
     :return:
     """
-    # from bisheng.linsight.task_exec import LinsightWorkflowTask
-    # LinsightWorkflowTask.delay(linsight_session_version_id=linsight_session_version_id)
+
+    session_version_model = await LinsightSessionVersionDao.get_by_id(
+        linsight_session_version_id=linsight_session_version_id)
+    if not session_version_model:
+        return resp_500(code=404, message="灵思会话版本不存在")
+
+    if login_user.user_id != session_version_model.user_id:
+        return resp_500(code=403, message="无权限执行该灵思SOP")
+
     from bisheng.linsight.worker import RedisQueue
     queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
 
@@ -208,6 +223,15 @@ async def user_input(
     :param login_user:
     :return:
     """
+
+    session_version_model = await LinsightSessionVersionDao.get_by_id(
+        linsight_session_version_id=session_version_id)
+    if not session_version_model:
+        return resp_500(code=404, message="灵思会话版本不存在")
+
+    if login_user.user_id != session_version_model.user_id:
+        return resp_500(code=403, message="无权限输入该灵思SOP")
+
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
     await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content)
@@ -242,6 +266,9 @@ async def submit_feedback(
 
     if not session_version_model:
         return resp_500(code=404, message="灵思会话版本不存在")
+
+    if login_user.user_id != session_version_model.user_id:
+        return resp_500(code=403, message="无权限提交该灵思的反馈")
 
     # score 不为空，且大于3，cancel_feedback 为 False feedback 为 None 或空字符串
     if score is not None and score > 3 and (feedback is None or feedback.strip() == "") and cancel_feedback is False:
@@ -324,6 +351,8 @@ async def terminate_execute(
 
     if not session_version_model:
         return resp_500(code=404, message="灵思会话版本不存在")
+    if login_user.user_id != session_version_model.user_id:
+        return resp_500(code=403, message="无权限终止该灵思执行")
 
     if session_version_model.status == SessionVersionStatusEnum.COMPLETED:
         return resp_500(code=400, message="灵思会话版本已完成，无法终止执行")
