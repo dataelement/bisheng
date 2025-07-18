@@ -8,7 +8,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
@@ -187,6 +187,25 @@ export default function index({ formData: parentFormData, setFormData: parentSet
   const handleOpenWebSearchSettings = () => {
         setWebSearchDialogOpen(true);
     };
+    // 在父组件中添加这个方法
+const handleWebSearchChange = useCallback((field: string, value: any) => {
+    console.log('更新字段:', field, '新值:', value);
+    
+    // 更新本地状态
+    setFormData(prev => ({
+        ...prev,
+        webSearch: {
+            ...prev.webSearch,
+            [field]: value
+        }
+    }));
+    
+    // 同时更新全局状态 (zustand)
+    setWebSearchData(prev => ({
+        ...prev,
+        [field]: value
+    }));
+}, [setFormData, setWebSearchData]); // 添加依赖项
     return (
         <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
             <Card className="">
@@ -340,10 +359,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             }
                         >
                             <WebSearchConfig
-                                config={webSearchData || formData.webSearch}
-                                onChange={(updatedConfig) => {
-                                    setWebSearchData(updatedConfig) // 实时更新全局状态
-                                }}
+                              config={webSearchData || formData.webSearch}
+    onChange={handleWebSearchChange}
                             />
                         </ToggleSection>
                         <ToggleSection
