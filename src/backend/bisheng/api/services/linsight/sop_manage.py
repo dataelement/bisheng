@@ -120,8 +120,9 @@ class SOPManageService:
 
                 vector_client.delete(expr=f"vector_store_id == '{vector_store_id}'")
                 es_client.delete([vector_store_id])
-                vector_client.add_texts([sop_obj.content], metadatas=[{"vector_store_id": vector_store_id}])
-                es_client.add_texts([sop_obj.content], ids=[vector_store_id])
+                metadatas = [{"vector_store_id": vector_store_id}]
+                vector_client.add_texts([sop_obj.content], metadatas=metadatas)
+                es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
 
             except Exception as e:
                 return resp_500(code=500, message=f"更新SOP失败，向向量存储更新数据失败: {str(e)}")
