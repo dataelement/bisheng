@@ -1,9 +1,12 @@
 import asyncio
 import uuid
 from typing import List
+
+from langchain_core.embeddings import Embeddings
 from loguru import logger
 from langchain_core.documents import Document
 
+from bisheng.utils import util
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -62,9 +65,9 @@ class SOPManageService:
             es_client: ElasticKeywordsSearch = decide_vectorstores(
                 SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
             )
-
-            vector_client.add_texts([sop_obj.content], metadatas=[{"vector_store_id": vector_store_id}])
-            es_client.add_texts([sop_obj.content], ids=[vector_store_id])
+            metadatas = [{"vector_store_id": vector_store_id}]
+            vector_client.add_texts([sop_obj.content], metadatas=metadatas)
+            es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
         except Exception as e:
             return resp_500(code=500, message=f"添加SOP失败，向向量存储添加数据失败: {str(e)}")
 
@@ -268,3 +271,66 @@ class SOPManageService:
             logger.error(f"搜索SOP失败: {str(e)}")
             return [], f"SOP检索失败: {str(e)}"
 
+    # 重建SOP VectorStore
+    @classmethod
+    async def rebuild_sop_vector_store_task(cls, embeddings: Embeddings):
+        """
+        重建SOP向量存储
+        :return: 重建结果
+        """
+        try:
+            # 获取所有SOP
+            all_sops = await LinsightSOPDao.get_all_sops()
+            if not all_sops:
+                logger.info("没有SOP数据需要重建向量存储")
+                return None
+
+            # 包装同步函数为异步函数
+            def sync_func(sops, emb):
+                """
+                同步函数，用于重建SOP向量存储
+                :param emb:
+                :param sops:
+                :return:
+                """
+
+                vector_client: Milvus = decide_vectorstores(
+                    SOPManageService.collection_name, "Milvus", emb
+                )
+                # 删除现有的向量存储collection
+                if vector_client.col is not None:
+                    logger.info("删除现有的SOP向量存储collection")
+                    vector_client.col.drop()
+                    vector_client.col = None
+                    vector_client.fields = []
+
+                metadatas = [{"vector_store_id": sop.vector_store_id} for sop in sops]
+                contents = [sop.content for sop in sops]
+
+                batch_size = 16
+                for i in range(0, len(contents), batch_size):
+
+                    batch_contents = contents[i:i + batch_size]
+                    batch_metadatas = metadatas[i:i + batch_size]
+
+                    # 添加新的SOP数据到向量存储
+                    vector_client.add_texts(batch_contents, metadatas=batch_metadatas)
+
+                logger.info("SOP向量存储重建完成： {}".format(len(sops)))
+
+            # 使用run_async运行同步函数
+            await util.sync_func_to_async(sync_func)(all_sops, embeddings)
+            return None
+
+
+        except Exception as e:
+            logger.exception(f"重建SOP向量存储失败: {str(e)}")
+            return None
+
+
+# if __name__ == '__main__':
+#     # 测试代码
+#     results, error_msg = asyncio.run(SOPManageService.search_sop(query="投标文件编写指南", k=3))
+#
+#     print(results)
+#     print(error_msg)

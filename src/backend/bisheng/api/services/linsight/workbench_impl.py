@@ -2,35 +2,37 @@ import os
 import uuid
 from dataclasses import dataclass
 from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
-from loguru import logger
-from bisheng.api.services.tool import ToolServices
-from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
-from bisheng.database.models.linsight_sop import LinsightSOPDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.settings import settings
-from bisheng.utils.minio_client import minio_client
-from bisheng.utils.util import calculate_md5
+from urllib.parse import unquote
+
 from fastapi import UploadFile
 from langchain_core.runnables import run_in_executor
 from langchain_core.tools import BaseTool
+from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge_imp import read_chunk_text, decide_vectorstores
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
+from bisheng.api.services.workstation import WorkStationService
+from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, LinsightExecuteTask
+from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
+from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.utils.minio_client import minio_client
+from bisheng.utils.util import calculate_md5
 
 
 @dataclass
@@ -556,7 +558,8 @@ class LinsightWorkbenchImpl:
         """
         # 生成文件信息
         file_id = uuid.uuid4().hex
-        original_filename = file.filename
+        # url 编码 decode 文件名
+        original_filename = unquote(file.filename)
         file_extension = original_filename.split('.')[-1] if '.' in original_filename else ''
         unique_filename = f"{file_id}.{file_extension}"
 

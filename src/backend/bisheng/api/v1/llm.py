@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Request, Depends, Body, Query
+from fastapi import APIRouter, Request, Depends, Body, Query, BackgroundTasks
 
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload, get_login_user, get_admin_user
 from bisheng.api.v1.schemas import resp_200, KnowledgeLLMConfig, \
-    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, WorkbenchModelConfig, UnifiedResponseModel
+    AssistantLLMConfig, EvaluationLLMConfig, LLMServerCreateReq, WorkbenchModelConfig, UnifiedResponseModel, resp_500
 
 router = APIRouter(prefix='/llm', tags=['LLM'])
 
@@ -58,10 +58,15 @@ async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(
 
 
 @router.post('/workbench', summary="更新工作台相关的模型配置", response_model=UnifiedResponseModel)
-async def update_workbench_llm(request: Request, login_user: UserPayload = Depends(get_admin_user),
-                              config_obj: WorkbenchModelConfig = Body(..., description="模型配置对象")):
+async def update_workbench_llm(
+        background_tasks: BackgroundTasks,
+        login_user: UserPayload = Depends(get_admin_user),
+        config_obj: WorkbenchModelConfig = Body(..., description="模型配置对象")):
     """ 更新灵思相关的模型配置 """
-    ret = await LLMService.update_workbench_llm(config_obj)
+    try:
+        ret = await LLMService.update_workbench_llm(config_obj, background_tasks)
+    except Exception as e:
+        return resp_500(message=str(e))
     return resp_200(data=ret)
 
 

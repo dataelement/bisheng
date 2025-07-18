@@ -379,7 +379,7 @@ async def chat_completions(
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
         except Exception as e:
-            logger.error(f'Error in processing the prompt: {e}')
+            logger.exception(f'Error in processing the prompt')
             error = True
             final_res = 'Error in processing the prompt'
 
