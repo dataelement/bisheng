@@ -156,3 +156,14 @@ class LinsightSOPDao(LinsightSOPBase):
             result = await session.exec(statement)
             sop_list = result.all()
             return sop_list
+
+    @classmethod
+    async def get_all_sops(cls) -> List[LinsightSOP]:
+        """
+        获取所有SOP
+        """
+        async with async_session_getter() as session:
+            statement = select(LinsightSOP)
+            result = await session.exec(statement)
+            sop_list = result.all()
+            return sop_list
