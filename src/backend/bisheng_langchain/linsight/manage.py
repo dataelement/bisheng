@@ -199,7 +199,7 @@ class TaskManage(BaseModel):
         for one in original_task:
             if need_input_task.get(one["step_id"]):
                 one["next_id"] = list(need_input_task[one["step_id"]])
-
+            one['display_target'] = one.get('target')
         return original_task
 
     def add_tasks(self, tasks: list[Task | ReactTask]) -> None:
