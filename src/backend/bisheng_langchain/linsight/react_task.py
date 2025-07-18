@@ -173,7 +173,7 @@ class ReactTask(BaseTask):
             res = await self._ainvoke_llm_without_tools(messages)
             try:
                 message, is_end = await self.parse_react_result(res.content)
-            except json.decoder.JSONDecodeError as e:
+            except Exception as e:
                 if json_decode_error >= RetryNum:
                     raise e
                 json_decode_error += 1

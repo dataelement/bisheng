@@ -10,7 +10,8 @@ from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMe
 from langchain_openai.chat_models.base import _convert_message_to_dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, RetryNum, RetrySleep, CallUserInputToolName
+from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, RetryNum, RetrySleep, \
+    CallUserInputToolName
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt, SummarizeAnswerPrompt
@@ -190,7 +191,7 @@ class BaseTask(BaseModel):
                 # 解析生成的任务json数据
                 sub_task = extract_json_from_markdown(res.content)
                 break
-            except json.decoder.JSONDecodeError as e:
+            except Exception as e:
                 if i == RetryNum - 1:
                     raise e
                 continue
