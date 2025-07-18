@@ -1,5 +1,6 @@
 import { ChevronRightIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { TooltipAnchor } from "../ui";
 
 export default function SopToolsDown({
     open,
@@ -15,9 +16,11 @@ export default function SopToolsDown({
     options: {
         label: string;
         value?: string;
+        desc: string;
         children?: {
             label: string;
             value: string;
+            desc: string;
         }[];
     }[];
     onChange: (value: any) => void;
@@ -129,7 +132,14 @@ export default function SopToolsDown({
                                 onMouseEnter={() => handleParentHover(index)}
                                 onClick={(e) => handleParentClick(index, e)}
                             >
-                                <div className="truncate">{option.label}</div>
+                                <TooltipAnchor
+                                    side="top"
+                                    description={option.desc}
+                                    className="truncate"
+                                    disabled={!option.desc}
+                                >
+                                    <div className="truncate">{option.label}</div>
+                                </TooltipAnchor>
                                 {hasChildren && (
                                     <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                                 )}
@@ -149,7 +159,14 @@ export default function SopToolsDown({
                                     `}
                                 onClick={(e) => handleChildClick(child, e)}
                             >
-                                <div className="truncate">{child.label}</div>
+                                <TooltipAnchor
+                                    side="top"
+                                    description={child.desc}
+                                    className="truncate"
+                                    disabled={!child.desc}
+                                >
+                                    <div className="truncate">{child.label}</div>
+                                </TooltipAnchor>
                             </div>
                         ))}
                     </div>

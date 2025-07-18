@@ -1,3 +1,4 @@
+import { LinsightInfo } from "~/store/linsight";
 import request from "./request";
 
 // 灵思
@@ -19,15 +20,32 @@ export function getLinsightSessionVersionList(ConversationId: string): Promise<a
     params: {
       session_id: ConversationId
     },
+  }).then(res => {
+    return res.data.map(item => {
+      return {
+        ...item,
+        sop: item.sop?.replace(/\`\`\`markdown/g, ' ') || '' // 去除markdown标记，否则vditor编辑器会显示为代码块
+      }
+    }
+    )
   });
 }
 
 // 获取灵思任务信息
-export function getLinsightTaskList(versionId: string): Promise<any> {
+export function getLinsightTaskList(versionId: string, linsight: LinsightInfo): Promise<any> {
   return request.get('/api/v1/linsight/workbench/execute-task-detail', {
     params: {
       session_version_id: versionId
     },
+  }).then(res => {
+    if (linsight.status === 'terminated') {
+      // 任务手动终止后，后端返回的数据status为in_progress的任务，需要修改为terminated
+      return res.data.map(item => ({
+        ...item,
+        status: item.status === 'in_progress' ? 'terminated' : item.status
+      }))
+    }
+    return res.data
   });
 }
 

@@ -110,6 +110,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 )}
                 {
                     showTask && <TaskFlowContent
+                        key={versionId}
                         status={linsight.status}
                         tasks={linsight.tasks}
                         summary={linsight?.summary}
@@ -120,9 +121,11 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             </div>
 
             <TaskControls
+                key={versionId}
                 current={currentTask}
                 tasks={linsight.tasks}
                 status={linsight.status}
+                feedbackProvided={!!linsight.execute_feedback}
                 onStop={stop}
                 onFeedback={handleFeedback}
             />

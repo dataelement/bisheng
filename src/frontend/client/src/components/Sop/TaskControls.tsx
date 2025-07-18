@@ -1,9 +1,23 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button, Checkbox, Switch, Textarea } from '../ui';
 import { SopStatus } from './SOPEditor';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import StarIcon from '../ui/icon/Star';
 import { Check } from 'lucide-react';
+
+interface Task {
+    id: string;
+    name: string;
+}
+
+interface TaskControlsProps {
+    onStop: () => void;
+    onFeedback: (rating: number, comment: string, restart: boolean, cancel?: boolean) => void;
+    current: Task | null;
+    tasks: Task[];
+    status: SopStatus;
+    feedbackProvided: boolean;
+}
 
 const slideUpAnimation = {
     initial: { y: 100, opacity: 0 },
@@ -12,15 +26,27 @@ const slideUpAnimation = {
     transition: { duration: 0.3, ease: "easeInOut" }
 };
 
-export const TaskControls = ({ onStop, onFeedback, current, tasks, status }) => {
+
+export const TaskControls = ({
+    onStop,
+    onFeedback,
+    current,
+    tasks,
+    status,
+    feedbackProvided
+}: TaskControlsProps) => {
     const [showOverview, setShowOverview] = useState(false);
-    const showTask = [SopStatus.Running, SopStatus.completed].includes(status)
 
-    const step = useMemo(() => {
-        return current ? tasks.findIndex(t => t.id === current.id) + 1 : 1;
-    }, [current, tasks])
+    const isRunning = status === SopStatus.Running;
+    const isCompleted = status === SopStatus.completed;
+    const userRequestedStop = status === SopStatus.Stoped && !feedbackProvided;
+    const showTask = isRunning || isCompleted || userRequestedStop;
 
-    const [stoped, setStoped] = useState(false)
+    const currentStep = useMemo(() => (
+        current ? tasks.findIndex(t => t.id === current.id) + 1 : 1
+    ), [current, tasks]);
+
+    const [stoped, setStoped] = useState(userRequestedStop)
     const handleStopClick = () => {
         setStoped(true)
         onStop()
@@ -38,33 +64,44 @@ export const TaskControls = ({ onStop, onFeedback, current, tasks, status }) => 
                     {...slideUpAnimation}
                 >
                     <div className='relative w-10/12 mx-auto'>
-                        <div className={`${!showOverview && 'hidden'} absolute bottom-10 p-6 pb-14 w-full border rounded-2xl bg-white transition-all overflow-hidden`}>
-                            <h1 className='font-bold mb-3'>任务规划</h1>
-                            {tasks?.map((task, i) => <p key={task.id} className='text-sm leading-7'>{i + 1}. {task.name}</p>)}
-                        </div>
+                        {
+                            !isCompleted && <div className={`${!showOverview && 'hidden'} absolute bottom-10 p-6 pb-14 w-full border rounded-2xl bg-white transition-all overflow-hidden`}>
+                                <h1 className='font-bold mb-3'>任务规划</h1>
+                                {tasks.map((task, i) => (
+                                    <p key={task.id} className='text-sm leading-7'>{i + 1}. {task.name}</p>
+                                ))}
+                            </div>
+                        }
 
-                        {status === SopStatus.Running ? <div className='linsight-card w-full relative'>
-                            <div className='flex justify-between'>
-                                <div className='flex items-center'>
-                                    {
-                                        tasks?.length > 0 && <span className='whitespace-nowrap bg-[#EEF3FF] border border-[#9EAEFF] px-2 py-1 rounded-md text-primary text-xs'>
-                                            任务阶段 {step}/{tasks?.length}
-                                        </span>
-                                    }
-                                    <span className="pl-4 text-sm">{current?.name || ''}</span>
-                                </div>
+                        {(isRunning || userRequestedStop) && (
+                            <div className='linsight-card w-full relative'>
+                                <div className='flex justify-between'>
+                                    <div className='flex items-center'>
+                                        {tasks.length > 0 && (
+                                            <span className='whitespace-nowrap bg-[#EEF3FF] border border-[#9EAEFF] px-2 py-1 rounded-md text-primary text-xs'>
+                                                任务阶段 {currentStep}/{tasks.length}
+                                            </span>
+                                        )}
+                                        <span className="pl-4 text-sm">{current?.name || ''}</span>
+                                    </div>
 
-                                <div className='flex gap-2 items-center'>
-                                    <span className='whitespace-nowrap text-sm text-gray-600'>显示概览窗口</span>
-                                    <Switch onCheckedChange={setShowOverview} />
-                                    {
-                                        !stoped && <Button className='ml-4 text-primary border-primary' variant="outline" onClick={handleStopClick}>
-                                            终止任务
-                                        </Button>
-                                    }
+                                    <div className='flex gap-2 items-center'>
+                                        <span className='whitespace-nowrap text-sm text-gray-600'>显示概览窗口</span>
+                                        <Switch onCheckedChange={setShowOverview} />
+                                        {
+                                            !stoped && !userRequestedStop && <Button
+                                                className='ml-4 text-primary border-primary'
+                                                variant="outline"
+                                                onClick={handleStopClick}
+                                            >
+                                                终止任务
+                                            </Button>
+                                        }
+                                    </div>
                                 </div>
                             </div>
-                        </div> :
+                        )}
+                        {isCompleted && (
                             <div className='relative'>
                                 <div className={`absolute bottom-14 p-6 pt-3 pb-14 w-full border rounded-3xl bg-gradient-to-r from-[#C0FDD4] to-[#DFFFED]`}>
                                     <div className='flex items-center text-sm'>
@@ -76,12 +113,10 @@ export const TaskControls = ({ onStop, onFeedback, current, tasks, status }) => 
                                     <div className='flex items-center text-sm'>
                                         <span>请评价任务，帮助灵思下次做得更好。</span>
                                     </div>
-                                    <FeedbackComponent
-                                        onFeedback={feedback}
-                                    />
+                                    <FeedbackComponent onFeedback={feedback} />
                                 </div>
                             </div>
-                        }
+                        )}
                     </div>
                 </motion.div>
             )}
@@ -89,54 +124,39 @@ export const TaskControls = ({ onStop, onFeedback, current, tasks, status }) => 
     );
 };
 
-interface FeedbackComponentProps {
-    onFeedback: (rating: number, comment: string, restart: boolean, cancel?: boolean) => void;
-}
 
-const FeedbackComponent = ({ onFeedback }: FeedbackComponentProps) => {
-    const [rating, setRating] = useState<number>(0);
-    const [check, setCheck] = useState<boolean>(false)
+const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFeedback'] }) => {
+    const [rating, setRating] = useState(0);
+    const [shouldRestart, setShouldRestart] = useState(false);
+    const [comment, setComment] = useState('');
 
-    const [comment, setComment] = useState<string>('');
-    const [showFeedbackForm, setShowFeedbackForm] = useState<boolean>(false);
+    const handleSubmit = useCallback(() => {
+        onFeedback(rating, comment, shouldRestart);
+    }, [rating, comment, shouldRestart, onFeedback]);
 
-    const handleStarClick = (selectedRating: number) => {
-        setRating(selectedRating);
-
-        // 如果评分≥3星，直接调用满意方法
-        if (selectedRating > 3) {
-            onFeedback(selectedRating, '', false);
-            setShowFeedbackForm(false);
-        } else {
-            setShowFeedbackForm(true);
-        }
-    };
-
-    const handleSubmitFeedback = () => {
-        onFeedback(rating, comment, check);
-    };
-
-    const handleCancel = () => {
-        onFeedback(rating, comment, check, true);
-    }
+    const handleCancel = useCallback(() => {
+        onFeedback(rating, comment, shouldRestart, true);
+    }, [rating, comment, shouldRestart, onFeedback]);
 
     return (
         <div className="relative">
-            {/* 星级评分 */}
             <div className='flex gap-2 mt-4'>
                 {[1, 2, 3, 4, 5].map((star) => (
-                    <div onClick={() => handleStarClick(star)}>
+                    <div
+                        key={star}
+                        onClick={() => {
+                            setRating(star);
+                            if (star > 3) onFeedback(star, '', false);
+                        }}
+                    >
                         <StarIcon
-                            key={star}
                             className={`cursor-pointer ${star <= rating ? 'text-yellow-400' : 'text-gray-400'}`}
-
                         />
                     </div>
                 ))}
             </div>
 
-            {/* 反馈表单（评分<3星时显示） */}
-            {showFeedbackForm && rating < 4 && (
+            {rating > 0 && rating < 4 && (
                 <div className="mt-4 space-y-4">
                     <Textarea
                         placeholder="请告诉我们如何改进，您的反馈将用于下次任务优化"
@@ -146,20 +166,19 @@ const FeedbackComponent = ({ onFeedback }: FeedbackComponentProps) => {
                     />
                     <div className="flex justify-between items-center">
                         <div className="flex items-center">
-                            <Checkbox value={check} onCheckedChange={setCheck} />
-                            <label htmlFor="contact-me" className="text-sm pl-2">基于反馈重新运行</label>
+                            <Checkbox
+                                checked={shouldRestart}
+                                onCheckedChange={setShouldRestart}
+                            />
+                            <label className="text-sm pl-2">基于反馈重新运行</label>
                         </div>
                         <div className="flex gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={handleCancel}
-                            >
+                            <Button variant="outline" onClick={handleCancel}>
                                 取消
                             </Button>
                             <Button
-                                className=""
-                                disabled={comment === ''}
-                                onClick={handleSubmitFeedback}
+                                disabled={!comment.trim()}
+                                onClick={handleSubmit}
                             >
                                 提交反馈
                             </Button>
@@ -169,4 +188,4 @@ const FeedbackComponent = ({ onFeedback }: FeedbackComponentProps) => {
             )}
         </div>
     );
-};                     
+};

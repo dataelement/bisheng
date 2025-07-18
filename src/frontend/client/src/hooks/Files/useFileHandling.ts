@@ -132,12 +132,15 @@ const useFileHandling = (params?: UseFileHandling) => {
         const file_name = body.get('file_name');
         clearUploadTimer(file_id as string);
         deleteFileById(file_id as string);
-        const errorMessage =
-          error?.code === 'ERR_CANCELED'
-            ? 'com_error_files_upload_canceled'
-            : file_name + ' 解析失败';
-        // : (error?.response?.data?.message ?? 'com_error_files_upload');
-        setError(errorMessage);
+        if (error?.code !== 'ERR_CANCELED') {
+          setError(file_name + ' 解析失败');
+        }
+        // const errorMessage =
+        //   error?.code === 'ERR_CANCELED'
+        //     ? 'com_error_files_upload_canceled'
+        //     : file_name + ' 解析失败';
+        // // : (error?.response?.data?.message ?? 'com_error_files_upload');
+        // setError(errorMessage);
       },
     },
     abortControllerRef.current?.signal,

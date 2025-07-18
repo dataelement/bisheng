@@ -55,6 +55,7 @@ export default function FileRow({
 
   useEffect(() => {
     if (files.length === 0) {
+      setFilesLoading(false);
       return;
     }
 

@@ -169,6 +169,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
     const { createLinsight, updateLinsight } = useLinsightManager()
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
+    const [error, setError] = useState(false);
 
     const mockGenerateSop = (versionId: string, feedback?: string) => {
         console.log('Mock SSE started for version:', versionId, linsightSubmission);
@@ -239,9 +240,6 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
         sse.addEventListener('open', () => {
             console.log('connection is opened');
             setLoading(false)
-            updateLinsight(_versionId, {
-                status: SopStatus.SopGenerating,
-            })
         });
 
         sse.addEventListener('error', async (e: MessageEvent) => {
@@ -250,9 +248,10 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                 message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
                 status: 'error',
             });
+            setError(true)
             setLoading(false)
-            updateLinsight(_versionId, {
-                status: SopStatus.SopGenerating,
+            updateLinsight(versionId, {
+                status: SopStatus.SopGenerated,
             })
         })
         sse.stream();
@@ -359,9 +358,10 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                         message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
                         status: 'error',
                     });
+                    setError(true)
                     setLoading(false)
                     updateLinsight(versionId, {
-                        status: SopStatus.SopGenerating,
+                        status: SopStatus.SopGenerated,
                     })
                 })
                 sse.stream();
@@ -369,11 +369,15 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                 generateSop(versionId, linsightSubmission.feedback)
             }
 
+            updateLinsight(versionId, {
+                status: SopStatus.SopGenerating,
+            })
             clearLinsightSubmission(versionId)
+            setError(false)
         }
     }, [linsightSubmission])
 
-    return loading
+    return [loading, error]
 }
 
 
@@ -419,15 +423,15 @@ function buildTaskTree(tasks) {
     const newTasks = tasks.map(task => {
         return {
             id: task.id,
-            name: task.task_data?.target || '',
-            status: task.status,
+            name: task.task_data?.display_target || '',
+            status: task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
             history: task.history || [],
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-            call_reason: '',
+            call_reason: task.input_prompt || '',
             children: task.children?.map(child => {
                 return {
                     id: child.id,
-                    name: child.task_data?.target || '',
+                    name: child.task_data?.display_target || '',
                     status: child.status,
                     history: child.history || [],
                     event_type: child.status === 'waiting_for_user_input' ? 'user_input' : '',

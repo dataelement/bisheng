@@ -468,6 +468,7 @@ export const uploadImage = (
   return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
     if (!res.data.temp_file_id) {
       res.data.temp_file_id = data.get('file_id')
+      res.data.type = res.data.type || "image"
       res.data.filename = decodeURIComponent(res.data.file_name)
     }
     return res.data

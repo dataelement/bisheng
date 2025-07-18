@@ -10,20 +10,19 @@ import { TaskFlow } from './TaskFlow';
 export default function index(params) {
     // 获取url参数
     const { conversationId } = useParams();
-    const [setIsLoading] = useState(true);
 
-    const { versionId, setVersionId, versions, setVersions } = useLinsightData(conversationId);
-    const isLoading = useGenerateSop(versionId, setVersionId, setVersions)
+    const { versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData(conversationId);
+    const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
 
     return (
         <div className='h-full bg-gradient-to-b from-[#F4F8FF] to-white'>
-            <Header isLoading={isLoading} setVersionId={setVersionId} versionId={versionId} versions={versions} />
+            <Header isLoading={isLoading} setVersionId={switchVersion} versionId={versionId} versions={versions} />
 
             {isLoading ? <LoadingBox /> : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
                 <div className='h-full flex gap-2'>
                     <SOPEditor
+                        sopError={error}
                         versionId={versionId}
-                        setIsLoading={setIsLoading}
                     />
 
                     <TaskFlow versionId={versionId} setVersions={setVersions} setVersionId={setVersionId} />
@@ -57,7 +56,31 @@ export const useLinsightData = (conversationId: string | undefined) => {
     // 状态管理
     const [versions, setVersions] = useState<{ id: string, name: string }[]>([]);
     const [versionId, setVersionId] = useState('new')
-    const { switchAndUpdateLinsight } = useLinsightManager();
+    const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
+
+    const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
+        try {
+            // 1. 获取会话版本列表
+            const data = await getLinsightSessionVersionList(_conversationId);
+            if (!versionId) {
+                const formattedVersions = data.map((item) => ({
+                    id: item.id,
+                    name: item.version.replace('T', ' '),
+                }));
+                setVersions(formattedVersions);
+            }
+
+            // 2. 默认选中第一个版本，并加载其任务
+            const firstVersion = versionId ? data.find(el => el.id === versionId) : data[0];
+            if (firstVersion) {
+                setVersionId(firstVersion.id);
+                const taskRes = await getLinsightTaskList(firstVersion.id, firstVersion);
+                switchAndUpdateLinsight(firstVersion.id, { ...firstVersion, tasks: taskRes });
+            }
+        } catch (error) {
+            console.error('Failed to load session versions or tasks:', error);
+        }
+    };
 
     // 加载会话版本和任务
     useEffect(() => {
@@ -65,30 +88,16 @@ export const useLinsightData = (conversationId: string | undefined) => {
             return;
         }
 
-        const loadSessionVersionsAndTasks = async () => {
-            try {
-                // 1. 获取会话版本列表
-                const res = await getLinsightSessionVersionList(conversationId);
-                const formattedVersions = res.data.map((item) => ({
-                    id: item.id,
-                    name: item.version.replace('T', ' '),
-                }));
-                setVersions(formattedVersions);
-
-                // 2. 默认选中第一个版本，并加载其任务
-                const firstVersion = res.data[0];
-                if (firstVersion) {
-                    setVersionId(firstVersion.id);
-                    const taskRes = await getLinsightTaskList(firstVersion.id);
-                    switchAndUpdateLinsight(firstVersion.id, { ...firstVersion, tasks: taskRes.data });
-                }
-            } catch (error) {
-                console.error('Failed to load session versions or tasks:', error);
-            }
-        };
-
-        loadSessionVersionsAndTasks();
+        loadSessionVersionsAndTasks(conversationId);
     }, [conversationId, linsightTools, PersonalTool, orgTools, switchAndUpdateLinsight]);
+
+
+    const switchVersion = async (versionId: string) => {
+        const linsight = getLinsight(versionId)
+        if (linsight) return setVersionId(versionId);
+        // 缓存无信息从接口读取
+        loadSessionVersionsAndTasks(conversationId!, versionId);
+    }
 
     return {
         linsightTools,
@@ -97,6 +106,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
         versions,
         versionId,
         setVersionId,
+        switchVersion,
         setVersions
     };
 };

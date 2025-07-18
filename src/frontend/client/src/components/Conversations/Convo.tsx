@@ -100,7 +100,7 @@ export default function Conversation({
       }
 
       updateConvoMutation.mutate(
-        { conversationId, title: titleInput ?? '' },
+        { conversationId, title: titleInput ?? '', flowType: conversation.flowType },
         {
           onError: () => {
             setTitleInput(title);
@@ -113,7 +113,7 @@ export default function Conversation({
         },
       );
     },
-    [title, titleInput, conversationId, showToast, updateConvoMutation],
+    [title, titleInput, conversationId, showToast, conversation, updateConvoMutation],
   );
 
   const handleKeyDown = useCallback(

@@ -175,7 +175,7 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
 
   const baseClasses = cn(
     'md:py-3.5 m-0 w-full resize-none py-[13px] bg-surface-tertiary placeholder-black/50 dark:placeholder-white/50 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.5)]',
-    isCollapsed ? 'max-h-[52px]' : 'max-h-[65vh] md:max-h-[75vh]',
+    isCollapsed ? 'max-h-[52px]' : 'max-h-96',
     isLingsi && 'bg-transparent'
   );
 
@@ -260,6 +260,7 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
           {/* {bsConfig?.fileUpload.enabled && */}
           <FileFormWrapper
             accept={accept}
+            fileTip={!isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
             disableInputs={disableInputs}
             disabledSearch={isSearch && !isLingsi}
