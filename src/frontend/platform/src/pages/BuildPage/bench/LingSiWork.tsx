@@ -86,7 +86,7 @@ export interface ChatConfigForm {
     };
 }
 
-export default function index() {
+export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
 
     const [keywords, setKeywords] = useState('');
     const [datalist, setDatalist] = useState([]);
@@ -94,11 +94,13 @@ export default function index() {
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [pageSize] = useState(10);
-    const [selectedTools, setSelectedTools] = useState([]);
+const [selectedTools, setSelectedTools] = useState(() => {
+  return parentFormData?.linsightConfig?.tools || [];
+});
     const [showToolSelector, setShowToolSelector] = useState(false);
     const [toolSearchTerm, setToolSearchTerm] = useState('');
     const [pageInputValue, setPageInputValue] = useState('1');
-    const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('api');
+    const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('mcp');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
@@ -150,32 +152,51 @@ export default function index() {
             tools: []
         }
     };
-    const [formData, setFormData] = useState<ChatConfigForm>(defaultFormValues);
+    const [formData, setFormData] = useState<ChatConfigForm>( parentFormData ||defaultFormValues);
     const [toolsData, setToolsData] = useState({
         builtin: [],
         api: [],
         mcp: []
     });
-    const { llmOptions, embeddings } = useAssistantLLmModel()
-    const fetchTools = async (type: 'builtin' | 'api' | 'mcp') => {
-        setLoading(true);
-        try {
-            let res;
-            if (type === 'builtin') {
-                res = await getAssistantToolsApi('default');
-            } else if (type === 'api') {
-                res = await getAssistantToolsApi('custom');
-            } else {
-                res = await getAssistantToolsApi('mcp');
-            }
-            setToolsData(prev => ({ ...prev, [type]: res || [] }));
-        } catch (error) {
-            toast({ variant: 'error', description: `获取${type === 'builtin' ? '内置' : type === 'api' ? 'API' : 'MCP'}工具失败` });
-        } finally {
-            setLoading(false);
-        }
-    };
+const fetchTools = async (type: 'builtin' | 'api' | 'mcp') => {
+  setLoading(true);
+  try {
+    let res;
+    if (type === 'builtin') {
+      res = await getAssistantToolsApi('default');
+    } else if (type === 'api') {
+      res = await getAssistantToolsApi('custom');
+    } else {
+      res = await getAssistantToolsApi('mcp');
+    }
+    setToolsData(prev => ({ ...prev, [type]: res || [] }));
+  } catch (error) {
+    toast({ variant: 'error', description: `获取${type}工具失败` });
+  } finally {
+    setLoading(false);
+  }
+};
+ useEffect(() => {
+    if (parentFormData) {
+      setFormData(parentFormData);
+    }
+     if (parentFormData?.linsightConfig?.tools) {
+    setSelectedTools(parentFormData.linsightConfig.tools);
+  }
+  }, [parentFormData]);
 
+  useEffect(() => {
+    parentSetFormData?.(formData);
+  }, [formData]);
+useEffect(() => {
+  setFormData(prev => ({
+    ...prev,
+    linsightConfig: {
+      ...prev.linsightConfig,
+      tools: selectedTools
+    }
+  }));
+}, [selectedTools]);
     useEffect(() => {
         setPageInputValue(page.toString());
     }, [page]);
@@ -284,10 +305,12 @@ const fetchData = async (params: {
         return selectedTools.some(t => t.id === toolId);
     };
     let { assistantState, dispatchAssistant } = useAssistantStore();
-    const {
-        handleInputChange,
-        handleSave
-    } = useChatConfig(assistantState, selectedTools, toolsData, setFormData);
+  const { handleSave } = useChatConfig(
+  assistantState,
+  selectedTools,
+  toolsData,
+  setFormData
+);
 
     // 非admin角色跳走
     const { user } = useContext(userContext);
@@ -317,34 +340,41 @@ const fetchData = async (params: {
             navigate('/build/apps');
             return;
         }
-        const loadInitialData = async () => {
-            try {
-                const config = await getWorkstationConfigApi();
-                if (config) {
-                    setFormData({
-                        ...defaultFormValues,
-                        ...config,
-                        inputPlaceholder: config.inputPlaceholder ||
-                            config.linsightConfig?.input_placeholder ||
-                            defaultFormValues.inputPlaceholder,
-                        linsightConfig: {
-                            ...defaultFormValues.linsightConfig,
-                            ...config.linsightConfig,
-                            input_placeholder: config.linsightConfig.input_placeholder ||
-                                '',
-                        }
-                    });
+  const loadInitialData = async () => {
+    try {
+        let config;
+        if (!parentFormData) {
+            config = await getWorkstationConfigApi();
+        } else {
+            config = parentFormData;
+        }
 
-                    if (config?.linsightConfig?.tools) {
-                        setSelectedTools(config.linsightConfig.tools);
-                    }
+        if (config) {
+            setFormData({
+                ...defaultFormValues,
+                ...config,
+                inputPlaceholder: config.inputPlaceholder ||
+                    config.linsightConfig?.input_placeholder ||
+                    defaultFormValues.inputPlaceholder,
+                linsightConfig: {
+                    ...defaultFormValues.linsightConfig,
+                    ...config.linsightConfig,
+                    input_placeholder: config.linsightConfig?.input_placeholder || '',
                 }
-            } catch (error) {
-                toast({ variant: 'error', description: '初始化数据加载失败' });
-            } finally {
-                setInitialized(true);
+            });
+
+            const tools = config.linsightConfig?.tools || parentFormData?.linsightConfig?.tools;
+
+            if (tools?.length > 0) {
+                setSelectedTools(tools);
             }
-        };
+        }
+    } catch (error) {
+        toast({ variant: 'error', description: '初始化数据加载失败' });
+    } finally {
+        setInitialized(true);
+    }
+};
 
         loadInitialData();
     }, [user]);
@@ -453,7 +483,7 @@ const handlePageChange = (newPage: number) => {
         keyword: keywords,
         pageSize
     };
-console.log(sortConfig);
+
 
     if (sortConfig && sortConfig.direction) {
         requestParams.sort = sortConfig.direction;

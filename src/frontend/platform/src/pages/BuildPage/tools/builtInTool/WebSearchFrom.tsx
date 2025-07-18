@@ -6,7 +6,6 @@ import { InputField, SelectField } from "./InputField";
 import { Label } from '@/components/bs-ui/label';
 import { useWebSearchStore } from '../webSearchStore'
 import { toast, useToast } from '@/components/bs-ui/toast/use-toast';
-
 const defaultToolParams = {
     bing: {
         api_key: '',
@@ -31,6 +30,16 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     const { t } = useTranslation();
     const { toast } = useToast();
     const { config: webSearchData, setConfig } = useWebSearchStore();
+
+        const [allToolsConfig, setAllToolsConfig] = useState(() => {
+        const mergedConfig = {
+            ...defaultToolParams,
+            ...(webSearchData?.config || {}),
+            ...(formData?.config || {})
+        };
+        return mergedConfig;
+    });
+
         const validationRules = {
         bing: {
             api_key: (value) => !value && 'Bing Subscription Key 不能为空',
@@ -44,21 +53,13 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
         },
         serp: {
             api_key: (value) => !value && 'API Key 不能为空',
-            engine: (value) => !value && 'Search Engine 不能为空'
+            engine: (value) => !value && 'engine 不能为空'
         },
         tavily: {
             api_key: (value) => !value && 'API Key 不能为空'
         }
         };
-    const [allToolsConfig, setAllToolsConfig] = useState(() => {
-        return webSearchData?.config || {
-            bing: defaultToolParams.bing,
-            bocha: defaultToolParams.bocha,
-            jina: defaultToolParams.jina,
-            serp: defaultToolParams.serp,
-            tavily: defaultToolParams.tavily
-        };
-    });
+
 
     const [selectedTool, setSelectedTool] = useState(webSearchData?.type || 'bing');
     const [formErrors, setFormErrors] = useState({});
@@ -213,7 +214,7 @@ console.log("webSearchData 是否更新?", webSearchData);
                         />
                         <InputField
                             required
-                            label="Search Engine"
+                            label="engine"
                             name="engine"
                             value={currentTool?.engine || 'baidu'}
                             onChange={handleParamChange}

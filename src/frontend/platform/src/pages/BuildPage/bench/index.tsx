@@ -103,7 +103,7 @@ export interface ChatConfigForm {
     };
 }
 
-export default function index() {
+export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
     const sidebarSloganRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
@@ -129,7 +129,7 @@ export default function index() {
         modelRefs,
         webSearchRef,
         systemPromptRef
-    });
+    }, parentFormData, parentSetFormData);
 
     useEffect(() => {
         modelRefs.current = modelRefs.current.slice(0, formData.models.length);
@@ -145,10 +145,15 @@ export default function index() {
         }
     }, [user])
     useEffect(() => {
-        getWorkstationConfigApi().then(res => {
+         if (!parentFormData) {
+            console.log("parentFormData is null", parentFormData);
+            
+ getWorkstationConfigApi().then(res => {
             setWebSearchData(res.webSearch)
             setFormData(res)
         })
+         }
+       
     }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
@@ -413,8 +418,8 @@ interface UseChatConfigProps {
     systemPromptRef: React.RefObject<HTMLDivElement>;
 }
 
-const useChatConfig = (refs: UseChatConfigProps) => {
-    const [formData, setFormData] = useState<ChatConfigForm>({
+const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
+    const [formData, setFormData] = useState<ChatConfigForm>(  parentFormData ||{
         menuShow: true,
         systemPrompt: '你是毕昇 AI 助手',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
@@ -459,6 +464,15 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 {question}`,
         },
     });
+ useEffect(() => {
+    if (parentFormData) {
+      setFormData(parentFormData);
+    }
+  }, [parentFormData]);
+
+  useEffect(() => {
+    parentSetFormData?.(formData);
+  }, [formData]);
 
     //         const sidebarSloganRef = useRef<HTMLDivElement>(null);
     // const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -469,13 +483,18 @@ const useChatConfig = (refs: UseChatConfigProps) => {
     // const webSearchRef = useRef<HTMLDivElement>(null);
     // const systemPromptRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        getWorkstationConfigApi().then((res) => {
+        if (!parentFormData) {
+            console.log('parentFormData :>> ', parentFormData);
+            
+  getWorkstationConfigApi().then((res) => {
             // res.webSearch.params = {
             //     api_key: '',
             //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
             // }
             res && setFormData(res);
         })
+        }
+      
     }, [])
 
     const [errors, setErrors] = useState<FormErrors>({

@@ -189,7 +189,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
             />
 
             {/* 内置工具设置 */}
-            <ToolSet ref={toolsetRef} onChange={() => loadData("default")} />
+            <ToolSet ref={toolsetRef} allData={allData} onChange={() => loadData("default")} />
         </div>
     );
 }

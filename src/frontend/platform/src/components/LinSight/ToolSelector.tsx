@@ -38,7 +38,7 @@ const ToolSelector = ({
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const rightContentRef = useRef<HTMLDivElement>(null);
 
-  const [rightMaxHeight, setRightMaxHeight] = useState<number | null>(null);
+  const [rightMaxHeight, setRightMaxHeight] = useState<number | null>(1);
 
   const syncPanelHeights = useCallback(() => {
     if (leftPanelRef.current && rightContentRef.current) {
@@ -276,7 +276,7 @@ const ToolSelector = ({
           {/* 左侧分类栏 - 固定宽度 */}
           <div
             ref={leftPanelRef}
-            className="w-1/3 border-r bg-gray-50 flex flex-col h-full">
+            className="w-1/3 border-r bg-gray-50 flex flex-col">
             <div className="p-2 border-b">
               <h3 className="font-medium">全量工具</h3>
             </div>
