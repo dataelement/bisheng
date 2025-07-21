@@ -37,22 +37,23 @@ const ToolSelector = ({
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const rightContentRef = useRef<HTMLDivElement>(null);
-
-  const [rightMaxHeight, setRightMaxHeight] = useState<number | null>(1);
-
-  const syncPanelHeights = useCallback(() => {
+ const MIN_HEIGHT = 360; // 设置最小高度
+   const syncPanelHeights = useCallback(() => {
     if (leftPanelRef.current && rightContentRef.current) {
-      const leftHeight = leftPanelRef.current.scrollHeight;
-      const rightContentHeight = rightContentRef.current.scrollHeight;
-
-      // 如果右侧内容小于左侧高度，则不限制高度
-      if (rightContentHeight < leftHeight) {
-        setRightMaxHeight(null);
-      } else {
-        setRightMaxHeight(leftHeight);
-      }
+      const leftHeight = Math.max(leftPanelRef.current.scrollHeight, MIN_HEIGHT);
+      const maxAllowedHeight = window.innerHeight * 0.8;
+      const calculatedHeight = Math.min(leftHeight, maxAllowedHeight);
+      
+      // 应用高度到右侧容器
+      rightContentRef.current.style.minHeight = `${MIN_HEIGHT}px`;
+      rightContentRef.current.style.height = `${calculatedHeight}px`;
+      
+      // 设置左侧面板高度
+      leftPanelRef.current.style.minHeight = `${MIN_HEIGHT}px`;
+      leftPanelRef.current.style.height = `${calculatedHeight}px`
     }
-  }, []);
+  }, [MIN_HEIGHT]);
+
   // 增加对 requestIdleCallback 的判断和使用
   useEffect(() => {
     if (showToolSelector && filteredTools.length > 0) {
@@ -142,7 +143,19 @@ const ToolSelector = ({
     // 初始尝试
     scrollTimeoutRef.current = setTimeout(tryScroll, 100);
   }, []);
+useEffect(() => {
+    const resizeObserver = new ResizeObserver(() => {
+      syncPanelHeights();
+    });
 
+    if (leftPanelRef.current) {
+      resizeObserver.observe(leftPanelRef.current);
+    }
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [syncPanelHeights]);
   useEffect(() => {
     if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
       scrollToTool(scrollToParentId);
@@ -155,7 +168,7 @@ const ToolSelector = ({
       setTimeout(() => {
         scrollToTool(scrollToParentId);
         setIsExpanding(false);
-      }, 500);
+      }, 100);
     }
   }, [isExpanding, scrollToParentId]);
 
@@ -191,7 +204,9 @@ const ToolSelector = ({
     <div className="flex gap-4">
       {/* 已选工具面板 */}
       <div
-        className="w-1/3 flex border rounded-lg bg-white">
+         ref={leftPanelRef}
+        className="w-1/3 flex border rounded-lg bg-white"
+        >
         <div className="flex-1 p-4">
           <h3 className="text-sm font-medium">已选工具</h3>
           {selectedTools.length === 0 && (
@@ -204,78 +219,81 @@ const ToolSelector = ({
             </button>
           )}
 
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="selectedTools">
-              {(provided) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-2 min-h-[100px] p-2 rounded-lg"
-                >
-                  {selectedTools.map((tool, index) => (
-                    <Draggable key={tool.id.toString()} draggableId={tool.id.toString()} index={index}>
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className={`flex items-center justify-between p-3 py-2 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
-                            }`}
-                          onClick={() => handleSelectedToolClick(tool)}
-                        >
-                          <div className="flex items-center">
-                            <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="truncate max-w-[120px]">{tool.name}</span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{tool.name}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeTool(index);
-                            }}
-                            className="text-red-500 hover:text-red-700 ml-2"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <Droppable droppableId="selectedTools">
+        {(provided) => (
+          <div
+            {...provided.droppableProps}
+            ref={provided.innerRef}
+            className="space-y-2 flex-1 overflow-y-auto" 
+            style={{ maxHeight: '300px' }} // 限制内容区域高度
+          >
+            {selectedTools.map((tool, index) => (
+              <Draggable key={tool.id.toString()} draggableId={tool.id.toString()} index={index}>
+                {(provided, snapshot) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                    className={`flex items-center justify-between p-3 py-2 rounded-lg ${
+                      snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                    }`}
+                    onClick={() => handleSelectedToolClick(tool)}
+                  >
+                    <div className="flex items-center">
+                      <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="truncate max-w-[120px]">{tool.name}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{tool.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeTool(index);
+                      }}
+                      className="text-red-500 hover:text-red-700 ml-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </Draggable>
+            ))}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
+    </DragDropContext>
 
-          {selectedTools.length > 0 && (
-            <Button
-              variant='outline'
-              onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
-            >
-              <Plus className="inline w-4 h-4 mr-1" />
-              添加更多工具
-            </Button>
-          )}
-        </div>
-      </div>
+    {selectedTools.length > 0 && (
+      <Button
+        variant='outline'
+        onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
+        className="mt-2"
+      >
+        <Plus className="inline w-4 h-4 mr-1" />
+        添加更多工具
+      </Button>
+    )}
+  </div>
+</div>
 
       {/* 工具选择器 */}
       {showToolSelector && (
         <div
           className="w-2/3 flex border rounded-lg bg-white overflow-hidden transition-all duration-300 ease-in-out"
           key={activeToolTab}
+           ref={rightContentRef}
         >
           {/* 左侧分类栏 - 固定宽度 */}
           <div
-            ref={leftPanelRef}
             className="w-1/3 border-r bg-gray-50 flex flex-col">
             <div className="p-2 border-b">
               <h3 className="font-medium">全量工具</h3>
@@ -317,11 +335,10 @@ const ToolSelector = ({
           </div>
 
           <div
-            ref={rightContentRef}
-            className="right-content w-2/3 flex flex-col"
+      
+            className="right-content w-2/3 flex flex-col h-full overflow-y-auto"
             style={{
-              maxHeight: rightMaxHeight ? `${rightMaxHeight}px` : undefined,
-              overflowY: rightMaxHeight ? 'auto' : 'visible',
+ 
               transition: 'max-height 0.3s ease-out',
             }}
           >

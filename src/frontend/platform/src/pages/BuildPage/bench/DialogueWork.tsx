@@ -12,7 +12,7 @@ export default function DialogueWork() {
     <div className="w-full h-full px-2 pt-4 relative">
       <Tabs defaultValue={defaultValue} className="w-full mb-[40px]">
         <TabsList className="">
-          <TabsTrigger value="client">对话</TabsTrigger>
+          <TabsTrigger value="client">日常</TabsTrigger>
           <TabsTrigger value="lingsi" className="roundedrounded-xl">灵思</TabsTrigger>
         </TabsList>
         <TabsContent value="client"  key="client-tab">

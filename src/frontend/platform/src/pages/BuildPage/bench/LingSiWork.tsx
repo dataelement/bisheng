@@ -681,7 +681,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             label="输入框提示语"
                             value={formData.linsightConfig.input_placeholder}
                             placeholder="请输入你的任务目标，然后交给 BISHENG 灵思"
-                            maxLength={1000}
+                            maxLength={100}
                             onChange={(v) => {
                                 setFormData(prev => ({
                                     ...prev,
@@ -741,6 +741,24 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 </div>
 
                                 <div className="flex gap-2">
+                                             {/* <Button
+                                        variant="default"
+                                        size="sm"
+                                        onClick={() => {
+                                            setIsEditing(false);
+                                            setCurrentSopId(null);
+                                            setSopForm({
+                                                id: '',
+                                                name: '',
+                                                description: '',
+                                                content: '',
+                                                rating: 0
+                                            });
+                                            setIsDrawerOpen(true);
+                                        }}
+                                    >
+                                        从运行记录中导入
+                                    </Button> */}
                                     <Button
                                         variant="default"
                                         size="sm"
