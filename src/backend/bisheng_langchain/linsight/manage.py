@@ -158,7 +158,7 @@ class TaskManage(BaseModel):
         :return: A tuple containing the result of the tool execution and a boolean indicating success.
         """
         if name not in self.tool_map:
-            return f"tool {name} exec error, because tool name is not found"
+            return f"tool {name} exec error, because tool name is not found", False
         try:
             res = await self.tool_map[name].ainvoke(input=params)
             if not isinstance(res, str):

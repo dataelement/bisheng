@@ -524,15 +524,8 @@ class LinsightWorkflowTask:
 
         await self._state_manager.set_session_version_info(session_model)
 
-        # 获取所有执行任务
-        execution_tasks = await self._state_manager.get_execution_tasks()
-
-        for task in execution_tasks:
-            # 更新每个任务状态为已终止
-            if task.status not in [ExecuteTaskStatusEnum.TERMINATED, ExecuteTaskStatusEnum.SUCCESS,
-                                   ExecuteTaskStatusEnum.FAILED]:
-                await self._state_manager.update_execution_task_status(task_id=task.id,
-                                                                       status=ExecuteTaskStatusEnum.TERMINATED)
+        # 设置所有任务为失败
+        await self._set_tasks_failed()
 
         # 推送终止消息
         await self._state_manager.push_message(
@@ -645,11 +638,32 @@ class LinsightWorkflowTask:
             logger.error(f"处理任务成功时发生错误: {e}")
             raise TaskExecutionError(f"处理任务成功时发生错误: {e}")
 
+    # 修改所有的任务失败处理逻辑
+    async def _set_tasks_failed(self):
+        """将所有任务设置为失败"""
+        try:
+            # 获取所有执行任务
+            execution_tasks = await self._state_manager.get_execution_tasks()
+
+            for task in execution_tasks:
+                # 更新每个任务状态为已终止
+                if task.status not in [ExecuteTaskStatusEnum.TERMINATED, ExecuteTaskStatusEnum.SUCCESS,
+                                       ExecuteTaskStatusEnum.FAILED]:
+                    await self._state_manager.update_execution_task_status(task_id=task.id,
+                                                                           status=ExecuteTaskStatusEnum.TERMINATED)
+        except Exception as e:
+            logger.error(f"设置任务失败时发生错误: {e}")
+            raise TaskExecutionError(f"设置任务失败时发生错误: {e}")
+
     async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
         """处理任务失败"""
         session_model.status = SessionVersionStatusEnum.TERMINATED
         session_model.output_result = {"error_message": error_msg}
         await self._state_manager.set_session_version_info(session_model)
+
+        # 设置所有任务为失败
+        await self._set_tasks_failed()
+
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.ERROR_MESSAGE, data={"error": error_msg})
         )
