@@ -2,11 +2,9 @@
 import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
-import { generateUUID } from "@/components/bs-ui/utils";
-import { locationContext } from "@/contexts/locationContext";
+
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
@@ -14,16 +12,14 @@ import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
 import { useAssistantStore } from "@/store/assistantStore";
 import { Search, Star, X } from "lucide-react";
-import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { t } from "i18next";
 import { sopApi } from "@/controllers/API/linsight";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
-import { useAssistantLLmModel } from "@/pages/ModelPage/manage";
 import ToolSelector from "@/components/LinSight/ToolSelector";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import SopTable from "@/components/LinSight/SopTable";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { cloneDeep } from "lodash-es";
 
 
@@ -94,9 +90,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [pageSize] = useState(10);
-const [selectedTools, setSelectedTools] = useState(() => {
-  return parentFormData?.linsightConfig?.tools || [];
-});
+    const [batchDeleting, setBatchDeleting] = useState(false);
+    const [selectedTools, setSelectedTools] = useState(() => {
+        return parentFormData?.linsightConfig?.tools || [];
+    });
     const [showToolSelector, setShowToolSelector] = useState(false);
     const [toolSearchTerm, setToolSearchTerm] = useState('');
     const [pageInputValue, setPageInputValue] = useState('1');
@@ -152,51 +149,51 @@ const [selectedTools, setSelectedTools] = useState(() => {
             tools: []
         }
     };
-    const [formData, setFormData] = useState<ChatConfigForm>( parentFormData ||defaultFormValues);
+    const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || defaultFormValues);
     const [toolsData, setToolsData] = useState({
         builtin: [],
         api: [],
         mcp: []
     });
-const fetchTools = async (type: 'builtin' | 'api' | 'mcp') => {
-  setLoading(true);
-  try {
-    let res;
-    if (type === 'builtin') {
-      res = await getAssistantToolsApi('default');
-    } else if (type === 'api') {
-      res = await getAssistantToolsApi('custom');
-    } else {
-      res = await getAssistantToolsApi('mcp');
-    }
-    setToolsData(prev => ({ ...prev, [type]: res || [] }));
-  } catch (error) {
-    toast({ variant: 'error', description: `获取${type}工具失败` });
-  } finally {
-    setLoading(false);
-  }
-};
- useEffect(() => {
-    if (parentFormData) {
-      setFormData(parentFormData);
-    }
-     if (parentFormData?.linsightConfig?.tools) {
-    setSelectedTools(parentFormData.linsightConfig.tools);
-  }
-  }, [parentFormData]);
+    const fetchTools = async (type: 'builtin' | 'api' | 'mcp') => {
+        setLoading(true);
+        try {
+            let res;
+            if (type === 'builtin') {
+                res = await getAssistantToolsApi('default');
+            } else if (type === 'api') {
+                res = await getAssistantToolsApi('custom');
+            } else {
+                res = await getAssistantToolsApi('mcp');
+            }
+            setToolsData(prev => ({ ...prev, [type]: res || [] }));
+        } catch (error) {
+            toast({ variant: 'error', description: `获取${type}工具失败` });
+        } finally {
+            setLoading(false);
+        }
+    };
+    useEffect(() => {
+        if (parentFormData) {
+            setFormData(parentFormData);
+        }
+        if (parentFormData?.linsightConfig?.tools) {
+            setSelectedTools(parentFormData.linsightConfig.tools);
+        }
+    }, [parentFormData]);
 
-  useEffect(() => {
-    parentSetFormData?.(formData);
-  }, [formData]);
-useEffect(() => {
-  setFormData(prev => ({
-    ...prev,
-    linsightConfig: {
-      ...prev.linsightConfig,
-      tools: selectedTools
-    }
-  }));
-}, [selectedTools]);
+    useEffect(() => {
+        parentSetFormData?.(formData);
+    }, [formData]);
+    useEffect(() => {
+        setFormData(prev => ({
+            ...prev,
+            linsightConfig: {
+                ...prev.linsightConfig,
+                tools: selectedTools
+            }
+        }));
+    }, [selectedTools]);
     useEffect(() => {
         setPageInputValue(page.toString());
     }, [page]);
@@ -235,33 +232,33 @@ useEffect(() => {
         return [...new Set([...searchExpanded, ...manuallyExpandedItems])];
     }, [filteredTools, toolSearchTerm, manuallyExpandedItems]);
 
-const fetchData = async (params: {
-    page: number;
-    pageSize: number;
-    keyword?: string;
-    sort?: 'asc' | 'desc';
-}) => {
-    setLoading(true);
-    try {
-        const res = await sopApi.getSopList({
-            page_size: params.pageSize,
-            page: params.page,
-            keywords: params.keyword || keywords,
-            sort: params.sort,
-        });
+    const fetchData = async (params: {
+        page: number;
+        pageSize: number;
+        keyword?: string;
+        sort?: 'asc' | 'desc';
+    }) => {
+        setLoading(true);
+        try {
+            const res = await sopApi.getSopList({
+                page_size: params.pageSize,
+                page: params.page,
+                keywords: params.keyword || keywords,
+                sort: params.sort,
+            });
 
-        setDatalist(res.items || []);
+            setDatalist(res.items || []);
 
             const hasItems = res.items && res.items.length > 0;
             const calculatedTotal = hasItems ? Math.max(res.total || 0, (params.page || page) * pageSize) : 0;
-              setTotal(calculatedTotal);
-    } catch (error) {
-        console.error('请求失败:', error);
-        toast({ variant: 'error', description: '请求失败，请稍后重试' });
-    } finally {
-        setLoading(false);
-    }
-};
+            setTotal(calculatedTotal);
+        } catch (error) {
+            console.error('请求失败:', error);
+            toast({ variant: 'error', description: '请求失败，请稍后重试' });
+        } finally {
+            setLoading(false);
+        }
+    };
     useEffect(() => {
         fetchData({ page: 1, pageSize: 10, keyword: '' });
     }, []);
@@ -305,12 +302,12 @@ const fetchData = async (params: {
         return selectedTools.some(t => t.id === toolId);
     };
     let { assistantState, dispatchAssistant } = useAssistantStore();
-  const { handleSave } = useChatConfig(
-  assistantState,
-  selectedTools,
-  toolsData,
-  setFormData
-);
+    const { handleSave } = useChatConfig(
+        assistantState,
+        selectedTools,
+        toolsData,
+        setFormData
+    );
 
     // 非admin角色跳走
     const { user } = useContext(userContext);
@@ -340,41 +337,41 @@ const fetchData = async (params: {
             navigate('/build/apps');
             return;
         }
-  const loadInitialData = async () => {
-    try {
-        let config;
-        if (!parentFormData) {
-            config = await getWorkstationConfigApi();
-        } else {
-            config = parentFormData;
-        }
-
-        if (config) {
-            setFormData({
-                ...defaultFormValues,
-                ...config,
-                inputPlaceholder: config.inputPlaceholder ||
-                    config.linsightConfig?.input_placeholder ||
-                    defaultFormValues.inputPlaceholder,
-                linsightConfig: {
-                    ...defaultFormValues.linsightConfig,
-                    ...config.linsightConfig,
-                    input_placeholder: config.linsightConfig?.input_placeholder || '',
+        const loadInitialData = async () => {
+            try {
+                let config;
+                if (!parentFormData) {
+                    config = await getWorkstationConfigApi();
+                } else {
+                    config = parentFormData;
                 }
-            });
 
-            const tools = config.linsightConfig?.tools || parentFormData?.linsightConfig?.tools;
+                if (config) {
+                    setFormData({
+                        ...defaultFormValues,
+                        ...config,
+                        inputPlaceholder: config.inputPlaceholder ||
+                            config.linsightConfig?.input_placeholder ||
+                            defaultFormValues.inputPlaceholder,
+                        linsightConfig: {
+                            ...defaultFormValues.linsightConfig,
+                            ...config.linsightConfig,
+                            input_placeholder: config.linsightConfig?.input_placeholder || '',
+                        }
+                    });
 
-            if (tools?.length > 0) {
-                setSelectedTools(tools);
+                    const tools = config.linsightConfig?.tools || parentFormData?.linsightConfig?.tools;
+
+                    if (tools?.length > 0) {
+                        setSelectedTools(tools);
+                    }
+                }
+            } catch (error) {
+                toast({ variant: 'error', description: '初始化数据加载失败' });
+            } finally {
+                setInitialized(true);
             }
-        }
-    } catch (error) {
-        toast({ variant: 'error', description: '初始化数据加载失败' });
-    } finally {
-        setInitialized(true);
-    }
-};
+        };
 
         loadInitialData();
     }, [user]);
@@ -399,12 +396,12 @@ const fetchData = async (params: {
 
         // 更新状态
         setKeywords(newKeywords);
-         setPageInputValue(newPage.toString());
+        setPageInputValue(newPage.toString());
         if (newPage !== page) {
             setPage(newPage);
         }
     };
-  
+
 
     const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -469,70 +466,72 @@ const fetchData = async (params: {
                 setLoading(false);
             });
     };
-const handlePageChange = (newPage: number) => {
-    if (newPage === page || loading) return;
+    const handlePageChange = (newPage: number) => {
+        if (newPage === page || loading) return;
 
-    const safeTotalPages = Math.max(1, Math.ceil(total / pageSize));
-    newPage = Math.max(1, Math.min(newPage, safeTotalPages));
+        const safeTotalPages = Math.max(1, Math.ceil(total / pageSize));
+        newPage = Math.max(1, Math.min(newPage, safeTotalPages));
 
-    setPage(newPage);
-    setPageInputValue(newPage.toString());
-    
-    const requestParams: any = {
-        page: newPage,
-        keyword: keywords,
-        pageSize
-    };
-
-
-    if (sortConfig && sortConfig.direction) {
-        requestParams.sort = sortConfig.direction;
-
-    }
-
-    fetchData(requestParams);
-};
-const handleBatchDelete = async () => {
-    try {
-        await sopApi.batchDeleteSop(selectedItems);
-
-        const newTotal = total - selectedItems.length;
-        const newTotalPages = Math.ceil(newTotal / pageSize);
-        let newPage = page;
-
-        if (datalist.length === selectedItems.length) {
-            if (page > 1) {
-                newPage = page - 1;
-            } else if (newTotal > 0) {
-                newPage = 1;
-            }
-        }
-
-        setTotal(newTotal);
-        setSelectedItems([]);
+        setPage(newPage);
         setPageInputValue(newPage.toString());
 
-        // 确保传递所有必要参数
-        fetchData({
+        const requestParams: any = {
             page: newPage,
-            pageSize: pageSize,
             keyword: keywords,
-            sort: sortConfig?.direction
-        });
+            pageSize
+        };
 
-        toast({ variant: 'success', description: `成功删除 ${selectedItems.length} 个 SOP` });
-    } catch (error) {
-        toast({ variant: 'error', description: '删除失败，请稍后重试' });
-    }
-};
-const handleSelectAll = useCallback(() => {
-    const currentPageIds = datalist.map(item => item.id);
-    if (currentPageIds.every(id => selectedItems.includes(id))) {
-        setSelectedItems(prev => prev.filter(id => !currentPageIds.includes(id)));
-    } else {
-        setSelectedItems(prev => [...new Set([...prev, ...currentPageIds])]);
-    }
-}, [datalist, selectedItems]);
+
+        if (sortConfig && sortConfig.direction) {
+            requestParams.sort = sortConfig.direction;
+
+        }
+
+        fetchData(requestParams);
+    };
+    const handleBatchDelete = async () => {
+        setBatchDeleting(true);
+        try {
+            await sopApi.batchDeleteSop(selectedItems);
+
+            const newTotal = total - selectedItems.length;
+            const newTotalPages = Math.ceil(newTotal / pageSize);
+            let newPage = page;
+
+            if (datalist.length === selectedItems.length) {
+                if (page > 1) {
+                    newPage = page - 1;
+                } else if (newTotal > 0) {
+                    newPage = 1;
+                }
+            }
+
+            setTotal(newTotal);
+            setSelectedItems([]);
+            setPageInputValue(newPage.toString());
+
+            // 确保传递所有必要参数
+            fetchData({
+                page: newPage,
+                pageSize: pageSize,
+                keyword: keywords,
+            });
+
+            toast({ variant: 'success', description: `成功删除 ${selectedItems.length} 个 SOP` });
+        } catch (error) {
+            toast({ variant: 'error', description: '删除失败，请稍后重试' });
+        } finally {
+            setBatchDeleting(false);
+        }
+    };
+    const handleSelectAll = useCallback(() => {
+        const currentPageIds = datalist.map(item => item.id);
+        if (currentPageIds.every(id => selectedItems.includes(id))) {
+            setSelectedItems(prev => prev.filter(id => !currentPageIds.includes(id)));
+        } else {
+            setSelectedItems(prev => [...new Set([...prev, ...currentPageIds])]);
+        }
+    }, [datalist, selectedItems]);
     const [sopForm, setSopForm] = useState({
         id: '',
         name: '',
@@ -575,12 +574,11 @@ const handleSelectAll = useCallback(() => {
             }
 
             setIsDrawerOpen(false);
-               fetchData({ 
-            page: 1, 
-            pageSize: 10, 
-            keyword: keywords,
-            sort: sortConfig?.direction 
-        }); // 刷新列表
+            fetchData({
+                page: 1,
+                pageSize: 10,
+                keyword: keywords
+            }); // 刷新列表
             resetSopForm(); // 重置表单
         } catch (error) {
             console.error('保存SOP失败:', error);
@@ -611,55 +609,53 @@ const handleSelectAll = useCallback(() => {
         setIsDrawerOpen(true);
     };
 
- const handleDelete = (id: string) => {
-    bsConfirm({
-        title: '删除确认',
-        desc: '确认删除该SOP吗？',
-        showClose: true,
-        okTxt: '确认删除',
-        canelTxt: '取消',
-        onOk(next) {
-            sopApi.deleteSop(id)
-                .then(() => {
-                    toast({
-                        variant: 'success',
-                        description: 'SOP删除成功'
-                    });
+    const handleDelete = (id: string) => {
+        bsConfirm({
+            title: '删除确认',
+            desc: '确认删除该SOP吗？',
+            showClose: true,
+            okTxt: '确认删除',
+            canelTxt: '取消',
+            onOk(next) {
+                sopApi.deleteSop(id)
+                    .then(() => {
+                        toast({
+                            variant: 'success',
+                            description: 'SOP删除成功'
+                        });
 
-                    setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
-                    
-                    // 修复这里 - 确保传递正确的参数
-                    if (datalist.length === 1 && page > 1) {
-                        setPage(page - 1);
-                        fetchData({
-                            page: page - 1,
-                            pageSize: pageSize,
-                            keyword: keywords,
-                            sort: sortConfig?.direction
+                        setSelectedItems(prevItems => prevItems.filter(itemId => itemId !== id));
+
+                        // 修复这里 - 确保传递正确的参数
+                        if (datalist.length === 1 && page > 1) {
+                            setPage(page - 1);
+                            fetchData({
+                                page: page - 1,
+                                pageSize: pageSize,
+                                keyword: keywords,
+                            });
+                        } else {
+                            fetchData({
+                                page: page,
+                                pageSize: pageSize,
+                                keyword: keywords,
+                            });
+                        }
+                        next();
+                    })
+                    .catch(error => {
+                        console.error('删除SOP失败:', error);
+                        toast({
+                            variant: 'error',
+                            description: '删除失败',
+                            details: error.message || '请稍后重试'
                         });
-                    } else {
-                        fetchData({
-                            page: page,
-                            pageSize: pageSize,
-                            keyword: keywords,
-                            sort: sortConfig?.direction
-                        });
-                    }
-                    next();
-                })
-                .catch(error => {
-                    console.error('删除SOP失败:', error);
-                    toast({
-                        variant: 'error',
-                        description: '删除失败',
-                        details: error.message || '请稍后重试'
                     });
-                });
-        },
-        onCancel() {
-        }
-    });
-};
+            },
+            onCancel() {
+            }
+        });
+    };
 
     const toggleGroup = useCallback((group: any, checked: boolean) => {
         setSelectedTools(prev => {
@@ -766,7 +762,7 @@ const handleSelectAll = useCallback(() => {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        disabled={selectedItems.length === 0}
+                                        disabled={selectedItems.length === 0 || batchDeleting}
                                         onClick={() => {
                                             bsConfirm({
                                                 title: '批量删除确认',
@@ -782,9 +778,10 @@ const handleSelectAll = useCallback(() => {
                                                 }
                                             });
                                         }}
-                                        className={selectedItems.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
                                     >
-                                        批量删除
+                                        {batchDeleting && <LoadIcon className=" mr-2 text-gray-600" />}
+                                        {'批量删除'}
+
                                     </Button>
                                 </div>
                             </div>

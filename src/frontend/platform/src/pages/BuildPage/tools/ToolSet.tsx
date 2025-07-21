@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { updateAssistantToolApi,getAssistantToolsApi } from "@/controllers/API/assistant";
+import { updateAssistantToolApi } from "@/controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,9 +14,7 @@ import EmailConfigForm from "./builtInTool/EmailConfig";
 import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
 import WebSearchForm from "./builtInTool/WebSearchFrom";
 import { useWebSearchStore } from './webSearchStore'
-const ToolSet = forwardRef(function ToolSet({ onChange, allData }, ref) {
-    console.log('ToolSet', allData[0], ref,);
-    
+const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
     const [formData, setFormData] = useState(null)
@@ -35,44 +33,30 @@ const ToolSet = forwardRef(function ToolSet({ onChange, allData }, ref) {
     // });
     const idRef = useRef('');
     const [name, setName] = useState('');
- const { config: webSearchData, setConfig } = useWebSearchStore()
- const getExtraData = () => {
-        if (!allData || allData.length === 0) return null;
-        
-        try {
-            const firstItem = allData[0];
-            if (firstItem.extra) {
-                return JSON.parse(firstItem.extra);
-            }
-            console.log(firstItem.extra,222);
-            
-            return null;
-        } catch (e) {
-            console.error('解析 extra 数据失败:', e);
-            return null;
-        }
-    };
-   useImperativeHandle(ref, () => ({
+    const { config: webSearchData, setConfig } = useWebSearchStore()
+
+    useImperativeHandle(ref, () => ({
+
         edit: (item) => {
             setName(item.name);
             idRef.current = item.id;
-            const config = item.children[0]?.extra 
-                ? JSON.parse(item.children[0].extra)
-                : getExtraData() || webSearchData || {};
-                
+            console.log(item, webSearchData, 222);
+            const config =
+                webSearchData || {};
+
             setFormData(config);
-            setOpen(true); 
+            setOpen(true);
         }
     }));
 
 
 
-  const handleSubmit = async (formdata) => {
-    await updateAssistantToolApi(idRef.current, formdata)
-    setConfig(formdata)
-    setOpen(false)
-    onChange()
-  }
+    const handleSubmit = async (formdata) => {
+        await updateAssistantToolApi(idRef.current, formdata)
+        setConfig(formdata)
+        setOpen(false)
+        onChange()
+    }
 
     // const getFieldsToSubmit = () => {
     //     const fields = {};
