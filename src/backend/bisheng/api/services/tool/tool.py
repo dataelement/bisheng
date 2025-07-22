@@ -227,7 +227,7 @@ class ToolServices(BaseModel):
                     GptsTools(
                         id=100001,
                         name="知识库和文件内容检索",
-                        description="检索组织知识库、个人知识库以及本地上传文件的内容。",
+                        desc="检索组织知识库、个人知识库以及本地上传文件的内容。",
                         tool_key="search_knowledge_base",
                     )
                 ]
