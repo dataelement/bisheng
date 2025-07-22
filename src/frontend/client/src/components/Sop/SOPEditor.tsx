@@ -114,6 +114,7 @@ export const SOPEditor = ({ versionId, sopError }) => {
 
     // auto save
     const sopValueFuncRef = useRef<null | ((id) => void)>(null)
+    const [disabled, setDisabled] = useStartDisable(linsight.status, linsight.sop)
     const handleChange = (val) => {
         sopValueFuncRef.current = (_v) => {
             saveSop({
@@ -121,12 +122,14 @@ export const SOPEditor = ({ versionId, sopError }) => {
                 linsight_session_version_id: _v
             }).then(res => {
                 if (res.status_code === 200) {
-                    updateLinsight(_v, { sop: val })
+                    updateLinsight(_v, { sop: val, inputSop: true })
                 }
             }).catch(err => {
                 console.error('err :>> ', err);
             })
         }
+
+        setDisabled(val.trim() === '')
     }
     useEffect(() => {
         const timer = setInterval(() => {
@@ -179,7 +182,7 @@ export const SOPEditor = ({ versionId, sopError }) => {
                                     }}>
                                         重新生成 SOP
                                     </Button>
-                                    <Button className="px-6" disabled={sopError} onClick={handleRun}>
+                                    <Button className="px-6" disabled={sopError || disabled} onClick={handleRun}>
                                         开始执行
                                     </Button>
                                 </div>
@@ -194,3 +197,19 @@ export const SOPEditor = ({ versionId, sopError }) => {
     );
 };
 
+
+const useStartDisable = (status: SopStatus, sop: string) => {
+    const [disabled, setDisabled] = useState(false)
+    const _sop = sop.trim()
+    useEffect(() => {
+        if (status === SopStatus.SopGenerating) {
+            setDisabled(false)
+        }
+    }, [status])
+
+    useEffect(() => {
+        setDisabled(_sop === '')
+    }, [sop])
+
+    return [disabled, setDisabled]
+}

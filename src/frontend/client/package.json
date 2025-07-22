@@ -55,7 +55,7 @@
     "downloadjs": "^1.4.7",
     "export-from-json": "^1.7.2",
     "filenamify": "^6.0.0",
-    "framer-motion": "^11.5.4",
+    "framer-motion": "11.5.4",
     "html-to-image": "^1.11.11",
     "i18next": "^24.2.2",
     "i18next-browser-languagedetector": "^8.0.3",
@@ -98,8 +98,8 @@
     "tailwind-merge": "^1.14.0",
     "tailwindcss-animate": "^1.0.5",
     "tailwindcss-radix": "^2.8.0",
-    "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "uuid": "^11.1.0",
+    "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "zod": "^3.22.4"
   },
   "devDependencies": {

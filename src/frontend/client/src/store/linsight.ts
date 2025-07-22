@@ -9,6 +9,8 @@ export type LinsightInfo = {
     org_knowledge_enabled: boolean;
     personal_knowledge_enabled: boolean;
     sop: null | string;
+    /** 用户输入的sop */
+    inputSop: boolean;
     // sop_map: { [key in string]: string };
     status: string;
     execute_feedback: null | string;

@@ -3,6 +3,7 @@ import Vditor from "vditor";
 import "vditor/dist/index.css";
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
 import { LinsightInfo } from "~/store/linsight";
+import { SopStatus } from "./SOPEditor";
 import SopToolsDown from "./SopToolsDown";
 
 interface MarkdownProps {
@@ -16,7 +17,7 @@ interface MarkdownRef {
 
 const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     const { linsight, edit, onChange } = props;
-    const { sop: value = '', files, tools } = linsight
+    const { sop: value = '', inputSop, files, tools } = linsight
 
     const veditorRef = useRef<any>(null);
     const inserRef = useRef<any>(null);
@@ -84,14 +85,16 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     }, []);
 
     useEffect(() => {
-        if (value === '' || value) {
+        // 用户输入同步value to markdown
+        if (!inputSop && (value === '' || value)) {
+            // 回显值
             veditorRef.current?.setValue(replaceMarkersToBraces(value, valueToNameRef.current))
         }
 
-        if (scrollBoxRef.current) {
+        if (scrollBoxRef.current && linsight.status !== SopStatus.SopGenerated) {
             scrollBoxRef.current.scrollTop = scrollBoxRef.current.scrollHeight
         }
-    }, [value])
+    }, [value, linsight.status, inputSop])
 
     // 开启/禁用
     useEffect(() => {
@@ -115,9 +118,11 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     console.log('toolOptions :>> ', toolOptions);
 
     const handleChange = (val) => {
-        inserRef.current(`{{${val.label}}}`);
+        inserRef.current(`{{@${val.label}@}}`);
         setMenuOpen(false)
     }
+
+    useAtTip(scrollBoxRef)
 
     return <div ref={boxRef} className="relative h-full">
         <div id="vditor" className="linsight-vditor border-none" />
@@ -247,7 +252,7 @@ const useSopTools = (linsight) => {
                         return {
                             label: child.name,
                             value: child.tool_key,
-                            desc: '',
+                            desc: child.desc,
                             children: []
                         }
                     })
@@ -262,6 +267,27 @@ const useSopTools = (linsight) => {
     return { nameToValueRef, valueToNameRef, buildTreeData };
 };
 
+// 滚动隐藏@标记
+const useAtTip = (scrollBoxRef) => {
+    useEffect(() => {
+
+        const handleScroll = () => {
+            const atDom = document.querySelector('#vditor-placeholder-at');
+            if (atDom) {
+                atDom.style.display = 'none';
+            }
+        }
+        if (scrollBoxRef.current) {
+            scrollBoxRef.current.addEventListener('scroll', handleScroll);
+        }
+
+        return () => {
+            if (scrollBoxRef.current) {
+                scrollBoxRef.current.removeEventListener('scroll', handleScroll);
+            }
+        }
+    }, [scrollBoxRef.current])
+}
 
 /**
  * 正向替换：将 @标记@ 替换为 {{value}} 格式
@@ -274,9 +300,10 @@ function replaceMarkersToBraces(inputStr, valueToNameMap) {
     return inputStr.replace(regex, (match, id) => {
         // 检查映射中是否存在该ID
         if (Object.prototype.hasOwnProperty.call(valueToNameMap, id)) {
-            return `{{${valueToNameMap[id]}}}`;
+            return `{{@${valueToNameMap[id]}@}}`;
         }
-        return `{{${id}}}`; // 未找到时保留原始ID
+        console.warn('转换ui时未找到对应的ID  :>> ', valueToNameMap, id);
+        return `{{#${id}#}}`; // 未找到时保留原始ID
     });
 }
 
@@ -293,6 +320,7 @@ function replaceBracesToMarkers(inputStr, nameToValueMap) {
         if (Object.prototype.hasOwnProperty.call(nameToValueMap, value)) {
             return `@${nameToValueMap[value]}@`;
         }
-        return `{{${value}}}`; // 未找到时保留原始值
+        console.warn('转换sop时未找到对应的工具  :>> ', nameToValueMap, value);
+        return `${value}`; // 未找到时保留原始值
     });
 }

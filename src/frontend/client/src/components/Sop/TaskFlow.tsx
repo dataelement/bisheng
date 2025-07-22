@@ -61,7 +61,10 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 status: SopStatus.NotStarted
             })
 
-            setVersions((prve) => [{ id: newVersionId, name: res.data.version.replace('T', ' ') }, ...prve])
+            setVersions((prve) => [{
+                id: newVersionId,
+                name: res.data.version.replace('T', ' ').replaceAll('-', '/').slice(0, -3)
+            }, ...prve])
             setVersionId(newVersionId)
             // 切换版本
             check && !cancel && setLinsightSubmission(newVersionId, {

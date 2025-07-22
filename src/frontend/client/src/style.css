@@ -2786,9 +2786,10 @@ button.scroll-convo {
   scrollbar-color: transparent transparent;
 }
 
-.linsight-vditor .vditor-reset:hover{
+.linsight-vditor .vditor-reset:hover {
   scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
 }
+
 .linsight-vditor .vditor-reset .vditor-wysiwyg__preview code.hljs {
   /* display: none; */
   color: #333;
@@ -2811,7 +2812,15 @@ button.scroll-convo {
   background: #E9F1FF;
   color: #2A3F73;
   font-size: 14px;
-  padding: 0 6px;
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
+.linsi-error {
+  background: #ffece9;
+  color: #a13434;
+  font-size: 14px;
+  padding: 1px 8px;
   border-radius: 4px;
 }
 

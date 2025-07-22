@@ -782,6 +782,7 @@ export function updateConversation(
 ): Promise<t.TUpdateConversationResponse> {
   return request.post(endpoints.updateConversation(), {
     conversationId: payload.conversationId,
+    flow_type: payload.flowType,
     name: payload.title
   });
 }

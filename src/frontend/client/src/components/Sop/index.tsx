@@ -65,7 +65,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
             if (!versionId) {
                 const formattedVersions = data.map((item) => ({
                     id: item.id,
-                    name: item.version.replace('T', ' '),
+                    name: item.version.replace('T', ' ').replaceAll('-', '/').slice(0, -3)
                 }));
                 setVersions(formattedVersions);
             }

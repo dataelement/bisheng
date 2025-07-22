@@ -1,6 +1,8 @@
 import { FileText, MessageCircleMoreIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
+import { useConversationsInfiniteQuery } from '~/data-provider';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
@@ -13,6 +15,7 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
     }, [getLinsight, versionId])
 
     console.log('linsight :>> ', linsight);
+    const title = useCurrentTitle()
 
     return (
         <div className="flex items-center justify-between p-4">
@@ -21,7 +24,7 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                 : <div className="flex items-center gap-3">
                     <FileText className="size-4" />
                     <span className="text-base font-medium text-gray-900">
-                        {linsight?.title}
+                        {title || linsight?.title}
                     </span>
                 </div>
             }
@@ -66,3 +69,26 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
         </div>
     );
 };
+
+
+const useCurrentTitle = () => {
+    const { conversationId } = useParams();
+
+    const { data } =
+        useConversationsInfiniteQuery(
+            {
+                pageNumber: '1',
+                isArchived: false,
+            },
+        );
+
+    const title = useMemo(() => {
+        // 初始化列表or搜索数据获取
+        const conversations = data?.pages.flatMap((page) => page.conversations) ||
+            [];
+        const conversation = conversations.find((vo) => vo.conversationId === conversationId);
+        return conversation?.title
+    }, [conversationId, data]);
+
+    return title
+}
