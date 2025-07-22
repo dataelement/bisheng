@@ -69,8 +69,8 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
         setSaveLoad(true);
         try {
             const data = {
-                task_model: { id:extractModelId},
-                embedding_model: { id:sourceModelId },
+                 task_model: { id: String(extractModelId) },
+                embedding_model: { id: String(sourceModelId) },
                  linsight_executor_mode: executionMode
             };
 
