@@ -35,4 +35,8 @@ export const sopApi = {
   getToolList: () => {
     return axios.get('/api/v1/workstation/config');
   },
+  setToolList:(data) => {
+     return axios.post(`api/v1/workstation/config`, data);
+  }
+  
 }

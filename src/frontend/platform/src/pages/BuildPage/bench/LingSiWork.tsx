@@ -13,7 +13,7 @@ import Preview from "./Preview";
 import { useAssistantStore } from "@/store/assistantStore";
 import { Search, Star, X } from "lucide-react";
 import { t } from "i18next";
-import { sopApi } from "@/controllers/API/linsight";
+import { sopApi} from "@/controllers/API/linsight";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import ToolSelector from "@/components/LinSight/ToolSelector";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
@@ -21,6 +21,7 @@ import SopTable from "@/components/LinSight/SopTable";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { cloneDeep } from "lodash-es";
+import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
 
 
 export interface FormErrors {
@@ -100,6 +101,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('mcp');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
+    // const [importDialogOpen, setImportDialogOpen] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
         title: '确认删除',
@@ -717,6 +719,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">灵思SOP管理</p>
+                            {/* <p className="text-lg font-bold mb-2">灵思SOP库</p> */}
+
                             <div className="flex items-center gap-2 mb-2">
                                 <div className="relative flex-1 max-w-xs">
                                     <div className="relative">
@@ -744,18 +748,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     {/* <Button
                                         variant="default"
                                         size="sm"
-                                        onClick={() => {
-                                            setIsEditing(false);
-                                            setCurrentSopId(null);
-                                            setSopForm({
-                                                id: '',
-                                                name: '',
-                                                description: '',
-                                                content: '',
-                                                rating: 0
-                                            });
-                                            setIsDrawerOpen(true);
-                                        }}
+                                       onClick={() => setImportDialogOpen(true)}
                                     >
                                         从运行记录中导入
                                     </Button> */}
@@ -803,6 +796,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     </Button>
                                 </div>
                             </div>
+                            {/* <ImportFromRecordsDialog 
+                                open={importDialogOpen} 
+                                onOpenChange={setImportDialogOpen} 
+                                /> */}
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
                             {deleteConfirmModal.open && (
@@ -870,71 +867,43 @@ const useChatConfig = (
 ) => {
     const { toast } = useToast();
 
-    const handleSave = async (formData: ChatConfigForm) => {
-        const currentTools = Array.isArray(toolsData[activeToolTab])
-            ? toolsData[activeToolTab]
-            : [];
-        const processedTools = selectedTools.map(tool => {
-            const processedTool = {
-                ...tool,
-                extra: undefined
-            };
+const handleSave = async (formData: ChatConfigForm) => {
+  // 保留所有必要的字段
+  console.log(formData, 'formData',selectedTools,22);
+  
+  const processedTools = selectedTools.map(tool => ({
+    id: tool.id,
+    name: tool.name,
+    is_preset: tool.is_preset, // 保留关键字段
+    tool_key: tool.tool_key,   // 保留关键字段
+    children: tool.children?.map(child => ({
+      id: child.id,
+      name: child.name,
+      tool_key: child.tool_key,
+      desc: child.desc        // 保留描述信息
+    }))
+  }));
 
-            if (tool.children) {
-                processedTool.children = tool.children.map(child => ({
-                    ...child,
-                    extra: undefined
-                }));
-            }
-            return processedTool;
-        });
-        const dataToSave = {
-            ...formData,
-            sidebarSlogan: formData.sidebarSlogan?.trim() || '',
-            welcomeMessage: formData.welcomeMessage?.trim() || '',
-            functionDescription: formData.functionDescription?.trim() || '',
-            inputPlaceholder: formData.inputPlaceholder,
-            maxTokens: formData.maxTokens || 15000,
-            linsightConfig: {
-                ...formData.linsightConfig,
-                input_placeholder: formData.linsightConfig?.input_placeholder || '',
-                tools: processedTools.reduce((acc, tool) => {
-                    const parentTool = currentTools.find(parent =>
-                        parent?.children?.some(child => child.id === tool.id)
-                    );
+  const dataToSave = {
+    ...formData,
+    linsightConfig: {
+      input_placeholder: formData.linsightConfig?.input_placeholder || '',
+      tools: processedTools
+    }
+  };
 
-                    if (parentTool) {
-                        const existingGroup = acc.find(g => g.id === parentTool.id);
-                        if (existingGroup) {
-                            existingGroup.children.push(tool);
-                        } else {
-                            acc.push({
-                                id: parentTool.id,
-                                name: parentTool.name,
-                                children: [tool]
-                            });
-                        }
-                    } else {
-                        acc.push(tool);
-                    }
-                    return acc;
-                }, [])
-            }
-        };
-
-        try {
-            const res = await setWorkstationConfigApi(dataToSave);
-            if (res) {
-                // 保存成功后更新本地状态
-                setFormData(dataToSave);
-                toast({ variant: 'success', description: '配置保存成功' });
-                return true;
-            }
-        } catch (error) {
-            toast({ variant: 'error', description: '保存失败' });
-            return false;
-        }
-    };
+  try {
+    const res = await setWorkstationConfigApi(dataToSave);
+    if (res) {
+      setFormData(dataToSave);
+      toast({ variant: 'success', description: '配置保存成功' });
+      return true;
+    }
+  } catch (error) {
+    toast({ variant: 'error', description: '保存失败' });
+    return false;
+  }
+};
 
     return { handleSave };
 };

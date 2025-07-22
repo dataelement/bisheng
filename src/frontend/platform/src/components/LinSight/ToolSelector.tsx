@@ -75,74 +75,77 @@ const ToolSelector = ({
     syncPanelHeights();
   }, [syncPanelHeights, selectedTools, filteredTools, expandedItems, showToolSelector]);
 
-  const handleSelectedToolClick = (tool) => {
-    setShowToolSelector(true);
-    console.log(tool);
+const handleSelectedToolClick = (tool) => {
+  setShowToolSelector(true);
+  
+  let toolCategory = 'builtin';
+  if (tool.is_preset === 0) {
+    toolCategory = 'api';
+  } else if (tool.is_preset === 2) {
+    toolCategory = 'mcp';
+  }
 
-    let toolCategory = 'builtin';
-    if (tool.is_preset === 0) {
-      toolCategory = 'api';
-    } else if (tool.is_preset === 2) {
-      toolCategory = 'mcp';
-    }
-    console.log(toolCategory, 123);
+  setTargetCategory(toolCategory);
+  setScrollToParentId(tool.id);
 
-    setTargetCategory(toolCategory);
-    setScrollToParentId(tool.id);
-
+  // 使用setTimeout确保DOM更新完成后再执行滚动
+  setTimeout(() => {
     if (activeToolTab !== toolCategory) {
       setActiveToolTab(toolCategory);
     } else {
-      scrollToTool(tool.id);
+      if (!expandedItems.includes(tool.id)) {
+        setManuallyExpandedItems(prev => [...prev, tool.id]);
+        // 等待展开动画完成
+        setTimeout(() => scrollToTool(tool.id), 300);
+      } else {
+        scrollToTool(tool.id);
+      }
     }
+  }, 50);
+};
+const scrollToTool = useCallback((toolId: string) => {
+  if (scrollTimeoutRef.current) {
+    clearTimeout(scrollTimeoutRef.current);
+  }
 
-    if (!expandedItems.includes(tool.id)) {
-      setIsExpanding(true);
-      setManuallyExpandedItems([...expandedItems, tool.id]);
-    } else {
-      scrollToTool(tool.id);
-    }
-  };
-  const scrollToTool = useCallback((toolId: string) => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
+  scrollAttempts.current = 0;
 
-    scrollAttempts.current = 0;
+  const tryScroll = () => {
+    scrollAttempts.current++;
+    const element = document.getElementById(`tool-${toolId}`);
+    const childElement = document.getElementById(`tool-child-${toolId}`);
+    const container = rightContentRef.current;
 
-    const tryScroll = () => {
-      scrollAttempts.current++;
-      const element = document.getElementById(`tool-${toolId}`);
-
-      if (element && rightContentRef.current) {
-        // 使用ref获取容器而不是querySelector
-        const container = rightContentRef.current;
-
-        // 计算元素相对于容器的位置
-        const elementTop = element.offsetTop;
-        const containerTop = container.offsetTop;
-        const scrollPosition = elementTop - containerTop - 20; // 减去20px作为缓冲
-
-        // 平滑滚动到目标位置
-        container.scrollTo({
-          top: scrollPosition,
-          behavior: 'smooth'
-        });
-
-        // 高亮显示目标元素
-        element.classList.add('bg-blue-50');
-        setTimeout(() => {
-          element.classList.remove('bg-blue-50');
-        }, 2000);
-      } else if (scrollAttempts.current < 5) {
-        // 如果元素未找到，重试最多5次
+    if (!container) {
+      if (scrollAttempts.current < 10) {
         scrollTimeoutRef.current = setTimeout(tryScroll, 200);
       }
-    };
+      return;
+    }
 
-    // 初始尝试
-    scrollTimeoutRef.current = setTimeout(tryScroll, 100);
-  }, []);
+    // 优先查找子元素，如果找不到再找父元素
+    const targetElement = childElement || element;
+    
+    if (targetElement) {
+      // 确保元素已经完全渲染
+      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      setTimeout(() => {
+        targetElement.classList.remove('bg-blue-50');
+      }, 2000);
+      
+      return; // 成功找到并滚动到元素，结束重试
+    }
+
+    // 如果没找到元素，继续重试
+    if (scrollAttempts.current < 10) {
+      scrollTimeoutRef.current = setTimeout(tryScroll, 200);
+    }
+  };
+
+  tryScroll();
+}, []);
+
 useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {
       syncPanelHeights();
@@ -156,12 +159,20 @@ useEffect(() => {
       resizeObserver.disconnect();
     };
   }, [syncPanelHeights]);
-  useEffect(() => {
-    if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
+useEffect(() => {
+  if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
+    if (!expandedItems.includes(scrollToParentId)) {
+      setManuallyExpandedItems(prev => [...prev, scrollToParentId]);
+      setTimeout(() => {
+        scrollToTool(scrollToParentId);
+        setTargetCategory(null);
+      }, 300);
+    } else {
       scrollToTool(scrollToParentId);
       setTargetCategory(null);
     }
-  }, [activeToolTab, targetCategory]);
+  }
+}, [activeToolTab, targetCategory, scrollToParentId, expandedItems]);
 
   useEffect(() => {
     if (isExpanding && scrollToParentId) {
