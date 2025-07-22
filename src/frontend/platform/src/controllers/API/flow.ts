@@ -195,7 +195,7 @@ export const createCustomFlowApi = async (params: {
 }, userName: string) => {
     if (params.logo) {
         // logo保存相对路径
-        params.logo = params.logo.match(/(icon.*)\?/)?.[1]
+        params.logo = params.logo.replace('/bisheng', '') 
     }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,

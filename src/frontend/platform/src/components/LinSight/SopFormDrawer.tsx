@@ -4,6 +4,7 @@ import { Button } from '../bs-ui/button';
 import { useState, useRef, useEffect } from 'react';
 import { LoadIcon } from "../bs-icons/loading";
 import { Input, Textarea } from "../bs-ui/input";
+import SopMarkdown from "./SopMarkdown";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -11,6 +12,7 @@ const SopFormDrawer = ({
   isEditing,
   sopForm,
   setSopForm,
+  tools,
   handleSaveSOP
 }) => {
   const [errors, setErrors] = useState({
@@ -102,7 +104,7 @@ const SopFormDrawer = ({
 
   return (
     <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent className="w-2/3 sm:max-w-[780px]">
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between px-4 py-6 border-b border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
@@ -139,7 +141,7 @@ const SopFormDrawer = ({
                 </label>
                 <Textarea
                   id="sop-description"
-                    maxLength={1000}
+                  maxLength={1000}
                   rows={3}
                   value={sopForm.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
@@ -152,7 +154,14 @@ const SopFormDrawer = ({
                 <label htmlFor="sop-content" className="block text-sm font-medium text-gray-700">
                   详细内容<span className="text-red-500">*</span>
                 </label>
-                <Textarea
+                {
+                  isDrawerOpen && <SopMarkdown
+                    tools={tools}
+                    defaultValue={sopForm.content}
+                    onChange={(val) => handleInputChange('content', val)}
+                  />
+                }
+                {/* <Textarea
                   id="sop-content"
                   maxLength={50000}
                   ref={contentInputRef}
@@ -161,12 +170,12 @@ const SopFormDrawer = ({
                   onChange={(e) => handleInputChange('content', e.target.value)}
                   className={`mt-1 block w-full border ${errors.content ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
                   placeholder="请输入SOP详细内容"
-                />
+                /> */}
                 <div className="flex justify-between">
                   {errors.content && (
                     <p className="mt-1 text-sm text-red-600">{errors.content}</p>
                   )}
-                  
+
                 </div>
               </div>
 

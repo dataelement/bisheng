@@ -321,6 +321,16 @@ export async function deleteFileLib(id) {
   return await axios.delete(`/api/v1/knowledge/`, { data: { knowledge_id: id } });
 }
 
+// 获取灵思工具
+export async function getLinsightTools(): Promise<any> {
+  return await axios.get('/api/v1/tool/linsight/preset');
+}
+
+// 获取个人知识库信息
+export async function getPersonalKnowledgeInfo(): Promise<any> {
+  return await axios.get('/api/v1/knowledge/personal_knowledge_info');
+}
+
 /**
  * 删除知识库下文件
  */

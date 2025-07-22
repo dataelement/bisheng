@@ -741,7 +741,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 </div>
 
                                 <div className="flex gap-2">
-                                             {/* <Button
+                                    {/* <Button
                                         variant="default"
                                         size="sm"
                                         onClick={() => {
@@ -837,7 +837,15 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             )}
 
 
-                            <SopFormDrawer isDrawerOpen={isDrawerOpen} setIsDrawerOpen={setIsDrawerOpen} isEditing={isEditing} sopForm={sopForm} setSopForm={setSopForm} handleSaveSOP={handleSaveSOP} />
+                            <SopFormDrawer
+                                isDrawerOpen={isDrawerOpen}
+                                setIsDrawerOpen={setIsDrawerOpen}
+                                isEditing={isEditing}
+                                sopForm={sopForm}
+                                setSopForm={setSopForm}
+                                handleSaveSOP={handleSaveSOP}
+                                tools={selectedTools}
+                            />
                         </div>
                     </div>
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
