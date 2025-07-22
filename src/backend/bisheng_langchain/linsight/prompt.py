@@ -91,6 +91,8 @@ GenerateTaskPrompt = """你是一个任务规划专家，请根据用户的需�
 
 用户问题：
 {query}
+
+无论如何，你都应该生成完整的步骤。
 """
 
 # 单个agent的prompt模板
