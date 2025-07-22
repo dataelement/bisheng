@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -7,23 +7,13 @@ from bisheng.database.constants import ToolPresetType
 
 class ToolChildrenSchema(BaseModel):
     id: int = Field(..., description="工具id")
-    name: str = Field(..., description="工具名称")
-    tool_key: str = Field(..., description="工具key")
 
 
 # 选择的toolSchema
 class LinsightToolSchema(BaseModel):
     id: int = Field(..., description="工具一级ID")
-    name: str = Field(..., description="工具一级名称")
-    description: str = Field(..., description="工具一级描述")
-    is_preset: ToolPresetType = Field(..., description="工具类型")
     # child工具列表
-    children: List[ToolChildrenSchema] = Field(..., description="子工具列表")
-
-    @field_validator("is_preset")
-    @classmethod
-    def validate_is_preset(cls, v: ToolPresetType) -> int:
-        return v.value
+    children: Optional[List[ToolChildrenSchema]] = Field(..., description="子工具列表")
 
 
 class SubmitFileSchema(BaseModel):
