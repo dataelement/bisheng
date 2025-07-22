@@ -343,8 +343,10 @@ class LinsightWorkbenchImpl:
                 sop_content=content
             )
 
+            logger.info(f"生成SOP内容成功: session_version_id={linsight_session_version_id}")
+
         except Exception as e:
-            logger.error(f"生成SOP失败: {str(e)}")
+            logger.error(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
             yield {"event": "error", "data": str(e)}
 
     @classmethod

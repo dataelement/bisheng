@@ -19,7 +19,7 @@ from redis.asyncio import Redis as AsyncRedis
 
 class RedisClient:
 
-    def __init__(self, url, max_connections=10):
+    def __init__(self, url, max_connections=100):
         # # 哨兵模式
         if isinstance(settings.redis_url, Dict):
             redis_conf = dict(settings.redis_url)

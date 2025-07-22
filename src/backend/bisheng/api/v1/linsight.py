@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import List, Literal
-
+from loguru import logger
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
 from sse_starlette import EventSourceResponse
@@ -20,8 +20,6 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -68,6 +66,8 @@ async def submit_linsight_workbench(
     :param login_user:
     :return:
     """
+
+    logger.info(f"用户 {login_user.user_id} 提交灵思问题: {submit_obj.question}")
 
     async def event_generator():
         """
@@ -127,6 +127,8 @@ async def generate_sop(
     :param login_user:
     :return:
     """
+
+    logger.info(f"开始生成与重新规划灵思SOP，灵思会话版本ID: {linsight_session_version_id} ")
 
     async def event_generator():
         """

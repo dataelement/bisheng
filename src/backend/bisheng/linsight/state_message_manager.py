@@ -129,7 +129,7 @@ class LinsightStateMessageManager:
 
         except Exception as e:
             self._logger.error(f"Failed to pop message: {e}")
-            return None
+            raise e
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def set_session_version_info(self, session_version_model) -> None:
