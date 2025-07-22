@@ -396,7 +396,7 @@ useEffect(() => {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>{tool.name}</p>
+                            <p className='max-w-[240px]'>{tool.name}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -429,7 +429,7 @@ useEffect(() => {
                                   </p>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>{child.name}</p>
+                                  <p className='max-w-[240px]'>{child.name}</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -440,7 +440,7 @@ useEffect(() => {
                                     <p className="text-xs text-gray-500 truncate max-w-[260px]">{child.desc}</p>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p>{child.desc}</p>
+                                    <p className='max-w-[240px]'>{child.desc}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>

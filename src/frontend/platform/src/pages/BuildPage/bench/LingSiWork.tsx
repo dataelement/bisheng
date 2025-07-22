@@ -491,41 +491,56 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
         fetchData(requestParams);
     };
-    const handleBatchDelete = async () => {
-        setBatchDeleting(true);
-        try {
-            await sopApi.batchDeleteSop(selectedItems);
+ const handleBatchDelete = async () => {
+    setBatchDeleting(true);
+    try {
+        await sopApi.batchDeleteSop(selectedItems);
 
-            const newTotal = total - selectedItems.length;
-            const newTotalPages = Math.ceil(newTotal / pageSize);
-            let newPage = page;
-
-            if (datalist.length === selectedItems.length) {
-                if (page > 1) {
-                    newPage = page - 1;
-                } else if (newTotal > 0) {
-                    newPage = 1;
-                }
+        // 计算新的总数
+        const newTotal = total - selectedItems.length;
+        const newTotalPages = Math.ceil(newTotal / pageSize);
+        
+        // 确定新的当前页
+        let newPage = page;
+        
+        if (datalist.length === selectedItems.length) {
+            if (page > 1) {
+                newPage = page - 1;
+            } 
+            else if (newTotal > 0) {
+                newPage = 1;
             }
-
-            setTotal(newTotal);
-            setSelectedItems([]);
-            setPageInputValue(newPage.toString());
-
-            // 确保传递所有必要参数
-            fetchData({
-                page: newPage,
-                pageSize: pageSize,
-                keyword: keywords,
-            });
-
-            toast({ variant: 'success', description: `成功删除 ${selectedItems.length} 个 SOP` });
-        } catch (error) {
-            toast({ variant: 'error', description: '删除失败，请稍后重试' });
-        } finally {
-            setBatchDeleting(false);
         }
-    };
+        if (newPage > newTotalPages && newTotalPages > 0) {
+            newPage = newTotalPages;
+        }
+
+        // 更新状态
+        setTotal(newTotal);
+        setSelectedItems([]);
+        setPage(newPage);  // 确保更新page状态
+        setPageInputValue(newPage.toString());
+
+        // 重新获取数据
+        fetchData({
+            page: newPage,
+            pageSize: pageSize,
+            keyword: keywords,
+        });
+
+        toast({ 
+            variant: 'success', 
+            description: `成功删除 ${selectedItems.length} 个 SOP` 
+        });
+    } catch (error) {
+        toast({ 
+            variant: 'error', 
+            description: '删除失败，请稍后重试' 
+        });
+    } finally {
+        setBatchDeleting(false);
+    }
+};
     const handleSelectAll = useCallback(() => {
         const currentPageIds = datalist.map(item => item.id);
         if (currentPageIds.every(id => selectedItems.includes(id))) {
@@ -874,13 +889,13 @@ const handleSave = async (formData: ChatConfigForm) => {
   const processedTools = selectedTools.map(tool => ({
     id: tool.id,
     name: tool.name,
-    is_preset: tool.is_preset, // 保留关键字段
-    tool_key: tool.tool_key,   // 保留关键字段
+    is_preset: tool.is_preset,
+    tool_key: tool.tool_key,
     children: tool.children?.map(child => ({
       id: child.id,
       name: child.name,
       tool_key: child.tool_key,
-      desc: child.desc        // 保留描述信息
+      desc: child.desc 
     }))
   }));
 
