@@ -230,7 +230,8 @@ LoopAgentPrompt = """你是一个强大的{profile}，可以使用提供的工�
 请根据用户问题，使用适当的工具来完成任务。当你完成了当前用户问题，应该明确当前任务的产出内容是什么，并结束执行。"""
 
 # 历史记录总结的prompt模板, 在历史记录过长时使用
-# variables -> sop: 标准执行步骤；query: 用户问题；history_str: 历史记录字符串
+# 二级任务： sop: 当前方法; query: 当前目标; history_str: 历史记录字符串
+# 一级任务：sop: sop; query: prompt; history_str: 历史记录字符串
 SummarizeHistoryPrompt = """请基于以下对话历史记录尝试回答用户问题，并明确完成任务还需要做什么:
 要求：
 1. 基于已有历史记录对用户问题进行阶段性回答。

@@ -26,10 +26,10 @@ class ReactTask(BaseTask):
             else:
                 remain_messages.append(one)
 
-        all_tool_messages_str = json.dumps([one.model_dump() for one in tool_messages], ensure_ascii=False,
+        all_tool_messages_str = json.dumps([json.loads(one.content) for one in tool_messages], ensure_ascii=False,
                                            indent=2)
         if len(encode_str_tokens(all_tool_messages_str)) > self.tool_buffer:
-            messages_str = json.dumps([one.model_dump() for one in self.history], ensure_ascii=False, indent=2)
+            messages_str = json.dumps([json.loads(one.content) for one in self.history], ensure_ascii=False, indent=2)
             history_summary = await self.summarize_history(messages_str)
             # 将总结后的历史记录插入到system_message后面
             remain_messages.append(AIMessage(content=history_summary))

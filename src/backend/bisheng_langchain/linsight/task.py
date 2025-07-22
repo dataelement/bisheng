@@ -138,7 +138,10 @@ class BaseTask(BaseModel):
         # This is a placeholder for the actual summarization logic.
         # You would typically call an LLM or a summarization service here.
         # For now, we will just return a truncated version of the messages_str.
-        prompt = SummarizeHistoryPrompt.format(sop=self.sop, query=self.query, history_str=messages_str)
+        query = self.prompt
+        if self.parent_id:
+            query = self.target
+        prompt = SummarizeHistoryPrompt.format(sop=self.sop, query=query, history_str=messages_str)
         res = await self._ainvoke_llm_without_tools([HumanMessage(content=prompt)])
         return res.content
 
