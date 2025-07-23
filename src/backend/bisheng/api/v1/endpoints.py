@@ -72,10 +72,6 @@ def get_env():
     env['version'] = __version__
     env['enable_etl4lm'] = etl_for_lm_url is not None
 
-    linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
-    if linsight_invitation_code is not None:
-        env['linsight_invitation_code'] = linsight_invitation_code
-
     return resp_200(env)
 
 
