@@ -9,6 +9,7 @@ from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
@@ -21,6 +22,7 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
+from bisheng.settings import settings
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
 
@@ -74,6 +76,20 @@ async def submit_linsight_workbench(
         """
         事件生成器，用于生成SSE事件
         """
+
+        system_config = await settings.aget_all_config()
+
+        # 获取Linsight_invitation_code
+        linsight_invitation_code = system_config.get("linsight_invitation_code", False)
+
+        if linsight_invitation_code:
+            if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
+                yield {
+                    "event": "error",
+                    "data": "您的灵思使用次数已用完，请使用新的邀请码激活灵思功能。"
+                }
+                return
+
         try:
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
                 submit_obj,
@@ -204,9 +220,14 @@ async def start_execute_sop(
         return resp_500(code=403, message="无权限执行该灵思SOP")
 
     from bisheng.linsight.worker import RedisQueue
-    queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
+    try:
+        queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
 
-    await queue.put(data=linsight_session_version_id)
+        await queue.put(data=linsight_session_version_id)
+    except Exception as e:
+        logger.error(f"开始执行灵思任务失败: {str(e)}")
+        await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
+        return resp_500(code=500, message=str(e))
 
     return resp_200(data=True, message="灵思执行任务已开始，执行结果将通过消息流返回")
 
@@ -451,7 +472,6 @@ async def batch_download_files(
     try:
         # 调用实现类处理批量下载
         zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
-
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
 

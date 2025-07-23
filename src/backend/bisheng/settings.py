@@ -287,6 +287,24 @@ class Settings(BaseModel):
                 else:
                     raise Exception('initdb_config not found, please check your system config')
 
+    async def aget_all_config(self):
+        from bisheng.database.base import async_session_getter
+        from bisheng.cache.redis import redis_client
+        from bisheng.database.models.config import Config
+
+        redis_key = 'config:initdb_config'
+        cache = await redis_client.aget(redis_key)
+        if cache:
+            return yaml.safe_load(cache)
+        else:
+            async with async_session_getter() as session:
+                initdb_config = (await session.exec(select(Config).where(Config.key == 'initdb_config'))).first()
+                if initdb_config:
+                    await redis_client.set(redis_key, initdb_config.value, 100)
+                    return yaml.safe_load(initdb_config.value)
+                else:
+                    raise Exception('initdb_config not found, please check your system config')
+
     def update_from_yaml(self, file_path: str, dev: bool = False):
         new_settings = load_settings_from_yaml(file_path)
         self.chains = new_settings.chains or {}
