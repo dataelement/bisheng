@@ -329,7 +329,7 @@ class Task(BaseTask):
                                               processed_steps=self.task_manager.get_processed_steps(),
                                               input_str=await self.get_input_str(),
                                               step_id=self.step_id,
-                                              target=self.target,
+                                              target=self.prompt,
                                               single_sop=self.sop)
         return HumanMessage(content=prompt)
 
