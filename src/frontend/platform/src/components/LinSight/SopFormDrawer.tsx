@@ -61,16 +61,19 @@ const SopFormDrawer = ({
     return isValid;
   };
 
-  const handleInputChange = (field, value) => {
-    // 限制输入长度
-    if (value.length <= MAX_LENGTHS[field]) {
-      setSopForm({ ...sopForm, [field]: value });
-      setCharCount({ ...charCount, [field]: value.length });
-      if (errors[field]) {
-        setErrors({ ...errors, [field]: '' });
-      }
+const handleInputChange = (field, value) => {
+  const length = field === 'content' 
+    ? value.replace(/[#*_\-`~]/g, '').length-1
+    : value.length;
+
+  if (length <= MAX_LENGTHS[field]) {
+    setSopForm(prev => ({ ...prev, [field]: value }));
+    setCharCount(prev => ({ ...prev, [field]: length }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
-  };
+  }
+};
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -105,13 +108,13 @@ const SopFormDrawer = ({
   return (
     <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
       <SheetContent className="w-2/3 sm:max-w-[780px]">
-        <div className="flex flex-col h-full">
-          <div className="flex items-center justify-between px-4 py-6 border-b border-gray-200">
+        <div className="flex flex-col ">
+          <div className="flex items-center justify-between px-4 py-5 border-b border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
               {isEditing ? '编辑SOP' : '新建SOP'}
             </SheetTitle>
           </div>
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 p-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="sop-name" className="block text-sm font-medium text-gray-700">
@@ -154,13 +157,19 @@ const SopFormDrawer = ({
                 <label htmlFor="sop-content" className="block text-sm font-medium text-gray-700">
                   详细内容<span className="text-red-500">*</span>
                 </label>
-                {
-                  isDrawerOpen && <SopMarkdown
-                    tools={tools}
-                    defaultValue={sopForm.content}
-                    onChange={(val) => handleInputChange('content', val)}
-                  />
-                }
+                {isDrawerOpen && (
+    <div className="relative mt-1">
+      <SopMarkdown
+        tools={tools}
+        defaultValue={sopForm.content}
+        onChange={(val) => handleInputChange('content', val)}
+        className="min-h-[200px]"
+      />
+      <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
+        {charCount.content}/{MAX_LENGTHS.content}
+      </div>
+    </div>
+                )}
                 {/* <Textarea
                   id="sop-content"
                   maxLength={50000}
@@ -173,28 +182,28 @@ const SopFormDrawer = ({
                 /> */}
                 <div className="flex justify-between">
                   {errors.content && (
-                    <p className="mt-1 text-sm text-red-600">{errors.content}</p>
+                    <p className="mt-0 text-sm text-red-600">{errors.content}</p>
                   )}
 
                 </div>
               </div>
 
-              <div className="flex-shrink-0 px-4 py-4 border-t border-gray-200 flex justify-end space-x-3">
-                <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
-                {/* <Button type="submit">{isEditing ? '更新' : '创建'}</Button> */}
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <LoadIcon className="animate-spin mr-2" />
-                      保存中...
-                    </>
-                  ) : (
-                    '保存'
-                  )}
-                </Button>
+           <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 flex justify-end space-x-3">
+            <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
+            <Button
+              type="submit"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <LoadIcon className="animate-spin mr-2" />
+                  保存中...
+                </>
+              ) : (
+                '保存'
+              )}
+            </Button>
               </div>
             </form>
           </div>

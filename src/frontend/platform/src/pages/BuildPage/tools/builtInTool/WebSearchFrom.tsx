@@ -156,7 +156,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     };
 
     const renderParams = () => {
-        if (loading) return <LoadingIcon />;
+      
 
         const currentTool = allToolsConfig[selectedTool];
         console.log(currentTool, 111);
@@ -257,6 +257,8 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
     };
 
     return (
+        <>
+           {loading? <LoadingIcon />:
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <SelectField
                 label="联网搜索引擎"
@@ -288,7 +290,9 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
                     {t('build.confirm')}
                 </Button>
             </DialogFooter>
-        </form>
+        </form>}
+        </>
+    
     );
 };
 
