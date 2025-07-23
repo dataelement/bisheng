@@ -118,7 +118,7 @@ const SopTable = ({
                                                     {item.name}
                                                 </div>
                                             </TooltipTrigger>
-                                            <TooltipContent>
+                                            <TooltipContent className='max-w-[700px] break-words whitespace-normal'>
                                                 <p>{item.name}</p>
                                             </TooltipContent>
                                         </Tooltip>
