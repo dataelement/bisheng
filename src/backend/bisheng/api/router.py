@@ -6,7 +6,7 @@ from bisheng.api.v1 import (assistant_router, audit_router, chat_router, compone
                             group_router, knowledge_router, llm_router, mark_router, qa_router,
                             report_router, server_router, skillcenter_router, tag_router,
                             user_router, validate_router, variable_router, workflow_router,
-                            workstation_router, linsight_router, tool_router)
+                            workstation_router, linsight_router, tool_router, invite_code_router)
 from bisheng.api.v2 import (assistant_router_rpc, chat_router_rpc, flow_router,
                             knowledge_router_rpc, rpc_router_rpc, workflow_router_rpc,
                             workstation_router_rpc)
@@ -36,7 +36,7 @@ router.include_router(mark_router)
 router.include_router(workstation_router)
 router.include_router(linsight_router)
 router.include_router(tool_router)
-
+router.include_router(invite_code_router)
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(chat_router_rpc)
