@@ -121,12 +121,20 @@ class LocalFileTool(BaseModel):
             for item in items:
                 full_path = os.path.join(directory_path, item)
                 if os.path.isdir(full_path):
-                    result.append(f"📁 {item}/")
+                    result.append({
+                        "type": "directory",
+                        "name": item,
+                        "path": full_path
+                    })
                 else:
                     # 获取文件大小
                     size = os.path.getsize(full_path)
                     size_str = format_size(size)
-                    result.append(f"📄 {item} ({size_str})")
+                    result.append({
+                        "type": "file",
+                        "name": item,
+                        "size": size_str
+                    })
 
             if not result:
                 return ["目录为空"]
