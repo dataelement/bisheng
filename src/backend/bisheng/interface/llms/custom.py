@@ -164,7 +164,7 @@ class BishengLLM(BaseChatModel):
         self.streaming = kwargs.get('streaming', True)
         self.temperature = kwargs.get('temperature', 0.3)
         self.top_p = kwargs.get('top_p', 1)
-        self.cache = kwargs.get('cache', True)
+        self.cache = kwargs.get('cache', False)
         # 是否忽略模型是否上线的检查
         ignore_online = kwargs.get('ignore_online', False)
 
