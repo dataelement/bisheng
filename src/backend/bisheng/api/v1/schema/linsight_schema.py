@@ -37,3 +37,8 @@ class LinsightQuestionSubmitSchema(BaseModel):
             return []
         # 将工具转换为字典格式
         return [tool.model_dump() for tool in v]
+
+
+class BatchDownloadFilesSchema(BaseModel):
+    file_name: str = Field(..., description="文件名称")
+    file_url: str = Field(..., description="文件下载链接")

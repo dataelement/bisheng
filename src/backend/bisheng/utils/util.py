@@ -3,11 +3,13 @@ import functools
 import hashlib
 import importlib
 import inspect
+import io
 import logging
 import re
 import time
+import zipfile
 from functools import wraps
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List, Tuple
 from urllib.parse import urlparse
 
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
@@ -507,3 +509,49 @@ def sync_func_to_async(func, executor=None):
         return await loop.run_in_executor(executor, bound_func)
 
     return wrapper
+
+
+def bytes_to_zip(
+        files: List[Tuple[str, bytes]],
+        compress_level: int = 6
+) -> bytes:
+    """
+    将字节流数据打包成ZIP文件，返回ZIP文件的字节流
+
+    参数:
+        files: 包含(文件名, 字节流)元组的列表
+        compress_level: 压缩级别(0-9)，0表示不压缩，9表示最高压缩率
+
+    返回:
+        生成的ZIP文件字节流
+    """
+    try:
+        # 验证压缩级别
+        if not 0 <= compress_level <= 9:
+            raise ValueError("压缩级别必须在0到9之间")
+
+        # 创建内存中的字节流用于存储ZIP数据
+        zip_buffer = io.BytesIO()
+
+        # 创建ZIP文件并添加字节流数据
+        with zipfile.ZipFile(
+                zip_buffer,
+                'w',
+                zipfile.ZIP_DEFLATED,
+                compresslevel=compress_level
+        ) as zipf:
+            for filename, data in files:
+                # 向ZIP文件中添加字节流数据
+                zipf.writestr(filename, data)
+                print(f"已添加: {filename} (大小: {len(data) / 1024:.2f} KB)")
+
+        # 将ZIP数据定位到起始位置并返回字节流
+        zip_buffer.seek(0)
+        zip_data = zip_buffer.getvalue()
+
+        logger.debug(f"\nZIP文件创建成功，总大小: {len(zip_data) / 1024:.2f} KB")
+        return zip_data
+
+    except Exception as e:
+        logger.error(f"打包过程出错: {str(e)}")
+        raise e

@@ -1,6 +1,8 @@
+import asyncio
 import os
 import uuid
 from dataclasses import dataclass
+from io import BytesIO
 from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
 from urllib.parse import unquote
 
@@ -17,7 +19,7 @@ from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
@@ -30,6 +32,7 @@ from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.settings import settings
+from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import calculate_md5
@@ -841,3 +844,48 @@ class LinsightWorkbenchImpl:
                 linsight_session_id=session_version.session_id
             )
             await SOPManageService.add_sop(create_obj, user_id=session_version.user_id)
+
+    @classmethod
+    async def batch_download_files(cls, file_info_list: List[BatchDownloadFilesSchema]) -> bytes:
+        """
+        批量下载文件
+
+        Args:
+            file_info_list: 文件信息列表
+
+        Returns:
+            包含文件下载信息的列表
+        """
+
+        async def download_file(file_info: BatchDownloadFilesSchema) -> Tuple[str, bytes]:
+            """下载单个文件"""
+            object_name = file_info.file_url
+            try:
+                file_url = minio_client.get_share_link(object_name)
+                http_client = await app_ctx.get_http_client()
+
+                bytes_io = BytesIO()
+                async for chunk in http_client.stream(method="GET", url=str(file_url)):
+                    bytes_io.write(chunk)
+
+                bytes_io.seek(0)
+
+                return object_name, bytes_io.getvalue()
+
+            except Exception as e:
+                logger.error(f"下载文件失败 {object_name}: {e}")
+                return object_name, b''
+
+        # 批量下载文件
+        download_tasks = [download_file(file_info) for file_info in file_info_list]
+
+        results = await asyncio.gather(*download_tasks)
+
+        # 过滤掉下载失败的文件
+        successful_files = [res for res in results if res[1]]
+
+        if not successful_files:
+            raise ValueError("没有成功下载的文件，无法生成ZIP")
+
+        zip_bytes = util.bytes_to_zip(successful_files)
+        return zip_bytes

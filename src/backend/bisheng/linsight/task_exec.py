@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import shutil
-import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional, List, Dict, Callable
@@ -26,7 +25,6 @@ from bisheng.interface.llms.custom import BishengLLM
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.linsight import utils as linsight_execute_utils
 from bisheng.settings import settings
-from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.linsight.agent import LinsightAgent
 from bisheng_langchain.linsight.const import TaskStatus

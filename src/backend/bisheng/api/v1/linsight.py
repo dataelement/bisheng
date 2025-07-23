@@ -1,9 +1,11 @@
 import json
+import os
 from typing import List, Literal
 from loguru import logger
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
 from sse_starlette import EventSourceResponse
+from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.base import UnAuthorizedError
@@ -12,7 +14,7 @@ from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.user_service import get_login_user, UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
@@ -430,6 +432,39 @@ async def task_message_stream(
     except Exception as e:
         await websocket.close(code=1000, reason=str(e))
         return
+
+
+# 批量下载任务文件
+@router.post("/workbench/batch-download-files", summary="批量下载任务文件")
+async def batch_download_files(
+        zip_name: str = Body(..., description="压缩包名称"),
+        file_info_list: List[BatchDownloadFilesSchema] = Body(..., description="文件信息列表"),
+        login_user: UserPayload = Depends(get_login_user)):
+    """
+    批量下载任务文件
+    :param zip_name:
+    :param file_info_list:
+    :param login_user:
+    :return:
+    """
+
+    try:
+        # 调用实现类处理批量下载
+        zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
+
+
+        zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
+
+        return StreamingResponse(
+            iter([zip_bytes]),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename={zip_name}"
+            }
+        )
+    except Exception as e:
+        logger.error(f"批量下载文件失败: {str(e)}")
+        return resp_500(code=500, message=str(e))
 
 
 @router.post("/sop/add", summary="添加灵思SOP", response_model=UnifiedResponseModel)
