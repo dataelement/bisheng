@@ -1,4 +1,4 @@
-# 生成sop的prompt模板, variables -> query: 用户问题；sop：参考sop; tools_str: 已有工具字符串
+# 生成sop的prompt模板, variables -> query: 用户问题；sop：参考sop; tools_str: 已有工具字符串；file_list_str: 用户上传的文件名列表
 SopPrompt = """基于以下信息创建一个标准操作流程(SOP):
 请基于用户需求的生成SOP：
 1. SOP指的是通过哪些标准步骤能指导大模型解决用户的问题。
@@ -11,6 +11,8 @@ SopPrompt = """基于以下信息创建一个标准操作流程(SOP):
 7. 如果用户意图需要输出很长的内容，推荐使用写文档的工具，写文档的工具需要先拆解需要写的目录结构，然后给定一个文件名，然后一步一步的完成，每一步都写入同一个文件。
 8. 使用@来说明使用什么工具以及文件，
 例如工具的表示方法：@工具名@，文件的表示方法：@文件名@。
+
+{file_list_str}
 
 已有工具：
 {tools_str}
@@ -25,8 +27,13 @@ SopPrompt = """基于以下信息创建一个标准操作流程(SOP):
 输出内容应该简练，只输出SOP，不要输出其他内容"""
 
 # 调整sop时的反馈prompt模板, variables -> query: 用户问题；sop：参考sop；feedback：用户反馈; history_summary: 历史执行过程
-# variables -> tools_str: 已有工具字符串
+# variables -> tools_str: 已有工具字符串; file_list_str: 用户上传的文件名列表;
 FeedBackSopPrompt = """基于以下信息创建一个标准操作流程(SOP):
+
+{file_list_str}
+
+已有工具：
+{tools_str}
 
 用户需求: {query}
 

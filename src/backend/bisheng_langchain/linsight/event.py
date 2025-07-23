@@ -15,6 +15,8 @@ class ExecStep(BaseEvent):
     # params: str = Field(..., description='执行步骤的参数')
     params: Optional[Any] = Field(default=None, description='执行步骤的参数')
     output: Optional[str] = Field(default=None, description='工具执行的结果')
+    step_type: Optional[str] = Field("tool_call",
+                                     description='步骤类型。tool_call: 工具调用；react_step: 固定步骤或回答;')
     status: str = Field(..., description='执行状态，start: 开始执行；end：执行结束')
 
 

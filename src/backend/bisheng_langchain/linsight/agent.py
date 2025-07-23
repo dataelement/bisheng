@@ -33,14 +33,20 @@ class LinsightAgent(BaseModel):
     debug: Optional[bool] = Field(default=False, description='是否是调试模式。开启后会记录llm的输入和输出')
     debug_id: Optional[str] = Field(default=None, description='调试记录唯一ID, 用来写唯一的文件')
 
-    async def generate_sop(self, sop: str) -> AsyncIterator[ChatGenerationChunk]:
+    async def generate_sop(self, sop: str, file_list: list[str] = None) -> AsyncIterator[ChatGenerationChunk]:
         """
         Generate a Standard Operating Procedure (SOP) based on the provided SOP string.
         :param sop: The SOP string to be processed.
+        :param file_list: Optional list of files uploaded by the user.
+
         :return: Processed SOP string.
         """
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
-        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str)
+        file_list_str = ""
+        if file_list:
+            file_list_str = "\n".join(file_list)
+            file_list_str = f"用户上传文件列表:\n{file_list_str}"
+        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str)
         # Add logic to process the SOP string
         start_time = time.time()
         one = None
@@ -52,13 +58,15 @@ class LinsightAgent(BaseModel):
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
                               time.time() - start_time, self.debug_id)
 
-    async def feedback_sop(self, sop: str, feedback: str, history_summary: list[str] = None) -> AsyncIterator[
+    async def feedback_sop(self, sop: str, feedback: str, history_summary: list[str] = None,
+                           file_list: list[str] = None) -> AsyncIterator[
         ChatGenerationChunk]:
         """
         Provide feedback on the generated SOP.
         :param sop: The SOP string to be reviewed.
         :param feedback: Feedback string for the SOP.
         :param history_summary: Optional summary of previous interactions.
+        :param file_list: Optional list of files uploaded by the user.
 
         :return: Processed SOP with feedback applied.
         """
@@ -70,9 +78,14 @@ class LinsightAgent(BaseModel):
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
         if sop:
             sop = f"已有SOP：{sop}"
+        file_list_str = ""
+
+        if file_list:
+            file_list_str = "\n".join(file_list)
+            file_list_str = f"用户上传文件列表:\n{file_list_str}"
 
         sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
-                                              history_summary=history_summary)
+                                              history_summary=history_summary, file_list_str=file_list_str)
         start_time = time.time()
         one = None
         answer = ''

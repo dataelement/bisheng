@@ -372,6 +372,16 @@ class LinsightWorkbenchImpl:
         return tools
 
     @classmethod
+    async def _prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
+        """准备文件列表"""
+        file_list = []
+        if session_version.files:
+            for file in session_version.files:
+                if file.get('original_filename'):
+                    file_list.append(file['original_filename'])
+        return file_list
+
+    @classmethod
     async def _prepare_history_summary(cls, reexecute: bool,
                                        previous_session_version_id: str) -> List[str]:
         """准备历史摘要"""
@@ -412,6 +422,8 @@ class LinsightWorkbenchImpl:
                                     feedback_content: Optional[str],
                                     history_summary: List[str]) -> AsyncGenerator:
         """生成SOP内容"""
+        file_list = await cls._prepare_file_list(session_version)
+
         if feedback_content is None:
             # 检索SOP模板
             sop_template, search_sop_error_msg = await SOPManageService.search_sop(
@@ -427,7 +439,7 @@ class LinsightWorkbenchImpl:
                 for sop in sop_template if sop.page_content
             ])
 
-            async for res in agent.generate_sop(sop=sop_template):
+            async for res in agent.generate_sop(sop=sop_template, file_list=file_list):
                 yield res
         else:
             sop_template = session_version.sop if session_version.sop else ""
@@ -437,7 +449,8 @@ class LinsightWorkbenchImpl:
             async for res in agent.feedback_sop(
                     sop=sop_template,
                     feedback=feedback_content,
-                    history_summary=history_summary if history_summary else None
+                    history_summary=history_summary if history_summary else None,
+                    file_list=file_list
             ):
                 yield res
 
@@ -750,6 +763,7 @@ class LinsightWorkbenchImpl:
             feedback: 反馈内容
         """
         try:
+            file_list = await cls._prepare_file_list(session_version_model)
             # 获取工作台配置
             workbench_conf = await cls._get_workbench_config()
 
@@ -769,7 +783,8 @@ class LinsightWorkbenchImpl:
             async for res in agent.feedback_sop(
                     sop=sop_template,
                     feedback=feedback,
-                    history_summary=history_summary if history_summary else None
+                    history_summary=history_summary if history_summary else None,
+                    file_list=file_list
             ):
                 sop_content += res.content
 
