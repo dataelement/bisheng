@@ -111,6 +111,7 @@ class ReactTask(BaseTask):
                                           name=action,
                                           params=params,
                                           output=str(generate_content),
+                                          step_type='react_step',
                                           status="end"))
             message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
         else:
