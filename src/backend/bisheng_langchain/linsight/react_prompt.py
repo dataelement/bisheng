@@ -72,9 +72,9 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 
 {input_str}
 
-当前任务为：{step_id}，步骤目标为：
+当前任务为：{step_id}，目标为：
 {target}
-当你完成了阶段目标，应该结束执行。
+当你完成了当前目标，应该结束执行。
 
 当前应该遵守的SOP：
 {single_sop}
@@ -157,9 +157,9 @@ ReactLoopAgentPrompt = """你是一个强大的{profile}，可以使用以下工
 当前方法：
 {single_sop}
 
-当前任务为：{step_id}，阶段目标为：
+当前任务为：{step_id}，目标为：
 {target}
-当你完成了阶段目标，应该结束执行。
+当你完成了当前目标，应该结束执行。
 
 已经执行的步骤：
 {history}
