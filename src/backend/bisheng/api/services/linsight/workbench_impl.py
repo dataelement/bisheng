@@ -389,10 +389,13 @@ class LinsightWorkbenchImpl:
     async def _prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
         """准备文件列表"""
         file_list = []
-        if session_version.files:
-            for file in session_version.files:
-                if file.get('original_filename'):
-                    file_list.append(file['original_filename'])
+        template_str = """@{filename}的文件储存信息:{{"文件储存在语义检索库中的id":"{file_id}","文件储存地址":"{markdown}"}}@"""
+        if not session_version.files:
+            return file_list
+        for file in session_version.files:
+            file_list.append(template_str.format(filename=file['original_filename'],
+                                                 file_id=file['file_id'],
+                                                 markdown=f"./{file['markdown_filename']}"))
         return file_list
 
     @classmethod
