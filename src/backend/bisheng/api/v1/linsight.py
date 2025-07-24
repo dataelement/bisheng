@@ -359,7 +359,7 @@ async def submit_feedback(
             feedback
         )
 
-        return resp_200(data=True, message="反馈已提交，正在重新生成SOP")
+        return resp_200(data=True, message="提交成功")
 
     # score 小于等于3，且没有取消反馈 feedback 不为空 is_reexecute 为 True
     if score is not None and score <= 3 and (

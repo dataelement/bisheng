@@ -7,11 +7,17 @@ from bisheng.database.constants import ToolPresetType
 
 class ToolChildrenSchema(BaseModel):
     id: int = Field(..., description="工具id")
+    name: Optional[str] = Field(None, description="工具名称")
+    tool_key: Optional[str] = Field(None, description="工具key")
+    desc: Optional[str] = Field(None, description="工具描述")
 
 
 # 选择的toolSchema
 class LinsightToolSchema(BaseModel):
     id: int = Field(..., description="工具一级ID")
+    name: Optional[str] = Field(None, description="工具名称")
+    is_preset: Optional[bool] = Field(False, description="是否为预设工具")
+    desc: Optional[str] = Field(None, description="工具描述")
     # child工具列表
     children: Optional[List[ToolChildrenSchema]] = Field(..., description="子工具列表")
 
