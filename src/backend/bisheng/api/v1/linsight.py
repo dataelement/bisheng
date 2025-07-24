@@ -219,6 +219,10 @@ async def start_execute_sop(
     if login_user.user_id != session_version_model.user_id:
         return resp_500(code=403, message="无权限执行该灵思SOP")
 
+    if session_version_model.status in [SessionVersionStatusEnum.COMPLETED, SessionVersionStatusEnum.TERMINATED,
+                                        SessionVersionStatusEnum.IN_PROGRESS]:
+        return resp_500(code=400, message="灵思会话版本已完成或正在执行，无法再次执行")
+
     from bisheng.linsight.worker import RedisQueue
     try:
         queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
@@ -332,6 +336,15 @@ async def submit_feedback(
         session_version_model.score = score
         session_version_model.execute_feedback = feedback
         await LinsightSessionVersionDao.insert_one(session_version_model)
+
+        system_config = await settings.aget_all_config()
+
+        # 获取Linsight_invitation_code
+        linsight_invitation_code = system_config.get("linsight_invitation_code", False)
+
+        if linsight_invitation_code:
+            if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
+                return resp_500(code=400, message="您的灵思使用次数已用完，请使用新的邀请码激活灵思功能。")
 
         # 灵思会话版本
         linsight_session_version_model = LinsightSessionVersion(
