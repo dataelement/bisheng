@@ -266,12 +266,12 @@ class LinsightStateMessageManager:
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
         try:
-            task_data = await self._redis_client.aget(task_key)
 
-            if not task_data:
-                raise ValueError(f"Task with ID {task_id} not found in Redis.")
+            task_model = await self.get_execution_task(task_id)
 
-            task_model = LinsightExecuteTask.model_validate(task_data)
+            if not task_model:
+                raise ValueError(f"Task with ID {task_id} not found in Redis or database.")
+
             task_model.user_input = user_input
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
@@ -383,7 +383,8 @@ class LinsightStateMessageManager:
             tasks = [LinsightExecuteTask.model_validate(task) for task in tasks_data if task]
 
             if not tasks:
-                tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id=self._session_version_id)
+                tasks = await LinsightExecuteTaskDao.get_by_session_version_id(
+                    session_version_id=self._session_version_id)
             return tasks
 
         except Exception as e:
