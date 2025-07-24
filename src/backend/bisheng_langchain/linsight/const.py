@@ -6,6 +6,7 @@ DefaultToolBuffer = 20000
 MaxSteps = 200
 RetryNum = 3  # 重试次数
 RetrySleep = 5  # 重试间隔时间（秒）
+MaxFileNum = 5  # sop里放的文件信息数量
 CallUserInputToolName = "call_user_input"
 
 

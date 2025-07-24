@@ -9,7 +9,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field
 
-from bisheng_langchain.linsight.const import TaskMode
+from bisheng_langchain.linsight.const import TaskMode, MaxFileNum
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.manage import TaskManage
 from bisheng_langchain.linsight.prompt import SopPrompt, FeedBackSopPrompt, GenerateTaskPrompt
@@ -33,6 +33,16 @@ class LinsightAgent(BaseModel):
     debug: Optional[bool] = Field(default=False, description='是否是调试模式。开启后会记录llm的输入和输出')
     debug_id: Optional[str] = Field(default=None, description='调试记录唯一ID, 用来写唯一的文件')
 
+    @staticmethod
+    async def parse_file_list_str(file_list: list[str]) -> str:
+        file_list_str = ""
+        if file_list:
+            file_list_str = "\n".join(file_list[:MaxFileNum])
+            file_list_str = f"用户上传文件列表:\n{file_list_str}\n"
+            if len(file_list) > MaxFileNum:
+                file_list_str += f"用户上传了{len(file_list)}份文件，此处只展示{MaxFileNum}份。都储存在./目录下。"
+        return file_list_str
+
     async def generate_sop(self, sop: str, file_list: list[str] = None) -> AsyncIterator[ChatGenerationChunk]:
         """
         Generate a Standard Operating Procedure (SOP) based on the provided SOP string.
@@ -42,18 +52,32 @@ class LinsightAgent(BaseModel):
         :return: Processed SOP string.
         """
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
-        file_list_str = ""
-        if file_list:
-            file_list_str = "\n".join(file_list)
-            file_list_str = f"用户上传文件列表:\n{file_list_str}"
+
+        file_list_str = await self.parse_file_list_str(file_list)
+
         sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str)
         # Add logic to process the SOP string
         start_time = time.time()
         one = None
-        answer = ''
+        sop_flag = False
+        sop_content = ""
+        answer = ""
         async for one in self.llm.astream(sop_prompt):
-            yield one
             answer += f"{one.content}"
+            if sop_flag:
+                yield one
+                sop_content += one.content
+                continue
+            if answer.find("<SOP_START>") != -1:
+                sop_flag = True
+                sop_content = answer.split("<SOP_START>")[-1].strip()
+                if sop_content:
+                    one.content = sop_content
+                    yield one
+        if not sop_content:
+            one.content = answer
+            yield one
+
         if self.debug and one:
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
                               time.time() - start_time, self.debug_id)
@@ -78,11 +102,8 @@ class LinsightAgent(BaseModel):
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
         if sop:
             sop = f"已有SOP：{sop}"
-        file_list_str = ""
 
-        if file_list:
-            file_list_str = "\n".join(file_list)
-            file_list_str = f"用户上传文件列表:\n{file_list_str}"
+        file_list_str = await self.parse_file_list_str(file_list)
 
         sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
                                               history_summary=history_summary, file_list_str=file_list_str)
