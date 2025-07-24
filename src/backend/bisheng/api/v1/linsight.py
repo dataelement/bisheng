@@ -76,21 +76,21 @@ async def submit_linsight_workbench(
         """
         事件生成器，用于生成SSE事件
         """
-
-        system_config = await settings.aget_all_config()
-
-        # 获取Linsight_invitation_code
-        linsight_invitation_code = system_config.get("linsight_invitation_code", False)
-
-        if linsight_invitation_code:
-            if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
-                yield {
-                    "event": "error",
-                    "data": "您的灵思使用次数已用完，请使用新的邀请码激活灵思功能。"
-                }
-                return
-
         try:
+
+            system_config = await settings.aget_all_config()
+
+            # 获取Linsight_invitation_code
+            linsight_invitation_code = system_config.get("linsight_invitation_code", False)
+
+            if linsight_invitation_code:
+                if await InviteCodeService.use_invite_code(user_id=login_user.user_id) is False:
+                    yield {
+                        "event": "error",
+                        "data": "您的灵思使用次数已用完，请使用新的邀请码激活灵思功能。"
+                    }
+                    return
+
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
                 submit_obj,
                 login_user)
