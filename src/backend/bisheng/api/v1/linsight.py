@@ -29,10 +29,13 @@ router = APIRouter(prefix="/linsight", tags=["灵思"])
 
 # 灵思上传文件
 @router.post("/workbench/upload-file", summary="灵思上传文件", response_model=UnifiedResponseModel)
-async def upload_file(file: UploadFile = File(...),
-                      login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+async def upload_file(
+        background_tasks: BackgroundTasks,
+        file: UploadFile = File(...),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
     灵思上传文件
+    :param background_tasks:
     :param file: 上传的文件
     :param login_user: 登录用户信息
     :return: 上传结果
@@ -42,20 +45,49 @@ async def upload_file(file: UploadFile = File(...),
         # 调用实现类处理文件上传
         upload_result = await LinsightWorkbenchImpl.upload_file(file)
 
-        # 解析
-        parse_result = await LinsightWorkbenchImpl.parse_file(upload_result)
+        background_tasks.add_task(LinsightWorkbenchImpl.parse_file, upload_result)
 
         result = {
-            "file_id": parse_result.get("file_id"),
-            "file_name": parse_result.get("original_filename"),
-            "parsing_status": "completed"
+            "file_id": upload_result.get("file_id"),
+            "file_name": upload_result.get("original_filename"),
+            "parsing_status": upload_result.get("parsing_status"),
         }
     except Exception as e:
         logger.error(f"文件上传失败: {str(e)}")
         return resp_500(code=500, message=str(e))
 
     # 返回上传结果
-    return resp_200(data=result, message="文件上传成功")
+    return resp_200(data=result, message="文件上传成功 并开始解析。请稍后查看解析状态。")
+
+
+# 获取文件解析状态
+@router.post("/workbench/file-parsing-status", summary="获取文件解析状态", response_model=UnifiedResponseModel)
+async def get_file_parsing_status(
+        file_ids: List[str] = Body(..., description="文件ID列表", embed=True),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    获取文件解析状态
+    :param file_ids:
+    :param login_user:
+    :return:
+    """
+
+    try:
+        # 调用实现类获取文件解析状态
+        key_prefix = LinsightWorkbenchImpl.FILE_INFO_REDIS_KEY_PREFIX
+
+        if not file_ids:
+            return resp_500(code=400, message="文件ID列表不能为空")
+
+        file_ids = [f"{key_prefix}{file_id}" for file_id in file_ids]
+
+        # 使用 Redis 的 amget 方法批量获取文件解析状态
+        parsing_status = await redis_client.amget(file_ids)
+
+        return resp_200(data=parsing_status, message="文件解析状态获取成功")
+    except Exception as e:
+        logger.error(f"获取文件解析状态失败: {str(e)}")
+        return resp_500(code=500, message=str(e))
 
 
 # 提交灵思用户问题请求

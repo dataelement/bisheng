@@ -374,12 +374,12 @@ class LinsightStateMessageManager:
         """
         try:
             pattern = f"{self._keys['execution_tasks']}*"
-            task_keys = await self._redis_client.async_connection.keys(pattern)
+            task_keys = await self._redis_client.akeys(pattern)
 
             if not task_keys:
                 return []
 
-            tasks_data = await self._redis_client.amget(*task_keys)
+            tasks_data = await self._redis_client.amget(task_keys)
             tasks = [LinsightExecuteTask.model_validate(task) for task in tasks_data if task]
 
             if not tasks:

@@ -38,7 +38,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
 
             file_path = history.get("params", {}).get(local_file_tool_dict[history_name], "")
 
-            if not file_path or not os.path.exists(file_path):
+            if not file_path:
                 continue
 
             file_name = os.path.basename(file_path)
@@ -68,7 +68,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     async def upload_file_to_minio(file_info: Dict) -> dict | None:
         """上传文件到MinIO并返回文件信息"""
         try:
-            object_name = f"linsight/session_files/{file_info['file_id']}/{file_info['file_name']}"
+            object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
             await sync_func_to_async(minio_client.upload_minio)(
                 bucket_name=minio_client.bucket,
@@ -100,7 +100,6 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
 
     if failed_uploads:
         logger.warning(f"部分文件上传失败: {len(failed_uploads)} 个文件")
-
 
     logger.debug(f"会话中操作过的文件数量: {len(all_from_session_files)}，文件详情: {all_from_session_files}")
 

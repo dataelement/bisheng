@@ -74,6 +74,10 @@ class LinsightWorkbenchImpl:
             super().__init__(message)
             self.message = message
 
+    class ToolsInitializationError(Exception):
+        """工具初始化错误"""
+        pass
+
     @classmethod
     async def submit_user_question(cls, submit_obj: LinsightQuestionSubmitSchema,
                                    login_user: UserPayload) -> tuple[MessageSession, LinsightSessionVersion]:
@@ -348,6 +352,10 @@ class LinsightWorkbenchImpl:
 
             logger.info(f"生成SOP内容成功: session_version_id={linsight_session_version_id}")
 
+        except cls.ToolsInitializationError as e:
+            logger.exception(
+                f"初始化灵思工作台工具失败: session_version_id={linsight_session_version_id}, error={str(e)}")
+            yield {"event": "error", "data": str(e)}
         except Exception as e:
             logger.exception(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
             yield {"event": "error", "data": str(e)}
@@ -364,15 +372,18 @@ class LinsightWorkbenchImpl:
     async def _prepare_tools(cls, session_version: LinsightSessionVersion,
                              llm: BishengLLM) -> List[BaseTool]:
         """准备工具列表"""
-        tools = await cls.init_linsight_config_tools(session_version, llm)
+        try:
+            tools = await cls.init_linsight_config_tools(session_version, llm)
 
-        root_path = os.path.join(CACHE_DIR, "linsight", session_version.id)
-        os.makedirs(root_path, exist_ok=True)
+            root_path = os.path.join(CACHE_DIR, "linsight", session_version.id)
+            os.makedirs(root_path, exist_ok=True)
 
-        linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
-        tools.extend(linsight_tools)
+            linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
+            tools.extend(linsight_tools)
 
-        return tools
+            return tools
+        except Exception as e:
+            raise cls.ToolsInitializationError(f"初始化灵思工作台工具失败: {str(e)}")
 
     @classmethod
     async def _prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
@@ -588,13 +599,18 @@ class LinsightWorkbenchImpl:
         # 保存文件
         file_path = await save_file_to_folder(file, 'linsight', unique_filename)
 
-        return {
+        upload_result = {
             "file_id": file_id,
             "filename": unique_filename,
             "original_filename": original_filename,
             "file_path": file_path,
-            "parsing_status": "pending",
+            "parsing_status": "running",
         }
+
+        # 缓存解析结果
+        await cls._cache_parse_result(file_id, upload_result)
+
+        return upload_result
 
     @classmethod
     async def parse_file(cls, upload_result: Dict) -> Dict:
@@ -607,23 +623,33 @@ class LinsightWorkbenchImpl:
         Returns:
             解析结果
         """
+        logger.info(f"开始解析文件: {upload_result}")
+
         file_id = upload_result["file_id"]
         original_filename = upload_result["original_filename"]
         file_path = upload_result["file_path"]
+        try:
+            # 获取工作台配置
+            workbench_conf = await cls._get_workbench_config()
+            collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
-        # 获取工作台配置
-        workbench_conf = await cls._get_workbench_config()
-        collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
+            # 异步执行文件解析
+            parse_result = await util.sync_func_to_async(cls._parse_file_sync)(file_id, file_path, original_filename,
+                                                                               collection_name, workbench_conf)
 
-        # 异步执行文件解析
-        parse_result = await run_in_executor(
-            None,
-            cls._parse_file_sync,
-            file_id, file_path, original_filename, collection_name, workbench_conf
-        )
+            # 缓存解析结果
+            await cls._cache_parse_result(file_id, parse_result)
 
-        # 缓存解析结果
-        await cls._cache_parse_result(file_id, parse_result)
+            logger.info(f"文件解析完成: {parse_result}")
+        except Exception as e:
+            logger.error(f"文件解析失败: file_id={file_id}, error={str(e)}")
+            parse_result = {
+                "file_id": file_id,
+                "original_filename": original_filename,
+                "parsing_status": "failed",
+                "error_message": str(e)
+            }
+            await cls._cache_parse_result(file_id, parse_result)
 
         return parse_result
 
@@ -644,39 +670,48 @@ class LinsightWorkbenchImpl:
             解析结果
         """
         # 读取文件内容
-        texts, _, parse_type, _ = read_chunk_text(
-            input_file=file_path,
-            file_name=original_filename,
-            separator=['\n\n', '\n'],
-            separator_rule=['after', 'after'],
-            chunk_size=1000,
-            chunk_overlap=100,
-            no_summary=True
-        )
+        try:
+            texts, _, parse_type, _ = read_chunk_text(
+                input_file=file_path,
+                file_name=original_filename,
+                separator=['\n\n', '\n'],
+                separator_rule=['after', 'after'],
+                chunk_size=1000,
+                chunk_overlap=100,
+                no_summary=True
+            )
 
-        # 生成markdown内容
-        markdown_content = "\n".join(texts)
-        markdown_bytes = markdown_content.encode('utf-8')
+            # 生成markdown内容
+            markdown_content = "\n".join(texts)
+            markdown_bytes = markdown_content.encode('utf-8')
 
-        # 保存markdown文件
-        markdown_filename = f"{file_id}.md"
-        minio_client.upload_tmp(markdown_filename, markdown_bytes)
-        markdown_md5 = calculate_md5(markdown_bytes)
+            # 保存markdown文件
+            markdown_filename = f"{file_id}.md"
+            minio_client.upload_tmp(markdown_filename, markdown_bytes)
+            markdown_md5 = calculate_md5(markdown_bytes)
 
-        # 处理向量存储
-        cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
+            # 处理向量存储
+            cls._process_vector_storage(texts, file_id, collection_name, workbench_conf)
 
-        return {
-            "file_id": file_id,
-            "original_filename": original_filename,
-            "parsing_status": "completed",
-            "parse_type": parse_type,
-            "markdown_filename": markdown_filename,
-            "markdown_file_path": markdown_filename,
-            "markdown_file_md5": markdown_md5,
-            "embedding_model_id": workbench_conf.embedding_model.id,
-            "collection_name": collection_name
-        }
+            return {
+                "file_id": file_id,
+                "original_filename": original_filename,
+                "parsing_status": "completed",
+                "parse_type": parse_type,
+                "markdown_filename": markdown_filename,
+                "markdown_file_path": markdown_filename,
+                "markdown_file_md5": markdown_md5,
+                "embedding_model_id": workbench_conf.embedding_model.id,
+                "collection_name": collection_name
+            }
+        except Exception as e:
+            logger.error(f"文件解析失败: file_id={file_id}, error={str(e)}")
+            return {
+                "file_id": file_id,
+                "original_filename": original_filename,
+                "parsing_status": "failed",
+                "error_message": str(e)
+            }
 
     @classmethod
     def _process_vector_storage(cls, texts: List[str], file_id: str,
@@ -793,9 +828,11 @@ class LinsightWorkbenchImpl:
 
             # 生成SOP摘要并更新数据库
             await cls._update_sop_in_database(session_version_model, sop_content, llm)
+        except cls.ToolsInitializationError as e:
+            logger.exception(f"初始化灵思工作台工具失败: session_version_id={session_version_model.id}, error={str(e)}")
 
         except Exception as e:
-            logger.error(f"反馈重新生成SOP任务失败: {str(e)}")
+            logger.exception(f"反馈重新生成SOP任务失败: session_version_id={session_version_model.id}, error={str(e)}")
 
     @classmethod
     async def _get_history_summary(cls, session_version_id: str) -> List[str]:
@@ -861,16 +898,16 @@ class LinsightWorkbenchImpl:
             """下载单个文件"""
             object_name = file_info.file_url
             try:
-                file_url = minio_client.get_share_link(object_name)
-                http_client = await app_ctx.get_http_client()
 
                 bytes_io = BytesIO()
-                async for chunk in http_client.stream(method="GET", url=str(file_url)):
-                    bytes_io.write(chunk)
+
+                file_byte = await util.sync_func_to_async(minio_client.get_object)(bucket_name=minio_client.bucket,
+                                                                                   object_name=object_name)
+                bytes_io.write(file_byte)
 
                 bytes_io.seek(0)
 
-                return object_name, bytes_io.getvalue()
+                return file_info.file_name, bytes_io.getvalue()
 
             except Exception as e:
                 logger.error(f"下载文件失败 {object_name}: {e}")

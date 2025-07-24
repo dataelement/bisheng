@@ -195,6 +195,15 @@ class RedisClient:
         except TypeError as exc:
             raise TypeError('RedisCache only accepts values that can be pickled. ') from exc
 
+    async def akeys(self, pattern: str) -> typing.List[str]:
+        """异步获取匹配模式的所有键"""
+        try:
+            await self.acluster_nodes(pattern)
+            keys = await self.async_connection.keys(pattern)
+            return [key.decode('utf-8') for key in keys]
+        except Exception as e:
+            raise e
+
     def hsetkey(self, name, key, value, expiration=3600):
         try:
             self.cluster_nodes(key)

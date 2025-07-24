@@ -300,7 +300,7 @@ class Settings(BaseModel):
             async with async_session_getter() as session:
                 initdb_config = (await session.exec(select(Config).where(Config.key == 'initdb_config'))).first()
                 if initdb_config:
-                    await redis_client.set(redis_key, initdb_config.value, 100)
+                    await redis_client.aset(redis_key, initdb_config.value, 100)
                     return yaml.safe_load(initdb_config.value)
                 else:
                     raise Exception('initdb_config not found, please check your system config')
