@@ -8,6 +8,7 @@ from sqlmodel import Field, or_, select, Text, update
 from bisheng.database.base import session_getter
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.utils import md5_hash, generate_uuid
 
 
 class AuthMethod(Enum):
@@ -292,7 +293,7 @@ class GptsToolsDao(GptsToolsBase):
                 # 插入工具列表
                 for one in children:
                     one.type = gpts_tool_type.id
-                    one.tool_key = cls.get_tool_key(gpts_tool_type.id, one.tool_key)
+                    one.tool_key = cls.get_tool_key(gpts_tool_type.id, one)
                 session.add_all(children)
                 session.commit()
         res = GptsToolsTypeRead(**gpts_tool_type.model_dump(), children=children)
@@ -321,7 +322,7 @@ class GptsToolsDao(GptsToolsBase):
             # 新增工具列表
             for one in add_tool_list:
                 one.type = data.id
-                one.tool_key = cls.get_tool_key(data.id, one.tool_key)
+                one.tool_key = cls.get_tool_key(data.id, one)
                 session.add(one)
                 finally_children.append(one)
             # 更新工具列表
@@ -352,11 +353,13 @@ class GptsToolsDao(GptsToolsBase):
             session.commit()
 
     @classmethod
-    def get_tool_key(cls, tool_type_id: int, tool_key: str) -> str:
+    def get_tool_key(cls, tool_type_id: int, gpt_tool: GptsTools) -> str:
         """
         拼接自定义工具的tool_key
         """
-        return f"tool_type_{tool_type_id}_{tool_key}"
+        if gpt_tool.is_preset == ToolPresetType.MCP.value:
+            return f"{gpt_tool.name}_{generate_uuid()[:8]}"
+        return f"tool_type_{tool_type_id}_{md5_hash(gpt_tool.name)}"
 
     @classmethod
     def update_tools_extra(cls, tool_type_id: int, extra: str) -> bool:
