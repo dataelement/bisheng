@@ -592,7 +592,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
             setIsDrawerOpen(false);
             fetchData({
-                page: 1,
+                page: page,
                 pageSize: 10,
                 keyword: keywords
             }); // 刷新列表

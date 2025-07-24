@@ -112,7 +112,7 @@ const scrollToTool = useCallback((toolId: string) => {
 
   const tryScroll = () => {
     scrollAttempts.current++;
-    const element = document.getElementById(`tool-${toolId}`);
+    const parentElement = document.getElementById(`tool-${toolId}`);
     const childElement = document.getElementById(`tool-child-${toolId}`);
     const container = rightContentRef.current;
 
@@ -123,21 +123,34 @@ const scrollToTool = useCallback((toolId: string) => {
       return;
     }
 
-    // 优先查找子元素，如果找不到再找父元素
-    const targetElement = childElement || element;
-    
-    if (targetElement) {
-      // 确保元素已经完全渲染
-      targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (parentElement) {
+      const parentRect = parentElement.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
       
-      setTimeout(() => {
-        targetElement.classList.remove('bg-blue-50');
-      }, 2000);
+      // 判断元素是否完全可见
+      const isFullyVisible = parentRect.top >= containerRect.top && 
+                           parentRect.bottom <= containerRect.bottom;
+
+      if (!isFullyVisible) {
+        // 对于长菜单项的特殊处理
+        if (parentElement.offsetHeight > container.offsetHeight * 0.8) {
+          // 如果菜单项高度超过容器高度的80%，滚动到顶部
+          parentElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        } else {
+          // 正常大小的菜单项使用居中显示
+          parentElement.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' 
+          });
+        }
+      }
       
-      return; // 成功找到并滚动到元素，结束重试
+      return;
     }
 
-    // 如果没找到元素，继续重试
     if (scrollAttempts.current < 10) {
       scrollTimeoutRef.current = setTimeout(tryScroll, 200);
     }
@@ -145,7 +158,6 @@ const scrollToTool = useCallback((toolId: string) => {
 
   tryScroll();
 }, []);
-
 useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {
       syncPanelHeights();
