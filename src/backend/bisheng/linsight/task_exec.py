@@ -349,7 +349,7 @@ class LinsightWorkflowTask:
             logger.info("智能体任务被用户终止")
             return False
         except Exception as e:
-            logger.error(f"智能体任务执行失败: {e}")
+            logger.exception(e)
             raise TaskExecutionError(f"智能体任务执行失败: {e}")
 
     # ==================== 事件处理 ====================
