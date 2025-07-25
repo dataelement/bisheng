@@ -226,11 +226,22 @@ class TaskManage(BaseModel):
         return "你现在已经完成了" + ",".join(success_steps) if success_steps else ''
 
     def get_depend_step(self, step_id: str) -> str:
-        result = ""
-        for task in self.tasks:
-            if step_id in task.input:
-                result += f"{task.step_id},"
-        return result.rstrip(",")
+        depend_steps = []
+        if step_id not in self.task_step_map:
+            return ""
+        task = self.task_step_map[step_id]
+        next_ids = task.next_id
+        while next_ids:
+            new_next_ids = []
+            for next_id in next_ids:
+                if next_id not in self.task_map:
+                    continue
+                next_task = self.task_map[next_id]
+                depend_steps.append(next_task.step_id)
+                if next_task.next_id:
+                    new_next_ids.extend(next_task.next_id)
+            next_ids = new_next_ids
+        return ",".join(depend_steps)
 
     def get_workflow(self):
         res = []
