@@ -119,7 +119,8 @@ class LinsightAgent(BaseModel):
 
     async def generate_task(self, sop: str) -> list[dict]:
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        tools_str = self.task_manager.get_all_tool_schema_str
+        tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
+
         prompt = GenerateTaskPrompt.format(query=self.query, sop=sop, file_dir=self.file_dir,
                                            current_time=current_time, tools_str=tools_str)
         start_time = time.time()
