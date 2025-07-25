@@ -316,7 +316,7 @@ class LocalFileTool(BaseModel):
             # 提取指定行的内容
             content = ''
             for idx in range(start_idx, end_idx):
-                content += f"行号: {idx + 1} 内容: {lines[idx]}"
+                content += f"第{idx + 1}行内容: {lines[idx]}"
 
             # 构建结果
             total_lines = len(lines)
