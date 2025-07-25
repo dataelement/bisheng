@@ -171,7 +171,10 @@ class ReactTask(BaseTask):
         json_decode_error = 0
         for i in range(self.max_steps):
             messages = await self.build_messages_with_history()
-            res = await self._ainvoke_llm_without_tools(messages)
+            if json_decode_error > 0:
+                res = await self._ainvoke_llm(self, messages, temperature=1)
+            else:
+                res = await self._ainvoke_llm_without_tools(messages)
             try:
                 message, is_end = await self.parse_react_result(res.content)
             except Exception as e:

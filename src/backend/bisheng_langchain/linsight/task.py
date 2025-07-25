@@ -87,7 +87,7 @@ class BaseTask(BaseModel):
         return input_str
 
     @retry_async(num_retries=RetryNum, delay=RetrySleep, return_exceptions=False)
-    async def _ainvoke_llm(self, messages: list[BaseMessage]) -> BaseMessage:
+    async def _ainvoke_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
         Invoke the language model with the provided messages.
         :param messages: List of messages to be sent to the language model.
@@ -96,21 +96,21 @@ class BaseTask(BaseModel):
         # get tool schema
         tool_args = self.task_manager.get_all_tool_schema
         start_time = time.time()
-        res = await self.llm.ainvoke(messages, tools=tool_args)
+        res = await self.llm.ainvoke(messages, tools=tool_args, **kwargs)
         if self.debug and res:
             record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
                               res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
         return res
 
     @retry_async(num_retries=RetryNum, delay=RetrySleep, return_exceptions=False)
-    async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage]) -> BaseMessage:
+    async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
         Invoke the language model without tools.
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
         start_time = time.time()
-        res = await self.llm.ainvoke(messages)
+        res = await self.llm.ainvoke(messages, **kwargs)
         if self.debug and res:
             record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
                               res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
@@ -189,7 +189,10 @@ class BaseTask(BaseModel):
         messages = [HumanMessage(content=prompt)]
         sub_task = None
         for i in range(RetryNum):
-            res = await self._ainvoke_llm_without_tools(messages)
+            if i > 0:
+                res = await self._ainvoke_llm_without_tools(messages, temperature=1)
+            else:
+                res = await self._ainvoke_llm_without_tools(messages)
             try:
                 # 解析生成的任务json数据
                 sub_task = extract_json_from_markdown(res.content)
