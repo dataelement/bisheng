@@ -103,10 +103,10 @@ class InviteCodeService:
         generator = VoucherGenerator()
         flag, _ = generator.validate_voucher(code)
         if not flag:
-            return False, "邀请码格式不正确"
+            return False, "您输入的邀请码无效"
         codes = await InviteCodeDao.get_user_bind_code(login_user.user_id)
         if codes:
-            return False, "用户已绑定邀请码，请勿重复绑定"
+            return False, "已绑定其他邀请码"
 
         flag = await InviteCodeDao.bind_invite_code(login_user.user_id, code)
-        return flag, "邀请码绑定成功" if flag else "邀请码已被绑定"
+        return flag, "邀请码绑定成功" if flag else "您输入的邀请码无效"
