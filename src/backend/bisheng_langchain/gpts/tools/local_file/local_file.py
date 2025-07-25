@@ -314,16 +314,17 @@ class LocalFileTool(BaseModel):
             end_idx = min(start_idx + num_lines, len(lines))
 
             # 提取指定行的内容
-            selected_lines = lines[start_idx:end_idx]
-            content = ''.join(selected_lines)
+            content = ''
+            for idx in range(start_idx, end_idx):
+                content += f"行号: {idx + 1} 内容: {lines[idx]}"
 
             # 构建结果
             total_lines = len(lines)
             result = {
                 "文件名": os.path.basename(file_path),
                 "总行数": total_lines,
-                "读取范围": f"{start_line}-{start_idx + len(selected_lines)}",
-                "实际读取行数": len(selected_lines),
+                "读取范围": f"{start_line}-{end_idx + 1}",
+                "实际读取行数": end_idx - start_idx,
                 "内容": content
             }
 
