@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import datetime
 
 from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
@@ -162,8 +163,12 @@ class ReactTask(BaseTask):
                 "参数": params,
                 "观察": observation,
             }
-            message = ToolMessage(tool_call_id=generate_uuid_str(),
-                                  content=json.dumps(result_dict, ensure_ascii=False, indent=2))
+            try:
+                message = ToolMessage(tool_call_id=generate_uuid_str(),
+                                      content=json.dumps(result_dict, ensure_ascii=False, indent=2))
+            except TypeError as e:
+                logging.error(f"json.dumps failed with result_dict: {result_dict}")
+                raise e
         return message, is_end
 
     async def _ainvoke(self) -> None:
