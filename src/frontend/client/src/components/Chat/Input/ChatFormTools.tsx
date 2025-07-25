@@ -1,4 +1,4 @@
-import { FileText, GlobeIcon, Hammer, Settings2Icon } from 'lucide-react';
+import { FileText, GlobeIcon, Hammer, KeyRound, Pencil, Settings2Icon } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { Switch } from '~/components/ui';
 import { Select, SelectContent, SelectTrigger } from '~/components/ui/Select';
@@ -11,6 +11,11 @@ import { cn } from '~/utils';
 // 工具
 export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSearchType, disabled }
     : { linsi: boolean, config?: BsConfig, searchType: string, setSearchType: (type: string) => void, disabled: boolean }) => {
+
+    // 每次重置工具
+    useEffect(() => {
+        setSearchType('');
+    }, [])
 
     if (linsi) return <LinsiTools tools={tools} setTools={setTools} />
 
@@ -67,7 +72,20 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
 
 const LinsiTools = ({ tools, setTools }) => {
     const { data: bsConfig } = useGetBsConfig()
-    //   const toolsRef = useRef<any>([])
+
+    const defaultTools = [{
+        id: 'pro_knowledge',
+        name: '组织知识库',
+        icon: <KeyRound size="16" />,
+        checked: true
+    },
+    {
+        id: 'knowledge',
+        name: '个人知识库',
+        icon: <Pencil size="16" />,
+        checked: true
+    },]
+
     useEffect(() => {
         if (bsConfig) {
             const tools = bsConfig.linsightConfig?.tools || []
@@ -78,7 +96,7 @@ const LinsiTools = ({ tools, setTools }) => {
                 checked: true,
                 data: tool
             }))
-            setTools((tools) => [...tools, ...newTools])
+            setTools((tools) => [...defaultTools, ...newTools])
         }
 
     }, [bsConfig])

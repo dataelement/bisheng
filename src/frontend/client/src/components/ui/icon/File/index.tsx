@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-type FileType = 'markdown' | 'txt' | 'html' | 'csv';
+type FileType = 'md' | 'txt' | 'html' | 'csv' | 'dir';
 
 interface FileIconProps {
     className?: string;
@@ -29,6 +29,9 @@ const FileIcon: React.FC<FileIconProps> = ({ className = '', type }) => {
         ),
         doc: (
             <svg t="1753084925585" class={className} viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7814" width="200" height="200"><path d="M910.2336 1024H113.7664C51.2 1024 0 972.8 0 910.2336V113.7664C0 51.2 51.2 0 113.7664 0h796.4672C972.8 0 1024 51.2 1024 113.7664v796.4672C1024 972.8 972.8 1024 910.2336 1024zM850.5088 253.824h-71.68l-101.3248 391.68c-5.3504 19.328-8.576 36.224-9.6768 50.688h-1.3312c-2.2272-20.0192-5.0944-36.4544-8.6528-49.3824L551.168 253.8496h-65.664L373.8368 643.84c-6.2464 21.9904-9.8816 39.6544-11.008 52.992h-1.9968a254.976 254.976 0 0 0-8.3456-52.992L247.168 253.824H173.4912l149.6832 516.352h77.0048l104.96-372.6592a249.0112 249.0112 0 0 0 9.344-52.6848h1.3312c0.9216 18.6624 3.6864 36.4288 8.3456 53.3248l104.0128 371.9936h77.6704l144.64-516.3264z" fill="#3A80FC" p-id="7815"></path></svg>
+        ),
+        dir: (
+           <svg t="1753254956028" class={className} viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="6260" width="200" height="200"><path d="M529.664 213.333333H896a42.666667 42.666667 0 0 1 42.666667 42.666667v597.333333a42.666667 42.666667 0 0 1-42.666667 42.666667H128a42.666667 42.666667 0 0 1-42.666667-42.666667V170.666667a42.666667 42.666667 0 0 1 42.666667-42.666667h316.330667l85.333333 85.333333z" fill="#bfbfbf" p-id="6261"></path></svg>
         )
     };
 
@@ -46,6 +49,8 @@ const FileIcon: React.FC<FileIconProps> = ({ className = '', type }) => {
             case 'doc':
             case 'docx':
                 return icons.doc;
+            case 'dir':
+                return icons.dir;
             default:
                 return null;
         }

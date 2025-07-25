@@ -320,7 +320,8 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                         title: message_session.flow_name,
                         tasks: [],
                         summary: '',
-                        file_list: []
+                        file_list: [],
+                        inputSop: false
                     })
                 })
 

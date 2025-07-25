@@ -1,5 +1,5 @@
 // src/state/linsightState.ts
-import { atom, atomFamily, selectorFamily, useRecoilState } from 'recoil';
+import { atom, atomFamily } from 'recoil';
 import { ExtendedFile } from '~/common';
 
 export type LinsightInfo = {
@@ -104,3 +104,4 @@ export const filesByIndex = atomFamily<Map<string, ExtendedFile>, string | numbe
   key: 'linsightFilesByIndex',
   default: new Map(),
 });
+

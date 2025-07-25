@@ -1,6 +1,7 @@
 import { ChevronRightIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TooltipAnchor } from "../ui";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip2";
 
 export default function SopToolsDown({
     open,
@@ -115,7 +116,7 @@ export default function SopToolsDown({
         >
             <div className="flex text-sm">
                 {/* 一级菜单 */}
-                <div className="w-40 border-r border-gray-100">
+                <div className="w-48 border-r border-gray-100 overflow-auto max-h-96">
                     {options.map((option, index) => {
                         const hasChildren = option.children && option.children.length > 0;
                         const isActive = activeIndex === index;
@@ -132,14 +133,16 @@ export default function SopToolsDown({
                                 onMouseEnter={() => handleParentHover(index)}
                                 onClick={(e) => handleParentClick(index, e)}
                             >
-                                <TooltipAnchor
-                                    side="top"
-                                    description={option.desc}
-                                    className="truncate"
-                                    disabled={!option.desc}
-                                >
-                                    <div className="truncate">{option.label}</div>
-                                </TooltipAnchor>
+                                {
+                                    option.desc ? <Tooltip disableHoverableContent>
+                                        <TooltipTrigger asChild>
+                                            <div className="truncate">{option.label}</div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>{option.desc}</p>
+                                        </TooltipContent>
+                                    </Tooltip> : <div className="truncate">{option.label}</div>
+                                }
                                 {hasChildren && (
                                     <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                                 )}
@@ -150,7 +153,7 @@ export default function SopToolsDown({
 
                 {/* 二级菜单 */}
                 {hoverIndex !== null && options[hoverIndex]?.children?.length > 0 && (
-                    <div className="w-40 max-h-96 overflow-y-auto">
+                    <div className="w-44 max-h-96 overflow-y-auto">
                         {options[hoverIndex].children?.map((child, childIndex) => (
                             <div
                                 key={childIndex}
@@ -159,14 +162,16 @@ export default function SopToolsDown({
                                     `}
                                 onClick={(e) => handleChildClick(child, e)}
                             >
-                                <TooltipAnchor
-                                    side="top"
-                                    description={child.desc}
-                                    className="truncate"
-                                    disabled={!child.desc}
-                                >
-                                    <div className="truncate">{child.label}</div>
-                                </TooltipAnchor>
+                                {
+                                    child.desc ? <Tooltip disableHoverableContent>
+                                        <TooltipTrigger asChild>
+                                            <div className="truncate">{child.label}</div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>{child.desc}</p>
+                                        </TooltipContent>
+                                    </Tooltip> : <div className="truncate">{child.label}</div>
+                                }
                             </div>
                         ))}
                     </div>

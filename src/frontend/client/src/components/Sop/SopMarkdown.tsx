@@ -23,8 +23,10 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     const inserRef = useRef<any>(null);
     const boxRef = useRef<any>(null);
     const scrollBoxRef = useRef<any>(null);
+    useAutoHeight(boxRef)
 
     const { nameToValueRef, valueToNameRef, buildTreeData: toolOptions } = useSopTools(linsight)
+    const [RenderingCompleted, setRenderingCompleted] = useState(false);
 
     useEffect(() => {
         const vditorDom = document.getElementById('vditor');
@@ -35,16 +37,17 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             cdn: location.origin + __APP_ENV__.BASE_URL + '/vditor',
             toolbar: [],
             cache: {
-                enable: true
+                enable: false
             },
             height: boxRef.current.clientHeight,
             mode: "wysiwyg",
             placeholder: "",
             after: () => {
+                setRenderingCompleted(true);
                 veditorRef.current = vditor;
                 scrollBoxRef.current = vditorDom.querySelector('.vditor-reset');
             },
-            input: onChange,
+            input: (val) => onChange(replaceBracesToMarkers(val, nameToValueRef.current)),
             hint: {
                 parse: false, // 必须
                 placeholder: {
@@ -88,13 +91,13 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
         // 用户输入同步value to markdown
         if (!inputSop && (value === '' || value)) {
             // 回显值
-            veditorRef.current?.setValue(replaceMarkersToBraces(value, valueToNameRef.current))
+            veditorRef.current?.setValue(replaceMarkersToBraces(value, valueToNameRef.current, nameToValueRef.current))
         }
 
         if (scrollBoxRef.current && linsight.status !== SopStatus.SopGenerated) {
             scrollBoxRef.current.scrollTop = scrollBoxRef.current.scrollHeight
         }
-    }, [value, linsight.status, inputSop])
+    }, [value, linsight.status, inputSop, RenderingCompleted])
 
     // 开启/禁用
     useEffect(() => {
@@ -289,21 +292,50 @@ const useAtTip = (scrollBoxRef) => {
     }, [scrollBoxRef.current])
 }
 
+// 自适应高度
+const useAutoHeight = (boxRef) => {
+    useEffect(() => {
+        if (!boxRef.current) return;
+
+        const vditorDom = document.getElementById("vditor");
+        if (!vditorDom) return;
+
+        // 监听 boxRef 的高度变化
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { height } = entry.contentRect;
+                vditorDom.style.height = `${height}px`;
+            }
+        });
+
+        resizeObserver.observe(boxRef.current);
+
+        // 组件卸载时取消监听
+        return () => {
+            resizeObserver.disconnect();
+        };
+    }, []);
+}
+
 /**
  * 正向替换：将 @标记@ 替换为 {{value}} 格式
  * @param {string} inputStr - 输入字符串
  * @param {Object} valueToNameMap - 映射对象 {id: value}
  * @returns {string} - 替换后的字符串
  */
-function replaceMarkersToBraces(inputStr, valueToNameMap) {
+function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
     const regex = /@([^@]+)@/g;
     return inputStr.replace(regex, (match, id) => {
         // 检查映射中是否存在该ID
         if (Object.prototype.hasOwnProperty.call(valueToNameMap, id)) {
             return `{{@${valueToNameMap[id]}@}}`;
         }
+        // 反推回原始值
+        if (Object.prototype.hasOwnProperty.call(nameToValueMap, id)) {
+            return `{{@${id}@}}`;
+        }
         console.warn('转换ui时未找到对应的ID  :>> ', valueToNameMap, id);
-        return `{{#${id}#}}`; // 未找到时保留原始ID
+        return `@${id}@`; // 未找到时保留原始ID
     });
 }
 
@@ -314,13 +346,13 @@ function replaceMarkersToBraces(inputStr, valueToNameMap) {
  * @returns {string} - 替换后的字符串
  */
 function replaceBracesToMarkers(inputStr, nameToValueMap) {
-    const regex = /\{\{([^{}]+)\}\}/g;
+    const regex = /\{\{[@#]([^{}]+)[@#]\}\}/g;
     return inputStr.replace(regex, (match, value) => {
         // 检查映射中是否存在该值
         if (Object.prototype.hasOwnProperty.call(nameToValueMap, value)) {
             return `@${nameToValueMap[value]}@`;
         }
         console.warn('转换sop时未找到对应的工具  :>> ', nameToValueMap, value);
-        return `${value}`; // 未找到时保留原始值
+        return `@${value}@`; // 未找到时保留原始值
     });
 }

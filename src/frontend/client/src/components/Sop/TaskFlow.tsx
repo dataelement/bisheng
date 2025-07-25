@@ -118,6 +118,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                         tasks={linsight.tasks}
                         summary={linsight?.summary}
                         files={linsight?.file_list}
+                        allFiles={linsight?.output_result?.all_from_session_files || []}
                         sendInput={sendInput}
                     />
                 }

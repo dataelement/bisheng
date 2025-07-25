@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Button, Checkbox, Switch, Textarea } from '../ui';
-import { SopStatus } from './SOPEditor';
-import { useMemo, useState, useCallback } from 'react';
-import StarIcon from '../ui/icon/Star';
 import { Check } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useGetBsConfig, useGetUserLinsightCountQuery } from '~/data-provider';
+import { Button, Checkbox, Switch, Textarea } from '../ui';
+import StarIcon from '../ui/icon/Star';
+import { SopStatus } from './SOPEditor';
 
 interface Task {
     id: string;
@@ -129,6 +130,11 @@ const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFe
     const [rating, setRating] = useState(0);
     const [shouldRestart, setShouldRestart] = useState(false);
     const [comment, setComment] = useState('');
+    const { data: bsConfig } = useGetBsConfig()
+    const { data: count, refetch } = useGetUserLinsightCountQuery()
+    useEffect(() => {
+        refetch()
+    }, [])
 
     const handleSubmit = useCallback(() => {
         onFeedback(rating, comment, shouldRestart);
@@ -168,9 +174,11 @@ const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFe
                         <div className="flex items-center">
                             <Checkbox
                                 checked={shouldRestart}
+                                disabled={bsConfig?.linsight_invitation_code && count === 0}
                                 onCheckedChange={setShouldRestart}
                             />
                             <label className="text-sm pl-2">基于反馈重新运行</label>
+                            {bsConfig?.linsight_invitation_code && <label className='text-sm pl-2'>（剩余任务次数 {count} 次）</label>}
                         </div>
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={handleCancel}>

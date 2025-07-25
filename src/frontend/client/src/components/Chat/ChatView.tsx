@@ -12,6 +12,7 @@ import store from '~/store';
 import { buildTree, cn } from '~/utils';
 import HeaderTitle from './HeaderTitle';
 import ChatForm from './Input/ChatForm';
+import InvitationCodeForm from './InviteCode';
 import Landing from './Landing';
 import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
@@ -20,6 +21,7 @@ function ChatView({ index = 0 }: { index?: number }) {
   const { conversationId } = useParams();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
+  const [showCode, setShowCode] = useState(false);
 
   const fileMap = useFileMapContext();
   // console.log('fileMap :>> ', fileMap);
@@ -98,12 +100,16 @@ function ChatView({ index = 0 }: { index?: number }) {
                 />
               </video>
               {/* his messages */}
-              {content}
-              <div className="w-full border-t-0 pl-0 pt-2 dark:border-white/20 md:w-[calc(100%-.5rem)] md:border-t-0 md:border-transparent md:pl-0 md:pt-0 md:dark:border-transparent">
-                {/* input */}
-                <ChatForm isLingsi={isLingsi} index={index} />
-                {/* <Footer /> */}
-                {/* {isLingsi && <div className='relative'>
+              {/*   邀请码 */}
+              {showCode &&
+                <InvitationCodeForm setShowCode={setShowCode} />}
+              <div className={showCode ? "hidden" : ""}>
+                {content}
+                <div className="w-full border-t-0 pl-0 pt-2 dark:border-white/20 md:w-[calc(100%-.5rem)] md:border-t-0 md:border-transparent md:pl-0 md:pt-0 md:dark:border-transparent">
+                  {/* input */}
+                  <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} />
+                  {/* <Footer /> */}
+                  {/* {isLingsi && <div className='relative'>
                   <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
                   <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-8'>
                   <div className='border rounded-xl p-4 text-sm hover:shadow-md cursor-pointer'>
@@ -116,8 +122,10 @@ function ChatView({ index = 0 }: { index?: number }) {
                   </div>
                   </div>
                   </div>} */}
-                <div className="h-[20vh]"></div>
+                  <div className="h-[20vh]"></div>
+                </div>
               </div>
+
             </div>
           </Presentation>
         </AddedChatContext.Provider>

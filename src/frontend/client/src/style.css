@@ -2808,6 +2808,10 @@ button.scroll-convo {
   background-color: transparent !important;
 }
 
+.linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
+  opacity: 0.9;
+}
+
 .linsi-span {
   background: #E9F1FF;
   color: #2A3F73;

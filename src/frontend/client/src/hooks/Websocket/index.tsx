@@ -251,7 +251,7 @@ export const useLinsightWebSocket = (versionId) => {
                     })
                     break;
                 case 'error_message':
-                    console.error(taskData.data.error)
+                    console.error(taskData.data.error, id, activeVersionIdRef.current)
                     if (id === activeVersionIdRef.current) {
                         showToast({ message: taskData.data.error, status: 'error' });
                     }

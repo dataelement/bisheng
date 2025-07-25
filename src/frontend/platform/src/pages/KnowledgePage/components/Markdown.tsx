@@ -31,7 +31,7 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
 
     useEffect(() => {
         vditorRef.current = new Vditor('vditor', {
-            cdn: location.origin + '/vditor',
+            cdn: location.origin + __APP_ENV__.BASE_URL + '/vditor',
             height: '100%',
             toolbarConfig: {
                 hide: true,

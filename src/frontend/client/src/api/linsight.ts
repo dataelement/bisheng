@@ -100,3 +100,43 @@ export function getPersonalKnowledgeInfo(): Promise<any> {
 export function getKnowledgeInfo(): Promise<any> {
   return request.get('/api/v1/knowledge?page_num=1&page_size=200&type=0');
 }
+
+// 获取linsight剩余次数
+export function inviteCode() {
+  return request.get('/api/v1/invite/code');
+};
+
+// 绑定邀请码
+export function bindInviteCode(code: string) {
+  return request.post('/api/v1/invite/bind', { code });
+}
+
+// 批量下载
+export async function batchDownload(data: {
+  fileName: string,
+  files: { file_name: string, file_url: string }[]
+}) {
+  const res = await request.post('/api/v1/linsight/workbench/batch-download-files', {
+    zip_name: data.fileName,
+    file_info_list: data.files
+  }, {
+    responseType: 'blob'
+  })
+
+  console.log('res :>> ', res);
+  const url = window.URL.createObjectURL(new Blob([res]));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = data.fileName || 'downloadFile.zip';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
+// 检查文件解析状态
+export function checkFileParseStatus(ids: string[]) {
+  return request.post('/api/v1/linsight/workbench/file-parsing-status', {
+    file_ids: ids
+  })
+}

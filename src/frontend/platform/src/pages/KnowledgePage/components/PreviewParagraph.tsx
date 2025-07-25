@@ -83,7 +83,7 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
 
     useEffect(() => {
         vditorRef.current = new Vditor(domRef.current, {
-            cdn: location.origin + '/vditor',
+            cdn: location.origin + __APP_ENV__.BASE_URL + '/vditor',
             height: '100%',
             toolbarConfig: {
                 hide: true,

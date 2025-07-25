@@ -11,6 +11,7 @@ import type {
   UseInfiniteQueryOptions,
   QueryObserverResult,
   UseQueryOptions,
+  UseQueryResult,
 } from '@tanstack/react-query';
 import type t from '~/data-provider/data-provider/src';
 import type {
@@ -30,6 +31,7 @@ import type {
 } from '~/data-provider/data-provider/src';
 import { findPageForConversation } from '~/utils';
 import store from '~/store';
+import { inviteCode } from '~/api/linsight';
 
 export const useGetPresetsQuery = (
   config?: UseQueryOptions<TPreset[]>,
@@ -528,5 +530,20 @@ export const useUserTermsQuery = (
     refetchOnReconnect: false,
     refetchOnMount: false,
     ...config,
+  });
+};
+
+// 获取灵思剩余剩余使用次数
+export const useGetUserLinsightCountQuery = (): UseQueryResult<t.TGetUserPromptCountResponse> => {
+  return useQuery<t.TGetUserPromptCountResponse>({
+    queryKey: [QueryKeys.getLinsightCount],
+    queryFn: () => inviteCode(),
+    select(data) {
+      return data?.data;
+    },
+    enabled: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
 };

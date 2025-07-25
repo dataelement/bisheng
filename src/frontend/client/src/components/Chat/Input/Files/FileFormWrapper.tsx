@@ -36,7 +36,9 @@ function FileFormWrapper({
   const { endpoint: _endpoint, endpointType } = conversation ?? { endpoint: null };
   const isAgents = useMemo(() => isAgentsEndpoint(_endpoint), [_endpoint]);
 
-  const { handleFileChange, abortUpload } = useFileHandling();
+  const { handleFileChange, abortUpload } = useFileHandling({
+    isLinsight: !fileTip
+  });
 
   const { data: fileConfig = defaultFileConfig } = useGetFileConfig({
     select: (data) => mergeFileConfig(data),
@@ -62,6 +64,7 @@ function FileFormWrapper({
       );
     }
     if (endpointSupportsFiles && !isUploadDisabled) {
+      // this
       return (
         <AttachFile
           isRTL={isRTL}
@@ -97,6 +100,7 @@ function FileFormWrapper({
         Wrapper={({ children }) => <div className="mx-2 mt-2 flex flex-wrap gap-2 max-h-96 overflow-auto">{children}</div>}
       />
       {children}
+      {/* 上传按钮 */}
       {renderAttachFile()}
     </>
   );

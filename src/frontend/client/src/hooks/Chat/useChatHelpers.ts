@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QueryKeys } from '~/data-provider/data-provider/src';
 import { useRecoilState, useResetRecoilState, useSetRecoilState } from 'recoil';
@@ -9,12 +9,13 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import useNewConvo from '~/hooks/useNewConvo';
 import store from '~/store';
 import { filesByIndex } from '~/store/linsight';
+import { checkFileParseStatus } from '~/api/linsight';
 
 // this to be set somewhere else
 export default function useChatHelpers(index = 0, paramId?: string, isLingsight = false) {
   const clearAllSubmissions = store.useClearSubmissionState();
   const [files, setFiles] = useRecoilState(store.filesByIndex(index));
-  const [linsightFiles, setLinsightFiles] = useRecoilState(filesByIndex(index));
+  const [linsightFiles, setLinsightFiles] = useLinsighFiles(index);
 
   const [filesLoading, setFilesLoading] = useState(false);
 
@@ -177,4 +178,78 @@ export default function useChatHelpers(index = 0, paramId?: string, isLingsight 
     filesLoading,
     setFilesLoading
   };
+}
+
+
+
+const useLinsighFiles = (index) => {
+  const [files, setLinsightFiles] = useRecoilState(filesByIndex(index));
+  const filesRef = useRef(new Map()); // 用于跟踪文件状态
+
+  const newFiles = useMemo(() => {
+    const newFiles = new Map(files);
+
+    newFiles.forEach((value, key) => {
+      newFiles.set(key, {
+        ...value,
+        progress: value.parsing_status === 'completed' ? 1 : 0.9,
+        parsing_status: value.parsing_status ?? 'pending'
+      });
+    });
+
+    filesRef.current = newFiles;
+    return newFiles;
+  }, [files]);
+
+
+  // 解析状态检查定时器
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      const currentFiles = new Map(filesRef.current);
+      const filesToCheck = [];
+
+      // 收集需要检查的文件：上传完成但未解析完成的文件
+      currentFiles.forEach(file => {
+        if (file.parsing_status !== 'completed') {
+          filesToCheck.push(file.file_id);
+        }
+      });
+
+      if (filesToCheck.length === 0) return;
+
+      try {
+        const res = await checkFileParseStatus(filesToCheck);
+        const statusMap = new Map(res.data.map(item => [item.file_id, item.parsing_status]));
+
+        // 更新解析完成的文件状态
+        let needsUpdate = false;
+        const updatedFiles = new Map(currentFiles);
+
+        // 遍历 updatedFiles，找到匹配 fileId 的文件
+        updatedFiles.forEach((file, key) => {
+          const fileId = file.file_id; // 假设 file 对象中有 file_id 字段
+          if (statusMap.has(fileId)) {
+            const status = statusMap.get(fileId);
+            if (status === 'completed' && file.parsing_status !== 'completed') {
+              updatedFiles.set(key, {
+                ...file,
+                parsing_status: 'completed',
+                // 可添加其他解析完成后的元数据
+              });
+              needsUpdate = true;
+            }
+          }
+        });
+
+        if (needsUpdate) {
+          setLinsightFiles(updatedFiles);
+        }
+      } catch (error) {
+        console.error('文件解析状态检查失败:', error);
+      }
+    }, 2000)
+    return () => clearInterval(intervalId);
+  }, []);
+
+  return [newFiles, setLinsightFiles]
 }

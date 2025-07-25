@@ -26,6 +26,7 @@ type UseFileHandling = {
   fileSetter?: FileSetter;
   fileFilter?: (file: File) => boolean;
   additionalMetadata?: Record<string, string | undefined>;
+  isLinsight?: boolean;
 };
 
 const useFileHandling = (params?: UseFileHandling) => {
@@ -243,6 +244,7 @@ const useFileHandling = (params?: UseFileHandling) => {
     const fileList = Array.from(_files);
     /* Validate files */
     let filesAreValid: boolean;
+
     try {
       filesAreValid = validateFiles({
         files,
@@ -253,6 +255,7 @@ const useFileHandling = (params?: UseFileHandling) => {
           fileConfig?.endpoints.default ??
           defaultFileConfig.endpoints[endpoint] ??
           defaultFileConfig.endpoints.default,
+        noLimitSize: true
       });
     } catch (error) {
       console.error('file validation error', error);

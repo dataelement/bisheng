@@ -46,7 +46,10 @@ export default function NavToggle({
         aria-expanded={navVisible}
         aria-controls={side === 'left' ? 'chat-history-nav' : 'controls-nav'}
         id={`toggle-${side}-nav`}
-        onClick={onToggle}
+        onClick={(e) => {
+          onToggle(e);
+          setIsHovering(false)
+        }}
         role="button"
         description={
           navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')

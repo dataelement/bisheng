@@ -1,9 +1,10 @@
-import { File, FileText, FileUpIcon, GlobeIcon, KeyRound, Pencil, Rotate3DIcon, Settings2Icon, Spline, Waypoints } from 'lucide-react';
+import { KeyRound, Pencil, Rotate3DIcon, Spline } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { Switch, TextareaAutosize } from '~/components/ui';
+import { Button, TextareaAutosize } from '~/components/ui';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
-import { useGetBsConfig, useGetFileConfig } from '~/data-provider';
+import { useGetBsConfig, useGetFileConfig, useGetUserLinsightCountQuery } from '~/data-provider';
 import {
   BsConfig,
   fileConfig as defaultFileConfig,
@@ -28,14 +29,13 @@ import {
 } from '~/Providers';
 import store from '~/store';
 import { checkIfScrollable, cn, removeFocusRings } from '~/utils';
+import { ChatToolDown } from './ChatFormTools';
 import CollapseChat from './CollapseChat';
 import FileFormWrapper from './Files/FileFormWrapper';
 import SendButton from './SendButton';
 import StopButton from './StopButton';
-import { ChatToolDown } from './ChatFormTools';
-import { useNavigate } from 'react-router-dom';
 
-const ChatForm = ({ isLingsi, index = 0 }) => {
+const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   useQueryParams({ textAreaRef });
@@ -185,26 +185,12 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
     : `pl-${uploadActive ? '6' : '4'} pr-6`;
 
   // linsight工具
-  const [tools, setTools] = useState([
-    {
-      id: 'pro_knowledge',
-      name: '组织知识库',
-      icon: <KeyRound size="16" />,
-      checked: true
-    },
-    {
-      id: 'knowledge',
-      name: '个人知识库',
-      icon: <Pencil size="16" />,
-      checked: true
-    },
-    //     id: 'search',
-    //     name: '联网搜索',
-    //     icon: <GlobeIcon size="16" />,
-    //     checked: true
-    // }
-  ])
-
+  const [tools, setTools] = useState([])
+  // 获取剩余次数
+  const { data: count, refetch } = useGetUserLinsightCountQuery()
+  useEffect(() => {
+    bsConfig?.linsight_invitation_code && refetch()
+  }, [bsConfig?.linsight_invitation_code])
 
   const accept = useMemo(() => {
     if (isLingsi) {
@@ -218,6 +204,7 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
   return (
     <form
       onSubmit={methods.handleSubmit((data) => {
+        if (isLingsi && count === 0) return setShowCode(true)
         submitMessage({ ...data, linsight: isLingsi, tools })
         isLingsi && navigator('/sop/new')
       })}
@@ -340,7 +327,7 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
         </div>
         {/* 气泡 */}
         <div className={cn(
-          "absolute w-full rounded-b-[28px] pt-10 -bottom-10",
+          "absolute w-full rounded-b-[28px] pt-10 -bottom-10 flex justify-between",
           "bg-gradient-to-b from-[#DEE8FF] via-[#DEE8FF] to-[rgba(222,232,255,0.4)]",
           "backdrop-blur-sm", // 添加毛玻璃效果
           "transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]",
@@ -357,14 +344,17 @@ const ChatForm = ({ isLingsi, index = 0 }) => {
             <span className="font-semibold text-[#4A5AA1] mr-2"><Spline size={14} /></span>
             大模型结合业务 SOP 自主规划并完成复杂任务
           </p>
+          {bsConfig?.linsight_invitation_code &&
+            <div className='flex gap-4 items-center pr-6'>
+              <span className='text-xs text-gray-500'>剩余任务次数： {count}次</span>
+              {!count && <Button size="sm" className='h-6 text-xs' onClick={() => setShowCode(true)}>去激活</Button>}
+            </div>
+          }
         </div>
       </div>
-    </form >
+    </form>
   );
 };
-
-const buttonActiveStyle =
-  'text-blue-main border-blue-300 bg-blue-100 hover:text-blue-main hover:bg-blue-200';
 
 const ModelSelect = ({ options, value, onChange }: { options?: BsConfig['models'], value: number, onChange: (value: string) => void }) => {
 

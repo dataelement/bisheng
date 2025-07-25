@@ -116,6 +116,7 @@ export const SOPEditor = ({ versionId, sopError }) => {
     const sopValueFuncRef = useRef<null | ((id) => void)>(null)
     const [disabled, setDisabled] = useStartDisable(linsight.status, linsight.sop)
     const handleChange = (val) => {
+        console.log('sop input :>> ');
         sopValueFuncRef.current = (_v) => {
             saveSop({
                 sop_content: val,

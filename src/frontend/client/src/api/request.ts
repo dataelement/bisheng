@@ -16,9 +16,10 @@ async function _getResponse<T>(url: string, options?: AxiosRequestConfig): Promi
   return await customAxios.get(url, { ...options });
 }
 
-async function _post(url: string, data?: any) {
+async function _post(url: string, data?: any, config?: AxiosRequestConfig) {
   const response = await customAxios.post(url, JSON.stringify(data), {
     headers: { 'Content-Type': 'application/json' },
+    ...config
   });
   return response.data;
 }
