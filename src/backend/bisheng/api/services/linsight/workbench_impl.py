@@ -593,7 +593,7 @@ class LinsightWorkbenchImpl:
             文件信息字典
         """
         # 生成文件信息
-        file_id = uuid.uuid4().hex
+        file_id = uuid.uuid4().hex[:8]  # 生成8位唯一文件ID
         # url 编码 decode 文件名
         original_filename = unquote(file.filename)
         file_extension = original_filename.split('.')[-1] if '.' in original_filename else ''
