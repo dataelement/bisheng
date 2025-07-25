@@ -1,10 +1,10 @@
 from typing import Any, Dict, Tuple, Type, Union, Optional
 
+from langchain_core.tools import BaseTool, Tool
+from loguru import logger
 from pydantic import ConfigDict, model_validator, BaseModel, Field
 
 from bisheng_langchain.utils.requests import Requests, RequestsWrapper
-from langchain_core.tools import BaseTool, Tool
-from loguru import logger
 
 
 class ApiArg(BaseModel):
@@ -17,7 +17,7 @@ class MultArgsSchemaTool(Tool):
         # For backwards compatibility, if run_input is a string,
         # pass as a positional argument.
         if isinstance(tool_input, str):
-            return (tool_input, ), {}
+            return (tool_input,), {}
         else:
             return (), tool_input
 
@@ -41,9 +41,9 @@ class APIToolBase(BaseModel):
         """Validate that api key and python package exists in environment."""
         timeout = values.get('request_timeout', 30)
         if not values.get('client'):
-            values['client'] = Requests(headers=values['headers'], request_timeout=timeout)
+            values['client'] = Requests(headers=values.get('headers'), request_timeout=timeout)
         if not values.get('async_client'):
-            values['async_client'] = RequestsWrapper(headers=values['headers'],
+            values['async_client'] = RequestsWrapper(headers=values.get('headers'),
                                                      request_timeout=timeout)
         return values
 

@@ -1,12 +1,10 @@
 import time
-from typing import Any, Dict, Type
+from typing import Any
 
 import requests
-
 from pydantic import BaseModel, Field
 
-from bisheng_langchain.gpts.tools.api_tools.base import (APIToolBase,
-                                                         MultArgsSchemaTool)
+from bisheng_langchain.gpts.tools.api_tools.base import (MultArgsSchemaTool)
 
 
 class InputArgs(BaseModel):
@@ -14,15 +12,13 @@ class InputArgs(BaseModel):
 
 
 class FireCrawl(BaseModel):
-
     api_key: str = Field(description="apikey")
     base_url: str = Field(description="params base_url")
     maxdepth: int = Field(description="params maxDepth")
     limit: int = Field(description="params limit")
     timeout: int = Field(description="params timeout")
 
-
-    def search_crawl(self,  target_url: str) -> str:
+    def search_crawl(self, target_url: str) -> str:
         """crawl from firecrawl"""
         url = "https://api.firecrawl.dev/v1/crawl"
         headers = {
@@ -38,11 +34,16 @@ class FireCrawl(BaseModel):
             },
         }
         response = requests.post(url, json=params, headers=headers)
-        status_url = response.json()["url"]
+        if response.status_code != 200:
+            return f"failed with status code: {response.status_code}, {response.text}"
+        status_url = response.json().get("url")
+        if not status_url:
+            return f"not found url from {response.text}"
         start_time = time.time()
         while True:
-            response = requests.get(status_url,headers=headers)
-            print("wating for completion " + status_url)
+            response = requests.get(status_url, headers=headers)
+            if response.status_code != 200:
+                return f"failed with status code: {response.status_code}, {response.text}"
             data = response.json()
             if time.time() - start_time > self.timeout:
                 return "timeout"
@@ -52,8 +53,6 @@ class FireCrawl(BaseModel):
                 return "failed"
             else:
                 time.sleep(5)
-
-
 
     def search_scrape(self, target_url: str) -> str:
         """scrape from firecrawl"""
@@ -70,7 +69,6 @@ class FireCrawl(BaseModel):
 
         response = requests.post(url, json=params, headers=headers)
         return response.text
-
 
     @classmethod
     def get_api_tool(cls, name: str, **kwargs: Any) -> "FireCrawl":
