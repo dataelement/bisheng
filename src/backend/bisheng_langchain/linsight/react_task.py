@@ -121,7 +121,7 @@ class ReactTask(BaseTask):
                                           status="end"))
             message = AIMessage(content=json.dumps(result_dict, ensure_ascii=False, indent=2))
         else:
-            _call_reason = params.pop("call_reason", "")
+            _call_reason = params.get("call_reason", "")
             # 等待用户输入的特殊工具调用
             if action == CallUserInputToolName:
                 # 等待用户输入

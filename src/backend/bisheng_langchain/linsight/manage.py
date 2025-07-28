@@ -158,6 +158,9 @@ class TaskManage(BaseModel):
         """
         if name not in self.tool_map:
             return f"tool {name} exec error, because tool name is not found", False
+        if not params.get("call_reason"):
+            return f"tool {name} exec error, because call_reason field is required.", False
+        params.pop("call_reason")
         try:
             res = await self.tool_map[name].ainvoke(input=params)
             if not isinstance(res, str):

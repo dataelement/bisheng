@@ -383,7 +383,7 @@ class Task(BaseTask):
                 for one in res.tool_calls:
                     tool_name = one.get("name")
                     tool_args = one.get("args")
-                    call_reason = tool_args.pop("call_reason") if "call_reason" in tool_args else ""
+                    call_reason = tool_args.get("call_reason") if "call_reason" in tool_args else ""
 
                     # 等待用户输入的特殊工具调用
                     if tool_name == CallUserInputToolName:
