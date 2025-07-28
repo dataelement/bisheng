@@ -352,12 +352,12 @@ async def submit_feedback(
         session_version_model.execute_feedback = feedback
         await LinsightSessionVersionDao.insert_one(session_version_model)
 
-        # 执行重新生成SOP任务
-        background_tasks.add_task(
-            LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-            session_version_model,
-            feedback
-        )
+        # TODO: 执行重新生成SOP任务  暂时注释掉
+        # background_tasks.add_task(
+        #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
+        #     session_version_model,
+        #     feedback
+        # )
 
         return resp_200(data=True, message="提交成功")
 

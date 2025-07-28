@@ -584,8 +584,8 @@ class LinsightWorkflowTask:
                 )
             )
 
-            # 保存SOP
-            await self._save_sop(session_model, llm)
+            # TODO: 保存SOP 暂时关闭自动保存SOP功能
+            # await self._save_sop(session_model, llm)
 
             logger.info(f"任务成功完成，处理了 {len(final_result_files)} 个文件")
 
