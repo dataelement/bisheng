@@ -1,5 +1,6 @@
 import asyncio
 import os
+import uuid
 from typing import List, Dict, Any, Coroutine
 from loguru import logger
 from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
@@ -120,7 +121,7 @@ async def read_file_directory(file_dir: str) -> List[Dict[str, str]]:
             "file_name": os.path.basename(file),
             "file_path": file,
             "file_md5": file_md5,
-            "file_id": os.path.basename(file).rsplit('.', 1)[0]
+            "file_id": uuid.uuid4().hex[:8]  # 生成唯一的文件ID
         })
 
     return file_details
