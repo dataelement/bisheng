@@ -181,7 +181,7 @@ class LinsightWorkflowTask:
             workbench_conf = await LLMService.get_workbench_llm()
             return BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
         except Exception as e:
-            raise TaskExecutionError(f"LLM初始化失败: {e}")
+            raise TaskExecutionError("任务已终止，请联系管理员检查灵思任务执行模型状态")
 
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
