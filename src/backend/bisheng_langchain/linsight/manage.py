@@ -217,7 +217,7 @@ class TaskManage(BaseModel):
     async def get_step_answer(self, step_id: str) -> str:
         """ 获取某个步骤的答案 """
         if step_id not in self.task_step_map:
-            return ""
+            return f"not found step_id: {step_id}"
         return await self.task_step_map[step_id].get_answer()
 
     def get_processed_steps(self):
@@ -244,7 +244,7 @@ class TaskManage(BaseModel):
                 if next_task.next_id:
                     new_next_ids.extend(next_task.next_id)
             next_ids = new_next_ids
-        return ",".join(depend_steps)
+        return ",".join(list(set(depend_steps)))
 
     def get_workflow(self):
         res = []
