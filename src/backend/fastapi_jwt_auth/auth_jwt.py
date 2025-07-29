@@ -191,7 +191,7 @@ class AuthJWT(AuthConfig):
             secret_key,
             algorithm=algorithm,
             headers=headers
-        ).decode('utf-8')
+        )
 
     def _has_token_in_denylist_callback(self) -> bool:
         """
