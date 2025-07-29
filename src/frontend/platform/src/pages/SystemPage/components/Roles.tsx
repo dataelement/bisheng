@@ -71,7 +71,8 @@ export default function Roles() {
             inputDom.value = '';
         }
         try {
-            const data:any = await getRolesByGroupApi('', [state.group]);
+            if (!state.group) return
+            const data: any = await getRolesByGroupApi('', [state.group]);
             dispatch({ type: 'SET_ROLES', payload: data });
             allRolesRef.current = data;
         } catch (error) {
@@ -80,7 +81,7 @@ export default function Roles() {
     }, [state.group]);
 
     useEffect(() => {
-        getUserGroupsApi().then((res:any) => {
+        getUserGroupsApi().then((res: any) => {
             const groups = res.records.map(ug => ({ label: ug.group_name, value: ug.id }))
             // 获取最近修改用户组
             dispatch({ type: 'SET_GROUP', payload: groups[0].value });
@@ -142,16 +143,16 @@ export default function Roles() {
                 <div className="flex justify-between">
                     <div className="flex items-center">
                         <Label>{t('system.currentGroup')}</Label>
-                        <SelectSearch value={state.group} options={options} selectPlaceholder={t('system.defaultGroup')} 
-                        inputPlaceholder={t('log.selectUserGroup')}
-                        selectClass="w-[180px] inline-flex ml-2" contentClass="max-w-[180px] break-all"
-                        onOpenChange={(open) => {
-                            !open && setKeyWord('')
-                        }}
-                        onValueChange={(value) => {
-                            dispatch({ type: 'SET_GROUP', payload: value})
-                        }}
-                        onChange={e => setKeyWord(e.target.value)}
+                        <SelectSearch value={state.group} options={options} selectPlaceholder={t('system.defaultGroup')}
+                            inputPlaceholder={t('log.selectUserGroup')}
+                            selectClass="w-[180px] inline-flex ml-2" contentClass="max-w-[180px] break-all"
+                            onOpenChange={(open) => {
+                                !open && setKeyWord('')
+                            }}
+                            onValueChange={(value) => {
+                                dispatch({ type: 'SET_GROUP', payload: value })
+                            }}
+                            onChange={e => setKeyWord(e.target.value)}
                         />
                     </div>
                     <div className="flex gap-6 items-center justify-between">

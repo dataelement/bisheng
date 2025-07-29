@@ -23,6 +23,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     const scrollBoxRef = useRef<any>(null);
 
     const { nameToValueRef, valueToNameRef, buildTreeData: toolOptions } = useSopTools(tools)
+    const [RenderingCompleted, setRenderingCompleted] = useState(false);
 
     useEffect(() => {
         const vditorDom = document.getElementById('sop-vditor');
@@ -39,10 +40,11 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             mode: "wysiwyg",
             placeholder: "",
             after: () => {
+                setRenderingCompleted(true);
                 veditorRef.current = vditor;
                 scrollBoxRef.current = vditorDom.querySelector('.vditor-reset');
             },
-            input: onChange,
+            input: (val) => onChange(replaceBracesToMarkers(val, nameToValueRef.current)),
             hint: {
                 parse: false, // 必须
                 placeholder: {
@@ -89,7 +91,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             veditorRef.current?.setValue(replaceMarkersToBraces(defaultValue, valueToNameRef.current, nameToValueRef.current))
         }
 
-    }, [])
+    }, [RenderingCompleted])
 
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({
@@ -108,18 +110,17 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     useAtTip(scrollBoxRef)
 
-    return <div ref={boxRef} className="relative border rounded-md  h-[calc(100vh-420px)]">
+    return <div ref={boxRef} className="relative border rounded-md  h-[calc(100vh-420px)] bg-[#fff]">
         <div id="sop-vditor" className="linsight-vditor rounded-md border-none" />
         {/* 工具选择 */}
-        <div>
-            <SopToolsDown
-                open={menuOpen}
-                position={menuPosition}
-                options={toolOptions}
-                onChange={handleChange}
-                onClose={() => setMenuOpen(false)}
-            />
-        </div>
+        <SopToolsDown
+            open={menuOpen}
+            parentRef={boxRef}
+            position={menuPosition}
+            options={toolOptions}
+            onChange={handleChange}
+            onClose={() => setMenuOpen(false)}
+        />
     </div >;
 });
 

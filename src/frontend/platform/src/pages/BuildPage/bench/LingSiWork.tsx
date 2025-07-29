@@ -891,6 +891,7 @@ const handleSave = async (formData: ChatConfigForm) => {
     name: tool.name,
     is_preset: tool.is_preset,
     tool_key: tool.tool_key,
+    description: tool.description,
     children: tool.children?.map(child => ({
       id: child.id,
       name: child.name,

@@ -16,6 +16,7 @@ interface FileItem {
 }
 
 interface FileDrawerProps {
+    title: string
     files: FileItem[]
     isOpen: boolean
     onOpenChange: (open: boolean) => void
@@ -24,7 +25,7 @@ interface FileDrawerProps {
     onPreview?: (fileId: string) => void
 }
 
-export default function TaskFiles({ files, isOpen, onOpenChange, downloadFile, onPreview }: FileDrawerProps) {
+export default function TaskFiles({ title, files, isOpen, onOpenChange, downloadFile, onPreview }: FileDrawerProps) {
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
     const [isDownloading, setIsDownloading] = useState(false)
 
@@ -64,7 +65,7 @@ export default function TaskFiles({ files, isOpen, onOpenChange, downloadFile, o
             file_url: file.file_url,
             file_name: file.file_name
         }))
-        batchDownload({ fileName: 'downloadFile.zip', files: downloadFiles })
+        batchDownload({ fileName: (title || 'downloadFile') + '.zip', files: downloadFiles })
         setTimeout(() => {
             setIsDownloading(false)
         }, 2000);
@@ -116,7 +117,7 @@ export default function TaskFiles({ files, isOpen, onOpenChange, downloadFile, o
                 {/* 文件列表 */}
                 <div className="space-y-1 h-[calc(100vh-100px)] overflow-auto pb-10">
                     {files.map((file) => (
-                        <div key={file.file_id} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50">
+                        <div key={file.file_id} className="group flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50">
                             <Checkbox
                                 id={`file-${file.file_id}`}
                                 checked={selectedFiles.has(file.file_id)}
@@ -129,7 +130,7 @@ export default function TaskFiles({ files, isOpen, onOpenChange, downloadFile, o
                                 <span className="text-sm text-gray-900 flex-1">{file.file_name}</span>
                             </div>
 
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 group-hover:visible invisible">
                                 <Button
                                     variant="ghost"
                                     size="icon"

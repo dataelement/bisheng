@@ -62,9 +62,9 @@ export const useLinsightManager = () => {
     }, [setLinsightMap]);
 
     // 获取会话信息
-    const getLinsight = useCallback((versionId: string) => {
+    const getLinsight = (versionId: string) => {
         return linsightMap.get(versionId) || null;
-    }, [linsightMap]);
+    };
 
     // 切换当前会话
     const switchSession = useCallback((versionId: string) => {
@@ -74,8 +74,7 @@ export const useLinsightManager = () => {
     // 切换会话，更新会话信息
     const switchAndUpdateLinsight = useCallback((versionId: string, update: any) => {
         const linsight = getLinsight(versionId)
-        console.log('update :>> ', update);
-        if (linsight) return;
+        if (linsight) return updateLinsight(versionId, { inputSop: false }); // 恢复用户未输入状态
 
         const { status, execute_feedback, output_result, tasks, files, ...params } = update
         let newStatus = ''
@@ -108,7 +107,7 @@ export const useLinsightManager = () => {
         }
 
         createLinsight(versionId, data);
-    }, [])
+    }, [linsightMap])
 
     return {
         createLinsight,
@@ -173,6 +172,11 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
     const [error, setError] = useState(false);
     const { setConversation } = store.useCreateConversationAtom(0);
 
+    // 切换非新建会话不展示loading
+    useEffect(() => {
+        if (versionId !== 'new') setLoading(false)
+    }, [versionId])
+
     const mockGenerateSop = (versionId: string, feedback?: string) => {
         console.log('Mock SSE started for version:', versionId, linsightSubmission);
         setLoading(false)
@@ -219,7 +223,8 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
             const data = JSON.parse(e.data);
             content += data.content
             updateLinsight(_versionId, {
-                sop: content.replace('```markdown\n', '')
+                sop: content.replace('```markdown\n', '```'),
+                inputSop: false
             })
         })
 
@@ -298,7 +303,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                     }, ...prevVersions])
 
                     // replaceUrl
-                    window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/sop/${linsight_session_version.session_id}`);
+                    window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/linsight/${linsight_session_version.session_id}`);
 
                     createLinsight(versionId, {
                         status: SopStatus.SopGenerating, //linsight_session_version.status,
@@ -380,6 +385,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
             updateLinsight(versionId, {
                 status: SopStatus.SopGenerating,
+                sop: ''
             })
             clearLinsightSubmission(versionId)
             setError(false)
@@ -430,11 +436,12 @@ const convertTools = (tools) => {
 
 
 function buildTaskTree(tasks) {
+    let hasTerminated = false
     const newTasks = tasks.map(task => {
-        return {
+        const taskTree = {
             id: task.id,
             name: task.task_data?.display_target || '',
-            status: task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
+            status: hasTerminated ? 'not_started' : task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
             history: task.history || [],
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
             call_reason: task.input_prompt || '',
@@ -449,6 +456,13 @@ function buildTaskTree(tasks) {
                 }
             }) || []
         }
+
+        // 处理终止后的任务全部为not_started（隐藏）
+        if (['terminated', 'failed'].includes(task.status)) {
+            hasTerminated = true
+        }
+
+        return taskTree
     })
     return newTasks
 

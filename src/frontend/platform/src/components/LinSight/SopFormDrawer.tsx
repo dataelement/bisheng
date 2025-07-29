@@ -61,19 +61,19 @@ const SopFormDrawer = ({
     return isValid;
   };
 
-const handleInputChange = (field, value) => {
-  const length = field === 'content' 
-    ? value.replace(/[#*_\-`~]/g, '').length-1
-    : value.length;
+  const handleInputChange = (field, value) => {
+    const length = field === 'content'
+      ? value.replace(/[#*_\-`~]/g, '').length - 1
+      : value.length;
 
-  if (length <= MAX_LENGTHS[field]) {
-    setSopForm(prev => ({ ...prev, [field]: value }));
-    setCharCount(prev => ({ ...prev, [field]: length }));
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+    if (length <= MAX_LENGTHS[field]) {
+      setSopForm(prev => ({ ...prev, [field]: value }));
+      setCharCount(prev => ({ ...prev, [field]: length }));
+      if (errors[field]) {
+        setErrors(prev => ({ ...prev, [field]: '' }));
+      }
     }
-  }
-};
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -158,17 +158,17 @@ const handleInputChange = (field, value) => {
                   详细内容<span className="text-red-500">*</span>
                 </label>
                 {isDrawerOpen && (
-    <div className="relative mt-1">
-      <SopMarkdown
-        tools={tools}
-        defaultValue={sopForm.content}
-        onChange={(val) => handleInputChange('content', val)}
-        className="min-h-[200px]"
-      />
-      <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
-        {charCount.content}/{MAX_LENGTHS.content}
-      </div>
-    </div>
+                  <div className="relative mt-1">
+                    <SopMarkdown
+                      tools={tools}
+                      defaultValue={sopForm.content}
+                      onChange={(val) => handleInputChange('content', val)}
+                      className="min-h-[200px]"
+                    />
+                    <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
+                      {charCount.content}/{MAX_LENGTHS.content}
+                    </div>
+                  </div>
                 )}
                 {/* <Textarea
                   id="sop-content"
@@ -188,22 +188,22 @@ const handleInputChange = (field, value) => {
                 </div>
               </div>
 
-           <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 flex justify-end space-x-3">
-            <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
-            <Button
-              type="submit"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <LoadIcon className="animate-spin mr-2" />
-                  保存中...
-                </>
-              ) : (
-                '保存'
-              )}
-            </Button>
+              <div className="flex-shrink-0 px-4 py-2 border-t border-gray-200 flex justify-end space-x-3">
+                <Button type="button" variant='outline' onClick={() => setIsDrawerOpen(false)}>取消</Button>
+                <Button
+                  type="submit"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <LoadIcon className="animate-spin mr-2" />
+                      保存中...
+                    </>
+                  ) : (
+                    '保存'
+                  )}
+                </Button>
               </div>
             </form>
           </div>

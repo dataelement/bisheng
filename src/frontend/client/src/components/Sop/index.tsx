@@ -7,7 +7,7 @@ import { Header } from './Header';
 import { SOPEditor } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
 
-export default function index(params) {
+export default function index() {
     // 获取url参数
     const { conversationId } = useParams();
 
@@ -89,7 +89,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
         }
 
         loadSessionVersionsAndTasks(conversationId);
-    }, [conversationId, linsightTools, PersonalTool, orgTools, switchAndUpdateLinsight]);
+    }, [conversationId, linsightTools, PersonalTool, orgTools]);
 
 
     const switchVersion = async (versionId: string) => {

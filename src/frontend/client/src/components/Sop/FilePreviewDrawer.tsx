@@ -2,12 +2,11 @@
 
 import type React from "react"
 
+import { ChevronLeft, Download } from "lucide-react"
 import { useState } from "react"
-import { ChevronLeft, Download, X } from "lucide-react"
 import { Button, TooltipAnchor } from "../ui"
 import FileIcon from "../ui/icon/File"
 import { Sheet, SheetContent, SheetHeader } from "../ui/Sheet"
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "../ui/Select"
 import FilePreview from "./FilePreview"
 
 interface FileItem {
@@ -24,7 +23,7 @@ interface FilePreviewDrawerProps {
     onOpenChange: (open: boolean) => void
     currentFileId?: string
     onFileChange?: (fileId: string) => void
-    onBack?: (b) => void
+    onBack?: () => void
     downloadFile: (file: any) => void
     children?: React.ReactNode // 预览内容组件
 }
@@ -53,7 +52,7 @@ export default function FilePreviewDrawer({
     }
 
     // 获取当前选中的文件
-    const currentFile = files.find((file) => file.file_id === selectedFileId)
+    const currentFile = files.find((file) => file.file_id === currentFileId)
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -63,7 +62,7 @@ export default function FilePreviewDrawer({
                         <div className="flex items-center space-x-3 flex-1">
                             {/* 返回按钮 */}
                             {onBack && (
-                                <Button variant="outline" size="icon" onClick={() => onBack(false)} className="h-8 w-8">
+                                <Button variant="outline" size="icon" onClick={() => onBack()} className="h-8 w-8">
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
                             )}

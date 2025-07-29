@@ -88,7 +88,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     }, []);
 
     useEffect(() => {
-        // 用户输入同步value to markdown
+        // 用户手动输入不再更新setValue markdown
         if (!inputSop && (value === '' || value)) {
             // 回显值
             veditorRef.current?.setValue(replaceMarkersToBraces(value, valueToNameRef.current, nameToValueRef.current))
@@ -106,7 +106,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
         } else {
             veditorRef.current?.enable()
         }
-    }, [edit])
+    }, [edit, RenderingCompleted])
 
     // 暴露方法给父组件
     useImperativeHandle(ref, () => ({
@@ -130,15 +130,14 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
     return <div ref={boxRef} className="relative h-full">
         <div id="vditor" className="linsight-vditor border-none" />
         {/* 工具选择 */}
-        <div>
-            <SopToolsDown
-                open={menuOpen}
-                position={menuPosition}
-                options={toolOptions}
-                onChange={handleChange}
-                onClose={() => setMenuOpen(false)}
-            />
-        </div>
+        <SopToolsDown
+            open={menuOpen}
+            parentRef={boxRef}
+            position={menuPosition}
+            options={toolOptions}
+            onChange={handleChange}
+            onClose={() => setMenuOpen(false)}
+        />
     </div >;
 });
 
@@ -148,7 +147,7 @@ export default SopMarkdown;
 
 // 工具整合
 const useSopTools = (linsight) => {
-    const { files, tools, org_knowledge_enabled, personal_knowledge_enabled } = linsight
+    const { files, file_list, tools, org_knowledge_enabled, personal_knowledge_enabled } = linsight
 
     const { data: linsightTools } = useGetLinsightToolList();
     const { data: personalTool } = useGetPersonalToolList();
@@ -170,7 +169,7 @@ const useSopTools = (linsight) => {
             };
             fileNode.children = files.map(file => {
                 const name = file.file_name;
-                const value = `${file.file_name}的文件储存信息：{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
+                const value = `${file.file_name}的文件储存信息:{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
                 nameToValueRef.current[name] = value;
                 valueToNameRef.current[value] = name;
                 return {
@@ -183,6 +182,16 @@ const useSopTools = (linsight) => {
             tree.push(fileNode);
         }
 
+        // 补充结果文件到 ref映射
+        if (file_list?.length) {
+            file_list.forEach(file => {
+                const name = file.file_name;
+                const value = `${file.file_name}的文件储存信息:{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
+                nameToValueRef.current[name] = value;
+                valueToNameRef.current[value] = name;
+            });
+        }
+
         // 2. 转换orgTools数据
         if (org_knowledge_enabled && orgTools && orgTools.length > 0) {
             tree.push({
@@ -191,7 +200,7 @@ const useSopTools = (linsight) => {
                 desc: '',
                 children: orgTools.map(tool => {
                     const name = tool.name;
-                    const value = `${tool.name}的储存信息：{"知识库储存在语义检索库中的id":"${tool.id}"}`
+                    const value = `${tool.name}的储存信息:{"知识库储存在语义检索库中的id":"${tool.id}"}`
                     nameToValueRef.current[name] = value;
                     valueToNameRef.current[value] = name;
                     return {
@@ -213,7 +222,7 @@ const useSopTools = (linsight) => {
                 children: [] // 个人知识库没有子节点
             });
             const name = personalTool[0].name;
-            const value = `${personalTool[0].name}的储存信息：{"知识库储存在语义检索库中的id":"${personalTool[0].id}"}`
+            const value = `${personalTool[0].name}的储存信息:{"知识库储存在语义检索库中的id":"${personalTool[0].id}"}`
             nameToValueRef.current[name] = value;
             valueToNameRef.current[value] = name;
         }
