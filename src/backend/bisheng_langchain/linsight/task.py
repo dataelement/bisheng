@@ -262,7 +262,7 @@ class BaseTask(BaseModel):
         raise NotImplementedError
 
     async def get_answer(self) -> str:
-        if not self.answer:
+        if not self.history:
             return ""
 
         if self.summarize_answer:

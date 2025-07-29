@@ -280,7 +280,7 @@ class TaskManage(BaseModel):
             if task_exception := async_task.exception():
                 raise task_exception
             if task.status == TaskStatus.FAILED.value:
-                raise Exception(f"Task {task.step_id} failed with error: {task.get_answer()}")
+                raise Exception(f"Task {task.step_id} failed with error: {task.get_finally_answer()}")
 
     async def continue_task(self, task_id: str, user_input: str) -> None:
         """
