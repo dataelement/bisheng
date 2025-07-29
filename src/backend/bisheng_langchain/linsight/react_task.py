@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 from datetime import datetime
@@ -144,7 +145,7 @@ class ReactTask(BaseTask):
                                               name=action,
                                               params=params,
                                               status="start"))
-                observation, flag = await self.task_manager.ainvoke_tool(action, params)
+                observation, flag = await self.task_manager.ainvoke_tool(action, copy.deepcopy(params))
                 # 说明工具调用失败
                 if not flag:
                     is_end = False

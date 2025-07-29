@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import datetime
 import json
 import time
@@ -408,7 +409,7 @@ class Task(BaseTask):
                                                   name=tool_name,
                                                   params=tool_args,
                                                   status="start"))
-                    tool_result, _ = await self.task_manager.ainvoke_tool(tool_name, tool_args)
+                    tool_result, _ = await self.task_manager.ainvoke_tool(tool_name, copy.deepcopy(tool_args))
                     await self.put_event(ExecStep(task_id=self.id,
                                                   call_id=one.get('id'),
                                                   call_reason=call_reason,
