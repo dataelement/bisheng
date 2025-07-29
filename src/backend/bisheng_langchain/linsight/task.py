@@ -158,7 +158,8 @@ class BaseTask(BaseModel):
             await self.put_event(GenerateSubTask(task_id=self.id,
                                                  subtask=[one.get_task_info() for one in self.children]))
         if not self.children:
-            raise ValueError("No sub-tasks generated for the loop task.")
+            self.status = TaskStatus.SUCCESS.value
+            return None
         # 如果是循环任务，子任务执行完毕后需要将结果合并。目前
         all_failed = True
         answer = []
