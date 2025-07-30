@@ -519,7 +519,8 @@ async def batch_download_files(
         zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
-
+        # 转成 unicode 字符串
+        zip_name = zip_name.encode('utf-8').decode('latin1')
         return StreamingResponse(
             iter([zip_bytes]),
             media_type="application/zip",
