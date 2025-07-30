@@ -379,6 +379,22 @@ class RedisClient:
         except Exception as e:
             raise e
 
+    async def alrange(self, key, start=0, end=-1):
+        try:
+            await self.acluster_nodes(key)
+            values = await self.async_connection.lrange(key, start, end)
+            return [pickle.loads(v) for v in values if v is not None]
+        except Exception as e:
+            raise e
+
+    async def alrem(self, key, value):
+        try:
+            await self.acluster_nodes(key)
+            value = pickle.dumps(value) if not isinstance(value, bytes) else value
+            return await self.async_connection.lrem(key, 0, value)
+        except Exception as e:
+            raise e
+
     def rpush(self, key, value, expiration=3600):
         try:
             self.cluster_nodes(key)

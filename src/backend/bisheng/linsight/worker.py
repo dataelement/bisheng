@@ -13,8 +13,8 @@ from bisheng.utils.logger import configure
 logger = logging.getLogger(__name__)
 
 
-# Redis 队列
-class RedisQueue(object):
+# LinsightQueue 队列
+class LinsightQueue(object):
     def __init__(self, name, namespace, redis):
         self.__db: RedisClient = redis
         self.key = '%s:%s' % (namespace, name)
@@ -23,9 +23,7 @@ class RedisQueue(object):
         return await self.__db.allen(self.key)  # 返回队列里面list内元素的数量
 
     async def put(self, data, timeout=None):
-        await self.__db.arpush(self.key, data)  # 添加新元素到队列最右方
-        if isinstance(timeout, int):
-            await self.__db.aexpire_key(self.key, timeout)
+        await self.__db.arpush(self.key, data, expiration=timeout)  # 添加新元素到队列最右方
 
     async def get_wait(self, timeout=None):
         # 返回队列第一个元素，如果为空则等待至有元素被加入队列（超时时间阈值为timeout，如果为None则一直等待）
@@ -37,12 +35,36 @@ class RedisQueue(object):
         item = await self.__db.alpop(self.key)
         return item
 
+    # 获取某个任务数据在队列中的位置
+    async def index(self, data):
+        """
+        获取某个任务数据在队列中的位置
+        :param data: 任务数据
+        :return: 任务数据在队列中的位置，-1表示不在队列中
+        """
+        items = await self.__db.alrange(self.key)
+        try:
+            index = items.index(data)
+            return index + 1 # 返回索引从1开始
+        except ValueError:
+            return 0
+
+    # 删除某个任务数据
+    async def remove(self, data):
+        """
+        删除某个任务数据
+        :param data: 任务数据
+        :return: None
+        """
+        await self.__db.alrem(self.key, data)  # 从队列中删除指定数据
+
+
 
 class ScheduleCenterProcess(Process):
     def __init__(self):
         super().__init__()
         self.daemon = True
-        self.queue: Optional[RedisQueue] = None
+        self.queue: Optional[LinsightQueue] = None
         # 信号量
         self.semaphore: Optional[asyncio.Semaphore] = None
 
@@ -95,9 +117,9 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
-        self.queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
+        self.queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
         for _ in range(10000):
-            self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency)
+            self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency + 1)
             try:
                 asyncio.run(self.async_run())
             except Exception as e:
