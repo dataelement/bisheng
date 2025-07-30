@@ -1,6 +1,8 @@
 import json
 import os
 from typing import List, Literal
+from urllib import parse
+
 from loguru import logger
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
@@ -520,7 +522,7 @@ async def batch_download_files(
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
         # 转成 unicode 字符串
-        zip_name = zip_name.encode('utf-8').decode('latin1')
+        zip_name = parse.quote(zip_name)
         return StreamingResponse(
             iter([zip_bytes]),
             media_type="application/zip",
