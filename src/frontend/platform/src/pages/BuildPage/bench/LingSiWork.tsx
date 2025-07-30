@@ -696,7 +696,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
                             label="输入框提示语"
-                            value={formData.linsightConfig.input_placeholder}
+                            value={formData.linsightConfig?.input_placeholder}
                             placeholder="请输入你的任务目标，然后交给 BISHENG 灵思"
                             maxLength={100}
                             onChange={(v) => {

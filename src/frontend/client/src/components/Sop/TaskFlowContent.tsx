@@ -101,7 +101,7 @@ const Tool = ({ data }) => {
 
 const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null }) => {
     const [isExpanded, setIsExpanded] = useState(true);
-
+    const [inputValue, setInputValue] = useState('');
     // 根据状态选择对应的图标
     const renderStatusIcon = () => {
         const status = (task.children?.some(child => child.status === 'user_input') && 'user_input') || task.status;

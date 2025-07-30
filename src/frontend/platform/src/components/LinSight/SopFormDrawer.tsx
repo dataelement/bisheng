@@ -31,7 +31,7 @@ const SopFormDrawer = ({
   const MAX_LENGTHS = {
     name: 500,      // 名称不超过500字
     description: 1000, // 描述不超过1000字
-    content: 50000   // 详细内容不超过100000字
+    content: 10000   // 详细内容不超过100000字
   };
 
   const validateForm = () => {
