@@ -3,9 +3,9 @@ import os
 from typing import List, Literal
 from urllib import parse
 
-from loguru import logger
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
+from loguru import logger
 from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
@@ -15,7 +15,8 @@ from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.user_service import get_login_user, UserPayload
+from bisheng.api.services.user_service import get_login_user, UserPayload, get_admin_user
+from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
@@ -596,6 +597,15 @@ async def get_sop_list(
 
     sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, page=page, page_size=page_size, sort=sort)
     return resp_200(data=sop_pages)
+
+
+@router.get("/sop/record", summary="获取灵思SOP记录", response_model=UnifiedResponseModel)
+async def get_sop_record(login_user: UserPayload = Depends(get_admin_user),
+                         keyword: str = Query(None, description="搜索关键字"),
+                         page: int = Query(1, ge=1, description="页码"),
+                         page_size: int = Query(10, ge=1, le=100, description="每页数量")):
+    res, count = await SOPManageService.get_sop_record(keyword, page, page_size)
+    return resp_200(PageList(total=count, list=res))
 
 
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)

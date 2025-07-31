@@ -2,7 +2,7 @@ from typing import List, Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from bisheng.database.constants import ToolPresetType
+from bisheng.database.models.linsight_sop import LinsightSOPBase
 
 
 class ToolChildrenSchema(BaseModel):
@@ -48,3 +48,8 @@ class LinsightQuestionSubmitSchema(BaseModel):
 class BatchDownloadFilesSchema(BaseModel):
     file_name: str = Field(..., description="文件名称")
     file_url: str = Field(..., description="文件下载链接")
+
+
+class SopRecordRead(LinsightSOPBase):
+    id: int = Field(..., description="ID")
+    user_name: Optional[str] = Field(default=None, description="用户名称")

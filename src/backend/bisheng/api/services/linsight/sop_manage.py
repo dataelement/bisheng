@@ -1,33 +1,73 @@
-import asyncio
 import uuid
 from typing import List
 
-from langchain_core.embeddings import Embeddings
-from loguru import logger
 from langchain_core.documents import Document
-
-from bisheng.utils import util
-from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
+from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-from bisheng.api.services.llm import LLMService
-from bisheng_langchain.retrievers import EnsembleRetriever
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
+from loguru import logger
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores
+from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
+from bisheng.api.v1.schema.linsight_schema import SopRecordRead
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_500, resp_200
-from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao
+from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
+from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
+from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
+from bisheng_langchain.retrievers import EnsembleRetriever
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 
 
 class SOPManageService:
     __doc__ = "灵思SOP管理服务"
 
     collection_name = "col_linsight_sop"
+
+    @staticmethod
+    async def add_sop_record(sop_obj: SOPManagementSchema, user_id) -> LinsightSOPRecord:
+        """
+        添加SOP记录
+        """
+        sop_record = LinsightSOPRecord(**sop_obj.model_dump(), user_id=user_id)
+        return await LinsightSOPDao.create_sop_record(sop_record)
+
+    @staticmethod
+    async def get_sop_record(keyword: str = None, page: int = 1, page_size: int = 10) -> \
+            (List[SopRecordRead], int):
+        """
+        根据关键词过滤SOP记录
+        :param keyword: 关键词
+        :param page: 页码
+        :param page_size: 每页大小
+        :return: SOP记录列, 总数
+        """
+        user_ids = []
+        if keyword:
+            # 如果有关键词，先获取用户ID列表
+            user_ids = await UserDao.afilter_users(user_ids=[], keyword=keyword)
+            user_ids = [one.user_id for one in user_ids]
+
+        res = await LinsightSOPDao.filter_sop_record(keyword, user_ids, page, page_size)
+        count = await LinsightSOPDao.count_sop_record(keyword, user_ids)
+        if not res:
+            return [], 0
+
+        all_users = await UserDao.afilter_users(user_ids=[one.user_id for one in res])
+        all_users = {
+            one.user_id: one.user_name for one in all_users
+        }
+
+        result = []
+        for one in res:
+            result.append(
+                SopRecordRead(**one.model_dump(), user_name=all_users.get(one.user_id, str(one.user_id)))
+            )
+        return result, count
 
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
@@ -310,7 +350,6 @@ class SOPManageService:
 
                 batch_size = 16
                 for i in range(0, len(contents), batch_size):
-
                     batch_contents = contents[i:i + batch_size]
                     batch_metadatas = metadatas[i:i + batch_size]
 
@@ -327,7 +366,6 @@ class SOPManageService:
         except Exception as e:
             logger.exception(f"重建SOP向量存储失败: {str(e)}")
             return None
-
 
 # if __name__ == '__main__':
 #     # 测试代码

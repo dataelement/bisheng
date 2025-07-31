@@ -1,10 +1,8 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Literal
-from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import Column, Text, DateTime, text, CHAR, ForeignKey
-from sqlmodel import Field, select, delete, col
+from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR, ForeignKey
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.database.base import async_session_getter, async_get_count
@@ -27,9 +25,13 @@ class LinsightSOPBase(SQLModelSerializable):
                                            sa_column=Column(CHAR(36), nullable=False, comment="向量存储ID"))
 
     linsight_session_id: Optional[str] = Field(default=None, description='灵思会话ID',
-                                                        sa_column=Column(CHAR(36),
-                                                                         ForeignKey("message_session.chat_id"),
-                                                                         nullable=True))
+                                               sa_column=Column(CHAR(36),
+                                                                ForeignKey("message_session.chat_id"),
+                                                                nullable=True))
+    create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
+                                  sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
 
 
 class LinsightSOP(LinsightSOPBase, table=True):
@@ -38,6 +40,21 @@ class LinsightSOP(LinsightSOPBase, table=True):
     """
     __tablename__ = "linsight_sop"
     id: Optional[int] = Field(default=None, primary_key=True, description='SOP唯一ID')
+
+
+class LinsightSOPRecord(SQLModelSerializable, table=True):
+    """
+    灵思SOP运行记录表，记录灵思执行过程中产生的sop
+    """
+    __tablename__ = "linsight_sop_record"
+    id: Optional[int] = Field(default=None, primary_key=True, description='SOP记录唯一ID')
+    name: str = Field(..., description='SOP名称', sa_column=Column(Text, nullable=False))
+    description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
+    user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
+    content: str = Field(..., description='SOP内容',
+                         sa_column=Column(Text, nullable=False, comment="SOP内容"))
+
+    rating: Optional[int] = Field(None, ge=0, le=5, description='SOP评分，范围0-5')
     create_time: datetime = Field(default_factory=datetime.now, description='创建时间',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -98,7 +115,6 @@ class LinsightSOPDao(LinsightSOPBase):
             statement = statement.order_by(col(LinsightSOP.rating).asc(), col(LinsightSOP.create_time).asc())
         else:
             statement = statement.order_by(col(LinsightSOP.rating).desc(), col(LinsightSOP.create_time).desc())
-
 
         async with async_session_getter() as session:
             total_count = await async_get_count(session, statement)
@@ -167,3 +183,57 @@ class LinsightSOPDao(LinsightSOPBase):
             result = await session.exec(statement)
             sop_list = result.all()
             return sop_list
+
+    @classmethod
+    async def create_sop_record(cls, sop_record: LinsightSOPRecord) -> LinsightSOPRecord:
+        """
+        插入一条SOP记录
+        """
+        async with async_session_getter() as session:
+            session.add(sop_record)
+            await session.commit()
+            await session.refresh(sop_record)
+            return sop_record
+
+    @classmethod
+    async def _filter_sop_record_statement(cls, statement, keywords: str = None, user_ids: list[int] = None) -> select:
+        """
+        构建SOP记录的查询语句
+        """
+        or_params = []
+        if keywords:
+            or_params.extend([
+                LinsightSOPRecord.name.like(f'%{keywords}%'),
+                LinsightSOPRecord.description.like(f'%{keywords}%'),
+                LinsightSOPRecord.content.like(f'%{keywords}%')
+            ])
+        if user_ids:
+            or_params.append(LinsightSOPRecord.user_id.in_(user_ids))
+        if or_params:
+            statement = statement.where(or_(*or_params))
+        return statement
+
+    @classmethod
+    async def filter_sop_record(cls, keywords: str = None, user_ids: list[int] = None, page: int = None,
+                                page_size: int = None) -> List[LinsightSOPRecord]:
+        """
+        获取所有SOP记录, 关键字匹配name、description、content。user_ids为用户ID列表。筛选条件之间是or的关系
+        """
+        statement = select(LinsightSOPRecord)
+        statement = await cls._filter_sop_record_statement(statement, keywords, user_ids)
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+
+        async with async_session_getter() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def count_sop_record(cls, keywords: str = None, user_ids: list[int] = None) -> int:
+        """
+        统计SOP记录数量
+        """
+        statement = select(func.count(LinsightSOPRecord.id))
+        statement = await cls._filter_sop_record_statement(statement, keywords, user_ids)
+        async with async_session_getter() as session:
+            return await session.scalar(statement)
