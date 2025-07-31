@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
 from urllib.parse import unquote
 
 from fastapi import UploadFile
-from langchain_core.runnables import run_in_executor
 from langchain_core.tools import BaseTool
 from loguru import logger
 
@@ -27,7 +26,7 @@ from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
-from bisheng.database.models.linsight_sop import LinsightSOPDao
+from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
@@ -829,8 +828,13 @@ class LinsightWorkbenchImpl:
             ):
                 sop_content += res.content
 
-            # 生成SOP摘要并更新数据库
-            await cls._update_sop_in_database(session_version_model, sop_content, llm)
+            # sop写到记录表里，这个sop不需要关联会话，因为不需要更新分数
+            await SOPManageService.add_sop_record(LinsightSOPRecord(
+                name=session_version_model.title,
+                description=None,
+                user_id=session_version_model.user_id,
+                content=sop_content,
+            ))
         except cls.ToolsInitializationError as e:
             logger.exception(f"初始化灵思工作台工具失败: session_version_id={session_version_model.id}, error={str(e)}")
 

@@ -1,5 +1,6 @@
+import json
 import uuid
-from typing import List
+from typing import List, Dict
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -12,10 +13,12 @@ from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import SopRecordRead
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_500, resp_200
+from bisheng.core.app_context import app_ctx
 from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.interface.llms.custom import BishengLLM
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
@@ -29,11 +32,45 @@ class SOPManageService:
     collection_name = "col_linsight_sop"
 
     @staticmethod
-    async def add_sop_record(sop_obj: SOPManagementSchema, user_id) -> LinsightSOPRecord:
+    async def generate_sop_summary(sop_content: str, llm: BishengLLM = None) -> Dict[str, str]:
+        """生成SOP摘要"""
+        default_summary = {"sop_title": "SOP名称", "sop_description": "SOP描述"}
+
+        try:
+            if llm is None:
+                workbench_conf = await LLMService.get_workbench_llm()
+                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+            prompt_service = app_ctx.get_prompt_loader()
+            prompt_obj = prompt_service.render_prompt(
+                namespace="sop",
+                prompt_name="gen_sop_summary",
+                sop_detail=sop_content
+            )
+
+            prompt = [
+                ("system", prompt_obj.prompt.system),
+                ("user", prompt_obj.prompt.user)
+            ]
+
+            response = await llm.ainvoke(prompt)
+            if not response.content:
+                return default_summary
+
+            return json.loads(response.content)
+
+        except Exception as e:
+            logger.error(f"生成SOP摘要失败: {e}")
+            return default_summary
+
+    @staticmethod
+    async def add_sop_record(sop_record: LinsightSOPRecord) -> LinsightSOPRecord:
         """
         添加SOP记录
         """
-        sop_record = LinsightSOPRecord(**sop_obj.model_dump(), user_id=user_id)
+        if not sop_record.description:
+            sop_summary = await SOPManageService.generate_sop_summary(sop_record.content, None)
+            sop_record.description = sop_summary["sop_description"]
+
         return await LinsightSOPDao.create_sop_record(sop_record)
 
     @staticmethod
@@ -68,6 +105,78 @@ class SOPManageService:
                 SopRecordRead(**one.model_dump(), user_name=all_users.get(one.user_id, str(one.user_id)))
             )
         return result, count
+
+    @staticmethod
+    async def update_sop_record_score(session_version_id: str, score: int) -> None:
+        await LinsightSOPDao.update_sop_record_score(session_version_id, score)
+
+    @staticmethod
+    async def sync_sop_record(record_ids: list[int], override: bool = False, save_new: bool = False) \
+            -> list[str] | None:
+
+        """
+        如果有重复的SOP记录，返回重复的记录名称列表
+        """
+        sop_records = await LinsightSOPDao.get_sop_record_by_ids(record_ids)
+        records_name_dict = {}
+        repeat_names = set()
+        name_set = set()
+        sop_list = []
+        for one in sop_records:
+            if one.name not in name_set:
+                records_name_dict[one.name] = one
+                name_set.add(one.name)
+        if name_set:
+            sop_list = await LinsightSOPDao.get_sops_by_names(list(name_set))
+            for one in sop_list:
+                repeat_names.add(one.name)
+
+        if override:
+            # 先更新已有的sop库
+            for one in sop_list:
+                if one_record := records_name_dict.get(one.name):
+                    await SOPManageService.update_sop(SOPManagementUpdateSchema(
+                        id=one.id,
+                        name=one.name,
+                        description=one_record.description,
+                        content=one_record.content,
+                        rating=one_record.rating,
+                    ))
+                    del records_name_dict[one.name]
+            # 再新增剩下的sop记录
+            for one in records_name_dict.values():
+                await SOPManageService.add_sop(SOPManagementSchema(
+                    name=one.name,
+                    description=one.description,
+                    content=one.content,
+                    rating=one.rating,
+                ), one.user_id)
+        elif save_new:
+            for one in sop_records:
+                new_name = one.name
+                if new_name in repeat_names:
+                    # 如果有重复的记录，添加后缀, 长度限制500个字符
+                    new_name = f"{one.name}副本"
+                await SOPManageService.add_sop(SOPManagementSchema(
+                    name=new_name,
+                    description=one.description,
+                    content=one.content,
+                    rating=one.rating,
+                ), one.user_id)
+            return None
+        else:
+            # 说明有重复的记录，需要用户确认
+            if sop_list:
+                return list(repeat_names)
+            # 将记录插入到数据库中
+            for one in sop_records:
+                await SOPManageService.add_sop(SOPManagementSchema(
+                    name=one.name,
+                    description=one.description,
+                    content=one.content,
+                    rating=one.rating,
+                ), one.user_id)
+            return None
 
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
