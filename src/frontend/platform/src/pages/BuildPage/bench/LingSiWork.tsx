@@ -98,7 +98,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [showToolSelector, setShowToolSelector] = useState(false);
     const [toolSearchTerm, setToolSearchTerm] = useState('');
     const [pageInputValue, setPageInputValue] = useState('1');
-    const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('mcp');
+    const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('builtin');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
     // const [importDialogOpen, setImportDialogOpen] = useState(false);

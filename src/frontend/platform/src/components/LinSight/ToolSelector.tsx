@@ -232,7 +232,7 @@ useEffect(() => {
         >
         <div className="flex-1 p-4">
           <h3 className="text-sm font-medium">已选工具</h3>
-          {selectedTools.length === 0 && (
+          {/* {selectedTools.length === 0 && (
             <button
               onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
               className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
@@ -240,7 +240,7 @@ useEffect(() => {
               <Plus className="inline w-4 h-4 mr-1" />
               添加更多工具
             </button>
-          )}
+          )} */}
 
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="selectedTools">
@@ -295,7 +295,7 @@ useEffect(() => {
       </Droppable>
     </DragDropContext>
 
-    {selectedTools.length > 0 && (
+    {/* {selectedTools.length > 0 && (
       <Button
         variant='outline'
         onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
@@ -304,12 +304,12 @@ useEffect(() => {
         <Plus className="inline w-4 h-4 mr-1" />
         添加更多工具
       </Button>
-    )}
+    )} */}
   </div>
 </div>
 
       {/* 工具选择器 */}
-      {showToolSelector && (
+      {(
         <div
           className="w-2/3 flex border rounded-lg bg-white overflow-hidden transition-all duration-300 ease-in-out"
           key={activeToolTab}
