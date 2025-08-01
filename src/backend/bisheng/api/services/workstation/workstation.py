@@ -38,6 +38,35 @@ class WorkStationService(BaseService):
         return data
 
     @classmethod
+    def sync_tool_info(cls, tools: list[dict]) -> list[dict]:
+        """ 同步工具信息 """
+        if not tools:
+            return []
+        tool_type_ids = [t.get("id") for t in tools]
+        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        exists_tool_type = {t.id: t for t in tool_type_info}
+        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
+        exists_tool_info = {t.id: t for t in tool_info}
+        new_tools = []
+        for one in tools:
+            new_one = exists_tool_type.get(one.get("id"))
+            if not new_one:
+                continue
+            one["name"] = new_one.name
+            one["description"] = new_one.description
+            new_children = []
+            for item in one.get("children", []):
+                if not exists_tool_info.get(item.get("id")):
+                    continue
+                item["name"] = exists_tool_info[item.get("id")].name
+                item["description"] = exists_tool_info[item.get("id")].desc
+                item["tool_key"] = exists_tool_info[item.get("id")].tool_key
+                new_children.append(item)
+            one["children"] = new_children
+            new_tools.append(one)
+        return new_tools
+
+    @classmethod
     def parse_config(cls, config: Any) -> Optional[WorkstationConfig]:
         if config:
             ret = json.loads(config.value)
@@ -51,16 +80,8 @@ class WorkStationService(BaseService):
             if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
                 ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
-            # 判断工具是否被删除
-            if ret.linsightConfig.tools:
-                tool_type_ids = [t.get("id") for t in ret.linsightConfig.tools]
-                tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
-                exists_tool_type = {t.id: True for t in tool_type_info}
-                new_tools = []
-                for one in ret.linsightConfig.tools:
-                    if one.get("id") in exists_tool_type:
-                        new_tools.append(one)
-                ret.linsightConfig.tools = new_tools
+            # 判断工具是否被删除, 同步工具最新的信息名称和描述等
+            ret.linsightConfig.tools = cls.sync_tool_info(ret.linsightConfig.tools)
             return ret
         return None
 

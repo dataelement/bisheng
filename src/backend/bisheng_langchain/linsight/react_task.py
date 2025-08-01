@@ -6,7 +6,7 @@ from datetime import datetime
 
 from langchain_core.messages import ToolMessage, AIMessage, HumanMessage, BaseMessage
 
-from bisheng_langchain.linsight.const import TaskStatus, RetryNum, CallUserInputToolName
+from bisheng_langchain.linsight.const import TaskStatus, CallUserInputToolName
 from bisheng_langchain.linsight.event import NeedUserInput, ExecStep
 from bisheng_langchain.linsight.react_prompt import ReactSingleAgentPrompt, ReactLoopAgentPrompt
 from bisheng_langchain.linsight.task import BaseTask
@@ -30,7 +30,7 @@ class ReactTask(BaseTask):
 
         all_tool_messages_str = json.dumps([json.loads(one.content) for one in tool_messages], ensure_ascii=False,
                                            indent=2)
-        if len(encode_str_tokens(all_tool_messages_str)) > self.tool_buffer:
+        if len(encode_str_tokens(all_tool_messages_str)) > self.exec_config.tool_buffer:
             messages_str = ''
             for one in self.history:
                 messages_str += "\n" + one.content + ","
@@ -180,7 +180,7 @@ class ReactTask(BaseTask):
         is_end = False
         # json解析失败重试三次
         json_decode_error = 0
-        for i in range(self.max_steps):
+        for i in range(self.exec_config.max_steps):
             messages = await self.build_messages_with_history()
             if json_decode_error > 0:
                 res = await self._ainvoke_llm_without_tools(messages, temperature=1)
@@ -189,7 +189,7 @@ class ReactTask(BaseTask):
             try:
                 message, is_end = await self.parse_react_result(res.content)
             except Exception as e:
-                if json_decode_error >= RetryNum:
+                if json_decode_error >= self.exec_config.retry_num:
                     raise e
                 json_decode_error += 1
                 continue
