@@ -338,6 +338,9 @@ class LinsightWorkbenchImpl:
             # 创建代理并生成SOP
             agent = await cls._create_linsight_agent(session_version, llm, tools, workbench_conf)
 
+            if previous_session_version_id:
+                session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
+
             content = ""
             async for res in cls._generate_sop_content(
                     agent, session_version, feedback_content, history_summary
@@ -479,6 +482,7 @@ class LinsightWorkbenchImpl:
             async for res in agent.generate_sop(sop=sop_template, file_list=file_list):
                 yield res
         else:
+
             sop_template = session_version.sop if session_version.sop else ""
             if sop_template:
                 sop_template = f"例子:\n\n{sop_template}"
