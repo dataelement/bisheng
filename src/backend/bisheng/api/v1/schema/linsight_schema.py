@@ -52,5 +52,3 @@ class BatchDownloadFilesSchema(BaseModel):
 
 class SopRecordRead(LinsightSOPRecord, table=False):
     user_name: Optional[str] = Field(default=None, description="用户名称")
-    create_time: Optional[str] = Field(None)
-    update_time: Optional[str] = Field(None)

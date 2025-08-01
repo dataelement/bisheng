@@ -228,7 +228,7 @@ class LinsightSOPDao(LinsightSOPBase):
 
     @classmethod
     async def filter_sop_record(cls, keywords: str = None, user_ids: list[int] = None, page: int = None,
-                                page_size: int = None) -> List[LinsightSOPRecord]:
+                                page_size: int = None, sort: str = None) -> List[LinsightSOPRecord]:
         """
         获取所有SOP记录, 关键字匹配name、description、content。user_ids为用户ID列表。筛选条件之间是or的关系
         """
@@ -236,6 +236,10 @@ class LinsightSOPDao(LinsightSOPBase):
         statement = await cls._filter_sop_record_statement(statement, keywords, user_ids)
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
+        if sort == "asc":
+            statement = statement.order_by(col(LinsightSOPRecord.create_time).asc())
+        else:
+            statement = statement.order_by(col(LinsightSOPRecord.create_time).desc())
 
         async with async_session_getter() as session:
             result = await session.exec(statement)

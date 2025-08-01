@@ -271,6 +271,7 @@ async def start_execute_sop(
             user_id=login_user.user_id,
             content=session_version_model.sop,
             linsight_version_id=session_version_model.id,
+            create_time=session_version_model.create_time,
         ))
 
     except Exception as e:
@@ -613,9 +614,10 @@ async def get_sop_list(
 @router.get("/sop/record", summary="获取灵思SOP记录", response_model=UnifiedResponseModel)
 async def get_sop_record(login_user: UserPayload = Depends(get_admin_user),
                          keyword: str = Query(None, description="搜索关键字"),
+                         sort: str = Query(default='desc', description="排序方式，asc或desc"),
                          page: int = Query(1, ge=1, description="页码"),
                          page_size: int = Query(10, ge=1, le=100, description="每页数量")):
-    res, count = await SOPManageService.get_sop_record(keyword, page, page_size)
+    res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
     return resp_200(PageList(total=count, list=res))
 
 

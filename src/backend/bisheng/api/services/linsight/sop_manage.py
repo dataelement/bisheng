@@ -74,14 +74,10 @@ class SOPManageService:
         return await LinsightSOPDao.create_sop_record(sop_record)
 
     @staticmethod
-    async def get_sop_record(keyword: str = None, page: int = 1, page_size: int = 10) -> \
+    async def get_sop_record(keyword: str = None, sort: str = None, page: int = 1, page_size: int = 10) -> \
             (List[SopRecordRead], int):
         """
-        根据关键词过滤SOP记录
-        :param keyword: 关键词
-        :param page: 页码
-        :param page_size: 每页大小
-        :return: SOP记录列, 总数
+        根据关键词查询SOP记录
         """
         user_ids = []
         if keyword:
@@ -89,7 +85,7 @@ class SOPManageService:
             user_ids = await UserDao.afilter_users(user_ids=[], keyword=keyword)
             user_ids = [one.user_id for one in user_ids]
 
-        res = await LinsightSOPDao.filter_sop_record(keyword, user_ids, page, page_size)
+        res = await LinsightSOPDao.filter_sop_record(keyword, user_ids, page, page_size, sort)
         count = await LinsightSOPDao.count_sop_record(keyword, user_ids)
         if not res:
             return [], 0
@@ -101,9 +97,9 @@ class SOPManageService:
 
         result = []
         for one in res:
-            result.append(
-                SopRecordRead(**one.model_dump(), user_name=all_users.get(one.user_id, str(one.user_id)))
-            )
+            new_one = SopRecordRead.model_validate(one)
+            new_one.user_name = all_users.get(one.user_id, str(one.user_id))
+            result.append(new_one)
         return result, count
 
     @staticmethod
