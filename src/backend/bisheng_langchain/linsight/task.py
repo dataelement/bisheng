@@ -11,14 +11,12 @@ from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMe
 from langchain_openai.chat_models.base import _convert_message_to_dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-from bisheng_langchain.linsight.const import TaskStatus, DefaultToolBuffer, MaxSteps, RetryNum, RetrySleep, \
-    CallUserInputToolName
+from bisheng_langchain.linsight.const import TaskStatus, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
     LoopAgentPrompt, SummarizeAnswerPrompt
 from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
     record_llm_prompt, extract_json_from_markdown
-from bisheng_langchain.utils.wrap_function import retry_async
 
 
 class BaseTask(BaseModel):
@@ -32,17 +30,14 @@ class BaseTask(BaseModel):
     file_dir: str = Field(default="", description='存储文件的目录')
     llm: BaseLanguageModel = Field(..., description='Language model to use for processing queries')
     finally_sop: str = Field(default="", description="最终的SOP，用于处理任务的最终结果。")
-    max_steps: int = Field(default=MaxSteps, description='最大步骤数，超过这个数会报错')
 
-    tool_buffer: int = Field(default=DefaultToolBuffer, description='工具缓冲区，用于存储工具调用的结果')
     history: List[BaseMessage] = Field(default_factory=list, description='原始聊天记录，包含user、tool、AI消息')
     status: str = Field(TaskStatus.WAITING.value, description='任务状态')
     answer: list[Any] = Field(default_factory=list, description='任务答案，最终的结果')
     summarize_answer: Optional[str] = Field(default=None, description='总结后的答案，主要用于其他任务获取最终结果')
     task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
     user_input: Optional[str] = Field(default=None, description='用户输入的内容')
-    debug: bool = Field(default=False, description='是否是调试模式。开启后会记录llm的输入和输出')
-    debug_id: Optional[str] = Field(default=None, description='调试记录唯一ID, 用来写唯一的文件')
+    exec_config: ExecConfig = Field(default_factory=ExecConfig, description='执行过程中的配置')
 
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
@@ -72,7 +67,7 @@ class BaseTask(BaseModel):
         return v
 
     def get_task_info(self) -> dict:
-        return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children"})
+        return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children", "exec_config"})
 
     async def get_input_str(self) -> str:
         if not self.input:
@@ -87,35 +82,53 @@ class BaseTask(BaseModel):
             input_str = f"输入：\n{input_str}"
         return input_str
 
-    @retry_async(num_retries=RetryNum, delay=RetrySleep, return_exceptions=False)
     async def _ainvoke_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
         Invoke the language model with the provided messages.
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
-        # get tool schema
-        tool_args = self.task_manager.get_all_tool_schema
-        start_time = time.time()
-        res = await self.llm.ainvoke(messages, tools=tool_args, **kwargs)
-        if self.debug and res:
-            record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                              res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
-        return res
+        for i in range(max(self.exec_config.retry_num, 1)):
+            try:
+                # get tool schema
+                tool_args = self.task_manager.get_all_tool_schema
+                start_time = time.time()
+                res = await self.llm.ainvoke(messages, tools=tool_args, **kwargs)
+                if self.exec_config.debug and res:
+                    record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
+                                      res.response_metadata.get('token_usage', None), time.time() - start_time,
+                                      self.exec_config.debug_id)
+                return res
+            except Exception as e:
+                if i == self.exec_config.retry_num - 1:
+                    raise e
+                else:
+                    await asyncio.sleep(self.exec_config.retry_delay)
+                    continue
+        raise Exception("Failed to invoke LLM after retries.")
 
-    @retry_async(num_retries=RetryNum, delay=RetrySleep, return_exceptions=False)
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
         Invoke the language model without tools.
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
-        start_time = time.time()
-        res = await self.llm.ainvoke(messages, **kwargs)
-        if self.debug and res:
-            record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                              res.response_metadata.get('token_usage', None), time.time() - start_time, self.debug_id)
-        return res
+        for i in range(max(self.exec_config.retry_num, 1)):
+            try:
+                start_time = time.time()
+                res = await self.llm.ainvoke(messages, **kwargs)
+                if self.exec_config.debug and res:
+                    record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
+                                      res.response_metadata.get('token_usage', None), time.time() - start_time,
+                                      self.exec_config.debug_id)
+                return res
+            except Exception as e:
+                if i == self.exec_config.retry_num - 1:
+                    raise e
+                else:
+                    await asyncio.sleep(self.exec_config.retry_delay)
+                    continue
+        raise Exception("Failed to invoke LLM after retries.")
 
     async def handle_user_input(self, user_input: str) -> None:
         """
@@ -190,7 +203,7 @@ class BaseTask(BaseModel):
                                              prompt=self.prompt)
         messages = [HumanMessage(content=prompt)]
         sub_task = None
-        for i in range(RetryNum):
+        for i in range(self.exec_config.retry_num):
             if i > 0:
                 res = await self._ainvoke_llm_without_tools(messages, temperature=1)
             else:
@@ -200,7 +213,7 @@ class BaseTask(BaseModel):
                 sub_task = extract_json_from_markdown(res.content)
                 break
             except Exception as e:
-                if i == RetryNum - 1:
+                if i == self.exec_config.retry_num - 1:
                     raise e
                 continue
         original_query = sub_task.get("总体任务目标", "")
@@ -358,7 +371,7 @@ class Task(BaseTask):
                 all_remain_messages.append(one)
         all_tool_messages_str = json.dumps([one.model_dump() for one in all_tool_messages], ensure_ascii=False,
                                            indent=2)
-        if len(encode_str_tokens(all_tool_messages_str)) > self.tool_buffer:
+        if len(encode_str_tokens(all_tool_messages_str)) > self.exec_config.tool_buffer:
             messages_str = json.dumps([one.model_dump() for one in messages], ensure_ascii=False, indent=2)
             history_summary = await self.summarize_history(messages_str)
             # 将总结后的历史记录插入到system_message后面
@@ -376,7 +389,7 @@ class Task(BaseTask):
         if self.node_loop and not self.parent_id:
             return await self.ainvoke_loop()
 
-        for i in range(self.max_steps):
+        for i in range(self.exec_config.max_steps):
             messages = await self.build_messages_with_history()
             res = await self._ainvoke_llm(messages)
             self.history.append(res)

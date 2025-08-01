@@ -23,12 +23,12 @@ from bisheng.database.models.linsight_session_version import LinsightSessionVers
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.interface.llms.custom import BishengLLM
-from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.linsight import utils as linsight_execute_utils
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.linsight.agent import LinsightAgent
-from bisheng_langchain.linsight.const import TaskStatus
+from bisheng_langchain.linsight.const import TaskStatus, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
 
 
@@ -242,6 +242,8 @@ class LinsightWorkflowTask:
                             file_dir: str) -> LinsightAgent:
 
         workbench_conf = await LLMService.get_workbench_llm()
+        linsight_conf = settings.get_linsight_conf()
+        exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_model.id)
 
         """创建智能体"""
         return LinsightAgent(
@@ -250,8 +252,7 @@ class LinsightWorkflowTask:
             tools=tools,
             file_dir=file_dir,
             task_mode=workbench_conf.linsight_executor_mode,
-            debug=settings.linsight_conf.debug,
-            debug_id=session_model.id
+            exec_config=exec_config,
         )
 
     # ==================== 任务执行 ====================

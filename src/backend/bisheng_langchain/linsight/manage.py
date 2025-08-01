@@ -10,7 +10,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field, BaseModel, model_validator, ConfigDict
 
-from bisheng_langchain.linsight.const import TaskStatus, TaskMode, CallUserInputToolName
+from bisheng_langchain.linsight.const import TaskStatus, TaskMode, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.react_task import ReactTask
 from bisheng_langchain.linsight.task import Task
@@ -41,8 +41,8 @@ class TaskManage(BaseModel):
         self.tool_map = {tool.name: tool for tool in self.tools}
         return self
 
-    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str, debug: bool,
-                      debug_id: str) -> None:
+    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str,
+                      exec_config: ExecConfig) -> None:
         res = []
         child_map = {}  # task_id: [child_task]
         for task in self.tasks:
@@ -55,8 +55,7 @@ class TaskManage(BaseModel):
                                      llm=llm,
                                      file_dir=file_dir,
                                      finally_sop=sop,
-                                     debug=debug,
-                                     debug_id=debug_id)
+                                     exec_config=exec_config)
             else:
                 task_instance = ReactTask(**task,
                                           query=query,
@@ -64,8 +63,7 @@ class TaskManage(BaseModel):
                                           llm=llm,
                                           file_dir=file_dir,
                                           finally_sop=sop,
-                                          debug=debug,
-                                          debug_id=debug_id)
+                                          exec_config=exec_config)
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue
