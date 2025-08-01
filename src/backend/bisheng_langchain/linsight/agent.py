@@ -43,19 +43,7 @@ class LinsightAgent(BaseModel):
                 file_list_str += f"用户上传了{len(file_list)}份文件，此处只展示{MaxFileNum}份。都储存在./目录下。"
         return file_list_str
 
-    async def generate_sop(self, sop: str, file_list: list[str] = None) -> AsyncIterator[ChatGenerationChunk]:
-        """
-        Generate a Standard Operating Procedure (SOP) based on the provided SOP string.
-        :param sop: The SOP string to be processed.
-        :param file_list: Optional list of files uploaded by the user.
-
-        :return: Processed SOP string.
-        """
-        tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
-
-        file_list_str = await self.parse_file_list_str(file_list)
-
-        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str)
+    async def _parse_sop_content(self, sop_prompt: str) -> AsyncIterator[ChatGenerationChunk]:
         # Add logic to process the SOP string
         start_time = time.time()
         one = None
@@ -82,6 +70,23 @@ class LinsightAgent(BaseModel):
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
                               time.time() - start_time, self.debug_id)
 
+    async def generate_sop(self, sop: str, file_list: list[str] = None) -> AsyncIterator[ChatGenerationChunk]:
+        """
+        Generate a Standard Operating Procedure (SOP) based on the provided SOP string.
+        :param sop: The SOP string to be processed.
+        :param file_list: Optional list of files uploaded by the user.
+
+        :return: Processed SOP string.
+        """
+        tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
+
+        file_list_str = await self.parse_file_list_str(file_list)
+
+        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str)
+        # Add logic to process the SOP string
+        async for one in self._parse_sop_content(sop_prompt):
+            yield one
+
     async def feedback_sop(self, sop: str, feedback: str, history_summary: list[str] = None,
                            file_list: list[str] = None) -> AsyncIterator[
         ChatGenerationChunk]:
@@ -107,15 +112,8 @@ class LinsightAgent(BaseModel):
 
         sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
                                               history_summary=history_summary, file_list_str=file_list_str)
-        start_time = time.time()
-        one = None
-        answer = ''
-        async for one in self.llm.astream(sop_prompt):
-            answer += f"{one.content}"
+        async for one in self._parse_sop_content(sop_prompt):
             yield one
-        if self.debug and one:
-            record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
-                              time.time() - start_time, self.debug_id)
 
     async def generate_task(self, sop: str) -> list[dict]:
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
