@@ -612,7 +612,7 @@ class LinsightWorkflowTask:
 
     async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
         """处理任务失败"""
-        session_model.status = SessionVersionStatusEnum.TERMINATED
+        session_model.status = SessionVersionStatusEnum.FAILED
         session_model.output_result = {"error_message": error_msg}
         await self._state_manager.set_session_version_info(session_model)
 

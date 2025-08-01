@@ -25,7 +25,7 @@ from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
-from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
+from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -75,6 +75,10 @@ class LinsightWorkbenchImpl:
 
     class ToolsInitializationError(Exception):
         """工具初始化错误"""
+        pass
+
+    class BishengLLMError(Exception):
+        """Bisheng LLM相关错误"""
         pass
 
     @classmethod
@@ -229,7 +233,7 @@ class LinsightWorkbenchImpl:
         """获取并验证工作台配置"""
         workbench_conf = await LLMService.get_workbench_llm()
         if not workbench_conf or not workbench_conf.task_model:
-            raise ValueError("任务已终止，请联系管理员检查灵思任务执行模型状态")
+            raise cls.BishengLLMError("任务已终止，请联系管理员检查灵思任务执行模型状态")
         return workbench_conf
 
     @classmethod
@@ -308,6 +312,7 @@ class LinsightWorkbenchImpl:
         Yields:
             生成的SOP内容事件
         """
+        error_message = None
         try:
             # 获取工作台配置和会话版本
             workbench_conf = await cls._get_workbench_config()
@@ -316,9 +321,12 @@ class LinsightWorkbenchImpl:
             if login_user.user_id != session_version.user_id:
                 yield {"event": "error", "data": "无权限操作该会话版本"}
                 return
-
-            # 创建LLM和工具
-            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+            try:
+                # 创建LLM和工具
+                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+            except Exception as e:
+                logger.error(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
+                raise cls.BishengLLMError(str(e))
             tools = await cls._prepare_tools(session_version, llm)
 
             # 准备历史摘要
@@ -351,13 +359,25 @@ class LinsightWorkbenchImpl:
 
             logger.info(f"生成SOP内容成功: session_version_id={linsight_session_version_id}")
 
+
         except cls.ToolsInitializationError as e:
             logger.exception(
                 f"初始化灵思工作台工具失败: session_version_id={linsight_session_version_id}, error={str(e)}")
-            yield {"event": "error", "data": str(e)}
+            error_message = f"初始化灵思工作台工具失败: {str(e)}"
+        except cls.BishengLLMError as e:
+            logger.exception(f"Bisheng LLM错误: session_version_id={linsight_session_version_id}, error={str(e)}")
+            error_message = str(e)
         except Exception as e:
             logger.exception(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
-            yield {"event": "error", "data": str(e)}
+            error_message = f"生成SOP内容失败: {str(e)}"
+
+        finally:
+            if error_message:
+                session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
+                if session_version:
+                    session_version.sop = error_message
+                    session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
+                yield {"event": "error", "data": error_message}
 
     @classmethod
     async def _get_session_version(cls, session_version_id: str) -> LinsightSessionVersion:
