@@ -206,7 +206,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
       onSubmit={methods.handleSubmit((data) => {
         if (isLingsi && count === 0) return setShowCode(true)
         submitMessage({ ...data, linsight: isLingsi, tools })
-        isLingsi && navigator('/sop/new')
+        isLingsi && navigator('/linsight/new')
       })}
       className={cn(
         'mx-auto flex flex-row gap-3 pl-2 transition-all duration-200 last:mb-2',

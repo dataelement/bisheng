@@ -9,7 +9,7 @@ export default function useAuthRedirect() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (!isAuthenticated) {
-        navigate('/login', { replace: true });
+        navigate('/console/login', { replace: true });
       }
     }, 300);
 

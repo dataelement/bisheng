@@ -6,7 +6,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
-const app_env = { BASE_URL: '/workspace' }
+const app_env = { BASE_URL: '' }
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -19,35 +19,29 @@ export default defineConfig({
       //   // target: 'http://localhost:3080',
       //   changeOrigin: true,
       // },
-      '/workspace/bisheng': {
-        target: "http://192.168.106.120:9102",
+      '/bisheng': {
+        target: "http://192.168.106.120:3002",
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => {
-          return path.replace(/^\/workspace/, '');
-        },
+        // rewrite: (path) => {
+        //   return path.replace(/^\/workspace/, '');
+        // },
       },
-      '/workspace/api': {
-        target: 'http://192.168.106.120:3003',
+      '/api': {
+        target: 'http://192.168.106.120:3002',
         changeOrigin: true,
         secure: false,
         ws: true,
-        rewrite: (path) => {
-          return path.replace(/^\/workspace\/api/, '/api');
-        },
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
             console.log('Proxying request to:', proxyReq.path);
           });
         }
       },
-      '/workspace/tmp-dir': {
+      '/tmp-dir': {
         target: 'http://192.168.106.116:9000',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => {
-          return path.replace(/^\/workspace\/tmp-dir/, '/tmp-dir');
-        },
       }
     },
   },
@@ -193,7 +187,7 @@ export default defineConfig({
       '~': path.join(__dirname, 'src/'),
       $fonts: resolve('public/fonts'),
     },
-  },
+  }
 });
 
 interface SourcemapExclude {

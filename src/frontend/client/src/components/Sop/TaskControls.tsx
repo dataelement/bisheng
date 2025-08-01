@@ -39,7 +39,7 @@ export const TaskControls = ({
     const [showOverview, setShowOverview] = useState(false);
 
     const isRunning = status === SopStatus.Running;
-    const isCompleted = status === SopStatus.completed;
+    const isCompleted = [SopStatus.completed, SopStatus.Stoped].includes(status);
     const userRequestedStop = status === SopStatus.Stoped && !feedbackProvided;
     const showTask = isRunning || isCompleted || userRequestedStop;
 
@@ -74,7 +74,7 @@ export const TaskControls = ({
                             </div>
                         }
 
-                        {(isRunning || userRequestedStop) && (
+                        {(isRunning) && (
                             <div className='linsight-card w-full relative'>
                                 <div className='flex justify-between'>
                                     <div className='flex items-center'>
@@ -132,12 +132,18 @@ const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFe
     const [comment, setComment] = useState('');
     const { data: bsConfig } = useGetBsConfig()
     const { data: count, refetch } = useGetUserLinsightCountQuery()
+    const [loading, setLoading] = useState(false);
     useEffect(() => {
         refetch()
     }, [])
 
     const handleSubmit = useCallback(() => {
+        setLoading(true);
         onFeedback(rating, comment, shouldRestart);
+        // 临时延迟2秒
+        setTimeout(() => {
+            setLoading(false);
+        }, 2000);
     }, [rating, comment, shouldRestart, onFeedback]);
 
     const handleCancel = useCallback(() => {
@@ -152,7 +158,7 @@ const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFe
                         key={star}
                         onClick={() => {
                             setRating(star);
-                            if (star > 3) onFeedback(star, '', false);
+                            // if (star > 3) onFeedback(star, '', false);
                         }}
                     >
                         <StarIcon
@@ -162,38 +168,37 @@ const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFe
                 ))}
             </div>
 
-            {rating > 0 && rating < 4 && (
-                <div className="mt-4 space-y-4">
-                    <Textarea
-                        placeholder="请告诉我们如何改进，您的反馈将用于下次任务优化"
-                        value={comment}
-                        className='resize-y'
-                        onChange={(e) => setComment(e.target.value)}
-                    />
-                    <div className="flex justify-between items-center">
-                        <div className="flex items-center">
-                            <Checkbox
-                                checked={shouldRestart}
-                                disabled={bsConfig?.linsight_invitation_code && count === 0}
-                                onCheckedChange={setShouldRestart}
-                            />
-                            <label className="text-sm pl-2">基于反馈重新运行</label>
-                            {bsConfig?.linsight_invitation_code && <label className='text-sm pl-2'>（剩余任务次数 {count} 次）</label>}
-                        </div>
-                        <div className="flex gap-2">
-                            <Button variant="outline" onClick={handleCancel}>
-                                取消
-                            </Button>
-                            <Button
-                                disabled={!comment.trim()}
-                                onClick={handleSubmit}
-                            >
-                                提交反馈
-                            </Button>
-                        </div>
+
+            <div className="mt-4 space-y-4">
+                <Textarea
+                    placeholder="请告诉我们如何改进，您的反馈将用于下次任务优化"
+                    value={comment}
+                    className='resize-y min-h-16 max-h-40'
+                    onChange={(e) => setComment(e.target.value)}
+                />
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center">
+                        <Checkbox
+                            checked={shouldRestart}
+                            disabled={bsConfig?.linsight_invitation_code && count === 0}
+                            onCheckedChange={setShouldRestart}
+                        />
+                        <label className="text-sm pl-2">基于反馈重新运行</label>
+                        {bsConfig?.linsight_invitation_code && <label className='text-sm pl-2'>（剩余任务次数 {count} 次）</label>}
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={handleCancel}>
+                            取消
+                        </Button>
+                        <Button
+                            disabled={loading || !comment.trim()}
+                            onClick={handleSubmit}
+                        >
+                            提交反馈
+                        </Button>
                     </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 };

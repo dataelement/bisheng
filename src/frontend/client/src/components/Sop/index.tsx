@@ -1,17 +1,20 @@
-import { useEffect, useState } from 'react';
+import cloneDeep from 'lodash/cloneDeep';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
+import { checkSopQueueStatus, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
+import { SopCase } from './case';
+import { LoadingBox } from './components/sopLoading';
 import { Header } from './Header';
-import { SOPEditor } from './SOPEditor';
+import { SOPEditor, SopStatus } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
 
 export default function index() {
     // 获取url参数
     const { conversationId } = useParams();
 
-    const { versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData(conversationId);
+    const { versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData(conversationId);
     const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
 
     return (
@@ -23,6 +26,7 @@ export default function index() {
                     <SOPEditor
                         sopError={error}
                         versionId={versionId}
+                        onRun={checkQueueStatus}
                     />
 
                     <TaskFlow versionId={versionId} setVersions={setVersions} setVersionId={setVersionId} />
@@ -31,20 +35,6 @@ export default function index() {
         </div>
     );
 }
-
-// LoadingBox组件
-const LoadingBox = () => {
-    return (
-        <div className='h-full bg-white border border-[#E8E9ED] rounded-xl flex flex-col justify-center text-center'>
-            <div className="lingsi-border-box mx-auto">
-                <div className='w-[194px] h-[102px] bg-no-repeat mx-auto rounded-md bg-white'
-                    style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/linsi-load.png)` }}></div>
-            </div>
-            <h1 className='text-2xl mt-10'>为您提供详细 SOP，以确保任务精准</h1>
-            <p className='mt-5'>灵思正在为您规划 SOP...</p>
-        </div>
-    );
-};
 
 
 export const useLinsightData = (conversationId: string | undefined) => {
@@ -56,9 +46,16 @@ export const useLinsightData = (conversationId: string | undefined) => {
     // 状态管理
     const [versions, setVersions] = useState<{ id: string, name: string }[]>([]);
     const [versionId, setVersionId] = useState('new')
-    const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
+    const { getLinsight, updateLinsight, switchAndUpdateLinsight } = useLinsightManager();
+    // 检查排队情况
+    const checkQueueStatus = useQueueStatus(versionId, updateLinsight)
 
     const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
+        if (_conversationId.startsWith('case')) {
+            const firstVersion = cloneDeep(SopCase[_conversationId])
+            setVersionId(firstVersion.id);
+            return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion });
+        }
         try {
             // 1. 获取会话版本列表
             const data = await getLinsightSessionVersionList(_conversationId);
@@ -70,11 +67,12 @@ export const useLinsightData = (conversationId: string | undefined) => {
                 setVersions(formattedVersions);
             }
 
-            // 2. 默认选中第一个版本，并加载其任务
+            // 2. 默认选中第一个版本，并加载其任务  TODOsopError
             const firstVersion = versionId ? data.find(el => el.id === versionId) : data[0];
             if (firstVersion) {
                 setVersionId(firstVersion.id);
                 const taskRes = await getLinsightTaskList(firstVersion.id, firstVersion);
+                console.log('firstVersion :>> ', firstVersion, taskRes);
                 switchAndUpdateLinsight(firstVersion.id, { ...firstVersion, tasks: taskRes });
             }
         } catch (error) {
@@ -107,7 +105,37 @@ export const useLinsightData = (conversationId: string | undefined) => {
         versionId,
         setVersionId,
         switchVersion,
-        setVersions
+        setVersions,
+        checkQueueStatus
     };
 };
 
+
+const useQueueStatus = (vid, updateLinsight) => {
+    const timerRef = useRef<any>(null)
+
+    const checkQueueStatus = async (vid: string) => {
+        const res = await checkSopQueueStatus(vid);
+        console.log('res :>> ', res);
+        const count = res.data.index
+        updateLinsight(vid, { queueCount: count });
+        if (count > 0) {
+            timerRef.current = setTimeout(() => {
+                checkQueueStatus(vid)
+            }, 60000)
+        } else {
+            clearTimeout(timerRef.current)
+        }
+    }
+
+    useEffect(() => {
+        if (vid === 'new') return;
+        checkQueueStatus(vid)
+
+        return () => {
+            clearTimeout(timerRef.current)
+        }
+    }, [vid])
+
+    return () => checkQueueStatus(vid)
+}

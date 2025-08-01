@@ -238,6 +238,7 @@ export const useLinsightWebSocket = (versionId) => {
                     break;
                 case 'final_result':
                     updateLinsight(id, {
+                        output_result: taskData.data.output_result,
                         summary: taskData.data.output_result.answer,
                         file_list: taskData.data.output_result.final_files || [],
                         status: SopStatus.completed
@@ -253,6 +254,9 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'error_message':
                     console.error(taskData.data.error, id, activeVersionIdRef.current)
                     if (id === activeVersionIdRef.current) {
+                        updateLinsight(id, {
+                            taskError: taskData.data.error
+                        })
                         showToast({ message: taskData.data.error, status: 'error' });
                     }
             }

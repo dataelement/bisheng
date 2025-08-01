@@ -44,9 +44,13 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             cancel_feedback: cancel
         }).then(res => {
             console.log('res :>> ', res);
+            if (res.status_code !== 200) {
+                return showToast({ status: 'error', message: res.status_message })
+            }
+
             const newVersionId = res.data.id
             updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
-            showToast({ status: 'success', message: res.status_message })
+            !cancel && showToast({ status: 'success', message: '提交成功' })
             if (res.data === true) return
 
             // 克隆当前版本
@@ -98,7 +102,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 任务流
             </div>
 
-            <div ref={flowScrollRef} className='relative flex-1 pb-40 min-h-0 scroll-hover'>
+            <div ref={flowScrollRef} className='relative flex-1 pb-80 min-h-0 scroll-hover'>
                 {!showTask && (
                     <div className='flex flex-col h-full justify-center text-center bg-gradient-to-b from-[#F4F8FF] to-white'>
                         <div className='size-10 mx-auto'>

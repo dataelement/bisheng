@@ -140,3 +140,12 @@ export function checkFileParseStatus(ids: string[]) {
     file_ids: ids
   })
 }
+
+// 检查sop排队状态
+export function checkSopQueueStatus(id: string) {
+  return request.get('/api/v1/linsight/workbench/queue-status', {
+    params: {
+      session_version_id: id
+    }
+  })
+}

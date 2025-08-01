@@ -136,6 +136,9 @@ export default function TaskFiles({ title, files, isOpen, onOpenChange, download
                                     size="icon"
                                     className="h-8 w-8"
                                     onClick={() => {
+                                        if (file.file_name.split('.').pop() === 'html') {
+                                            return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
+                                        }
                                         onPreview?.(file.file_id)
                                     }}
                                 >

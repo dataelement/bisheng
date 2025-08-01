@@ -9,7 +9,7 @@ import {
     Search,
     WrenchIcon
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SendIcon } from '~/components/svg';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
@@ -91,9 +91,9 @@ const Tool = ({ data }) => {
     return (
         <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
-            <div className='flex gap-4 truncate'>
-                <span className='text-xs text-gray-600'>{displayName}</span>
-                <span className='text-xs text-[#82868C]'>{paramValue()}</span>
+            <div className='flex gap-4'>
+                <span className='text-xs text-gray-600 truncate'>{displayName}</span>
+                <span className='text-xs text-[#82868C] truncate w-72'>{paramValue()}</span>
             </div>
         </div>
     )
@@ -254,13 +254,15 @@ const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null 
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
             </div>
+            {/* error */}
+            {task.status === 'failed' && task.errorMsg && <p className='bg-red-100 p-2 rounded-md text-sm text-red-500 mb-2'>任务执行中断：{task.errorMsg}</p>}
         </div>
     );
 };
 
 
 export const TaskFlowContent = ({ linsight, sendInput }) => {
-    const { status, title, tasks, summary, file_list: files } = linsight
+    const { status, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
     const allFiles = linsight?.output_result?.all_from_session_files || []
 
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -297,8 +299,35 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
         }).catch(console.error);
     };
 
+    if (queueCount) {
+        const totalMinutes = queueCount * 8;
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        let timeText;
+        if (hours > 0) {
+            timeText = `${hours} 小时 ${minutes} 分钟`;
+        } else {
+            timeText = `${minutes} 分钟`;
+        }
+
+        return (
+            <div className='size-full flex flex-col items-center justify-center text-sm'>
+                <img src={__APP_ENV__.BASE_URL + '/assets/queue.png'} alt="" />
+                <p className='mt-9'>目前使用人数较多，正在排队中</p>
+                <p className='mt-4 font-bold'>预计等待 {timeText}</p>
+            </div>
+        );
+    }
+
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
+            {/* load */}
+            {!tasks?.length && status === SopStatus.Running && <p className='mt-0.5 text-sm flex gap-2'>
+                <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
+                正在整理内容...
+            </p>}
+            {/* 任务 */}
             {!!tasks?.length && <div className='pl-6'>
                 <p className='text-sm text-gray-400 mt-6 mb-4'>规划任务执行路径：</p>
                 {tasks.map((task, i) => (
@@ -306,8 +335,6 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 ))}
                 <p className='text-sm text-gray-400 mt-6 mb-4'>接下来为你执行对应任务：</p>
             </div>}
-            {/* 任务 */}
-            {!tasks?.length && status === SopStatus.Running && <LucideLoaderCircle size={16} className='text-primary mr-2 animate-spin' />}
             {
                 tasks?.map((task, i) => <Task
                     key={task.id}
@@ -322,9 +349,11 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 </Task>
                 )
             }
+            {/* error */}
+            {taskError && <p className='bg-red-100 p-2 rounded-md text-sm text-red-500 mb-2'>任务执行中断：{taskError}</p>}
             {/* 总结 */}
             {
-                summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6'>
+                summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
                     <Markdown content={summary} isLatestMessage={true} webContent={false} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>

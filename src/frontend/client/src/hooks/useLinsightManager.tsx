@@ -76,10 +76,11 @@ export const useLinsightManager = () => {
         const linsight = getLinsight(versionId)
         if (linsight) return updateLinsight(versionId, { inputSop: false }); // 恢复用户未输入状态
 
-        const { status, execute_feedback, output_result, tasks, files, ...params } = update
+        const { status, sop, execute_feedback, output_result, tasks, files, ...params } = update
         let newStatus = ''
         switch (status) {
             case 'not_started':
+            case 'sop_generation_failed':
                 newStatus = SopStatus.SopGenerated;
                 break;
             case 'in_progress':
@@ -103,7 +104,9 @@ export const useLinsightManager = () => {
             status: newStatus,
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: buildTaskTree(tasks),
-            file_list: output_result?.final_files || []
+            file_list: output_result?.final_files || [],
+            sop: 'sop_generation_failed' === status ? '' : sop,
+            sopError: 'sop_generation_failed' === status ? sop : ''
         }
 
         createLinsight(versionId, data);
@@ -177,29 +180,8 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
         if (versionId !== 'new') setLoading(false)
     }, [versionId])
 
-    const mockGenerateSop = (versionId: string, feedback?: string) => {
-        console.log('Mock SSE started for version:', versionId, linsightSubmission);
-        setLoading(false)
-        updateLinsight(versionId, {
-            status: SopStatus.SopGenerating,
-        })
-
-        setTimeout(() => {
-            updateLinsight(versionId, {
-                sop: mockContent
-            })
-        }, 2000)
-
-        setTimeout(() => {
-            updateLinsight(versionId, {
-                status: SopStatus.SopGenerated,
-            })
-        }, 3000)
-    };
-
     // 生成会话
     const generateSop = (_versionId, feedback?: string) => {
-        // return mockGenerateSop(_versionId, feedback)  // mock
         const payload = {
             linsight_session_version_id: _versionId,
             feedback_content: feedback,
@@ -223,6 +205,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
             const data = JSON.parse(e.data);
             content += data.content
             updateLinsight(_versionId, {
+                sopError: '',
                 sop: content.replace('```markdown\n', '```'),
                 inputSop: false
             })
@@ -242,6 +225,9 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                 message: e.data,
                 status: 'warning',
             });
+            updateLinsight(versionId, {
+                sopError: e.data
+            })
         })
 
         sse.addEventListener('open', () => {
@@ -258,6 +244,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
             setError(true)
             setLoading(false)
             updateLinsight(versionId, {
+                sopError: e.data,
                 status: SopStatus.SopGenerated,
             })
         })
@@ -326,7 +313,10 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                         tasks: [],
                         summary: '',
                         file_list: [],
-                        inputSop: false
+                        inputSop: false,
+                        sopError: '',
+                        taskError: '',
+                        queueCount: 0
                     })
                 })
 
@@ -445,6 +435,7 @@ function buildTaskTree(tasks) {
             history: task.history || [],
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
             call_reason: task.input_prompt || '',
+            errorMsg: task.result?.answer || '',
             children: task.children?.map(child => {
                 return {
                     id: child.id,
@@ -514,58 +505,3 @@ function buildTaskTree(tasks) {
 
     // return rootTasks;
 }
-
-const mockContent = `
-# SOP: 中美贸易逆顺差分析
-
-## 问题概述
-
-本SOP旨在帮助用户理解中美两国之间存在的贸易逆差或顺差情况，包括但不限于主要商品类别、影响因素及历史趋势等方面。适用于对国际贸易感兴趣的研究者、政策制定者以及相关行业从业者。
-
-## 所需工具和资源
-
-- **Bing搜索引擎** - 获取关于中美贸易数据的文章、研究报告等资料。
-- **世界银行公开数据库** - 提供详细的国家间贸易统计数据。
-- **中国海关总署网站** - 官方发布最新的进出口统计信息。
-- **美国商务部网站** - 同样提供官方发布的贸易数据。
-
-### 工具使用最佳实践
-
-- 使用Bing搜索时，请确保输入具体的关键词以获得更准确的结果，例如“中美贸易逆差”、“中美贸易数据分析”等。
-- 访问世界银行数据库时，利用其内置的筛选功能快速定位到中美之间的贸易数据。
-- 在查阅中国海关总署与美国商务部提供的信息时，注意查看最新发布的报告，并关注官方解释部分，以便更好地理解背景。
-
-## 详细的步骤说明
-
-1. **确定研究重点**
-
-   - 明确想要深入探讨的具体方面，如特定年份内的变化趋势、主要受影响的商品种类等。
-2. **收集基础数据**
-
-   - 利用 bing_search函数查找关于中美贸易概况的基础介绍性文章。
-   - 通过访问@world_bank_database获取两国间历年来的详细贸易数额记录。
-3. **分析关键指标**
-
-   - 结合从中国海关总署(@china_customs)和美国商务部(@us_department_of_commerce)获取的数据，对比分析不同时间段内双方出口与进口额的变化。
-4. **识别影响因素**
-
-   - 再次运用 bing_search，专注于寻找专家对于造成当前贸易状况背后原因的分析。
-5. **整理并总结发现**
-
-   - 将所有收集到的信息整合起来，提炼出导致中美贸易不平衡的主要原因及其潜在影响。
-6. **撰写最终报告**
-
-   - 如果需要生成一份详尽文档，则应先规划好大纲结构，然后按照@write_document的方式逐步完成每个章节的内容编写工作。
-
-## 可能遇到的问题及解决方案
-
-- **问题：数据解读困难**
-
-  - **解决方案**：尝试联系该领域的专家进行咨询；同时也可以参考更多可视化图表来辅助理解复杂的数据集。
-- **问题：难以找到足够全面的历史数据**
-
-  - **解决方案**：除了官方渠道外，还可以探索学术期刊中发表的相关研究论文，这些往往包含了长期追踪调查所得出的结论。
-- **问题：面对大量信息感到无从下手**
-
-  - **解决方案**：建议采用分步走策略，即先从最基础的概念开始学习，再逐渐过渡到更深层次的分析；此外，建立一个清晰的目标列表也有助于保持研究方向的一致性。
-`

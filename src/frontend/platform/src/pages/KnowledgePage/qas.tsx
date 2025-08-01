@@ -307,9 +307,9 @@ export default function QasPage() {
         });
     };
 
-    const {toast} = useToast()
+    const { toast } = useToast()
 
-    
+
     const handleStatusClick = async (id: number, checked: boolean) => {
         const targetStatus = checked ? 1 : 0;
         const isOpening = checked;
@@ -359,7 +359,7 @@ export default function QasPage() {
                                 downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                             })
                         }}>导出</Button>
-                        <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
+                        {hasPermission && <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
                     </div>
                 </div>
             </div>

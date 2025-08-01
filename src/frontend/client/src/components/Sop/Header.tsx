@@ -43,8 +43,15 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                             <span className="text-xs">任务描述</span>
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-96 border border-[#BCD2FF] rounded-xl bg-[#E5EEFF]">
-                        <p className='text-sm font-bold mb-2'>任务描述</p>
+                    <PopoverContent className="w-96 border bg-white rounded-xl">
+                        <p className='text-md font-bold mb-2 flex gap-2 items-center'>
+                            <div className='size-5 rounded-sm overflow-hidden'>
+                                <div className='size-full rounded-full rounded-br-2xl bg-primary text-white text-center'>
+                                    <span className='relative -top-1 '>...</span>
+                                </div>
+                            </div>
+                            任务描述
+                        </p>
                         <p className='text-sm'>{linsight?.question}</p>
                     </PopoverContent>
                 </Popover>

@@ -93,7 +93,7 @@ export default function FilePreviewDrawer({
                                 </Select> */}
                                 <div className="flex items-center space-x-3">
                                     {currentFile && <FileIcon type={getFileExtension(currentFile.file_name)} className="w-4 h-4" />}
-                                    <span className="font-medium text-gray-900">
+                                    <span className="font-medium text-gray-900 truncate w-1/2">
                                         {currentFile?.file_name || "选择文件"}
                                     </span>
                                 </div>

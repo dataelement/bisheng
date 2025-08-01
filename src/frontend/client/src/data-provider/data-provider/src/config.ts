@@ -572,7 +572,9 @@ export type BsConfig = {
     enabled: boolean;
     prompt: string;
   };
-  host: ''
+  host: '',
+  linsight_invitation_code: boolean
+  linsight_cache_dir: string
 };
 
 export const configSchema = z.object({
