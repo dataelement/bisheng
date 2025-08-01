@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from datetime import datetime
 from urllib.parse import unquote
 from uuid import uuid4
@@ -21,7 +20,7 @@ from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
-from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file, CACHE_DIR
+from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -120,7 +119,7 @@ def get_config(
 
     linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
-    ret['linsight_cache_dir'] = os.path.join(CACHE_DIR, 'linsight')
+    ret['linsight_cache_dir'] = "./"
 
     return resp_200(data=ret)
 
