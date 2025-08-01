@@ -66,7 +66,7 @@ export default function Conversation({
     /* Note: Latest Message should not be reset if existing convo */
     if (conversation.flowType === 20) {
       // 灵思
-      navigate(`/sop/${conversationId}`);
+      navigate(`/linsight/${conversationId}`);
     } else {
       // 会话
       navigateWithLastTools(

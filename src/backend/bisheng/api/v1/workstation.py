@@ -119,6 +119,7 @@ def get_config(
 
     linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
+    ret['linsight_cache_dir'] = "./"
 
     return resp_200(data=ret)
 

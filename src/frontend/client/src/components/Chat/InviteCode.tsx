@@ -1,14 +1,10 @@
-import type React from "react"
-    ; ('"use client')
-
-import { useState } from "react"
-import { Button, Input } from "../ui";
-import { Card, CardContent } from "../ui/Card";
+import { useState } from "react";
 import { bindInviteCode } from "~/api/linsight";
 import { useGetUserLinsightCountQuery } from "~/data-provider";
 import { useToastContext } from "~/Providers";
+import { Button, Dialog, DialogContent, Input } from "../ui";
 
-export default function InvitationCodeForm({ setShowCode }) {
+export default function InvitationCodeForm({ showCode, setShowCode }) {
     const [invitationCode, setInvitationCode] = useState("")
     const [error, setError] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -50,54 +46,43 @@ export default function InvitationCodeForm({ setShowCode }) {
     }
 
     return (
-        <div className={`min-h-screen flex items-center justify-center p-4 relative z-10`}>
-            <Card className="w-full max-w-screen-md">
-                <CardContent className="p-8">
+        <Dialog open={showCode} onOpenChange={setShowCode}>
+            <DialogContent className="sm:max-w-[560px]">
+                <div className="p-2">
                     {/* BISHENG Logo */}
-                    <div className="text-center mb-8">
-                        <div className="text-6xl font-bold text-blue-200 mb-4 tracking-wider">LINSIGHT</div>
+                    <div className="" style={{ backgroundImage: `url('${__APP_ENV__.BASE_URL}/assets/diandian.png')` }}>
+                        <div className="text-2xl font-bold text-primary pt-20 pl-8">Linsight 邀请码</div>
+                        {/* Description */}
+                        <p className="text-sm mt-3 pl-8">输入 BISHENG 提供的邀请码，开启你的灵思之旅。</p>
                     </div>
 
                     {/* Form */}
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Title */}
-                        <div className="text-center">
-                            <h2 className="text-xl font-medium text-gray-900 mb-6">Invitation Code</h2>
-                        </div>
-
+                    <form onSubmit={handleSubmit} className="mt-10 px-8">
                         {/* Input Field */}
-                        <div className="space-y-2">
+                        <div className="flex gap-3">
                             <Input
                                 type="text"
                                 value={invitationCode}
                                 onChange={(e) => setInvitationCode(e.target.value)}
-                                placeholder=""
-                                className="w-full h-12 rounded-2xl border-primary focus:border-blue-500 px-4"
+                                placeholder="请输入"
+                                maxLength={50}
+                                className=""
                                 disabled={isLoading}
                             />
-
-                            {/* Error Message */}
-                            <p className="text-red-500 text-sm mt-2 px-4 h-6">{error}</p>
-                        </div>
-
-                        {/* Description */}
-                        <div className="text-center">
-                            <p className="text-gray-600 text-sm">输入BISHENG提供的邀请码，以获得相应的灵思使用次数～</p>
-                        </div>
-
-                        {/* Submit Button */}
-                        <div className="text-center pt-4">
+                            {/* Submit Button */}
                             <Button
                                 type="submit"
                                 disabled={isLoading || !invitationCode.trim()}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-lg font-medium disabled:opacity-50"
+                                className="px-8 h-10"
                             >
                                 {isLoading ? "提交中..." : "提交"}
                             </Button>
                         </div>
+                        {/* Error Message */}
+                        <p className="text-red-500 text-sm mt-3 px-2 h-6">{error}</p>
                     </form>
-                </CardContent>
-            </Card>
-        </div>
+                </div>
+            </DialogContent>
+        </Dialog >
     )
 }

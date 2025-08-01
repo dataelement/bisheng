@@ -1,9 +1,11 @@
 import json
 import os
-from typing import List, Literal
-from loguru import logger
+from typing import List, Literal, Optional
+from urllib import parse
+
 from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
 from fastapi_jwt_auth import AuthJWT
+from loguru import logger
 from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
@@ -13,14 +15,15 @@ from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.services.user_service import get_login_user, UserPayload
+from bisheng.api.services.user_service import get_login_user, UserPayload, get_admin_user
+from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
-from bisheng.database.models.linsight_sop import LinsightSOPDao
+from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.state_message_manager import LinsightStateMessageManager
 from bisheng.settings import settings
 
@@ -234,6 +237,7 @@ async def modify_sop(
 # workbench 开始执行
 @router.post("/workbench/start-execute", summary="开始执行灵思", response_model=UnifiedResponseModel)
 async def start_execute_sop(
+        background_tasks: BackgroundTasks,
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID", embed=True),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
     """
@@ -255,11 +259,21 @@ async def start_execute_sop(
                                         SessionVersionStatusEnum.IN_PROGRESS]:
         return resp_500(code=400, message="灵思会话版本已完成或正在执行，无法再次执行")
 
-    from bisheng.linsight.worker import RedisQueue
+    from bisheng.linsight.worker import LinsightQueue
     try:
-        queue = RedisQueue('queue', namespace="linsight", redis=redis_client)
+        queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
 
         await queue.put(data=linsight_session_version_id)
+        # 将sop写入到记录表
+        background_tasks.add_task(SOPManageService.add_sop_record, LinsightSOPRecord(
+            name=session_version_model.title,
+            description=None,
+            user_id=login_user.user_id,
+            content=session_version_model.sop,
+            linsight_version_id=session_version_model.id,
+            create_time=session_version_model.create_time,
+        ))
+
     except Exception as e:
         logger.error(f"开始执行灵思任务失败: {str(e)}")
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
@@ -330,45 +344,25 @@ async def submit_feedback(
     if login_user.user_id != session_version_model.user_id:
         return resp_500(code=403, message="无权限提交该灵思的反馈")
 
-    # score 不为空，且大于3，cancel_feedback 为 False feedback 为 None 或空字符串
-    if score is not None and score > 3 and (feedback is None or feedback.strip() == "") and cancel_feedback is False:
+    if score is not None:
         session_version_model.score = score
-        session_version_model.execute_feedback = "评分大于3，未提供反馈"
-        # 获取sop
-        sop_model = await LinsightSOPDao.get_sop_by_session_id(session_version_model.session_id)
-        if sop_model:
-            sop_model.rating = score
-            await LinsightSOPDao.create_sop(sop_model)
-        # 更新会话版本
-        await LinsightSessionVersionDao.insert_one(session_version_model)
+        await SOPManageService.update_sop_record_score(session_version_model.id, score)
 
-        return resp_200(data=True, message="评分已提交，感谢您的反馈")
-
-    # score 小于等于3，且没有取消反馈 feedback 不为空
-    if score is not None and score <= 3 and (
-            feedback is not None and feedback.strip() != "") and cancel_feedback is False and is_reexecute is False:
-        # 反馈并重新生成SOP
-        session_version_model.score = score
+    if feedback is not None:
         session_version_model.execute_feedback = feedback
+    else:
+        session_version_model.execute_feedback = "用户未提供反馈"
+
+    # 如果是取消反馈
+    if cancel_feedback:
+        session_version_model.execute_feedback = "用户取消了反馈"
         await LinsightSessionVersionDao.insert_one(session_version_model)
-
-        # TODO: 执行重新生成SOP任务  暂时注释掉
-        # background_tasks.add_task(
-        #     LinsightWorkbenchImpl.feedback_regenerate_sop_task,
-        #     session_version_model,
-        #     feedback
-        # )
-
         return resp_200(data=True, message="提交成功")
 
-    # score 小于等于3，且没有取消反馈 feedback 不为空 is_reexecute 为 True
-    if score is not None and score <= 3 and (
-            feedback is not None and feedback.strip() != "") and cancel_feedback is False and is_reexecute is True:
-        # 重新执行灵思的逻辑
-        session_version_model.score = score
-        session_version_model.execute_feedback = feedback
-        await LinsightSessionVersionDao.insert_one(session_version_model)
+    session_version_model = await LinsightSessionVersionDao.insert_one(session_version_model)
 
+    if is_reexecute:
+        # 重新执行灵思的逻辑
         system_config = await settings.aget_all_config()
 
         # 获取Linsight_invitation_code
@@ -392,15 +386,19 @@ async def submit_feedback(
         linsight_session_version_model = await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
         return resp_200(data=linsight_session_version_model.model_dump(),
-                        message="重新执行灵思任务。")
-    # 取消反馈
-    if cancel_feedback:
-        # 取消反馈的逻辑
-        session_version_model.execute_feedback = "用户取消了反馈"
-        await LinsightSessionVersionDao.insert_one(session_version_model)
+                        message="提交成功。")
+    else:
 
-        return resp_200(data=True, message="反馈已取消")
-    return resp_500(code=400, message="参数错误，请检查输入的参数是否正确")
+        if feedback is not None and feedback.strip() != "":
+            # 重新生成SOP记录到记录表
+            background_tasks.add_task(
+                LinsightWorkbenchImpl.feedback_regenerate_sop_task,
+                session_version_model,
+                feedback
+            )
+            pass
+
+        return resp_200(data=True, message="提交成功")
 
 
 # workbench 终止执行
@@ -428,6 +426,16 @@ async def terminate_execute(
 
     if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
         return resp_500(code=400, message="灵思会话版本已终止执行")
+
+    from bisheng.linsight.worker import LinsightQueue
+
+    queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+
+    try:
+        # 从队列中移除任务
+        await queue.remove(linsight_session_version_id)
+    except Exception as e:
+        logger.error(f"删除队列任务失败: {str(e)}")
 
     # 更新状态为终止
     session_version_model.status = SessionVersionStatusEnum.TERMINATED
@@ -519,7 +527,8 @@ async def batch_download_files(
         zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
-
+        # 转成 unicode 字符串
+        zip_name = parse.quote(zip_name)
         return StreamingResponse(
             iter([zip_bytes]),
             media_type="application/zip",
@@ -529,6 +538,28 @@ async def batch_download_files(
         )
     except Exception as e:
         logger.error(f"批量下载文件失败: {str(e)}")
+        return resp_500(code=500, message=str(e))
+
+
+# 获取队列排队状态
+@router.get("/workbench/queue-status", summary="获取灵思队列排队状态", response_model=UnifiedResponseModel)
+async def get_queue_status(
+        session_version_id: str = Query(..., description="灵思会话版本ID"),
+        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+    """
+    获取灵思队列排队状态
+    :param session_version_id:
+    :param login_user:
+    :return:
+    """
+    from bisheng.linsight.worker import LinsightQueue
+
+    queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+    try:
+        index = await queue.index(session_version_id)
+        return resp_200(data={"index": index}, message="获取灵思队列排队状态成功")
+    except Exception as e:
+        logger.error(f"获取灵思队列排队状态失败: {str(e)}")
         return resp_500(code=500, message=str(e))
 
 
@@ -578,6 +609,36 @@ async def get_sop_list(
 
     sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, page=page, page_size=page_size, sort=sort)
     return resp_200(data=sop_pages)
+
+
+@router.get("/sop/record", summary="获取灵思SOP记录", response_model=UnifiedResponseModel)
+async def get_sop_record(login_user: UserPayload = Depends(get_admin_user),
+                         keyword: str = Query(None, description="搜索关键字"),
+                         sort: str = Query(default='desc', description="排序方式，asc或desc"),
+                         page: int = Query(1, ge=1, description="页码"),
+                         page_size: int = Query(10, ge=1, le=100, description="每页数量")):
+    res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
+    return resp_200(PageList(total=count, list=res))
+
+
+@router.post("/sop/record/sync", summary="同步sop记录到sop库", response_model=UnifiedResponseModel)
+async def sync_sop_record(login_user: UserPayload = Depends(get_admin_user),
+                          record_ids: list[int] = Body(..., description="sop记录表里的唯一id"),
+                          override: Optional[bool] = Body(default=False,
+                                                          description="是否强制覆盖"),
+                          save_new: Optional[bool] = Body(default=False,
+                                                          description="是否另存为新sop")) -> UnifiedResponseModel:
+    """
+    同步SOP记录到SOP库
+    """
+    try:
+        repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
+        return resp_200(data={
+            "repeat_name": repeat_name,
+        }, message="success")
+    except Exception as e:
+        logger.exception("sync_sop_record error")
+        return resp_500(code=500, message=f"SOP 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
 
 
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)

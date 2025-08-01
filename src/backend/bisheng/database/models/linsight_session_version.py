@@ -22,6 +22,10 @@ class SessionVersionStatusEnum(str, Enum):
     IN_PROGRESS = "in_progress"
     # 运行完成
     COMPLETED = "completed"
+    # 运行失败
+    FAILED = "failed"
+    # SOP 生成失败
+    SOP_GENERATION_FAILED = "sop_generation_failed"
     # 终止
     TERMINATED = "terminated"
 

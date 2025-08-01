@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { SendIcon } from '~/components/svg';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
+import DownIcon from '../svg/DownIcon';
 import { Button, Textarea } from '../ui';
 import FileIcon from '../ui/icon/File';
 import FilePreviewDrawer from './FilePreviewDrawer';
@@ -20,7 +21,21 @@ import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 
 const Tool = ({ data }) => {
-    const { name: toolName, step_type, params } = data;
+    const { name, step_type, params } = data;
+    // 过滤尾部hash值
+    const toolName = useMemo(() => {
+        const lastUnderscoreIndex = name.lastIndexOf('_');
+        if (lastUnderscoreIndex === -1) return name;
+
+        const afterLastUnderscore = name.slice(lastUnderscoreIndex + 1);
+
+        const isHash = afterLastUnderscore.length >= 8 &&
+            /^[a-z0-9]+$/.test(afterLastUnderscore) &&
+            !/^\d+$/.test(afterLastUnderscore);
+
+        return isHash ? name.slice(0, lastUnderscoreIndex) : name;
+    }, [name])
+
     // 工具名称映射
     const nameMap = {
         web_search: "正在联网搜索",
@@ -84,9 +99,8 @@ const Tool = ({ data }) => {
     )
 }
 
-const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
-    const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
-    const [inputValue, setInputValue] = useState('');
+const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null }) => {
+    const [isExpanded, setIsExpanded] = useState(true);
 
     // 根据状态选择对应的图标
     const renderStatusIcon = () => {
@@ -158,14 +172,6 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
         return result;
     }, [task.history])
 
-    const historyContainerRef = useRef(null);
-
-    useEffect(() => {
-        if (isHistoryExpanded && historyContainerRef.current) {
-            // 滚动到底部
-            historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight;
-        }
-    }, [isHistoryExpanded, history]);
 
     // 未开始执行的任务不展示
     if (task.status === 'not_started') {
@@ -173,20 +179,29 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
     }
 
     return (
-        <div className={`${lvl1 ? '' : 'pl-10'}`}>
+        <div className={`${lvl1 ? '' : 'pl-6'}`}>
             <div className={`flex items-start relative`}>
-                <ChevronDown
-                    size={18}
-                    className={`absolute top-0 -left-6 text-gray-500 mt-0.5 cursor-pointer transition-transform 
-                                ${isHistoryExpanded ? 'rotate-180' : ''} 
-                                ${history.length ? 'visible' : 'invisible'}
+                <div className={`absolute right-full flex gap-2 pr-2 items-center top-0 h-6`}>
+                    {/* 折叠 */}
+                    {lvl1 ? (history.length > 0 || hasSubTask) && <DownIcon
+                        className={`text-gray-500 mt-0.5 cursor-pointer size-3 transition-transform 
+                                ${isExpanded ? 'rotate-180' : ''}
                             `}
-                    onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-                />
+                        onClick={() => setIsExpanded(!isExpanded)}
+                    />
+                        : history.length > 0 && <ChevronDown
+                            size={18}
+                            className={`text-gray-500 mt-0.5 cursor-pointer transition-transform 
+                                ${isExpanded ? 'rotate-180' : ''} 
+                            `}
+                            onClick={() => setIsExpanded(!isExpanded)}
+                        />
+                    }
+                </div>
                 {lvl1 && <div className='mt-[5px]'>{renderStatusIcon()}</div>}
                 {
                     lvl1 ? <h2 className="font-semibold mb-4">{que}.{task.name}</h2> :
-                        <span className='text-sm mb-3'>{que}.{task.name}</span>
+                        <span className='text-sm mb-3'>{task.name}</span>
                 }
             </div>
 
@@ -195,7 +210,7 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
                 <div className='mb-2'>
                     <div className='flex'>
                         {
-                            isHistoryExpanded ? <div ref={historyContainerRef} className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 max-h-60 scroll-hover`}>
+                            isExpanded ? <div className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
                                 {history.map((_history, index) => (
                                     <div>
                                         <p key={index}>{_history.call_reason}</p>
@@ -236,18 +251,23 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
                     </div>
                 </div>
             )}
-
-            {children}
+            <div className={isExpanded ? 'block' : 'hidden'}>
+                {children}
+            </div>
         </div>
     );
 };
 
 
-export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendInput }) => {
-    console.log('TaskFlowContent tasks :>> ', tasks, files);
+export const TaskFlowContent = ({ linsight, sendInput }) => {
+    const { status, title, tasks, summary, file_list: files } = linsight
+    const allFiles = linsight?.output_result?.all_from_session_files || []
+
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [currentPreviewFileId, setCurrentPreviewFileId] = useState<string>("")
+    // 由卡片触发抽屉展开
+    const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     useFoucsInput(tasks);
 
     const mergeFiles = useMemo(() => {
@@ -257,16 +277,25 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
-        const url = `${__APP_ENV__.BASE_URL}/bisheng/${file_url}`
+        const url = `${__APP_ENV__.BASE_URL}/bisheng/${file_url}`;
+
         return axios.get(url, { responseType: "blob" }).then((res: any) => {
-            const blob = new Blob([res.data]);
+            let blob: any = null
+            if (file_url.endsWith(".csv")) {
+                // 添加 UTF-8 BOM（\uFEFF）
+                const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM
+                blob = new Blob([bom, res.data], { type: "text/csv;charset=utf-8;" });
+            } else {
+                blob = new Blob([res.data]);
+            }
+
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
             link.download = file_name;
             link.click();
             URL.revokeObjectURL(link.href);
         }).catch(console.error);
-    }
+    };
 
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
@@ -280,7 +309,13 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
             {/* 任务 */}
             {!tasks?.length && status === SopStatus.Running && <LucideLoaderCircle size={16} className='text-primary mr-2 animate-spin' />}
             {
-                tasks?.map((task, i) => <Task key={task.id} que={i + 1} lvl1 task={task} sendInput={sendInput} >
+                tasks?.map((task, i) => <Task
+                    key={task.id}
+                    que={i + 1}
+                    lvl1
+                    task={task}
+                    hasSubTask={!!task.children?.length}
+                    sendInput={sendInput} >
                     {
                         task.children?.map((_task, i) => <Task key={_task.id} que={i + 1} task={_task} sendInput={sendInput} />)
                     }
@@ -303,8 +338,12 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                             <div
                                 key={file.file_id}
                                 onClick={() => {
+                                    if (file.file_name.split('.').pop() === 'html') {
+                                        return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
+                                    }
                                     setCurrentPreviewFileId(file.file_id);
                                     setIsPreviewOpen(true);
+                                    setTriggerDrawerFromCard(true);
                                 }}
                                 className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
                             >
@@ -348,6 +387,7 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
             }
             {/* 文件列表抽屉 */}
             <FileDrawer
+                title={title}
                 files={allFiles}
                 isOpen={isDrawerOpen}
                 onOpenChange={setIsDrawerOpen}
@@ -356,6 +396,7 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                     setCurrentPreviewFileId(id);
                     setIsDrawerOpen(false)
                     setIsPreviewOpen(true)
+                    setTriggerDrawerFromCard(false)
                 }}
             />
             {/* 文件预览抽屉 */}
@@ -366,7 +407,10 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                 downloadFile={downloadFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
-                onBack={setIsPreviewOpen}
+                onBack={triggerDrawerFromCard ? undefined : (() => {
+                    setIsDrawerOpen(true);
+                    setIsPreviewOpen(false);
+                })}
             >
             </FilePreviewDrawer>
         </div >

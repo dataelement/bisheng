@@ -148,6 +148,7 @@ export const playDing = () => {
  * @param {boolean} shouldExpand - true表示展开，false表示关闭
  */
 export const toggleNav = (shouldExpand) => {
+  return // 去掉自动收起展开
   // 获取导航栏切换按钮元素
   const navToggle = document.querySelector('div[id="toggle-left-nav"]');
 

@@ -100,10 +100,7 @@ function ChatView({ index = 0 }: { index?: number }) {
                 />
               </video>
               {/* his messages */}
-              {/*   邀请码 */}
-              {showCode &&
-                <InvitationCodeForm setShowCode={setShowCode} />}
-              <div className={showCode ? "hidden" : ""}>
+              <div className={showCode ? "hidden" : "flex h-full flex-col justify-center"}>
                 {content}
                 <div className="w-full border-t-0 pl-0 pt-2 dark:border-white/20 md:w-[calc(100%-.5rem)] md:border-t-0 md:border-transparent md:pl-0 md:pt-0 md:dark:border-transparent">
                   {/* input */}
@@ -122,10 +119,11 @@ function ChatView({ index = 0 }: { index?: number }) {
                   </div>
                   </div>
                   </div>} */}
-                  <div className="h-[20vh]"></div>
+                  <div className="h-[2vh]"></div>
                 </div>
               </div>
-
+              {/*   邀请码 */}
+              <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
             </div>
           </Presentation>
         </AddedChatContext.Provider>

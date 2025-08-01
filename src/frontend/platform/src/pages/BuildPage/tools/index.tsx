@@ -205,13 +205,11 @@ export const useMcpRefrensh = () => {
             setLoading(true);
             // api
             const res = await captureAndAlertRequestErrorHoc(refreshAssistantMcpApi())
-            // console.log('刷新 :>> ', res);
-            if (res) {
-                message({
-                    variant: "success",
-                    description: "刷新成功"
-                })
-            }
+            console.log('刷新 :>> ', res);
+            message({
+                variant: "success",
+                description: "刷新成功"
+            })
             setLoading(false);
         }
     }

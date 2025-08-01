@@ -18,6 +18,7 @@ import ChatRoute from './ChatRoute';
 import Search from './Search';
 import Root from './Root';
 import Sop from '~/components/Sop';
+import WebView from '~/components/WebView';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -94,7 +95,7 @@ export const router = createBrowserRouter([
             element: <ChatRoute />,
           },
           {
-            path: 'sop/:conversationId?',
+            path: 'linsight/:conversationId?',
             element: <Sop />,
           },
           // {
@@ -104,5 +105,9 @@ export const router = createBrowserRouter([
         ],
       },
     ],
+  },
+  {
+    path: '/html',
+    element: <WebView />,
   },
 ], baseConfig);

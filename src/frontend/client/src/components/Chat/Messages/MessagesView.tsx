@@ -42,7 +42,7 @@ export default function MessagesView({
     <div className="flex-1 overflow-hidden overflow-y-auto">
       <div className="relative h-full">
         <div
-          className="scrollbar-gutter-stable flex flex-grow flex-col"
+          className="scrollbar-gutter-stable flex flex-grow flex-col pb-20"
           onScroll={debouncedHandleScroll}
           ref={scrollableRef}
           style={{

@@ -272,7 +272,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             id="desc"
                             name="desc"
                             placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
-                            maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
+                            maxLength={appType === AppType.ASSISTANT ? 1000 : 200}
                             className="mt-3 min-h-32 pt-3"
                             value={formData.desc}
                             onChange={handleChange}
