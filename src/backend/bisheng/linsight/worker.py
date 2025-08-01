@@ -2,9 +2,9 @@ import argparse
 import asyncio
 import logging
 
-from multiprocessing import Process
+from multiprocessing import Process, Manager
+from multiprocessing.managers import ValueProxy
 from typing import Optional
-
 from bisheng.cache.redis import RedisClient, redis_client
 from bisheng.linsight.task_exec import LinsightWorkflowTask
 from bisheng.settings import settings
@@ -45,7 +45,7 @@ class LinsightQueue(object):
         items = await self.__db.alrange(self.key)
         try:
             index = items.index(data)
-            return index + 1 # 返回索引从1开始
+            return index + 1  # 返回索引从1开始
         except ValueError:
             return 0
 
@@ -59,14 +59,18 @@ class LinsightQueue(object):
         await self.__db.alrem(self.key, data)  # 从队列中删除指定数据
 
 
-
 class ScheduleCenterProcess(Process):
-    def __init__(self):
+    def __init__(self, max_concurrency: ValueProxy = None):
+        """
+        调度中心进程，负责从 Redis 队列中获取任务并执行
+        :param max_concurrency:
+        """
         super().__init__()
         self.daemon = True
         self.queue: Optional[LinsightQueue] = None
         # 信号量
         self.semaphore: Optional[asyncio.Semaphore] = None
+        self.max_concurrency = max_concurrency
 
     def handle_task_result(self, task: asyncio.Task):
         try:
@@ -117,18 +121,29 @@ class ScheduleCenterProcess(Process):
         :return:
         """
 
+        configure(settings.logger_conf)
+
+        if self.max_concurrency is not None:
+            self.max_concurrency = self.max_concurrency.value  # 获取 ValueProxy 的实际值
+        else:
+            self.max_concurrency = 32
+            logger.warning("No max_concurrency provided, using default value of 32.")
+
+        self.semaphore = asyncio.Semaphore(self.max_concurrency)
+        logger.info(f"Semaphore initialized with max concurrency: {self.semaphore._value}")
+
         self.queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
         for _ in range(10000):
-            self.semaphore = asyncio.Semaphore(settings.linsight_conf.max_concurrency + 1)
             try:
                 asyncio.run(self.async_run())
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess run method: {e}")
 
 
-def start_schedule_center_process(worker_num: int = 4) -> Optional[list[ScheduleCenterProcess]]:
+def start_schedule_center_process(worker_num: int = 4, max_concurrency: ValueProxy = None):
     """
     启动调度中心进程
+    :param max_concurrency:
     :param worker_num: 启动的工作进程数量
     :return:
     """
@@ -138,7 +153,7 @@ def start_schedule_center_process(worker_num: int = 4) -> Optional[list[Schedule
         return
     processes = []
     for _ in range(worker_num):
-        process = ScheduleCenterProcess()
+        process = ScheduleCenterProcess(max_concurrency)
         process.start()
         logger.info(f"Started ScheduleCenterProcess with PID: {process.pid}")
         processes.append(process)
@@ -151,13 +166,16 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--worker_num', type=int, default=4, help='进程数量，默认为4')
+    # 单个进程的最大并发数
+    parser.add_argument('--max_concurrency', type=int, default=32, help='单个进程的最大并发数，默认为32')
 
     args = parser.parse_args()
 
-    configure(settings.logger_conf)
+    max_concurrency = Manager().Value('i', args.max_concurrency)
 
     try:
-        processes = start_schedule_center_process(worker_num=args.worker_num)
+        processes = start_schedule_center_process(worker_num=args.worker_num,
+                                                  max_concurrency=max_concurrency)
         if processes:
             for p in processes:
                 p.join()  # 等待所有进程结束

@@ -110,7 +110,6 @@ class CeleryConf(BaseModel):
 
 class LinsightConf(BaseModel):
     debug: bool = Field(default=False, description='是否开启debug模式')
-    max_concurrency: int = Field(default=32, description='单个worker最大并发数')
 
 
 class Settings(BaseModel):
