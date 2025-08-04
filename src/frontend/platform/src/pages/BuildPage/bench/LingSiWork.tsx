@@ -101,7 +101,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('builtin');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
-    // const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [importDialogOpen, setImportDialogOpen] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
         title: '确认删除',
@@ -760,13 +760,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 </div>
 
                                 <div className="flex gap-2">
-                                    {/* <Button
+                                    <Button
                                         variant="default"
                                         size="sm"
                                        onClick={() => setImportDialogOpen(true)}
                                     >
                                         从运行记录中导入
-                                    </Button> */}
+                                    </Button>
                                     <Button
                                         variant="default"
                                         size="sm"
@@ -811,10 +811,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     </Button>
                                 </div>
                             </div>
-                            {/* <ImportFromRecordsDialog 
+                            <ImportFromRecordsDialog 
                                 open={importDialogOpen} 
                                 onOpenChange={setImportDialogOpen} 
-                                /> */}
+                                />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
                             {deleteConfirmModal.open && (
