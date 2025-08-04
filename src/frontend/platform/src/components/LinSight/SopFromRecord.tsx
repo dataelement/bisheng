@@ -40,6 +40,7 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
   const [pageInputValue, setPageInputValue] = useState(page.toString());
+  const [selectedRecordIds, setSelectedRecordIds] = useState<number[]>([]);
 // 获取SOP记录
 const fetchRecords = async () => {
   setLoading(true);
@@ -149,16 +150,32 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 };
   // 处理记录选择和多选
   const handleSelectRecord = (record: SopRecord) => setCurrentRecord(record);
-  const handleToggleSelect = (record: SopRecord, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setSelectedRecords(prev => 
-      prev.some(r => r.id === record.id)
-        ? prev.filter(r => r.id !== record.id)
-        : [...prev, record]
-    );
-    setCurrentRecord(record);
-  };
-
+const handleToggleSelect = (record: SopRecord, e: React.MouseEvent) => {
+  e.stopPropagation();
+  setSelectedRecordIds(prev => 
+    prev.includes(record.id)
+      ? prev.filter(id => id !== record.id)
+      : [...prev, record.id]
+  );
+  setCurrentRecord(record);
+};
+// 全选/取消全选当前页
+const handleToggleSelectAll = () => {
+  const currentPageIds = records.map(r => r.id);
+  const allSelected = currentPageIds.every(id => selectedRecordIds.includes(id));
+  
+  if (allSelected) {
+    setSelectedRecordIds(prev => prev.filter(id => !currentPageIds.includes(id)));
+  } else {
+    const newSelected = [...selectedRecordIds];
+    currentPageIds.forEach(id => {
+      if (!newSelected.includes(id)) {
+        newSelected.push(id);
+      }
+    });
+    setSelectedRecordIds(newSelected);
+  }
+};
 const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveNew = false) => {
     setLoading(true);
     try {
@@ -227,26 +244,21 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
           <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <button
-                  type="button"
-                  className={`h-4 w-4 rounded border flex items-center justify-center ${
-                    records.length > 0 && 
-                    records.every(r => selectedRecords.some(sr => sr.id === r.id)) 
-                      ? 'bg-blue-600 border-blue-600'
-                      : 'bg-white border-gray-300'
-                  }`}
-                  onClick={() => {
-                    if (records.every(r => selectedRecords.some(sr => sr.id === r.id))) {
-                      setSelectedRecords([]);
-                    } else {
-                      setSelectedRecords([...records]);
-                    }
-                  }}
-                >
-                  {records.every(r => selectedRecords.some(sr => sr.id === r.id)) && (
-                    <Check className="w-3 h-3 text-white" />
-                  )}
-                </button>
+                  <button
+          type="button"
+          className={`h-4 w-4 rounded border flex items-center justify-center ${
+            records.length > 0 && 
+            records.every(r => selectedRecordIds.includes(r.id)) 
+              ? 'bg-blue-600 border-blue-600'
+              : 'bg-white border-gray-300'
+          }`}
+          onClick={handleToggleSelectAll}
+        >
+          {records.length > 0 && 
+          records.every(r => selectedRecordIds.includes(r.id)) && (
+            <Check className="w-3 h-3 text-white" />
+          )}
+        </button>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 名称
@@ -279,27 +291,27 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {sortedRecords.map((record) => (
-              <tr 
-                key={record.id}
-                className={`cursor-pointer ${currentRecord?.id === record.id ? 'bg-blue-50' : ''}`}
-                onClick={() => handleSelectRecord(record)}
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <button
-                    type="button"
-                    className={`h-4 w-4 rounded border flex items-center justify-center ${
-                      selectedRecords.some(r => r.id === record.id)
-                        ? 'bg-blue-600 border-blue-600'
-                        : 'bg-white border-gray-300'
-                    }`}
-                    onClick={(e) => handleToggleSelect(record, e)}
-                  >
-                    {selectedRecords.some(r => r.id === record.id) && (
-                      <Check className="w-3 h-3 text-white" />
-                    )}
-                  </button>
-                </td>
+            { sortedRecords.map((record) => (
+    <tr 
+      key={record.id}
+      className={`cursor-pointer ${currentRecord?.id === record.id ? 'bg-blue-50' : ''}`}
+      onClick={() => handleSelectRecord(record)}
+    >
+      <td className="px-6 py-4 whitespace-nowrap">
+        <button
+          type="button"
+          className={`h-4 w-4 rounded border flex items-center justify-center ${
+            selectedRecordIds.includes(record.id)
+              ? 'bg-blue-600 border-blue-600'
+              : 'bg-white border-gray-300'
+          }`}
+          onClick={(e) => handleToggleSelect(record, e)}
+        >
+          {selectedRecordIds.includes(record.id) && (
+            <Check className="w-3 h-3 text-white" />
+          )}
+        </button>
+      </td>
                 <td className="px-6 py-4 whitespace-nowrap max-w-[200px]">
                   <div className="text-sm font-medium text-gray-900 truncate">
                     {record.name}

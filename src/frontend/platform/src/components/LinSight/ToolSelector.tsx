@@ -226,10 +226,13 @@ useEffect(() => {
   return (
     <div className="flex gap-4">
       {/* 已选工具面板 */}
-<div className="w-1/3 flex border rounded-lg bg-white">
+<div
+  ref={leftPanelRef}
+  className="w-1/3 flex border rounded-lg bg-white"
+>
   <div className="flex-1 p-4">
-    <h3 className="text-sm font-medium">已选工具（可拖拽排序）</h3>
-    
+    <h3 className="text-sm font-medium">已选工具</h3>
+
     {selectedTools.length === 0 ? (
       <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-6 px-4 text-center">
         <div className="mb-2">

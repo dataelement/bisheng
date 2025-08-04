@@ -74,8 +74,8 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                  linsight_executor_mode: executionMode
             };
 
-            await updateLinsightModelConfig(data);
-            const linsightConfig = await getLinsightModelConfig();
+            await captureAndAlertRequestErrorHoc(updateLinsightModelConfig(data))
+            const linsightConfig = await captureAndAlertRequestErrorHoc(getLinsightModelConfig())
 
             setForm({
                 sourceModelId: linsightConfig?.embedding_model?.id || null,
@@ -89,10 +89,6 @@ export default function WorkbenchModel({ llmOptions, embeddings, onBack }) {
                  linsight_executor_mode: linsightConfig?.linsight_executor_mode || 'ReAct',
                 abstract_prompt: linsightConfig?.abstract_prompt || defalutPrompt
             };
-
-            message({ variant: 'success', description: t('model.saveSuccess') });
-        } catch (error) {
-            message({ variant: 'error', description: t('model.saveFailed') });
         } finally {
             setSaveLoad(false);
         }
