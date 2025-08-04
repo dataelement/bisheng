@@ -211,7 +211,7 @@ class SOPManageService:
                 SOPManageService.collection_name, "ElasticKeywordsSearch", FakeEmbedding()
             )
             metadatas = [{"vector_store_id": vector_store_id}]
-            vector_client.add_texts([sop_obj.content], metadatas=metadatas)
+            vector_client.add_texts([sop_obj.content[0:10000]], metadatas=metadatas)
             es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
         except Exception as e:
             return resp_500(code=500, message=f"添加SOP失败，向向量存储添加数据失败: {str(e)}")
@@ -266,7 +266,7 @@ class SOPManageService:
                 vector_client.delete(expr=f"vector_store_id == '{vector_store_id}'")
                 es_client.delete([vector_store_id])
                 metadatas = [{"vector_store_id": vector_store_id}]
-                vector_client.add_texts([sop_obj.content], metadatas=metadatas)
+                vector_client.add_texts([sop_obj.content[0:10000]], metadatas=metadatas)
                 es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
 
             except Exception as e:
