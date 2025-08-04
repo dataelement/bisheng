@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/bs-ui
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import { LoadIcon } from '../bs-icons/loading';
 import { sopApi } from "@/controllers/API/linsight";
+import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 
 interface SopRecord {
   id: number;
@@ -158,36 +159,36 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     setCurrentRecord(record);
   };
 
-  // 导入SOP
- const importSops = async (recordsToImport: SopRecord[], overwrite = false) => {
+const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveNew = false) => {
     setLoading(true);
     try {
-      const res = await sopApi.SyncSopRecord({
-        record_ids: recordsToImport.map(r => r.id),
-        override: overwrite,
-        save_new: !overwrite
-      });
+        const res = await captureAndAlertRequestErrorHoc(
+            sopApi.SyncSopRecord({
+                record_ids: recordsToImport.map(r => r.id),
+                override: overwrite,
+                save_new: saveNew
+            })
+        );
 
+        // 处理重复情况
+        if (res?.repeat_name) {
+            setDuplicateNames(res.repeat_name);
+            setDuplicateDialogOpen(true);
+            return false;
+        }
 
-      // 处理重复情况
-      if (res.data?.repeat_name) {
-        setDuplicateNames(res.data.repeat_name);
-        setDuplicateDialogOpen(true);
-        return;
-      }
-
-      if (res.status_code !== 200) {
-        throw new Error(res.status_message || '导入失败');
-      }
-
-      toast({ variant: 'success', description: '导入成功' });
-      onOpenChange(false);
+        // 处理成功
+        toast({ variant: 'success', description: '导入成功' });
+        onOpenChange(false);
     } catch (error) {
-      toast({ variant: 'error', description: error.message });
+        toast({ 
+            variant: 'error', 
+            description: error.response?.data?.message || error.message || '导入失败'
+        });
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -364,13 +365,13 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 
             <div className="flex items-center justify-start mt-4"> 
               <span>已选择 {selectedRecords.length}项</span>
-              <Button 
-                onClick={() => importSops(selectedRecords)}
-                disabled={selectedRecords.length === 0 || loading}
-                className="ml-4"
-              >
-                {loading ? '导入中...' : '批量导入'}
-              </Button>
+        <Button 
+            onClick={() => importSops(selectedRecords, false, false)}
+            disabled={selectedRecords.length === 0 || loading}
+            className="ml-4"
+        >
+            {loading ? '导入中...' : '批量导入'}
+        </Button>
             </div>
           </div>
 
@@ -387,14 +388,24 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
                     {currentRecord.content}
                   </pre>
                 </div>
-                <div className="flex justify-start gap-2 pt-4">
-                  <Button 
-                    onClick={() => importSops([currentRecord])}
-                    disabled={selectedRecords.length > 1 || loading}
-                  >
-                    {loading ? '导入中...' : '导入当前SOP'}
-                  </Button>
-                </div>
+           <div className="flex justify-start gap-2 pt-4">
+  <Button 
+    onClick={() => {
+      if (!currentRecord) return;
+      
+      // 直接尝试导入当前SOP
+      importSops([currentRecord]).then((hasDuplicate) => {
+        if (hasDuplicate === false) {
+          // 如果有重复，打开重复对话框
+          setDuplicateDialogOpen(true);
+        }
+      });
+    }}
+    disabled={!currentRecord || loading}
+  >
+    {loading ? '导入中...' : '导入当前SOP'}
+  </Button>
+</div>
               </>
             ) : (
               <div className="flex justify-center items-center h-full text-muted-foreground">
@@ -404,48 +415,52 @@ const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
           </div>
         </div>
       </SheetContent>
-     <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>SOP重复提示</DialogTitle>
-          <DialogDescription>
-            以下SOP在库中已存在，确认是否在导入时覆盖？
-          </DialogDescription>
-        </DialogHeader>
-        <div className="max-h-[300px] overflow-y-auto border rounded-md p-4">
-          {duplicateNames.length > 0 ? (
-            duplicateNames.map((name, index) => (
-              <div key={index} className="py-2 border-b last:border-b-0">
-                {name}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-2 text-muted-foreground">
-              未获取到重复SOP名称
-            </div>
-          )}
+  <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>SOP重复提示</DialogTitle>
+      <DialogDescription>
+        以下SOP在库中已存在，确认是否在导入时覆盖？
+      </DialogDescription>
+    </DialogHeader>
+    <div className="max-h-[300px] overflow-y-auto border rounded-md p-4">
+      {duplicateNames.length > 0 ? (
+        duplicateNames.map((name, index) => (
+          <div key={index} className="py-2 border-b last:border-b-0">
+            {name}
+          </div>
+        ))
+      ) : (
+        <div className="text-center py-2 text-muted-foreground">
+          未获取到重复SOP名称
         </div>
-        <div className="flex justify-end gap-2 pt-4">
-          <Button 
-            variant="outline" 
-            onClick={() => {
-              importSops(selectedRecords, false);
-              setDuplicateDialogOpen(false);
-            }}
-          >
-            不覆盖，另存为新SOP
-          </Button>
-          <Button 
-            onClick={() => {
-              importSops(selectedRecords, true);
-              setDuplicateDialogOpen(false);
-            }}
-          >
-            覆盖
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </div>
+    <div className="flex justify-end gap-2 pt-4">
+      <Button 
+        variant="outline" 
+        onClick={() => {
+          // 如果是当前SOP导入，确保传递当前SOP
+          const recordsToUse = selectedRecords.length > 0 ? selectedRecords : currentRecord ? [currentRecord] : [];
+          importSops(recordsToUse, false, true);
+          setDuplicateDialogOpen(false);
+        }}
+      >
+        不覆盖，另存为新SOP
+      </Button>
+      <Button 
+        onClick={() => {
+          // 如果是当前SOP导入，确保传递当前SOP
+          const recordsToUse = selectedRecords.length > 0 ? selectedRecords : currentRecord ? [currentRecord] : [];
+          importSops(recordsToUse, true, false);
+          setDuplicateDialogOpen(false);
+        }}
+      >
+        覆盖
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
     </Sheet>
   );
 }

@@ -733,9 +733,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         </div>
 
                         <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">灵思SOP管理</p>
-                            {/* <p className="text-lg font-bold mb-2">灵思SOP库</p> */}
-
+                            <p className="text-lg font-bold mb-2">灵思SOP库</p>
                             <div className="flex items-center gap-2 mb-2">
                                 <div className="relative flex-1 max-w-xs">
                                     <div className="relative">

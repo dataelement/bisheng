@@ -24,7 +24,8 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     const { nameToValueRef, valueToNameRef, buildTreeData: toolOptions } = useSopTools(tools)
     const [RenderingCompleted, setRenderingCompleted] = useState(false);
-
+useAutoHeight(boxRef);
+    
     useEffect(() => {
         const vditorDom = document.getElementById('sop-vditor');
         if (!vditorDom) return
@@ -272,26 +273,57 @@ const useSopTools = (tools) => {
     return { nameToValueRef, valueToNameRef, buildTreeData };
 };
 
-// 滚动隐藏@标记
+// 滚动、resize隐藏@标记
 const useAtTip = (scrollBoxRef) => {
     useEffect(() => {
 
-        const handleScroll = () => {
+        const handleHideAtDom = () => {
             const atDom = document.querySelector('#vditor-placeholder-at');
             if (atDom) {
                 atDom.style.display = 'none';
             }
-        }
+        };
+        let resizeObserver;
         if (scrollBoxRef.current) {
-            scrollBoxRef.current.addEventListener('scroll', handleScroll);
+            scrollBoxRef.current.addEventListener('scroll', handleHideAtDom);
+            // Set up ResizeObserver for width changes
+            resizeObserver = new ResizeObserver(handleHideAtDom);
+            resizeObserver.observe(scrollBoxRef.current);
         }
 
         return () => {
             if (scrollBoxRef.current) {
-                scrollBoxRef.current.removeEventListener('scroll', handleScroll);
+                scrollBoxRef.current.removeEventListener('scroll', handleHideAtDom);
             }
-        }
+            if (resizeObserver) {
+                resizeObserver.disconnect();
+            }
+        };
     }, [scrollBoxRef.current])
+}
+// 自适应高度
+const useAutoHeight = (boxRef) => {
+    useEffect(() => {
+        if (!boxRef.current) return;
+
+        const vditorDom = document.getElementById("sop-vditor");
+        if (!vditorDom) return;
+
+        // 监听 boxRef 的高度变化
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const { height } = entry.contentRect;
+                vditorDom.style.height = `${height}px`;
+            }
+        });
+
+        resizeObserver.observe(boxRef.current);
+
+        // 组件卸载时取消监听
+        return () => {
+            resizeObserver.disconnect();
+        };
+    }, []);
 }
 
 /**
