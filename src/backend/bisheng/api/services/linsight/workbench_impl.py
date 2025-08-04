@@ -381,6 +381,7 @@ class LinsightWorkbenchImpl:
                 if session_version:
                     session_version.sop = error_message
                     session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
+                    await LinsightSessionVersionDao.insert_one(session_version)
                 yield {"event": "error", "data": error_message}
 
     @classmethod
