@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import pickle
 from enum import Enum
 from loguru import logger
@@ -104,6 +103,8 @@ class LinsightStateMessageManager:
         Args:
             message: 消息模型
         """
+        self._logger.info(f"Pushing message: {message.event_type}")
+
         await self._handle_redis_operation(
             self._redis_client.arpush,
             self._keys['messages'],

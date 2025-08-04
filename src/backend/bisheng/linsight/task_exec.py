@@ -108,6 +108,7 @@ class LinsightWorkflowTask:
             logger.info(f"开始执行任务: session_version_id={session_version_id}")
 
             try:
+
                 async with self._managed_execution(session_version_id) as (session_model, file_dir):
                     await self._execute_workflow(session_model, file_dir)
 
@@ -150,6 +151,7 @@ class LinsightWorkflowTask:
         if success:
             await self._handle_task_completion(session_model, llm, file_dir)
         else:
+            await self._handle_user_termination(session_model)
             raise UserTerminationError("任务被用户终止")
 
     # ==================== 会话和状态管理 ====================
@@ -484,7 +486,6 @@ class LinsightWorkflowTask:
                 try:
                     if await self._check_user_termination():
                         self._is_terminated = True
-                        await self._handle_user_termination(session_model)
                         break
                     await asyncio.sleep(self.USER_TERMINATION_CHECK_INTERVAL)
                 except Exception as e:
@@ -608,8 +609,7 @@ class LinsightWorkflowTask:
                     await self._state_manager.update_execution_task_status(task_id=task.id,
                                                                            status=ExecuteTaskStatusEnum.TERMINATED)
         except Exception as e:
-            logger.error(f"设置任务失败时发生错误: {e}")
-            raise TaskExecutionError(f"设置任务失败时发生错误: {e}")
+            logger.warning(f"设置任务失败时发生错误: {e}")
 
     async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
         """处理任务失败"""
