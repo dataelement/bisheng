@@ -118,10 +118,19 @@ class SOPManageService:
         repeat_names = set()
         name_set = set()
         sop_list = []
+        oversize_records = []
+        new_records = []
         for one in sop_records:
+            if len(one.content) > 50000:
+                oversize_records.append(one.name)
+                continue
+            new_records.append(one)
             if one.name not in name_set:
                 records_name_dict[one.name] = one
                 name_set.add(one.name)
+        sop_records = new_records
+        if not sop_records and oversize_records:
+            raise ValueError(f"{'、'.join(oversize_records)}内容超长")
         if name_set:
             sop_list = await LinsightSOPDao.get_sops_by_names(list(name_set))
             for one in sop_list:
@@ -159,7 +168,6 @@ class SOPManageService:
                     content=one.content,
                     rating=one.rating,
                 ), one.user_id)
-            return None
         else:
             # 说明有重复的记录，需要用户确认
             if sop_list:
@@ -172,7 +180,9 @@ class SOPManageService:
                     content=one.content,
                     rating=one.rating,
                 ), one.user_id)
-            return None
+        if oversize_records:
+            raise ValueError(f"{'、'.join(oversize_records)}内容超长")
+        return None
 
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
