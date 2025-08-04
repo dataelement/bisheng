@@ -300,7 +300,7 @@ class ToolServices(BaseModel):
                     GptsTools(
                         id=200002,
                         name="获取文件详细信息",
-                        desc="获取指定文件的文件名、文件大小、文件地址等详细信息。",
+                        desc="获取指定文件的文件名、文件大小、文件地址、字数、行数等详细信息。",
                         tool_key="get_file_details"
                     ),
                     GptsTools(

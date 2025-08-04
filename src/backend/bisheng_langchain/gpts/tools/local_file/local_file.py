@@ -26,7 +26,7 @@ class SearchFilesInput(BaseModel):
 class ReadFileInput(BaseModel):
     file_path: str = Field(..., description="要读取的文件路径")
     start_line: Optional[int] = Field(default=1, description="起始行号（从1开始计数）")
-    num_lines: Optional[int] = Field(default=50, description="需要读取的行数，最多50行")
+    num_lines: Optional[int] = Field(default=50, description="需要读取的行数，最多250行")
 
 
 class SearchTextInput(BaseModel):
@@ -137,7 +137,7 @@ class LocalFileTool(BaseModel):
 
         return result
 
-    def get_file_details(self, file_path: str) -> Dict[str, Any]:
+    async def get_file_details(self, file_path: str) -> Dict[str, Any]:
         """
         获取指定文件的详细信息
 
@@ -158,12 +158,20 @@ class LocalFileTool(BaseModel):
             raise Exception(f"文件 '{file_path}' 不存在")
 
         stats = os.stat(file_path)
+        line_num = 0
+        str_num = 0
+        async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+            async for line in f:
+                line_num += 1
+                str_num += len(line)
 
         return {
             "名称": os.path.basename(file_path),
             "路径": file_path,
             "大小": format_size(stats.st_size),
             "大小(字节)": stats.st_size,
+            "行数": line_num,
+            "字符数": str_num,
             "修改时间": stats.st_mtime,
             "是目录": os.path.isdir(file_path),
             "是文件": os.path.isfile(file_path)
@@ -280,7 +288,7 @@ class LocalFileTool(BaseModel):
         Args:
             file_path: 要读取的文件路径
             start_line: 起始行号（从1开始计数）
-            num_lines: 需要读取的行数，最多50行
+            num_lines: 需要读取的行数，最多250行
 
         Returns:
             包含文件内容和元数据的字典
@@ -293,8 +301,8 @@ class LocalFileTool(BaseModel):
         start_idx = max(0, start_line - 1)
 
         # 计算结束行
-        if num_lines > 50:
-            num_lines = 50
+        if num_lines > 250:
+            num_lines = 250
 
         end_idx = min(start_idx + num_lines, len(lines))
 
@@ -555,7 +563,7 @@ class LocalFileTool(BaseModel):
                 name=f"{cls.get_file_details.__name__}",
                 description=cls.get_file_details.__doc__,
                 args_schema=FileToolInput,
-                func=obj.get_file_details,
+                coroutine=obj.get_file_details,
             )
         elif name == "search_files":
             return StructuredTool(
