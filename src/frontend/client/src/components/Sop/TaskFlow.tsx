@@ -9,6 +9,7 @@ import { useToastContext } from '~/Providers';
 import { SopStatus } from './SOPEditor';
 import { TaskControls } from './TaskControls';
 import { TaskFlowContent } from './TaskFlowContent';
+import { formatTime } from '~/utils';
 
 export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
@@ -67,7 +68,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
 
             setVersions((prve) => [{
                 id: newVersionId,
-                name: res.data.version.replace('T', ' ').replaceAll('-', '/').slice(0, -3)
+                name: formatTime(res.data.version, true)
             }, ...prve])
             setVersionId(newVersionId)
             // 切换版本

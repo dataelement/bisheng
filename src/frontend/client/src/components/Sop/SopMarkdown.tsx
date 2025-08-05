@@ -51,7 +51,9 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
                 // 拦截粘贴
                 const editorElement = vditor.vditor[vditor.vditor.currentMode].element
                 getMarkdownPaste(editorElement, (text) => {
-                    vditor.insertValue(text);
+                    const value = replaceBracesToMarkers(text, nameToValueRef.current)
+                    const name = replaceMarkersToBraces(value, valueToNameRef.current, nameToValueRef.current)
+                    vditor.insertValue(name);
                 })
             },
             input: (val) => onChange(replaceBracesToMarkers(val, nameToValueRef.current)),
@@ -167,46 +169,50 @@ const useSopTools = (linsight) => {
     const valueToNameRef = useRef({});
     // 整合数据为二级树结构
     const buildTreeData = useMemo(() => {
+        nameToValueRef.current = {};
+        valueToNameRef.current = {};
         const tree: { label: string; value: string; desc: string; children: any[] }[] = [];
 
         // 1. 转换files数据
-        const fileNode: any = {
-            label: "上传文件",
-            value: "",
-            desc: '',
-            children: []
-        };
-        const _name = "上传文件所在目录";
-        const _value = `上传文件所在目录:${bsConfig?.linsight_cache_dir}/${id?.substring(0, 8)}`;
-        nameToValueRef.current[_name] = _value;
-        valueToNameRef.current[_value] = _name;
-
-        fileNode.children = [{
-            label: _name,
-            value: _value,
-            desc: '',
-        }, ...files?.map(file => {
-            const name = file.file_name;
-            const value = `${file.file_name}的文件储存信息:{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
-            nameToValueRef.current[name] = value;
-            valueToNameRef.current[value] = name;
-            return {
-                label: file.file_name,
-                value: file.file_id,
+        if (files?.length > 0) {
+            const fileNode: any = {
+                label: "上传文件",
+                value: "",
                 desc: '',
                 children: []
-            }
-        }) || []];
-        tree.push(fileNode);
+            };
+            const _name = "上传文件所在目录";
+            const _value = `上传文件所在目录:${bsConfig?.linsight_cache_dir}/${id?.substring(0, 8)}`;
+            nameToValueRef.current[_name] = _value;
+            valueToNameRef.current[_value] = _name;
 
-        // 补充结果文件到 ref映射
-        if (file_list?.length) {
-            file_list.forEach(file => {
+            fileNode.children = [{
+                label: _name,
+                value: _value,
+                desc: '',
+            }, ...files?.map(file => {
                 const name = file.file_name;
                 const value = `${file.file_name}的文件储存信息:{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
                 nameToValueRef.current[name] = value;
                 valueToNameRef.current[value] = name;
-            });
+                return {
+                    label: file.file_name,
+                    value: file.file_id,
+                    desc: '',
+                    children: []
+                }
+            }) || []];
+            tree.push(fileNode);
+
+            // 补充结果文件到 ref映射
+            if (file_list?.length) {
+                file_list.forEach(file => {
+                    const name = file.file_name;
+                    const value = `${file.file_name}的文件储存信息:{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
+                    nameToValueRef.current[name] = value;
+                    valueToNameRef.current[value] = name;
+                });
+            }
         }
 
         // 2. 转换orgTools数据
@@ -296,25 +302,32 @@ const useSopTools = (linsight) => {
     return { nameToValueRef, valueToNameRef, buildTreeData };
 };
 
-// 滚动隐藏@标记
+// 滚动、resize隐藏@标记
 const useAtTip = (scrollBoxRef) => {
     useEffect(() => {
 
-        const handleScroll = () => {
+        const handleHideAtDom = () => {
             const atDom = document.querySelector('#vditor-placeholder-at');
             if (atDom) {
                 atDom.style.display = 'none';
             }
-        }
+        };
+        let resizeObserver;
         if (scrollBoxRef.current) {
-            scrollBoxRef.current.addEventListener('scroll', handleScroll);
+            scrollBoxRef.current.addEventListener('scroll', handleHideAtDom);
+            // Set up ResizeObserver for width changes
+            resizeObserver = new ResizeObserver(handleHideAtDom);
+            resizeObserver.observe(scrollBoxRef.current);
         }
 
         return () => {
             if (scrollBoxRef.current) {
-                scrollBoxRef.current.removeEventListener('scroll', handleScroll);
+                scrollBoxRef.current.removeEventListener('scroll', handleHideAtDom);
             }
-        }
+            if (resizeObserver) {
+                resizeObserver.disconnect();
+            }
+        };
     }, [scrollBoxRef.current])
 }
 

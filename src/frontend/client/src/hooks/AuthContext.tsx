@@ -96,7 +96,7 @@ const AuthContextProvider = ({
         token: undefined,
         isAuthenticated: false,
         user: undefined,
-        redirect: location.origin + '/console?from=workspace'// data.redirect ?? bsConfig?.host,
+        redirect: `${location.origin}/${__APP_ENV__.BISHENG_HOST}?from=workspace` // data.redirect ?? bsConfig?.host,
       });
     },
     onError: (error) => {
@@ -152,7 +152,7 @@ const AuthContextProvider = ({
       setUser(userQuery.data);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
-      navigate('/console/login', { replace: true });
+      navigate(`/${__APP_ENV__.BISHENG_HOST}/login`, { replace: true });
     }
     if (error != null && error && isAuthenticated) {
       doSetError(undefined);

@@ -414,6 +414,12 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                     }
                 </div>
             }
+            {/* running */}
+            {
+                tasks?.length && status === SopStatus.Running && <p className='text-sm flex gap-2 mt-10'>
+                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
+                </p>
+            }
             {/* 文件列表抽屉 */}
             <FileDrawer
                 title={title}

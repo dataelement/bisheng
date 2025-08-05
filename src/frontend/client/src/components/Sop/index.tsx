@@ -4,10 +4,11 @@ import { useParams } from 'react-router-dom';
 import { checkSopQueueStatus, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
+import { formatTime } from '~/utils';
 import { SopCase } from './case';
 import { LoadingBox } from './components/sopLoading';
 import { Header } from './Header';
-import { SOPEditor, SopStatus } from './SOPEditor';
+import { SOPEditor } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
 
 export default function index() {
@@ -54,6 +55,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
         if (_conversationId.startsWith('case')) {
             const firstVersion = cloneDeep(SopCase[_conversationId])
             setVersionId(firstVersion.id);
+            setVersions({ id: firstVersion.id, name: formatTime(firstVersion.version, true) });
             return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion });
         }
         try {
@@ -62,7 +64,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
             if (!versionId) {
                 const formattedVersions = data.map((item) => ({
                     id: item.id,
-                    name: item.version.replace('T', ' ').replaceAll('-', '/').slice(0, -3)
+                    name: formatTime(item.version, true)
                 }));
                 setVersions(formattedVersions);
             }

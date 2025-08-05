@@ -7,6 +7,7 @@ import { useState } from "react"
 import { Button, TooltipAnchor } from "../ui"
 import FileIcon from "../ui/icon/File"
 import { Sheet, SheetContent, SheetHeader } from "../ui/Sheet"
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip2"
 import FilePreview from "./FilePreview"
 
 interface FileItem {
@@ -93,9 +94,11 @@ export default function FilePreviewDrawer({
                                 </Select> */}
                                 <div className="flex items-center space-x-3">
                                     {currentFile && <FileIcon type={getFileExtension(currentFile.file_name)} className="w-4 h-4" />}
-                                    <span className="font-medium text-gray-900 truncate w-1/2">
-                                        {currentFile?.file_name || "选择文件"}
-                                    </span>
+                                    <TooltipAnchor side="bottom" description={currentFile?.file_name || "选择文件"}>
+                                        <p className="font-medium text-gray-900 truncate max-w-96">
+                                            {currentFile?.file_name || "选择文件"}
+                                        </p>
+                                    </TooltipAnchor>
                                 </div>
 
                                 {/* 关闭按钮 */}

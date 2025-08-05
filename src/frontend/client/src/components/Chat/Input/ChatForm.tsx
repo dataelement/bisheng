@@ -1,4 +1,4 @@
-import { KeyRound, Pencil, Rotate3DIcon, Spline } from 'lucide-react';
+import { Rotate3DIcon, Spline } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
@@ -46,13 +46,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isScrollable, setIsScrollable] = useState(false);
 
-  const SpeechToText = useRecoilValue(store.speechToText);
-  const TextToSpeech = useRecoilValue(store.textToSpeech);
-  const automaticPlayback = useRecoilValue(store.automaticPlayback);
-  const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
-  const [isTemporaryChat, setIsTemporaryChat] = useRecoilState<boolean>(store.isTemporary);
 
-  const [modelType, setModelType] = useRecoilState(store.modelType);
+  const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
   const [isSearch, setIsSearch] = useRecoilState(store.isSearch);
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
@@ -204,7 +199,8 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
   return (
     <form
       onSubmit={methods.handleSubmit((data) => {
-        if (isLingsi && count === 0) return setShowCode(true)
+        console.log('bsConfig?.linsight_invitation_code :>> ', bsConfig?.linsight_invitation_code, isLingsi, count);
+        if (bsConfig?.linsight_invitation_code && isLingsi && count === 0) return setShowCode(true)
         submitMessage({ ...data, linsight: isLingsi, tools })
         isLingsi && navigator('/linsight/new')
       })}

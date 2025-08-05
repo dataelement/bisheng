@@ -102,7 +102,7 @@ export const TaskControls = ({
                                 </div>
                             </div>
                         )}
-                        {isCompleted && (
+                        {isCompleted && !feedbackProvided && (
                             <div className='relative'>
                                 <div className={`absolute bottom-14 p-6 pt-3 pb-14 w-full border rounded-3xl bg-gradient-to-r from-[#C0FDD4] to-[#DFFFED]`}>
                                     <div className='flex items-center text-sm'>

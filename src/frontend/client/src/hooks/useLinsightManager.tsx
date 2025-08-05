@@ -15,6 +15,7 @@ import store from '~/store';
 import { activeSessionIdState, LinsightInfo, linsightMapState, submissionState, SubmissionState } from '~/store/linsight';
 import {
     addConversation,
+    formatTime,
     toggleNav
 } from '~/utils';
 
@@ -286,7 +287,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                     setVersionId(versionId)
                     setVersions((prevVersions) => [{
                         id: versionId,
-                        name: linsight_session_version.version.replace('T', ' ').replaceAll('-', '/').slice(0, -3)
+                        name: formatTime(linsight_session_version.version, true)
                     }, ...prevVersions])
 
                     // replaceUrl

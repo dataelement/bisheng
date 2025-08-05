@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useLinsightManager } from "../useLinsightManager";
-import { MockWebSocket } from "./mock";
 import { userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
 import { SopStatus } from "~/components/Sop/SOPEditor";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
+import { useLinsightManager } from "../useLinsightManager";
+import { MockWebSocket } from "./mock";
 const MOCK = false
 
 // 每个会话单独分配一个 WebSocket实例
@@ -177,11 +177,12 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'task_end':
                     updateLinsight(id, (prev) => {
                         const newStatus = taskData.data.status
+                        const errorMsg = newStatus === 'failed' ? taskData.data.result.answer : ''
                         if (!taskData.data.parent_task_id) {
                             // 更新一级任务
                             const newTasks = prev.tasks.map(task =>
                                 task.id === taskData.data.id
-                                    ? { ...task, status: newStatus, event_type: taskData.event_type }
+                                    ? { ...task, status: newStatus, errorMsg, event_type: taskData.event_type }
                                     : task
                             );
                             return { tasks: newTasks };
@@ -200,7 +201,7 @@ export const useLinsightWebSocket = (versionId) => {
                             ...parent,
                             children: parent.children.map(child =>
                                 child.id === taskData.data.id
-                                    ? { ...child, status: newStatus, event_type: taskData.event_type }
+                                    ? { ...child, status: newStatus, errorMsg, event_type: taskData.event_type }
                                     : child
                             )
                         };

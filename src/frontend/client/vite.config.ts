@@ -6,7 +6,10 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
-const app_env = { BASE_URL: '' }
+const app_env = {
+  BASE_URL: '',
+  BISHENG_HOST: 'console'
+}
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {

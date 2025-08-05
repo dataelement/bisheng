@@ -74,7 +74,7 @@ function ChatView({ index = 0 }: { index?: number }) {
 
 
   const handleCardClick = (caseId: string) => {
-    navigate(`/linsight/${caseId}`)
+    window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
   }
 
   return (
@@ -116,11 +116,11 @@ function ChatView({ index = 0 }: { index?: number }) {
                   {isLingsi && <div className='relative mt-20'>
                     <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
                     <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-8'>
-                      <div className='border rounded-xl p-4 text-sm hover:shadow-md cursor-pointer' onClick={() => handleCardClick('case_0001')}>
+                      <div className='border rounded-xl p-4 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0001')}>
                         <p className='font-bold'>查询近 7 日的销售数据趋势</p>
                         <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
                       </div>
-                      <div className='border rounded-xl p-4 text-sm hover:shadow-md cursor-pointer' onClick={() => handleCardClick('case_0002')}>
+                      <div className='border rounded-xl p-4 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0002')}>
                         <p className='font-bold'>查询近 7 日的销售数据趋势</p>
                         <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
                       </div>

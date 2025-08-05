@@ -91,7 +91,7 @@ export default function ToolItem({
                                 {
                                     api.api_params.map(param => (
                                         <div>
-                                            <span className=" rounded-xl bg-gray-200 dark:bg-background-login px-2 py-1 text-xs font-medium text-white">{param.name}</span>
+                                            <span className=" rounded-xl bg-gray-200 dark:bg-background-login px-2 py-1 text-xs font-medium">{param.name}</span>
                                             {/* <span>{param.schema.type}</span> */}
                                         </div>
                                     ))
