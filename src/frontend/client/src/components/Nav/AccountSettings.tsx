@@ -1,17 +1,15 @@
-import { useRecoilState } from 'recoil';
 import * as Select from '@ariakit/react/select';
-import { Fragment, useState, memo } from 'react';
-import { FileText, LogOut } from 'lucide-react';
-import { LinkIcon, GearIcon, DropdownMenuSeparator } from '~/components';
-import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
-import FilesView from '~/components/Chat/Input/Files/FilesView';
+import { FileText, GanttChartIcon, LogOut } from 'lucide-react';
+import { memo, useState } from 'react';
+import { useRecoilState } from 'recoil';
 import MyKnowledgeView from '~/components/Chat/Input/Files/MyKnowledgeView';
+import { UserIcon } from '~/components/svg';
+import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useAvatar from '~/hooks/Messages/useAvatar';
-import { UserIcon } from '~/components/svg';
-import { useLocalize } from '~/hooks';
-import Settings from './Settings';
 import store from '~/store';
+import Settings from './Settings';
 
 function AccountSettings() {
   const localize = useLocalize();
@@ -129,6 +127,15 @@ function AccountSettings() {
           {localize('com_nav_settings')}
         </Select.SelectItem> */}
         {/* <DropdownMenuSeparator /> */}
+        <Select.SelectItem
+          aria-selected={true}
+          className="select-item text-sm"
+        >
+          <GanttChartIcon className="icon-md" />
+          <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
+            管理后台
+          </a>
+        </Select.SelectItem>
         <Select.SelectItem
           aria-selected={true}
           onClick={() => logout()}

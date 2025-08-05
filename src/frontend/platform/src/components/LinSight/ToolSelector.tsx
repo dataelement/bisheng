@@ -226,85 +226,79 @@ useEffect(() => {
   return (
     <div className="flex gap-4">
       {/* 已选工具面板 */}
-      <div
-         ref={leftPanelRef}
-        className="w-1/3 flex border rounded-lg bg-white"
-        >
-        <div className="flex-1 p-4">
-          <h3 className="text-sm font-medium">已选工具</h3>
-          {/* {selectedTools.length === 0 && (
-            <button
-              onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
-              className="mt-2 px-3 py-1 text-sm border border-gray-300 rounded text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
+<div
+  ref={leftPanelRef}
+  className="w-1/3 flex border rounded-lg bg-white"
+>
+  <div className="flex-1 p-4">
+    <h3 className="text-sm font-medium">已选工具</h3>
+
+    {selectedTools.length === 0 ? (
+      <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-6 px-4 text-center">
+        <div className="mb-2">
+          <Plus className="w-6 h-6 text-gray-400" />
+        </div>
+        <div className="text-sm font-medium text-gray-500 mb-1">
+          暂未选择任何工具
+        </div>
+        <div className="text-xs text-gray-400">
+          请在右侧全量工具中挑选工具
+        </div>
+      </div>
+    ) : (
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="selectedTools">
+          {(provided) => (
+            <div
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="space-y-2 flex-1 overflow-y-auto" 
+              style={{ maxHeight: '300px' }}
             >
-              <Plus className="inline w-4 h-4 mr-1" />
-              添加更多工具
-            </button>
-          )} */}
-
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <Droppable droppableId="selectedTools">
-        {(provided) => (
-          <div
-            {...provided.droppableProps}
-            ref={provided.innerRef}
-            className="space-y-2 flex-1 overflow-y-auto" 
-            style={{ maxHeight: '300px' }} // 限制内容区域高度
-          >
-            {selectedTools.map((tool, index) => (
-              <Draggable key={tool.id.toString()} draggableId={tool.id.toString()} index={index}>
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    {...provided.dragHandleProps}
-                    className={`flex items-center justify-between p-3 py-2 rounded-lg ${
-                      snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
-                    }`}
-                    onClick={() => handleSelectedToolClick(tool)}
-                  >
-                    <div className="flex items-center">
-                      <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="truncate max-w-[120px]">{tool.name}</span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>{tool.name}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeTool(index);
-                      }}
-                      className="text-red-500 hover:text-red-700 ml-2"
+              {selectedTools.map((tool, index) => (
+                <Draggable key={tool.id.toString()} draggableId={tool.id.toString()} index={index}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      className={`flex items-center justify-between p-3 py-2 rounded-lg ${
+                        snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                      }`}
+                      onClick={() => handleSelectedToolClick(tool)}
                     >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </Draggable>
-            ))}
-            {provided.placeholder}
-          </div>
-        )}
-      </Droppable>
-    </DragDropContext>
-
-    {/* {selectedTools.length > 0 && (
-      <Button
-        variant='outline'
-        onClick={() => { setShowToolSelector(true), setActiveToolTab('builtin') }}
-        className="mt-2"
-      >
-        <Plus className="inline w-4 h-4 mr-1" />
-        添加更多工具
-      </Button>
-    )} */}
+                      <div className="flex items-center">
+                        <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="truncate max-w-[120px]">{tool.name}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{tool.name}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeTool(index);
+                        }}
+                        className="text-red-500 hover:text-red-700 ml-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+    )}
   </div>
 </div>
 

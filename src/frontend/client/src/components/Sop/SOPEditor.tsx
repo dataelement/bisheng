@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveSop, startLinsight } from '~/api/linsight';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { Button, Textarea } from '../ui';
+import CopyButton from './components/CopyButton';
+import { LoadingDots } from './components/sopLoading';
 import SopMarkdown from './SopMarkdown';
 
 export const enum SopStatus {
@@ -65,7 +67,7 @@ const SOPEditorArea = ({ setOpenAreaText, onsubmit }) => {
     </div>
 }
 
-export const SOPEditor = ({ versionId, sopError }) => {
+export const SOPEditor = ({ versionId, sopError, onRun }) => {
     const [openAreaText, setOpenAreaText] = useState(false)
     const { getLinsight, updateLinsight } = useLinsightManager()
     const markdownRef = useRef(null)
@@ -77,6 +79,8 @@ export const SOPEditor = ({ versionId, sopError }) => {
 
     // start
     const handleRun = () => {
+        onRun()
+
         const sop = markdownRef.current.getValue()
 
         saveSop({
@@ -154,12 +158,17 @@ export const SOPEditor = ({ versionId, sopError }) => {
             animate={{ width: showSopEdit ? '30%' : '70%' }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
         >
-            <div className='flex items-center gap-2 border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780] rounded-t-2xl'>
-                <PencilLineIcon size={14} />
-                SOP编辑器
+            <div className='flex items-center justify-between border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780] rounded-t-2xl'>
+                <div className='flex items-center gap-2'>
+                    <PencilLineIcon size={14} />
+                    SOP编辑器
+                </div>
+                {/* <CopyButton text={linsight.sop} /> */}
             </div>
 
-            <div className='p-8 linsight-markdown flex-1 min-h-0'>
+            {linsight.status === SopStatus.SopGenerating && !linsight.sop?.trim() && <LoadingDots size="md" />}
+            <p className={linsight.sopError ? 'bg-red-100 p-2 rounded-md text-sm text-red-500 m-2' : 'hidden'}>SOP生成失败：{linsight.sopError}</p>
+            <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'hidden'}`}>
                 <SopMarkdown ref={markdownRef} linsight={linsight} edit={showSopEdit} onChange={handleChange} />
             </div>
 
@@ -172,11 +181,11 @@ export const SOPEditor = ({ versionId, sopError }) => {
                         {!openAreaText ? (
                             <div className='linsight-card w-10/12 mx-auto relative'>
                                 {/* <span className='text-lg'>SOP</span> */}
-                                <p className='mt-3 text-sm flex gap-2'>
-                                    <div className="size-5 rounded-full bg-[radial-gradient(circle_at_center,_white_0%,_white_10%,_#143BFF_80%,_#143BFF_100%)] shadow-xl"></div>
+                                <p className='mt-0.5 text-sm flex gap-2'>
+                                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
                                     确认是否可以按照 SOP 执⾏任务
                                 </p>
-                                <div className='absolute right-4 bottom-4 flex gap-2'>
+                                <div className='absolute right-4 bottom-3 flex gap-2'>
                                     <Button variant="outline" className="px-3" onClick={() => {
                                         const sop = markdownRef.current.getValue()
                                         sop?.trim() === '' ? handleReExcute('') : setOpenAreaText(true)

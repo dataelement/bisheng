@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import shutil
 from contextlib import asynccontextmanager
@@ -9,11 +8,9 @@ from typing import Optional, List, Dict, Callable
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
-from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightExecuteTask
@@ -21,14 +18,13 @@ from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
     ExecuteTaskTypeEnum
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
-from bisheng.database.models.linsight_sop import LinsightSOPDao
 from bisheng.interface.llms.custom import BishengLLM
-from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.linsight import utils as linsight_execute_utils
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
 from bisheng.utils.minio_client import minio_client
 from bisheng_langchain.linsight.agent import LinsightAgent
-from bisheng_langchain.linsight.const import TaskStatus
+from bisheng_langchain.linsight.const import TaskStatus, ExecConfig
 from bisheng_langchain.linsight.event import NeedUserInput, GenerateSubTask, ExecStep, TaskStart, TaskEnd, BaseEvent
 
 
@@ -108,6 +104,7 @@ class LinsightWorkflowTask:
             logger.info(f"开始执行任务: session_version_id={session_version_id}")
 
             try:
+
                 async with self._managed_execution(session_version_id) as (session_model, file_dir):
                     await self._execute_workflow(session_model, file_dir)
 
@@ -150,6 +147,7 @@ class LinsightWorkflowTask:
         if success:
             await self._handle_task_completion(session_model, llm, file_dir)
         else:
+            await self._handle_user_termination(session_model)
             raise UserTerminationError("任务被用户终止")
 
     # ==================== 会话和状态管理 ====================
@@ -242,6 +240,8 @@ class LinsightWorkflowTask:
                             file_dir: str) -> LinsightAgent:
 
         workbench_conf = await LLMService.get_workbench_llm()
+        linsight_conf = settings.get_linsight_conf()
+        exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_model.id)
 
         """创建智能体"""
         return LinsightAgent(
@@ -250,8 +250,7 @@ class LinsightWorkflowTask:
             tools=tools,
             file_dir=file_dir,
             task_mode=workbench_conf.linsight_executor_mode,
-            debug=settings.linsight_conf.debug,
-            debug_id=session_model.id
+            exec_config=exec_config,
         )
 
     # ==================== 任务执行 ====================
@@ -483,7 +482,6 @@ class LinsightWorkflowTask:
                 try:
                     if await self._check_user_termination():
                         self._is_terminated = True
-                        await self._handle_user_termination(session_model)
                         break
                     await asyncio.sleep(self.USER_TERMINATION_CHECK_INTERVAL)
                 except Exception as e:
@@ -607,8 +605,7 @@ class LinsightWorkflowTask:
                     await self._state_manager.update_execution_task_status(task_id=task.id,
                                                                            status=ExecuteTaskStatusEnum.TERMINATED)
         except Exception as e:
-            logger.error(f"设置任务失败时发生错误: {e}")
-            raise TaskExecutionError(f"设置任务失败时发生错误: {e}")
+            logger.warning(f"设置任务失败时发生错误: {e}")
 
     async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
         """处理任务失败"""
@@ -635,64 +632,3 @@ class LinsightWorkflowTask:
             await self._handle_task_failure(session_model, str(error))
         except Exception as e:
             logger.error(f"处理执行错误失败: session_version_id={session_version_id}, error={e}")
-
-    # ==================== SOP处理 ====================
-
-    async def _save_sop(self, session_model: LinsightSessionVersion, llm: BishengLLM):
-        """保存SOP"""
-        try:
-
-            sop_summary = await self.generate_sop_summary(session_model.sop, llm)
-
-            sop_model = await LinsightSOPDao.get_sop_by_session_id(session_model.session_id)
-
-            if not sop_model:
-                sop_obj = SOPManagementSchema(
-                    name=sop_summary["sop_title"],
-                    description=sop_summary["sop_description"],
-                    content=session_model.sop,
-                    rating=0,
-                    linsight_session_id=session_model.session_id
-                )
-
-                await SOPManageService.add_sop(sop_obj, session_model.user_id)
-            else:
-                await SOPManageService.update_sop(SOPManagementUpdateSchema(
-                    id=sop_model.id,
-                    name=sop_summary["sop_title"],
-                    description=sop_summary["sop_description"],
-                    content=session_model.sop,
-                    rating=sop_model.rating,
-                    linsight_session_id=sop_model.linsight_session_id
-                ))
-
-        except Exception as e:
-            logger.error(f"保存SOP失败: session_version_id={session_model.id}, error={e}")
-
-    @staticmethod
-    async def generate_sop_summary(sop_content: str, llm: BishengLLM) -> Dict[str, str]:
-        """生成SOP摘要"""
-        default_summary = {"sop_title": "SOP名称", "sop_description": "SOP描述"}
-
-        try:
-            prompt_service = app_ctx.get_prompt_loader()
-            prompt_obj = prompt_service.render_prompt(
-                namespace="sop",
-                prompt_name="gen_sop_summary",
-                sop_detail=sop_content
-            )
-
-            prompt = [
-                ("system", prompt_obj.prompt.system),
-                ("user", prompt_obj.prompt.user)
-            ]
-
-            response = await llm.ainvoke(prompt)
-            if not response.content:
-                return default_summary
-
-            return json.loads(response.content)
-
-        except Exception as e:
-            logger.error(f"生成SOP摘要失败: {e}")
-            return default_summary

@@ -4,7 +4,7 @@ import logging
 
 from multiprocessing import Process, Manager
 from multiprocessing.managers import ValueProxy
-from typing import Optional
+from typing import Optional, Union
 from bisheng.cache.redis import RedisClient, redis_client
 from bisheng.linsight.task_exec import LinsightWorkflowTask
 from bisheng.settings import settings
@@ -70,7 +70,7 @@ class ScheduleCenterProcess(Process):
         self.queue: Optional[LinsightQueue] = None
         # 信号量
         self.semaphore: Optional[asyncio.Semaphore] = None
-        self.max_concurrency = max_concurrency
+        self.max_concurrency: Optional[Union[int, ValueProxy]] = max_concurrency
 
     def handle_task_result(self, task: asyncio.Task):
         try:
@@ -110,7 +110,7 @@ class ScheduleCenterProcess(Process):
             except Exception as e:
                 logger.error(f"Error in ScheduleCenterProcess: {e}")
                 if self.semaphore:
-                    if self.semaphore._value < settings.linsight_conf.max_concurrency:
+                    if self.semaphore._value < self.max_concurrency:
                         logger.info("Releasing semaphore due to error.")
                         self.semaphore.release()
                 continue

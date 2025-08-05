@@ -109,7 +109,7 @@ customAxios.interceptors.response.use(
       originalRequest._retry = true;
 
       if (import.meta.env.MODE === 'production') {
-        location.href = `${location.origin}?from=workspace`
+        location.href = `${location.origin}/${__APP_ENV__.BISHENG_HOST}?from=workspace`
       }
       // } else {
       //   if (location.pathname.indexOf('login') === -1) {

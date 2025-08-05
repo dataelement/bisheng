@@ -28,7 +28,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
         </SelectTrigger>
         <SelectContent className='bg-white rounded-xl p-2 w-52'>
             {
-                config?.webSearch.enabled && <div className='flex justify-between mb-2'>
+                config?.webSearch.enabled && <div className='flex justify-between mb-3'>
                     <div className='flex gap-2 items-center'>
                         <GlobeIcon className='' size="16" />
                         <span className="text-xs font-normal">联网搜索</span>
@@ -113,7 +113,7 @@ const LinsiTools = ({ tools, setTools }) => {
         </SelectTrigger>
         <SelectContent className='bg-white rounded-xl p-2 w-64'>
             {tools.map(tool => {
-                return <div key={tool.name} className='flex justify-between mb-2'>
+                return <div key={tool.name} className='flex justify-between mb-3.5'>
                     <div className='flex gap-2 items-center'>
                         {tool.icon}
                         <span className="max-w-36 text-xs font-normal line-clamp-1 flex-1 grow overflow-hidden">{tool.name}</span>

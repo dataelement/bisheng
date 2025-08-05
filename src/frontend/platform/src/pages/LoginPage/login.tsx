@@ -68,7 +68,7 @@ export const LoginPage = () => {
             ).then((res: any) => {
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
-                const path = location.href.indexOf('from=workspace') === -1 ? '' : '/workspace/'
+                const path = location.href.indexOf('from=workspace') === -1 ? '' : '/'
                 location.href = path ? location.origin + path : location.href
                 // location.href = __APP_ENV__.BASE_URL + '/'
 

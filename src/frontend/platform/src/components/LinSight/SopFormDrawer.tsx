@@ -31,7 +31,7 @@ const SopFormDrawer = ({
   const MAX_LENGTHS = {
     name: 500,      // 名称不超过500字
     description: 1000, // 描述不超过1000字
-    content: 10000   // 详细内容不超过100000字
+    content: 50000   // 详细内容不超过100000字
   };
 
   const validateForm = () => {
@@ -107,17 +107,20 @@ const SopFormDrawer = ({
 
   return (
     <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-      <SheetContent className="w-2/3 sm:max-w-[780px]">
+     <SheetContent 
+    className="w-[40%]"
+    style={{ minWidth: '40%', maxWidth: '40%' }}
+  >
         <div className="flex flex-col ">
-          <div className="flex items-center justify-between px-4 py-5 border-b border-gray-200">
+          <div className="flex items-center justify-between px-4 pt-5 border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
               {isEditing ? '编辑SOP' : '新建SOP'}
             </SheetTitle>
           </div>
-          <div className="flex-1 p-4">
+          <div className="flex-1 px-4 pb-4 pt-3">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="sop-name" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
                   SOP名称<span className="text-red-500">*</span>
                 </label>
                 < Input
@@ -128,7 +131,7 @@ const SopFormDrawer = ({
                   ref={nameInputRef}
                   value={sopForm.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
-                  className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500`}
+                  className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-lg`}
                   placeholder="请输入SOP名称"
                 />
                 <div className="flex justify-between">
@@ -139,7 +142,7 @@ const SopFormDrawer = ({
               </div>
 
               <div>
-                <label htmlFor="sop-description" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="sop-description" className="block text-sm pb-1 font-medium text-gray-700">
                   描述
                 </label>
                 <Textarea
@@ -148,13 +151,13 @@ const SopFormDrawer = ({
                   rows={3}
                   value={sopForm.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-lg"
                   placeholder="请输入SOP描述"
                 />
               </div>
 
               <div>
-                <label htmlFor="sop-content" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="sop-content" className="h-full block text-sm pb-1 font-medium text-gray-700">
                   详细内容<span className="text-red-500">*</span>
                 </label>
                 {isDrawerOpen && (
@@ -163,7 +166,7 @@ const SopFormDrawer = ({
                       tools={tools}
                       defaultValue={sopForm.content}
                       onChange={(val) => handleInputChange('content', val)}
-                      className="min-h-[200px]"
+                      className="h-full"
                     />
                     <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
                       {charCount.content}/{MAX_LENGTHS.content}

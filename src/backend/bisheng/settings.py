@@ -110,6 +110,11 @@ class CeleryConf(BaseModel):
 
 class LinsightConf(BaseModel):
     debug: bool = Field(default=False, description='是否开启debug模式')
+    tool_buffer: int = Field(default=50000, description='工具执行历史记录的最大token，超过后需要总结下历史记录')
+    max_steps: int = Field(default=200, description='单个任务最大执行步骤数，防止死循环')
+    retry_num: int = Field(default=3, description='灵思任务执行过程中模型调用重试次数')
+    retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')
+    max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
 
 
 class Settings(BaseModel):
@@ -261,6 +266,14 @@ class Settings(BaseModel):
         # 获取密码相关的配置项
         all_config = self.get_all_config()
         return WorkflowConf(**all_config.get('workflow', {}))
+
+    def get_linsight_conf(self) -> LinsightConf:
+        # 获取灵思相关的配置项
+        all_config = self.get_all_config()
+        linsight_conf = all_config.get('linsight', {})
+        for k, v in linsight_conf.items():
+            setattr(self.linsight_conf, k, v)
+        return self.linsight_conf
 
     def get_from_db(self, key: str):
         # 先获取所有的key

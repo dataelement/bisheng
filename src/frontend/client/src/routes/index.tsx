@@ -67,7 +67,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
     children: [
       {
-        path: '/',
+        path: '/' + __APP_ENV__.BISHENG_HOST,
         element: <LoginLayout />,
         children: [
           {

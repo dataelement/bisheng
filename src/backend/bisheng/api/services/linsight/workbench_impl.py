@@ -17,7 +17,6 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema, SOPManagementSchema
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
@@ -26,7 +25,7 @@ from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
-from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
+from bisheng.database.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
@@ -35,6 +34,7 @@ from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import calculate_md5
+from bisheng_langchain.linsight.const import ExecConfig
 
 
 @dataclass
@@ -337,6 +337,9 @@ class LinsightWorkbenchImpl:
             # 创建代理并生成SOP
             agent = await cls._create_linsight_agent(session_version, llm, tools, workbench_conf)
 
+            if previous_session_version_id:
+                session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
+
             content = ""
             async for res in cls._generate_sop_content(
                     agent, session_version, feedback_content, history_summary
@@ -377,6 +380,7 @@ class LinsightWorkbenchImpl:
                 if session_version:
                     session_version.sop = error_message
                     session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
+                    await LinsightSessionVersionDao.insert_one(session_version)
                 yield {"event": "error", "data": error_message}
 
     @classmethod
@@ -442,15 +446,15 @@ class LinsightWorkbenchImpl:
         from bisheng_langchain.linsight.agent import LinsightAgent
 
         root_path = os.path.join(CACHE_DIR, "linsight", session_version.id[:8])
-
+        linsight_conf = settings.get_linsight_conf()
+        exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_version.id)
         return LinsightAgent(
             file_dir=root_path,
             query=session_version.question,
             llm=llm,
             tools=tools,
             task_mode=workbench_conf.linsight_executor_mode,
-            debug=settings.linsight_conf.debug,
-            debug_id=session_version.id
+            exec_config=exec_config,
         )
 
     @classmethod
@@ -478,6 +482,7 @@ class LinsightWorkbenchImpl:
             async for res in agent.generate_sop(sop=sop_template, file_list=file_list):
                 yield res
         else:
+
             sop_template = session_version.sop if session_version.sop else ""
             if sop_template:
                 sop_template = f"例子:\n\n{sop_template}"
@@ -874,40 +879,6 @@ class LinsightWorkbenchImpl:
                     history_summary.append(answer)
 
         return history_summary
-
-    @classmethod
-    async def _update_sop_in_database(cls, session_version: LinsightSessionVersion,
-                                      sop_content: str, llm: BishengLLM) -> None:
-        """更新数据库中的SOP"""
-        from bisheng.linsight.task_exec import LinsightWorkflowTask
-
-        # 生成SOP摘要
-        sop_summary = await LinsightWorkflowTask.generate_sop_summary(sop_content, llm)
-
-        # 检查是否已存在SOP
-        existing_sop = await LinsightSOPDao.get_sop_by_session_id(session_version.session_id)
-
-        if existing_sop:
-            # 更新现有SOP
-            update_obj = SOPManagementUpdateSchema(
-                id=existing_sop.id,
-                content=sop_content,
-                name=sop_summary["sop_title"],
-                description=sop_summary["sop_description"],
-                rating=session_version.score,
-                linsight_session_id=session_version.session_id
-            )
-            await SOPManageService.update_sop(update_obj)
-        else:
-            # 创建新SOP
-            create_obj = SOPManagementSchema(
-                content=sop_content,
-                name=sop_summary["sop_title"],
-                description=sop_summary["sop_description"],
-                rating=session_version.score,
-                linsight_session_id=session_version.session_id
-            )
-            await SOPManageService.add_sop(create_obj, user_id=session_version.user_id)
 
     @classmethod
     async def batch_download_files(cls, file_info_list: List[BatchDownloadFilesSchema]) -> bytes:

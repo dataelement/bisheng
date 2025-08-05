@@ -101,7 +101,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [activeToolTab, setActiveToolTab] = useState<'builtin' | 'api' | 'mcp'>('builtin');
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
-    // const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [importDialogOpen, setImportDialogOpen] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
         title: '确认删除',
@@ -696,7 +696,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <FormInput
                             label="输入框提示语"
-                            value={formData.linsightConfig.input_placeholder}
+                            value={formData.linsightConfig?.input_placeholder}
                             placeholder="请输入你的任务目标，然后交给 BISHENG 灵思"
                             maxLength={100}
                             onChange={(v) => {
@@ -733,9 +733,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         </div>
 
                         <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">灵思SOP管理</p>
-                            {/* <p className="text-lg font-bold mb-2">灵思SOP库</p> */}
-
+                            <p className="text-lg font-bold mb-2">灵思SOP库</p>
                             <div className="flex items-center gap-2 mb-2">
                                 <div className="relative flex-1 max-w-xs">
                                     <div className="relative">
@@ -760,13 +758,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 </div>
 
                                 <div className="flex gap-2">
-                                    {/* <Button
+                                    <Button
                                         variant="default"
                                         size="sm"
                                        onClick={() => setImportDialogOpen(true)}
                                     >
                                         从运行记录中导入
-                                    </Button> */}
+                                    </Button>
                                     <Button
                                         variant="default"
                                         size="sm"
@@ -811,10 +809,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     </Button>
                                 </div>
                             </div>
-                            {/* <ImportFromRecordsDialog 
+                            <ImportFromRecordsDialog 
                                 open={importDialogOpen} 
                                 onOpenChange={setImportDialogOpen} 
-                                /> */}
+                                />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
                             {deleteConfirmModal.open && (

@@ -319,7 +319,7 @@ async def submit_feedback(
         background_tasks: BackgroundTasks,
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
         feedback: str = Body(None, description="用户反馈意见"),
-        score: int = Body(None, ge=1, le=5, description="用户评分，1-5分"),
+        score: int = Body(0, ge=0, le=5, description="用户评分，1-5分"),
         is_reexecute: bool = Body(False, description="是否重新执行"),
         cancel_feedback: bool = Body(False, description="取消反馈"),
         login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
@@ -344,7 +344,7 @@ async def submit_feedback(
     if login_user.user_id != session_version_model.user_id:
         return resp_500(code=403, message="无权限提交该灵思的反馈")
 
-    if score is not None:
+    if score is not None and 0 < score <= 5:
         session_version_model.score = score
         await SOPManageService.update_sop_record_score(session_version_model.id, score)
 
@@ -581,14 +581,12 @@ async def add_sop(
 @router.post("/sop/update", summary="更新灵思SOP", response_model=UnifiedResponseModel)
 async def update_sop(
         sop_obj: SOPManagementUpdateSchema = Body(..., description="SOP对象"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
     """
     更新灵思SOP
     :return:
     """
 
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
     return await SOPManageService.update_sop(sop_obj)
 
 
@@ -644,13 +642,10 @@ async def sync_sop_record(login_user: UserPayload = Depends(get_admin_user),
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)
 async def remove_sop(
         sop_ids: List[int] = Body(..., description="SOP唯一ID列表", embed=True),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
     """
     删除灵思SOP
     :return:
     """
-
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
 
     return await SOPManageService.remove_sop(sop_ids, login_user)
