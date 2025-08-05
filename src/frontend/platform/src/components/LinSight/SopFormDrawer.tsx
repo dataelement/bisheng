@@ -61,17 +61,26 @@ const SopFormDrawer = ({
     return isValid;
   };
 
-  const handleInputChange = (field, value) => {
-    const length = field === 'content'
-      ? value.replace(/[#*_\-`~]/g, '').length - 1
-      : value.length;
+const handleInputChange = (field, value) => {
+    // 计算实际内容长度（去除Markdown标记字符）
+    const rawContent = field === 'content' 
+      ? value.replace(/[#*_\-`~\[\]()]/g, '') 
+      : value;
+    const length = rawContent.length;
 
-    if (length <= MAX_LENGTHS[field]) {
-      setSopForm(prev => ({ ...prev, [field]: value }));
-      setCharCount(prev => ({ ...prev, [field]: length }));
-      if (errors[field]) {
-        setErrors(prev => ({ ...prev, [field]: '' }));
-      }
+    // 更新表单值
+    setSopForm(prev => ({ ...prev, [field]: value }));
+    setCharCount(prev => ({ ...prev, [field]: length }));
+
+    // 检查长度限制并设置错误状态
+    if (length > MAX_LENGTHS[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: `${field === 'content' ? '详细内容' : '名称'}不能超过${MAX_LENGTHS[field]}字`
+      }));
+    } else if (errors[field]) {
+      // 清除错误
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
 
@@ -166,7 +175,7 @@ const SopFormDrawer = ({
                       tools={tools}
                       defaultValue={sopForm.content}
                       onChange={(val) => handleInputChange('content', val)}
-                      className="h-full"
+                      className="h-full text-lg"
                     />
                     <div className="absolute bottom-0 right-0 bg-white/80 px-2 py-1 rounded text-xs text-gray-500">
                       {charCount.content}/{MAX_LENGTHS.content}

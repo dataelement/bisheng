@@ -8,7 +8,6 @@ import { Button } from '../bs-ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
 import { Check, Minus } from "lucide-react";
 import { LoadIcon } from '../bs-icons/loading';
-
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
 const ToolSelector = ({
@@ -388,24 +387,36 @@ useEffect(() => {
                         state={getGroupState(tool)}
                         onChange={(checked) => toggleGroup(tool, checked)}
                       />
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="truncate max-w-[180px] py-2">
-                              {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
-                                part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
-                                  <span key={i} className="bg-yellow-200">{part}</span>
-                                ) : (
-                                  <span key={i}>{part}</span>
-                                )
-                              ))}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className='max-w-[240px]'>{tool.name}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                     <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex flex-col min-w-0">
+            <p className="truncate max-w-[180px]">
+              {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
+                  <span key={i} className="bg-yellow-200">{part}</span>
+                ) : (
+                  <span key={i}>{part}</span>
+                )
+              ))}
+            </p>
+            {/* 一级菜单描述 - 与二级菜单样式一致 */}
+            {tool.description && (
+              <p className="text-xs text-gray-500 truncate max-w-[260px]">
+                {tool.description}
+              </p>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          {tool.description && (
+            <p className='text-xs mt-1 max-w-[240px]'>
+              {tool.description}
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
                     </div>
 
                     <AccordionContent>
