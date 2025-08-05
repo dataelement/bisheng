@@ -70,3 +70,5 @@ linsight:
   retry_sleep: 5
   # 生成SOP时，prompt里放的用户上传文件信息的数量
   max_file_num: 5
+  # 生成SOP时，prompt里放的组织知识库的最大数量
+  max_knowledge_num: 20

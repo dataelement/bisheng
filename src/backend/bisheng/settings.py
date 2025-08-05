@@ -115,6 +115,7 @@ class LinsightConf(BaseModel):
     retry_num: int = Field(default=3, description='灵思任务执行过程中模型调用重试次数')
     retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')
     max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
+    max_knowledge_num: int = Field(default=20, description='生成SOP时，prompt里放的知识库信息的数量')
 
 
 class Settings(BaseModel):

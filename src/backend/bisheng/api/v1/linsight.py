@@ -3,7 +3,7 @@ import os
 from typing import List, Literal, Optional
 from urllib import parse
 
-from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sse_starlette import EventSourceResponse
@@ -12,6 +12,7 @@ from starlette.websockets import WebSocket
 
 from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
+from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
 from bisheng.api.services.linsight.sop_manage import SOPManageService
 from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
@@ -21,6 +22,7 @@ from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPMan
 from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, resp_500
 from bisheng.cache.redis import redis_client
+from bisheng.database.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
@@ -165,6 +167,7 @@ async def submit_linsight_workbench(
 # workbench 生成与重新规划灵思SOP
 @router.post("/workbench/generate-sop", summary="生成与重新规划灵思SOP", response_model=UnifiedResponseModel)
 async def generate_sop(
+        request: Request,
         linsight_session_version_id: str = Body(..., description="灵思会话版本ID"),
         previous_session_version_id: str = Body(None, description="上一个灵思会话版本ID"),
         feedback_content: str = Body(None, description="用户反馈内容"),
@@ -182,6 +185,15 @@ async def generate_sop(
 
     logger.info(f"开始生成与重新规划灵思SOP，灵思会话版本ID: {linsight_session_version_id} ")
 
+    # 获取有权限的知识库列表
+    linsight_conf = settings.get_linsight_conf()
+    res, _ = await KnowledgeService.get_knowledge(request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
+                                                  linsight_conf.max_knowledge_num)
+    knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, None,
+                                                       KnowledgeTypeEnum.PRIVATE)
+    if knowledge:
+        res.extend(knowledge)
+
     async def event_generator():
         """
         事件生成器，用于生成SSE事件
@@ -192,7 +204,8 @@ async def generate_sop(
             previous_session_version_id=previous_session_version_id,
             feedback_content=feedback_content,
             reexecute=reexecute,
-            login_user=login_user
+            login_user=login_user,
+            knowledge_list=res
         )
 
         async for event in sop_generate:

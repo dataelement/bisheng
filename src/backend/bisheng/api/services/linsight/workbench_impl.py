@@ -23,6 +23,7 @@ from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
 from bisheng.database.models.linsight_sop import LinsightSOPRecord
@@ -298,7 +299,8 @@ class LinsightWorkbenchImpl:
                            previous_session_version_id: str,
                            feedback_content: Optional[str] = None,
                            reexecute: bool = False,
-                           login_user: Optional[UserPayload] = None) -> AsyncGenerator[Dict, None]:
+                           login_user: Optional[UserPayload] = None,
+                           knowledge_list: List[KnowledgeRead] = None) -> AsyncGenerator[Dict, None]:
         """
         生成SOP内容
 
@@ -308,6 +310,7 @@ class LinsightWorkbenchImpl:
             feedback_content: 反馈内容
             reexecute: 是否重新执行
             login_user: 登录用户信息
+            knowledge_list: 知识库列表
 
         Yields:
             生成的SOP内容事件
@@ -342,7 +345,7 @@ class LinsightWorkbenchImpl:
 
             content = ""
             async for res in cls._generate_sop_content(
-                    agent, session_version, feedback_content, history_summary
+                    agent, session_version, feedback_content, history_summary, knowledge_list
             ):
                 if isinstance(res, cls.SearchSOPError):
                     yield {"event": "search_sop_error", "data": str(res.message)}
@@ -422,6 +425,23 @@ class LinsightWorkbenchImpl:
         return file_list
 
     @classmethod
+    async def _prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> List[str]:
+        res = []
+        if not knowledge_list:
+            return res
+        # 查询是否有个人知识库
+        template_str = """@{name}的储存信息:{{"知识库储存在语义检索库中的id":"{id}"}}@"""
+        for one in knowledge_list:
+            if one.type == KnowledgeTypeEnum.PRIVATE.value:
+                res.append(template_str.format(name="个人知识库", id=one.id))
+            else:
+                knowledge_str = template_str.format(name=one.name, id=one.id)
+                if one.description:
+                    knowledge_str += f"，{one.name}的描述是{one.description}"
+                res.append(knowledge_str)
+        return res
+
+    @classmethod
     async def _prepare_history_summary(cls, reexecute: bool,
                                        previous_session_version_id: str) -> List[str]:
         """准备历史摘要"""
@@ -460,9 +480,11 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _generate_sop_content(cls, agent, session_version: LinsightSessionVersion,
                                     feedback_content: Optional[str],
-                                    history_summary: List[str]) -> AsyncGenerator:
+                                    history_summary: List[str],
+                                    knowledge_list: List[KnowledgeRead] = None) -> AsyncGenerator:
         """生成SOP内容"""
         file_list = await cls._prepare_file_list(session_version)
+        knowledge_list = await cls._prepare_knowledge_list(knowledge_list)
 
         if feedback_content is None:
             # 检索SOP模板
@@ -479,7 +501,7 @@ class LinsightWorkbenchImpl:
                 for sop in sop_template if sop.page_content
             ])
 
-            async for res in agent.generate_sop(sop=sop_template, file_list=file_list):
+            async for res in agent.generate_sop(sop=sop_template, file_list=file_list, knowledge_list=knowledge_list):
                 yield res
         else:
 
@@ -491,7 +513,8 @@ class LinsightWorkbenchImpl:
                     sop=sop_template,
                     feedback=feedback_content,
                     history_summary=history_summary if history_summary else None,
-                    file_list=file_list
+                    file_list=file_list,
+                    knowledge_list=knowledge_list
             ):
                 yield res
 

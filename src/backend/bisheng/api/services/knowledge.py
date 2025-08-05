@@ -71,7 +71,7 @@ from bisheng.worker.knowledge import file_worker
 class KnowledgeService(KnowledgeUtils):
 
     @classmethod
-    def get_knowledge(
+    async def get_knowledge(
             cls,
             request: Request,
             login_user: UserPayload,
@@ -82,17 +82,15 @@ class KnowledgeService(KnowledgeUtils):
     ) -> (List[KnowledgeRead], int):
         if not login_user.is_admin():
             knowledge_id_extra = []
-            user_role = UserRoleDao.get_user_roles(login_user.user_id)
+            user_role = await UserRoleDao.aget_user_roles(login_user.user_id)
             if user_role:
                 role_ids = [role.role_id for role in user_role]
-                role_access = RoleAccessDao.get_role_access(
-                    role_ids, AccessType.KNOWLEDGE
-                )
+                role_access = await RoleAccessDao.aget_role_access(role_ids, AccessType.KNOWLEDGE)
                 if role_access:
                     knowledge_id_extra = [
                         int(access.third_id) for access in role_access
                     ]
-            res = KnowledgeDao.get_user_knowledge(
+            res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
                 knowledge_type,
@@ -100,14 +98,14 @@ class KnowledgeService(KnowledgeUtils):
                 page,
                 limit,
             )
-            total = KnowledgeDao.count_user_knowledge(
+            total = await KnowledgeDao.acount_user_knowledge(
                 login_user.user_id, knowledge_id_extra, knowledge_type, name
             )
         else:
-            res = KnowledgeDao.get_all_knowledge(
+            res = await KnowledgeDao.aget_all_knowledge(
                 name, knowledge_type, page=page, limit=limit
             )
-            total = KnowledgeDao.count_all_knowledge(name, knowledge_type)
+            total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
         result = cls.convert_knowledge_read(login_user, res)
         return result, total

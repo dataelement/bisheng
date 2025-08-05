@@ -3,7 +3,6 @@ import json
 from typing import BinaryIO
 
 import minio
-from bisheng.settings import settings
 from loguru import logger
 from minio.commonconfig import Filter, CopySource
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration

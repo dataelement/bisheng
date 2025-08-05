@@ -41,6 +41,13 @@ class LinsightAgent(BaseModel):
                 file_list_str += f"用户上传了{len(file_list)}份文件，此处只展示{self.exec_config.max_file_num}份。都储存在./目录下。"
         return file_list_str
 
+    @staticmethod
+    async def parse_knowledge_list_str(knowledge_list: list[str]) -> str:
+        knowledge_list_str = ""
+        if knowledge_list:
+            knowledge_list_str = "知识库列表:\n" + "\n".join(knowledge_list)
+        return knowledge_list_str
+
     async def _parse_sop_content(self, sop_prompt: str) -> AsyncIterator[ChatGenerationChunk]:
         # Add logic to process the SOP string
         start_time = time.time()
@@ -68,32 +75,37 @@ class LinsightAgent(BaseModel):
             record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
                               time.time() - start_time, self.exec_config.debug_id)
 
-    async def generate_sop(self, sop: str, file_list: list[str] = None) -> AsyncIterator[ChatGenerationChunk]:
+    async def generate_sop(self, sop: str, file_list: list[str] = None, knowledge_list: list[str] = None) \
+            -> AsyncIterator[ChatGenerationChunk]:
         """
         Generate a Standard Operating Procedure (SOP) based on the provided SOP string.
         :param sop: The SOP string to be processed.
         :param file_list: Optional list of files uploaded by the user.
+        :param knowledge_list: Optional list of knowledge bases to be considered.
 
         :return: Processed SOP string.
         """
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
 
         file_list_str = await self.parse_file_list_str(file_list)
+        knowledge_list_str = await self.parse_knowledge_list_str(knowledge_list)
 
-        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str)
+        sop_prompt = SopPrompt.format(query=self.query, sop=sop, tools_str=tools_str, file_list_str=file_list_str,
+                                      knowledge_list_str=knowledge_list_str)
         # Add logic to process the SOP string
         async for one in self._parse_sop_content(sop_prompt):
             yield one
 
     async def feedback_sop(self, sop: str, feedback: str, history_summary: list[str] = None,
-                           file_list: list[str] = None) -> AsyncIterator[
-        ChatGenerationChunk]:
+                           file_list: list[str] = None, knowledge_list: list[str] = None) \
+            -> AsyncIterator[ChatGenerationChunk]:
         """
         Provide feedback on the generated SOP.
         :param sop: The SOP string to be reviewed.
         :param feedback: Feedback string for the SOP.
         :param history_summary: Optional summary of previous interactions.
         :param file_list: Optional list of files uploaded by the user.
+        :param knowledge_list: Optional list of knowledge bases to be considered.
 
         :return: Processed SOP with feedback applied.
         """
@@ -107,9 +119,11 @@ class LinsightAgent(BaseModel):
             sop = f"已有SOP：{sop}"
 
         file_list_str = await self.parse_file_list_str(file_list)
+        knowledge_list_str = await self.parse_knowledge_list_str(knowledge_list)
 
         sop_prompt = FeedBackSopPrompt.format(query=self.query, sop=sop, feedback=feedback, tools_str=tools_str,
-                                              history_summary=history_summary, file_list_str=file_list_str)
+                                              history_summary=history_summary, file_list_str=file_list_str,
+                                              knowledge_list_str=knowledge_list_str)
         async for one in self._parse_sop_content(sop_prompt):
             yield one
 

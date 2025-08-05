@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 
 
@@ -66,6 +66,15 @@ class RoleAccessDao(RoleAccessBase):
                     select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
                                              RoleAccess.type == access_type.value)).all()
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
+
+    @classmethod
+    async def aget_role_access(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
+        async with async_session_getter() as session:
+            if access_type:
+                return (await session.exec(
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
+                                             RoleAccess.type == access_type.value))).all()
+            return (await session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids)))).all()
 
     @classmethod
     def get_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:

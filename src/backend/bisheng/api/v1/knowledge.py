@@ -135,18 +135,18 @@ async def copy_knowledge(*,
 
 
 @router.get('', status_code=200)
-def get_knowledge(*,
-                  request: Request,
-                  login_user: UserPayload = Depends(get_login_user),
-                  name: str = None,
-                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
-                                              alias='type'),
-                  page_size: Optional[int] = 10,
-                  page_num: Optional[int] = 1):
+async def get_knowledge(*,
+                        request: Request,
+                        login_user: UserPayload = Depends(get_login_user),
+                        name: str = None,
+                        knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
+                                                    alias='type'),
+                        page_size: Optional[int] = 10,
+                        page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
-                                                page_num, page_size)
+    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
+                                                      page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
