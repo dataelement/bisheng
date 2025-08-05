@@ -378,7 +378,7 @@ const ToolSelector = ({
                     id={`tool-${tool.id}`}
                     className={expandedItems.includes(tool.id) ? 'bg-gray-50' : ''}
                   >
-                    <div className="flex items-center gap-2 py-2">
+                    <div className="flex items-center gap-2 py-3">
                       <AccordionTrigger className="p-0 w-4 hover:no-underline">
                       </AccordionTrigger>
                       <CustomCheckbox
@@ -400,7 +400,7 @@ const ToolSelector = ({
                               </p>
                               {/* 一级菜单描述 - 与二级菜单样式一致 */}
                               {tool.description && (
-                                <p className="text-xs text-gray-500 truncate max-w-[260px]">
+                                <p className="text-xs text-gray-500 truncate mt-1 max-w-[260px]">
                                   {tool.description}
                                 </p>
                               )}
@@ -452,7 +452,7 @@ const ToolSelector = ({
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <p className="text-xs text-gray-500 truncate max-w-[260px]">{child.desc}</p>
+                                    <p className="text-xs text-gray-500 truncate max-w-[260px] mt-1">{child.desc}</p>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p className='max-w-[240px]'>{child.desc}</p>

@@ -16,12 +16,14 @@ import { t } from "i18next";
 import { sopApi} from "@/controllers/API/linsight";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import ToolSelector from "@/components/LinSight/ToolSelector";
+import ToolSelectorContainer  from "@/components/LinSight/ToolSelectorContainer";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import SopTable from "@/components/LinSight/SopTable";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { cloneDeep } from "lodash-es";
 import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 
 export interface FormErrors {
@@ -225,14 +227,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             })
             .filter(Boolean);
     }, [toolsData, activeToolTab, toolSearchTerm]);
-
-
-    const expandedItems = useMemo(() => {
-        const searchExpanded = toolSearchTerm
-            ? filteredTools.filter(tool => tool._forceExpanded).map(tool => tool.id)
-            : [];
-        return [...new Set([...searchExpanded, ...manuallyExpandedItems])];
-    }, [filteredTools, toolSearchTerm, manuallyExpandedItems]);
 
     const fetchData = async (params: {
         page: number;
@@ -598,12 +592,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             }); // 刷新列表
             resetSopForm(); // 重置表单
         } catch (error) {
-            console.error('保存SOP失败:', error);
-            toast({
-                variant: 'error',
-                description: isEditing ? '更新SOP失败' : '创建SOP失败',
-                details: error.message || '请检查数据并重试'
-            });
         }
     };
 
@@ -711,25 +699,21 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             }} error={""} />
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">灵思可选工具</p>
-                            <ToolSelector
-                                selectedTools={selectedTools}
-                                toggleTool={toggleTool}
-                                removeTool={removeTool}
-                                isToolSelected={isToolSelected}
-                                handleDragEnd={handleDragEnd}
-                                showToolSelector={showToolSelector}
-                                setShowToolSelector={setShowToolSelector}
-                                toolsData={toolsData}
-                                activeToolTab={activeToolTab}
-                                setActiveToolTab={setActiveToolTab}
-                                toolSearchTerm={toolSearchTerm}
-                                setToolSearchTerm={setToolSearchTerm}
-                                loading={loading}
-                                filteredTools={filteredTools}
-                                expandedItems={expandedItems}
-                                setManuallyExpandedItems={setManuallyExpandedItems}
-                                toggleGroup={toggleGroup}
-                            />
+                         <ToolSelectorContainer
+            toolsData={toolsData}
+            selectedTools={selectedTools}
+            toggleTool={toggleTool}
+            removeTool={removeTool}
+            isToolSelected={isToolSelected}
+            handleDragEnd={handleDragEnd}
+            toggleGroup={toggleGroup}
+             activeToolTab={activeToolTab}
+  setActiveToolTab={setActiveToolTab}
+  showToolSelector={showToolSelector}
+  setShowToolSelector={setShowToolSelector}
+   toolSearchTerm={toolSearchTerm}
+  setToolSearchTerm={setToolSearchTerm}
+          />
                         </div>
 
                         <div className="mb-6">

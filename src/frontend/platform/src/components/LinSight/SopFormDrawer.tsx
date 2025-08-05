@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { LoadIcon } from "../bs-icons/loading";
 import { Input, Textarea } from "../bs-ui/input";
 import SopMarkdown from "./SopMarkdown";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 
 const SopFormDrawer = ({
   isDrawerOpen,
@@ -33,7 +34,7 @@ const SopFormDrawer = ({
     description: 1000, // 描述不超过1000字
     content: 50000   // 详细内容不超过100000字
   };
-
+  const { toast } = useToast()
   const validateForm = () => {
     const newErrors = {
       name: '',
@@ -87,9 +88,14 @@ const handleInputChange = (field, value) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
-
+  toast({
+                    variant: 'error',
+                    title: 'SOP 导入失败',
+                    description: `${sopForm.name}内容超长`
+                })
     if (validateForm()) {
       setIsSubmitting(true);
+      
       try {
         await handleSaveSOP();
       } catch (error) {
