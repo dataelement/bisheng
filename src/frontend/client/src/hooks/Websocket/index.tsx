@@ -296,6 +296,7 @@ export const useLinsightWebSocket = (versionId) => {
             userStopLinsightEvent(versionId)
             updateLinsight(versionId, (prev) => ({
                 ...prev,
+                status: SopStatus.Stoped,
                 tasks: prev.tasks.map(task => ({
                     ...task,
                     status: task.status === "in_progress" ? "terminated" : task.status,

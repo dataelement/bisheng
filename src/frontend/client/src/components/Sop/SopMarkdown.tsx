@@ -534,6 +534,12 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
         if (Object.prototype.hasOwnProperty.call(nameToValueMap, id)) {
             return `{{@${id}@}}`;
         }
+        // 文件不校验
+        const pattern = /([^@{}"\.]+?\.[^@{}"\s]+)的文件储存信息：\{"[^"]+":"[^"]*","[^"]+":"[^"]*"\}/g
+        const _match = pattern.exec(id);
+        if (_match?.[1]) {
+            return `{{@${_match[1]}@}}`;
+        }
         console.warn('转换ui时未找到对应的ID  :>> ', valueToNameMap, id);
         return `{{#${id}#}}`; // 未找到时标记红色
     });
@@ -546,7 +552,7 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
  * @returns {string} - 替换后的字符串
  */
 function replaceBracesToMarkers(inputStr, nameToValueMap) {
-    const regex = /\{\{[@#]([^{}]+)[@#]\}\}/g;
+    const regex = /\{\{[@#](.*?)[@#]\}\}/g;
     return inputStr.replace(regex, (match, value) => {
         // 检查映射中是否存在该值
         if (Object.prototype.hasOwnProperty.call(nameToValueMap, value)) {

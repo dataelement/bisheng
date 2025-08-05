@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check } from 'lucide-react';
+import { Check, CheckCircle, CheckIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useGetBsConfig, useGetUserLinsightCountQuery } from '~/data-provider';
 import { Button, Checkbox, Switch, Textarea } from '../ui';
@@ -107,20 +107,7 @@ export const TaskControls = ({
                             </div>
                         )}
                         {isCompleted && !feedbackProvided && (
-                            <div className='relative'>
-                                <div className={`absolute bottom-14 p-6 pt-3 pb-14 w-full border rounded-3xl bg-gradient-to-r from-[#C0FDD4] to-[#DFFFED]`}>
-                                    <div className='flex items-center text-sm'>
-                                        <Check size={16} className='bg-emerald-500 p-0.5 rounded-full text-white mr-2' />
-                                        <span>任务已完成</span>
-                                    </div>
-                                </div>
-                                <div className='linsight-card w-full relative'>
-                                    <div className='flex items-center text-sm'>
-                                        <span>请评价任务，帮助灵思下次做得更好。</span>
-                                    </div>
-                                    <FeedbackComponent onFeedback={feedback} />
-                                </div>
-                            </div>
+                            <FeedbackComponent stop={stoped} onFeedback={feedback} />
                         )}
                     </div>
                 </motion.div>
@@ -130,79 +117,99 @@ export const TaskControls = ({
 };
 
 
-const FeedbackComponent = ({ onFeedback }: { onFeedback: TaskControlsProps['onFeedback'] }) => {
-    const [rating, setRating] = useState(0);
-    const [shouldRestart, setShouldRestart] = useState(false);
-    const [comment, setComment] = useState('');
-    const { data: bsConfig } = useGetBsConfig()
-    const { data: count, refetch } = useGetUserLinsightCountQuery()
-    const [loading, setLoading] = useState(false);
-    useEffect(() => {
-        refetch()
+interface FeedbackComponentProps {
+    stop: boolean
+    onFeedback: (rating: number, comment: string, shouldRestart: boolean, cancelled?: boolean) => void
+}
+
+export default function FeedbackComponent({ stop, onFeedback }: FeedbackComponentProps) {
+    const [rating, setRating] = useState(0)
+    const [hoveredRating, setHoveredRating] = useState(0)
+    const [comment, setComment] = useState("")
+    const [loading, setLoading] = useState(false)
+
+    const handleStarClick = useCallback((star: number) => {
+        setRating(star)
+        // Record rating to backend here
+        // You can call your API to save the rating to SOP execution record
     }, [])
 
-    const handleSubmit = useCallback(() => {
-        setLoading(true);
-        onFeedback(rating, comment, shouldRestart);
-        // 临时延迟2秒
-        setTimeout(() => {
-            setLoading(false);
-        }, 2000);
-    }, [rating, comment, shouldRestart, onFeedback]);
+    const handleStarHover = useCallback((star: number) => {
+        setHoveredRating(star)
+    }, [])
 
-    const handleCancel = useCallback(() => {
-        onFeedback(rating, comment, shouldRestart, true);
-    }, [rating, comment, shouldRestart, onFeedback]);
+    const handleStarLeave = useCallback(() => {
+        setHoveredRating(0)
+    }, [])
+
+    const handleRestart = useCallback(() => {
+        if (!comment.trim()) return
+
+        setLoading(true)
+        onFeedback(rating, comment, true)
+
+        // Simulate API call
+        setTimeout(() => {
+            setLoading(false)
+        }, 2000)
+    }, [rating, comment, onFeedback])
+
+    const getStarColor = (starIndex: number) => {
+        const activeRating = hoveredRating || rating
+        return starIndex <= activeRating ? "text-yellow-400" : "text-gray-300"
+    }
 
     return (
-        <div className="relative">
-            <div className='flex gap-2 mt-4'>
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <div
-                        key={star}
-                        onClick={() => {
-                            setRating(star);
-                            // if (star > 3) onFeedback(star, '', false);
-                        }}
-                    >
-                        <StarIcon
-                            className={`cursor-pointer ${star <= rating ? 'text-yellow-400' : 'text-gray-400'}`}
-                        />
+        <div className="bg-gray-50 rounded-3xl border border-gray-100">
+            {/* Task Completed Header */}
+            <div className="flex items-center gap-2 p-4">
+                {stop ?
+                    <div className="w-5 h-5 bg-primary rounded-full text-white font-bold flex items-center justify-center">i</div>
+                    : <div className="w-5 h-5 bg-[#05B353] rounded-full p-1" >
+                        <CheckIcon size={14} className='text-white' />
                     </div>
-                ))}
-            </div>
+                }
+                <span className="text-sm font-medium text-gray-700">任务已{stop ? '终止' : '完成'}</span>
 
-
-            <div className="mt-4 space-y-4">
-                <Textarea
-                    placeholder="请告诉我们如何改进，您的反馈将用于下次任务优化"
-                    value={comment}
-                    className='resize-y min-h-16 max-h-40'
-                    onChange={(e) => setComment(e.target.value)}
-                />
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center">
-                        <Checkbox
-                            checked={shouldRestart}
-                            disabled={bsConfig?.linsight_invitation_code && count === 0}
-                            onCheckedChange={setShouldRestart}
-                        />
-                        <label className="text-sm pl-2">基于反馈重新运行</label>
-                        {bsConfig?.linsight_invitation_code && <label className='text-sm pl-2'>（剩余任务次数 {count} 次）</label>}
-                    </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={handleCancel}>
-                            取消
-                        </Button>
-                        <Button
-                            disabled={loading || !comment.trim()}
-                            onClick={handleSubmit}
-                        >
-                            提交反馈
-                        </Button>
+                {/* Star Rating */}
+                <div className="flex items-center gap-1 ml-auto">
+                    <span className="text-xs text-gray-500 mr-2 pt-0.5">评价任务帮助灵思下次做得更好：</span>
+                    <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                            <div
+                                key={star}
+                                onClick={() => handleStarClick(star)}
+                                onMouseEnter={() => handleStarHover(star)}
+                                onMouseLeave={handleStarLeave}
+                            >
+                                <StarIcon
+                                    className={`size-4 cursor-pointer ${getStarColor(star)}`}
+                                />
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
+
+            {/* Feedback Input and Restart Button */}
+            <div className="flex gap-3 bg-white rounded-3xl border border-gray-100 relative -bottom-1 p-4">
+                <div className="flex-1">
+                    <Textarea
+                        placeholder="对结果不满意？您还可以输入意见重新发起任务。"
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        className="resize-none min-h-[40px] text-sm border-none shadow-none focus:ring-0 focus:outline-none"
+                        rows={1}
+                    />
+                </div>
+                <Button
+                    onClick={handleRestart}
+                    disabled={!comment.trim() || loading}
+                    className="px-6  self-end"
+                >
+                    {loading ? "运行中..." : "重新运行"}
+                </Button>
+            </div>
         </div>
-    );
-};
+    )
+}

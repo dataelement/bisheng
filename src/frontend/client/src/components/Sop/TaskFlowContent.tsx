@@ -107,6 +107,7 @@ const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null 
         const status = (task.children?.some(child => child.status === 'user_input') && 'user_input') || task.status;
         switch (status) {
             case "failed":
+            case "user_input":
             case "terminated":
                 return <Pause size={18} className='min-w-4 p-0.5 rounded-full mr-2' />;
             // case "user_input":
