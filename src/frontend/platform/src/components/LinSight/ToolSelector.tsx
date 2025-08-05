@@ -36,17 +36,17 @@ const ToolSelector = ({
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const leftPanelRef = useRef<HTMLDivElement>(null);
   const rightContentRef = useRef<HTMLDivElement>(null);
- const MIN_HEIGHT = 360; // 设置最小高度
-   const syncPanelHeights = useCallback(() => {
+  const MIN_HEIGHT = 360; // 设置最小高度
+  const syncPanelHeights = useCallback(() => {
     if (leftPanelRef.current && rightContentRef.current) {
       const leftHeight = Math.max(leftPanelRef.current.scrollHeight, MIN_HEIGHT);
       const maxAllowedHeight = window.innerHeight * 0.8;
       const calculatedHeight = Math.min(leftHeight, maxAllowedHeight);
-      
+
       // 应用高度到右侧容器
       rightContentRef.current.style.minHeight = `${MIN_HEIGHT}px`;
       rightContentRef.current.style.height = `${calculatedHeight}px`;
-      
+
       // 设置左侧面板高度
       leftPanelRef.current.style.minHeight = `${MIN_HEIGHT}px`;
       leftPanelRef.current.style.height = `${calculatedHeight}px`
@@ -74,90 +74,90 @@ const ToolSelector = ({
     syncPanelHeights();
   }, [syncPanelHeights, selectedTools, filteredTools, expandedItems, showToolSelector]);
 
-const handleSelectedToolClick = (tool) => {
-  setShowToolSelector(true);
-  
-  let toolCategory = 'builtin';
-  if (tool.is_preset === 0) {
-    toolCategory = 'api';
-  } else if (tool.is_preset === 2) {
-    toolCategory = 'mcp';
-  }
+  const handleSelectedToolClick = (tool) => {
+    setShowToolSelector(true);
 
-  setTargetCategory(toolCategory);
-  setScrollToParentId(tool.id);
-
-  // 使用setTimeout确保DOM更新完成后再执行滚动
-  setTimeout(() => {
-    if (activeToolTab !== toolCategory) {
-      setActiveToolTab(toolCategory);
-    } else {
-      if (!expandedItems.includes(tool.id)) {
-        setManuallyExpandedItems(prev => [...prev, tool.id]);
-        // 等待展开动画完成
-        setTimeout(() => scrollToTool(tool.id), 300);
-      } else {
-        scrollToTool(tool.id);
-      }
+    let toolCategory = 'builtin';
+    if (tool.is_preset === 0) {
+      toolCategory = 'api';
+    } else if (tool.is_preset === 2) {
+      toolCategory = 'mcp';
     }
-  }, 50);
-};
-const scrollToTool = useCallback((toolId: string) => {
-  if (scrollTimeoutRef.current) {
-    clearTimeout(scrollTimeoutRef.current);
-  }
 
-  scrollAttempts.current = 0;
+    setTargetCategory(toolCategory);
+    setScrollToParentId(tool.id);
 
-  const tryScroll = () => {
-    scrollAttempts.current++;
-    const parentElement = document.getElementById(`tool-${toolId}`);
-    const childElement = document.getElementById(`tool-child-${toolId}`);
-    const container = rightContentRef.current;
+    // 使用setTimeout确保DOM更新完成后再执行滚动
+    setTimeout(() => {
+      if (activeToolTab !== toolCategory) {
+        setActiveToolTab(toolCategory);
+      } else {
+        if (!expandedItems.includes(tool.id)) {
+          setManuallyExpandedItems(prev => [...prev, tool.id]);
+          // 等待展开动画完成
+          setTimeout(() => scrollToTool(tool.id), 300);
+        } else {
+          scrollToTool(tool.id);
+        }
+      }
+    }, 50);
+  };
+  const scrollToTool = useCallback((toolId: string) => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
 
-    if (!container) {
+    scrollAttempts.current = 0;
+
+    const tryScroll = () => {
+      scrollAttempts.current++;
+      const parentElement = document.getElementById(`tool-${toolId}`);
+      const childElement = document.getElementById(`tool-child-${toolId}`);
+      const container = rightContentRef.current;
+
+      if (!container) {
+        if (scrollAttempts.current < 10) {
+          scrollTimeoutRef.current = setTimeout(tryScroll, 200);
+        }
+        return;
+      }
+
+      if (parentElement) {
+        const parentRect = parentElement.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        // 判断元素是否完全可见
+        const isFullyVisible = parentRect.top >= containerRect.top &&
+          parentRect.bottom <= containerRect.bottom;
+
+        if (!isFullyVisible) {
+          // 对于长菜单项的特殊处理
+          if (parentElement.offsetHeight > container.offsetHeight * 0.8) {
+            // 如果菜单项高度超过容器高度的80%，滚动到顶部
+            parentElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start'
+            });
+          } else {
+            // 正常大小的菜单项使用居中显示
+            parentElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          }
+        }
+
+        return;
+      }
+
       if (scrollAttempts.current < 10) {
         scrollTimeoutRef.current = setTimeout(tryScroll, 200);
       }
-      return;
-    }
+    };
 
-    if (parentElement) {
-      const parentRect = parentElement.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      
-      // 判断元素是否完全可见
-      const isFullyVisible = parentRect.top >= containerRect.top && 
-                           parentRect.bottom <= containerRect.bottom;
-
-      if (!isFullyVisible) {
-        // 对于长菜单项的特殊处理
-        if (parentElement.offsetHeight > container.offsetHeight * 0.8) {
-          // 如果菜单项高度超过容器高度的80%，滚动到顶部
-          parentElement.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
-          });
-        } else {
-          // 正常大小的菜单项使用居中显示
-          parentElement.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'center' 
-          });
-        }
-      }
-      
-      return;
-    }
-
-    if (scrollAttempts.current < 10) {
-      scrollTimeoutRef.current = setTimeout(tryScroll, 200);
-    }
-  };
-
-  tryScroll();
-}, []);
-useEffect(() => {
+    tryScroll();
+  }, []);
+  useEffect(() => {
     const resizeObserver = new ResizeObserver(() => {
       syncPanelHeights();
     });
@@ -170,20 +170,20 @@ useEffect(() => {
       resizeObserver.disconnect();
     };
   }, [syncPanelHeights]);
-useEffect(() => {
-  if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
-    if (!expandedItems.includes(scrollToParentId)) {
-      setManuallyExpandedItems(prev => [...prev, scrollToParentId]);
-      setTimeout(() => {
+  useEffect(() => {
+    if (targetCategory && activeToolTab === targetCategory && scrollToParentId) {
+      if (!expandedItems.includes(scrollToParentId)) {
+        setManuallyExpandedItems(prev => [...prev, scrollToParentId]);
+        setTimeout(() => {
+          scrollToTool(scrollToParentId);
+          setTargetCategory(null);
+        }, 300);
+      } else {
         scrollToTool(scrollToParentId);
         setTargetCategory(null);
-      }, 300);
-    } else {
-      scrollToTool(scrollToParentId);
-      setTargetCategory(null);
+      }
     }
-  }
-}, [activeToolTab, targetCategory, scrollToParentId, expandedItems]);
+  }, [activeToolTab, targetCategory, scrollToParentId, expandedItems]);
 
   useEffect(() => {
     if (isExpanding && scrollToParentId) {
@@ -225,88 +225,87 @@ useEffect(() => {
   return (
     <div className="flex gap-4">
       {/* 已选工具面板 */}
-<div
-  ref={leftPanelRef}
-  className="w-1/3 flex border rounded-lg bg-white"
->
-  <div className="flex-1 p-4">
-    <h3 className="text-sm font-medium">已选工具</h3>
+      <div
+        ref={leftPanelRef}
+        className="w-1/3 flex border rounded-lg bg-white"
+      >
+        <div className="flex-1 p-4">
+          <h3 className="text-sm font-medium">已选工具</h3>
 
-    {selectedTools.length === 0 ? (
-      <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-6 px-4 text-center">
-        <div className="mb-2">
-          <Plus className="w-6 h-6 text-gray-400" />
-        </div>
-        <div className="text-sm font-medium text-gray-500 mb-1">
-          暂未选择任何工具
-        </div>
-        <div className="text-xs text-gray-400">
-          请在右侧全量工具中挑选工具
+          {selectedTools.length === 0 ? (
+            <div className="mt-4 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50 flex flex-col items-center justify-center py-6 px-4 text-center">
+              <div className="mb-2">
+                <Plus className="w-6 h-6 text-gray-400" />
+              </div>
+              <div className="text-sm font-medium text-gray-500 mb-1">
+                暂未选择任何工具
+              </div>
+              <div className="text-xs text-gray-400">
+                请在右侧全量工具中挑选工具
+              </div>
+            </div>
+          ) : (
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="selectedTools">
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="space-y-2 flex-1 overflow-y-auto"
+                    style={{ maxHeight: '300px' }}
+                  >
+                    {selectedTools.map((tool, index) => (
+                      <Draggable key={tool.id.toString()} draggableId={tool.id.toString()} index={index}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            className={`flex items-center justify-between p-3 py-2 rounded-lg ${snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
+                              }`}
+                            onClick={() => handleSelectedToolClick(tool)}
+                          >
+                            <div className="flex items-center">
+                              <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="truncate max-w-[120px]">{tool.name}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{tool.name}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeTool(index);
+                              }}
+                              className="text-red-500 hover:text-red-700 ml-2"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          )}
         </div>
       </div>
-    ) : (
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="selectedTools">
-          {(provided) => (
-            <div
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-              className="space-y-2 flex-1 overflow-y-auto" 
-              style={{ maxHeight: '300px' }}
-            >
-              {selectedTools.map((tool, index) => (
-                <Draggable key={tool.id.toString()} draggableId={tool.id.toString()} index={index}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      className={`flex items-center justify-between p-3 py-2 rounded-lg ${
-                        snapshot.isDragging ? 'bg-blue-50 shadow-md' : 'bg-white border'
-                      }`}
-                      onClick={() => handleSelectedToolClick(tool)}
-                    >
-                      <div className="flex items-center">
-                        <AlignJustify className="w-4 h-4 mr-2 text-gray-400" />
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="truncate max-w-[120px]">{tool.name}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{tool.name}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeTool(index);
-                        }}
-                        className="text-red-500 hover:text-red-700 ml-2"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
-    )}
-  </div>
-</div>
 
       {/* 工具选择器 */}
       {(
         <div
           className="w-2/3 flex border rounded-lg bg-white overflow-hidden transition-all duration-300 ease-in-out"
           key={activeToolTab}
-           ref={rightContentRef}
+          ref={rightContentRef}
         >
           {/* 左侧分类栏 - 固定宽度 */}
           <div
@@ -351,10 +350,9 @@ useEffect(() => {
           </div>
 
           <div
-      
+
             className="right-content w-2/3 flex flex-col h-full overflow-y-auto"
             style={{
- 
               transition: 'max-height 0.3s ease-out',
             }}
           >
@@ -380,43 +378,43 @@ useEffect(() => {
                     id={`tool-${tool.id}`}
                     className={expandedItems.includes(tool.id) ? 'bg-gray-50' : ''}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 py-2">
                       <AccordionTrigger className="p-0 w-4 hover:no-underline">
                       </AccordionTrigger>
                       <CustomCheckbox
                         state={getGroupState(tool)}
                         onChange={(checked) => toggleGroup(tool, checked)}
                       />
-                     <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex flex-col min-w-0">
-            <p className="truncate max-w-[180px]">
-              {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
-                part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
-                  <span key={i} className="bg-yellow-200">{part}</span>
-                ) : (
-                  <span key={i}>{part}</span>
-                )
-              ))}
-            </p>
-            {/* 一级菜单描述 - 与二级菜单样式一致 */}
-            {tool.description && (
-              <p className="text-xs text-gray-500 truncate max-w-[260px]">
-                {tool.description}
-              </p>
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          {tool.description && (
-            <p className='text-xs mt-1 max-w-[240px]'>
-              {tool.description}
-            </p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex flex-col min-w-0">
+                              <p className="truncate max-w-[180px]">
+                                {tool.name.split(new RegExp(`(${toolSearchTerm})`, 'gi')).map((part, i) => (
+                                  part.toLowerCase() === toolSearchTerm.toLowerCase() ? (
+                                    <span key={i} className="bg-yellow-200">{part}</span>
+                                  ) : (
+                                    <span key={i}>{part}</span>
+                                  )
+                                ))}
+                              </p>
+                              {/* 一级菜单描述 - 与二级菜单样式一致 */}
+                              {tool.description && (
+                                <p className="text-xs text-gray-500 truncate max-w-[260px]">
+                                  {tool.description}
+                                </p>
+                              )}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {tool.description && (
+                              <p className='text-xs mt-1 max-w-[240px]'>
+                                {tool.description}
+                              </p>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
 
                     <AccordionContent>

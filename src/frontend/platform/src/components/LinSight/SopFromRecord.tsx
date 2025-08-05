@@ -1,14 +1,15 @@
-import * as React from 'react';
-import { useState, useEffect, useMemo } from 'react';
-import { Search, Check, Star, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/bs-ui/button';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/bs-ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/bs-ui/sheet';
-import AutoPagination from '../bs-ui/pagination/autoPagination';
-import { LoadIcon } from '../bs-icons/loading';
+import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { sopApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
+import { Check, ChevronDown, ChevronUp, Search, Star } from 'lucide-react';
+import * as React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { LoadIcon } from '../bs-icons/loading';
+import AutoPagination from '../bs-ui/pagination/autoPagination';
+import SopMarkdown from './SopMarkdown';
 
 interface SopRecord {
   id: number;
@@ -23,7 +24,7 @@ interface SopRecord {
   user_name: string;
 }
 
-export default function ImportFromRecordsDialog({ open, onOpenChange }) {
+export default function ImportFromRecordsDialog({ open, tools, onOpenChange }) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [records, setRecords] = useState<SopRecord[]>([]);
@@ -57,7 +58,7 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
         setRecords(res);
         setTotal(res.length);
         setCurrentRecord(res[0] || null);
-      } 
+      }
       else if (res && Array.isArray(res.list)) {
         setRecords(res.list);
         setTotal(res.total || res.list.length);
@@ -68,8 +69,8 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
       }
     } catch (error) {
       console.error('获取数据失败:', error);
-      toast({ 
-        variant: 'error', 
+      toast({
+        variant: 'error',
         description: error.message || '获取数据失败，请检查API响应结构'
       });
       setRecords([]);
@@ -79,7 +80,6 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
       setLoading(false);
     }
   };
-
   // 初始化数据
   useEffect(() => {
     if (open) {
@@ -106,9 +106,9 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
     return [...records].sort((a, b) => {
       const aValue = a[sortConfig.key as keyof SopRecord];
       const bValue = b[sortConfig.key as keyof SopRecord];
-      
+
       if (aValue === null || bValue === null) return 0;
-      
+
       if (aValue < bValue) {
         return sortConfig.direction === 'asc' ? -1 : 1;
       }
@@ -136,7 +136,7 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
 
     const newPage = parseInt(pageInputValue);
     const maxPage = Math.max(1, Math.ceil(total / pageSize));
-    
+
     if (newPage >= 1 && newPage <= maxPage) {
       setPage(newPage);
     } else {
@@ -156,51 +156,55 @@ export default function ImportFromRecordsDialog({ open, onOpenChange }) {
 
   const handleToggleSelect = (record: SopRecord, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedRecordIds(prev => 
+    setSelectedRecordIds(prev =>
       prev.includes(record.id)
         ? prev.filter(id => id !== record.id)
         : [...prev, record.id]
     );
     setCurrentRecord(record);
   };
-
   // 全选/取消全选当前页
   const handleToggleSelectAll = () => {
     const currentPageIds = records.map(r => r.id);
     const allSelected = currentPageIds.every(id => selectedRecordIds.includes(id));
-    
-    setSelectedRecordIds(prev => 
+
+    setSelectedRecordIds(prev =>
       allSelected
         ? prev.filter(id => !currentPageIds.includes(id))
         : [...new Set([...prev, ...currentPageIds])]
     );
   };
 
-const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveNew = false) => {
-  setLoading(true);
-  try {
-    const res = await captureAndAlertRequestErrorHoc(
-      sopApi.SyncSopRecord({
-        record_ids: recordsToImport.map(r => r.id),
-        override: overwrite,
-        save_new: saveNew
-      })
-    );
+  const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveNew = false) => {
+    setLoading(true);
+    try {
+      const res = await captureAndAlertRequestErrorHoc(
+        sopApi.SyncSopRecord({
+          record_ids: recordsToImport.map(r => r.id),
+          override: overwrite,
+          save_new: saveNew
+        })
+      );
 
-    if (res === false) return;
+      if (res === false) return;
 
-    if (res?.repeat_name) {
-      setDuplicateNames(res.repeat_name);
-      setDuplicateDialogOpen(true);
-      return;
+      if (res?.repeat_name) {
+        setDuplicateNames(res.repeat_name);
+        setDuplicateDialogOpen(true);
+        return;
+      }
+
+      toast({ variant: 'success', description: '导入成功' });
+      onOpenChange(false);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    toast({ variant: 'success', description: '导入成功' });
-    onOpenChange(false);
-  } finally {
-    setLoading(false);
-  }
-};
+  const markdownRef = useRef(null);
+  useEffect(() => {
+    markdownRef.current?.setValue(currentRecord?.content || '');
+  }, [currentRecord])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -241,19 +245,18 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <button
                               type="button"
-                              className={`h-4 w-4 rounded border flex items-center justify-center ${
-                                records.length > 0 && 
-                                records.every(r => selectedRecordIds.includes(r.id)) 
-                                  ? 'bg-blue-600 border-blue-600'
-                                  : 'bg-white border-gray-300'
-                              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              className={`h-4 w-4 rounded border flex items-center justify-center ${records.length > 0 &&
+                                records.every(r => selectedRecordIds.includes(r.id))
+                                ? 'bg-blue-600 border-blue-600'
+                                : 'bg-white border-gray-300'
+                                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                               onClick={handleToggleSelectAll}
                               disabled={loading}
                             >
-                              {records.length > 0 && 
-                              records.every(r => selectedRecordIds.includes(r.id)) && (
-                                <Check className="w-3 h-3 text-white" />
-                              )}
+                              {records.length > 0 &&
+                                records.every(r => selectedRecordIds.includes(r.id)) && (
+                                  <Check className="w-3 h-3 text-white" />
+                                )}
                             </button>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -288,7 +291,7 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {sortedRecords.map((record) => (
-                          <tr 
+                          <tr
                             key={record.id}
                             className={`cursor-pointer ${currentRecord?.id === record.id ? 'bg-blue-50' : ''}`}
                             onClick={() => handleSelectRecord(record)}
@@ -296,11 +299,10 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
                             <td className="px-6 py-4 whitespace-nowrap">
                               <button
                                 type="button"
-                                className={`h-4 w-4 rounded border flex items-center justify-center ${
-                                  selectedRecordIds.includes(record.id)
-                                    ? 'bg-blue-600 border-blue-600'
-                                    : 'bg-white border-gray-300'
-                                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`h-4 w-4 rounded border flex items-center justify-center ${selectedRecordIds.includes(record.id)
+                                  ? 'bg-blue-600 border-blue-600'
+                                  : 'bg-white border-gray-300'
+                                  } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 onClick={(e) => !loading && handleToggleSelect(record, e)}
                                 disabled={loading}
                               >
@@ -372,9 +374,9 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
               )}
             </div>
 
-            <div className="flex items-center justify-start mt-4"> 
+            <div className="flex items-center justify-start mt-4">
               <span>已选择 {selectedRecordIds.length} 项</span>
-              <Button 
+              <Button
                 onClick={() => {
                   const selected = records.filter(r => selectedRecordIds.includes(r.id));
                   importSops(selected, false, false);
@@ -392,26 +394,36 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
             {currentRecord ? (
               <>
                 <div className="mb-4">
-                  <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3> 
-                  <p className="text-muted-foreground truncate">{currentRecord.description}</p> 
+                  <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
+                  <p className="text-muted-foreground truncate">{currentRecord.description}</p>
                 </div>
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md p-4">
-                  <pre className="whitespace-pre-wrap font-sans text-sm">
-                    {currentRecord.content}
-                  </pre>
+                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md">
+                  <SopMarkdown
+                    ref={markdownRef}
+                    defaultValue={currentRecord?.content}
+                    tools={tools}
+                    height='h-[calc(100vh-170px)]'
+                    className="h-full"
+                    disabled
+                  />
                 </div>
                 <div className="flex justify-start gap-2 pt-4">
-      // 导入按钮调用
-<Button
-  onClick={async () => {
-    if (!currentRecord) return;
-    await importSops([currentRecord]); 
-  }}
-  disabled={!currentRecord || loading}
->
-  {loading ? <LoadIcon className="animate-spin mr-2" /> : null}
-  {loading ? '导入中...' : '导入当前SOP'}
-</Button>
+                  <Button
+                    onClick={() => {
+                      if (!currentRecord) return;
+
+                      // 直接尝试导入当前SOP
+                      importSops([currentRecord]).then((hasDuplicate) => {
+                        if (hasDuplicate === false) {
+                          // 如果有重复，打开重复对话框
+                          setDuplicateDialogOpen(true);
+                        }
+                      });
+                    }}
+                    disabled={!currentRecord || loading}
+                  >
+                    {loading ? '导入中...' : '导入当前SOP'}
+                  </Button>
                 </div>
               </>
             ) : (
@@ -444,13 +456,13 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
             )}
           </div>
           <div className="flex justify-end gap-2 pt-4">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
-                const recordsToUse = selectedRecordIds.length > 0 
+                const recordsToUse = selectedRecordIds.length > 0
                   ? records.filter(r => selectedRecordIds.includes(r.id))
-                  : currentRecord 
-                    ? [currentRecord] 
+                  : currentRecord
+                    ? [currentRecord]
                     : [];
                 importSops(recordsToUse, false, true);
                 setDuplicateDialogOpen(false);
@@ -458,12 +470,12 @@ const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveN
             >
               不覆盖，另存为新SOP
             </Button>
-            <Button 
+            <Button
               onClick={() => {
-                const recordsToUse = selectedRecordIds.length > 0 
+                const recordsToUse = selectedRecordIds.length > 0
                   ? records.filter(r => selectedRecordIds.includes(r.id))
-                  : currentRecord 
-                    ? [currentRecord] 
+                  : currentRecord
+                    ? [currentRecord]
                     : [];
                 importSops(recordsToUse, true, false);
                 setDuplicateDialogOpen(false);

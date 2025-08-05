@@ -5,9 +5,97 @@ import Vditor from "vditor";
 import "vditor/dist/index.css";
 import SopToolsDown from "./SopToolsDown";
 
+
+// 错误工具toolip提示
+const ToolErrorTip = () => {
+    const [tooltipState, setTooltipState] = useState({
+        show: false,
+        message: '错误变量',
+        position: { left: 0, top: 0 }
+    });
+    const currentElementRef = useRef<HTMLElement | null>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+
+    // 处理鼠标移入事件
+    const handleMouseOver = (e: MouseEvent) => {
+        const target = (e.target as HTMLElement).closest?.('.linsi-error');
+        if (!(target instanceof HTMLElement)) return;
+
+        currentElementRef.current = target;
+        const rect = target.getBoundingClientRect();
+        setTooltipState({
+            show: true,
+            message: '⚠️ 工具或资源不存在，请重新选择',
+            position: {
+                left: rect.left + rect.width / 2,
+                top: rect.top - 4
+            }
+        });
+    };
+
+    // 处理鼠标移出事件
+    const handleMouseOut = (e: MouseEvent) => {
+        const relatedTarget = e.relatedTarget as HTMLElement;
+        if (
+            !relatedTarget ||
+            !currentElementRef.current?.contains(relatedTarget) &&
+            !tooltipRef.current?.contains(relatedTarget)
+        ) {
+            setTooltipState(prev => ({ ...prev, show: false }));
+        }
+    };
+
+    // 处理滚动事件
+    const handleScroll = () => {
+        if (currentElementRef.current && tooltipState.show) {
+            const rect = currentElementRef.current.getBoundingClientRect();
+            setTooltipState(prev => ({
+                ...prev,
+                position: {
+                    left: rect.left + rect.width / 2,
+                    top: rect.top - 4
+                }
+            }));
+        }
+    };
+
+    useEffect(() => {
+        const container = document.getElementById('sop-vditor');
+        if (!container) return
+
+        container.addEventListener('mouseover', handleMouseOver as EventListener);
+        container.addEventListener('mouseout', handleMouseOut as EventListener);
+        window.addEventListener('scroll', handleScroll, true);
+
+        return () => {
+            container.removeEventListener('mouseover', handleMouseOver as EventListener);
+            container.removeEventListener('mouseout', handleMouseOut as EventListener);
+            window.removeEventListener('scroll', handleScroll, true);
+        };
+    }, []);
+
+    return (
+        <div
+            ref={tooltipRef}
+            className={`pointer-events-none fixed transition-opacity ${tooltipState.show ? 'opacity-100' : 'opacity-0'
+                }`}
+            style={{
+                left: tooltipState.position.left,
+                top: tooltipState.position.top,
+                transform: 'translateX(-50%) translateY(-100%)'
+            }}
+        >
+            <div className="bg-red-100 text-red-500 text-xs px-2 py-1 rounded shadow-lg">
+                {tooltipState.message}
+                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-red-100" />
+            </div>
+        </div>
+    );
+};
 interface MarkdownProps {
     defaultValue: string,
     onChange?: any;
+    disabled?: boolean;
 }
 
 interface MarkdownRef {
@@ -15,7 +103,7 @@ interface MarkdownRef {
 }
 
 const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
-    const { tools, defaultValue, onChange } = props;
+    const { value, tools, height = 'h-[calc(100vh-420px)]', defaultValue, disabled = false, onChange } = props;
 
     const veditorRef = useRef<any>(null);
     const inserRef = useRef<any>(null);
@@ -24,7 +112,6 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     useAutoHeight(boxRef);
 
-    const { Tooltip } = useToolErrorTip(boxRef);
     const { nameToValueRef, valueToNameRef, buildTreeData: toolOptions } = useSopTools(tools)
     const [RenderingCompleted, setRenderingCompleted] = useState(false);
 
@@ -86,7 +173,8 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
                 }
             },
             tab: "\t",
-            offPaste: true
+            offPaste: true,
+            disabled: disabled
         });
 
         return () => {
@@ -101,7 +189,6 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             // 回显值
             veditorRef.current?.setValue(replaceMarkersToBraces(defaultValue, valueToNameRef.current, nameToValueRef.current))
         }
-
     }, [RenderingCompleted])
 
     // 暴露方法给父组件
@@ -109,6 +196,9 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
         getValue: () => {
             return replaceBracesToMarkers(veditorRef.current?.getValue(), nameToValueRef.current)
         },
+        setValue: (val) => {
+            veditorRef.current && veditorRef.current?.setValue(replaceMarkersToBraces(val, valueToNameRef.current, nameToValueRef.current))
+        }
     }));
 
     const [menuOpen, setMenuOpen] = useState(false);
@@ -121,7 +211,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
 
     useAtTip(scrollBoxRef)
 
-    return <div ref={boxRef} className="relative border rounded-md  h-[calc(100vh-420px)] bg-[#fff]">
+    return <div ref={boxRef} className={"relative border rounded-md bg-[#fff] " + height}>
         <div id="sop-vditor" className="linsight-vditor rounded-md border-none" />
         {/* 工具选择 */}
         <SopToolsDown
@@ -132,7 +222,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
             onChange={handleChange}
             onClose={() => setMenuOpen(false)}
         />
-        <Tooltip />
+        <ToolErrorTip />
     </div >;
 });
 
@@ -336,95 +426,7 @@ const useAutoHeight = (boxRef) => {
         };
     }, []);
 }
-// 错误工具toolip提示
-const useToolErrorTip = (boxRef: React.RefObject<HTMLElement>) => {
-    const [tooltipState, setTooltipState] = useState({
-        show: false,
-        message: '错误变量',
-        position: { left: 0, top: 0 }
-    });
-    const currentElementRef = useRef<HTMLElement | null>(null);
-    const tooltipRef = useRef<HTMLDivElement>(null);
 
-    // 处理鼠标移入事件
-    const handleMouseOver = (e: MouseEvent) => {
-        const target = (e.target as HTMLElement).closest?.('.linsi-error');
-        if (!(target instanceof HTMLElement)) return;
-
-        currentElementRef.current = target;
-        const rect = target.getBoundingClientRect();
-        setTooltipState({
-            show: true,
-            message: '⚠️ 工具或资源不存在，请重新选择',
-            position: {
-                left: rect.left + rect.width / 2,
-                top: rect.top - 4
-            }
-        });
-    };
-
-    // 处理鼠标移出事件
-    const handleMouseOut = (e: MouseEvent) => {
-        const relatedTarget = e.relatedTarget as HTMLElement;
-        if (
-            !relatedTarget ||
-            !currentElementRef.current?.contains(relatedTarget) &&
-            !tooltipRef.current?.contains(relatedTarget)
-        ) {
-            setTooltipState(prev => ({ ...prev, show: false }));
-        }
-    };
-
-    // 处理滚动事件
-    const handleScroll = () => {
-        if (currentElementRef.current && tooltipState.show) {
-            const rect = currentElementRef.current.getBoundingClientRect();
-            setTooltipState(prev => ({
-                ...prev,
-                position: {
-                    left: rect.left + rect.width / 2,
-                    top: rect.top - 4
-                }
-            }));
-        }
-    };
-
-    useEffect(() => {
-        const container = boxRef.current;
-        if (!container) return;
-
-        container.addEventListener('mouseover', handleMouseOver as EventListener);
-        container.addEventListener('mouseout', handleMouseOut as EventListener);
-        window.addEventListener('scroll', handleScroll, true);
-
-        return () => {
-            container.removeEventListener('mouseover', handleMouseOver as EventListener);
-            container.removeEventListener('mouseout', handleMouseOut as EventListener);
-            window.removeEventListener('scroll', handleScroll, true);
-        };
-    }, []);
-
-    // 返回 Tooltip 组件和状态
-    const Tooltip = () => (
-        <div
-            ref={tooltipRef}
-            className={`pointer-events-none fixed transition-opacity ${tooltipState.show ? 'opacity-100' : 'opacity-0'
-                }`}
-            style={{
-                left: tooltipState.position.left,
-                top: tooltipState.position.top,
-                transform: 'translateX(-50%) translateY(-100%)'
-            }}
-        >
-            <div className="bg-red-100 text-red-500 text-xs px-2 py-1 rounded shadow-lg">
-                {tooltipState.message}
-                <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-red-100" />
-            </div>
-        </div>
-    );
-
-    return { Tooltip, tooltipState };
-};
 // markdown粘贴逻辑
 const getMarkdownPaste = async (editorElement, callBack) => {
     // 监听粘贴事件

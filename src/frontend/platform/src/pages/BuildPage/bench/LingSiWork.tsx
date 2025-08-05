@@ -811,6 +811,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             </div>
                             <ImportFromRecordsDialog 
                                 open={importDialogOpen} 
+                                tools={selectedTools}
                                 onOpenChange={setImportDialogOpen} 
                                 />
                             {/* 表格区域 */}
