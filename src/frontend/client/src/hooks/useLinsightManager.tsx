@@ -107,7 +107,8 @@ export const useLinsightManager = () => {
             tasks: buildTaskTree(tasks),
             file_list: output_result?.final_files || [],
             sop: 'sop_generation_failed' === status ? '' : sop,
-            sopError: 'sop_generation_failed' === status ? sop : ''
+            sopError: 'sop_generation_failed' === status ? sop : '',
+            queueCount: 0
         }
 
         createLinsight(versionId, data);

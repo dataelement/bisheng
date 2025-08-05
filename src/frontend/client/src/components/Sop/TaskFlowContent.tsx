@@ -237,7 +237,7 @@ const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null 
                             className='border-none ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
                             rows={1}
                             value={inputValue}
-                            maxLength={200}
+                            maxLength={10000}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
                         />
@@ -314,7 +314,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
         return (
             <div className='size-full flex flex-col items-center justify-center text-sm'>
                 <img src={__APP_ENV__.BASE_URL + '/assets/queue.png'} alt="" />
-                <p className='mt-9'>目前使用人数较多，正在排队中</p>
+                <p className='mt-9'>目前使用人数较多，正在排队中...</p>
                 <p className='mt-4 font-bold'>预计等待 {timeText}</p>
             </div>
         );
@@ -416,7 +416,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
             }
             {/* running */}
             {
-                tasks?.length && status === SopStatus.Running && <p className='text-sm flex gap-2 mt-10'>
+                tasks?.length > 0 && status === SopStatus.Running && <p className='text-sm flex gap-2 mt-10'>
                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
                 </p>
             }

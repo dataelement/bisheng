@@ -575,6 +575,7 @@ export type BsConfig = {
   host: '',
   linsight_invitation_code: boolean
   linsight_cache_dir: string
+  waiting_list_url: string
 };
 
 export const configSchema = z.object({

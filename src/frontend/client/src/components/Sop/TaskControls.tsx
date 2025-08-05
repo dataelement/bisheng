@@ -17,6 +17,7 @@ interface TaskControlsProps {
     current: Task | null;
     tasks: Task[];
     status: SopStatus;
+    queueCount: number;
     feedbackProvided: boolean;
 }
 
@@ -33,6 +34,7 @@ export const TaskControls = ({
     onFeedback,
     current,
     tasks,
+    queueCount,
     status,
     feedbackProvided
 }: TaskControlsProps) => {
@@ -56,6 +58,8 @@ export const TaskControls = ({
     const feedback = (rating: number, comment: string, restart: boolean, cancel?: boolean) => {
         onFeedback(rating, comment, restart, cancel)
     }
+
+    if (queueCount) return null
 
     return (
         <AnimatePresence>

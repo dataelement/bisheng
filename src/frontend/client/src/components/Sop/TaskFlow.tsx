@@ -19,7 +19,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
 
     const linsight = useMemo(() => {
         const linsight = getLinsight(versionId)
-        return linsight || { sop: '', tools: [], tasks: [], status: '' }
+        return linsight || { sop: '', tools: [], tasks: [], status: '', queueCount: 0 }
     }, [getLinsight, versionId])
 
     const showTask = [SopStatus.Running, SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(linsight.status)
@@ -130,6 +130,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 current={currentTask}
                 tasks={linsight.tasks}
                 status={linsight.status}
+                queueCount={linsight.queueCount}
                 feedbackProvided={!!linsight.execute_feedback}
                 onStop={stop}
                 onFeedback={handleFeedback}

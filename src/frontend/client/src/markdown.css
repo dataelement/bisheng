@@ -32,7 +32,6 @@
 
 .bs-mkdown {
     color: var(--tw-prose-body);
-    max-width: 65ch;
 }
 
 :root .bs-mkdown {

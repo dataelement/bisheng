@@ -79,8 +79,6 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
 
     // start
     const handleRun = () => {
-        onRun()
-
         const sop = markdownRef.current.getValue()
 
         saveSop({
@@ -92,6 +90,8 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
                     if (res.status_code === 200) {
                         updateLinsight(versionId, { sop, status: SopStatus.Running })
                     }
+
+                    onRun()
                 })
             }
         }).catch(err => {

@@ -8,7 +8,7 @@ import { formatTime } from '~/utils';
 import { SopCase } from './case';
 import { LoadingBox } from './components/sopLoading';
 import { Header } from './Header';
-import { SOPEditor } from './SOPEditor';
+import { SOPEditor, SopStatus } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
 
 export default function index() {
@@ -54,8 +54,8 @@ export const useLinsightData = (conversationId: string | undefined) => {
     const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
         if (_conversationId.startsWith('case')) {
             const firstVersion = cloneDeep(SopCase[_conversationId])
+            setVersions([{ id: firstVersion.id, name: formatTime(firstVersion.version, true) }]);
             setVersionId(firstVersion.id);
-            setVersions({ id: firstVersion.id, name: formatTime(firstVersion.version, true) });
             return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion });
         }
         try {
@@ -72,8 +72,8 @@ export const useLinsightData = (conversationId: string | undefined) => {
             // 2. 默认选中第一个版本，并加载其任务  TODOsopError
             const firstVersion = versionId ? data.find(el => el.id === versionId) : data[0];
             if (firstVersion) {
-                setVersionId(firstVersion.id);
                 const taskRes = await getLinsightTaskList(firstVersion.id, firstVersion);
+                setVersionId(firstVersion.id);
                 console.log('firstVersion :>> ', firstVersion, taskRes);
                 switchAndUpdateLinsight(firstVersion.id, { ...firstVersion, tasks: taskRes });
             }
@@ -118,9 +118,12 @@ const useQueueStatus = (vid, updateLinsight) => {
 
     const checkQueueStatus = async (vid: string) => {
         const res = await checkSopQueueStatus(vid);
-        console.log('res :>> ', res);
         const count = res.data.index
-        updateLinsight(vid, { queueCount: count });
+        const params = { queueCount: count }
+        if (count > 0) {
+            params.status = SopStatus.Running
+        }
+        updateLinsight(vid, params);
         if (count > 0) {
             timerRef.current = setTimeout(() => {
                 checkQueueStatus(vid)
