@@ -581,14 +581,12 @@ async def add_sop(
 @router.post("/sop/update", summary="更新灵思SOP", response_model=UnifiedResponseModel)
 async def update_sop(
         sop_obj: SOPManagementUpdateSchema = Body(..., description="SOP对象"),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
     """
     更新灵思SOP
     :return:
     """
 
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
     return await SOPManageService.update_sop(sop_obj)
 
 
@@ -644,13 +642,10 @@ async def sync_sop_record(login_user: UserPayload = Depends(get_admin_user),
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)
 async def remove_sop(
         sop_ids: List[int] = Body(..., description="SOP唯一ID列表", embed=True),
-        login_user: UserPayload = Depends(get_login_user)) -> UnifiedResponseModel:
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
     """
     删除灵思SOP
     :return:
     """
-
-    if not login_user.is_admin():
-        return UnAuthorizedError.return_resp()
 
     return await SOPManageService.remove_sop(sop_ids, login_user)
