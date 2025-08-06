@@ -276,9 +276,6 @@ class BaseTask(BaseModel):
         raise NotImplementedError
 
     async def get_answer(self) -> str:
-        if not self.history:
-            return ""
-
         if self.summarize_answer:
             return self.summarize_answer
 
@@ -286,6 +283,9 @@ class BaseTask(BaseModel):
         if self.children:
             self.summarize_answer = "\n".join([await one.get_answer() for one in self.children])
             return self.summarize_answer
+
+        if not self.history:
+            return ""
 
         prompt_str = SummarizeAnswerPrompt.format(history_str=await self.get_history_str(),
                                                   workflow=self.task_manager.get_workflow(),
