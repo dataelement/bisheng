@@ -56,6 +56,7 @@ class LinsightWorkflowTask:
         self._final_result: Optional[TaskEnd] = None
         self.file_dir: Optional[str] = None
         self.session_version_id: Optional[str] = None
+        self.step_event_extra_files: List[Dict] = []  # 用于存储步骤事件额外处理的文件信息
 
     # ==================== 资源管理 ====================
 

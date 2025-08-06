@@ -232,6 +232,19 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
 
             file_md5 = await util.async_calculate_md5(file_path)
 
+            # 判断文件是否已经上传过
+            step_event_extra_files = task_exec_obj.step_event_extra_files
+            if step_event_extra_files:
+                existing_file = next((f for f in step_event_extra_files if f["file_md5"] == file_md5), None)
+                if existing_file:
+                    logger.debug(f"步骤事件额外处理，文件已存在: {existing_file['file_name']}, file_md5: {file_md5}")
+                    event.extra_info["file_info"] = {
+                        "file_name": file_name,
+                        "file_md5": existing_file["file_md5"],
+                        "file_url": existing_file["file_url"]
+                    }
+                    return event
+
             object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
             logger.debug(f"步骤事件额外处理，上传文件到MinIO: {object_name}")
 
@@ -241,11 +254,15 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
                 object_name=object_name,
                 file_path=file_path
             )
+
             event.extra_info["file_info"] = {
                 "file_name": file_name,
                 "file_md5": file_md5,
                 "file_url": object_name
             }
+
+            # 添加到步骤事件额外文件列表
+            task_exec_obj.step_event_extra_files.append(event.extra_info["file_info"])
 
     except Exception as e:
         logger.error(f"步骤事件额外处理异常: {e}")
