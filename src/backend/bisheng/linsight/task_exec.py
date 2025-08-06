@@ -117,10 +117,10 @@ class LinsightWorkflowTask:
             except TaskAlreadyInProgressError:
                 logger.warning(f"任务已在进行中: session_version_id={self.session_version_id}")
             except TaskExecutionError as e:
-                logger.exception(f"任务执行失败: session_version_id={self.session_version_id}")
+                logger.error(f"任务执行失败: session_version_id={self.session_version_id}")
                 await self._handle_execution_error(e)
             except Exception as e:
-                logger.exception(f"未知错误: session_version_id={self.session_version_id}, error={e}")
+                logger.error(f"未知错误: session_version_id={self.session_version_id}, error={e}")
                 await self._handle_execution_error(e)
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
@@ -352,7 +352,7 @@ class LinsightWorkflowTask:
             logger.info("智能体任务被用户终止")
             return False
         except Exception as e:
-            logger.exception(e)
+            # logger.exception(e)
             raise TaskExecutionError(f"智能体任务执行失败: {e}")
 
     # ==================== 事件处理 ====================
