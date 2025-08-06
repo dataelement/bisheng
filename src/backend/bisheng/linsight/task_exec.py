@@ -54,16 +54,17 @@ class LinsightWorkflowTask:
         self._is_terminated = False
         self._termination_task: Optional[asyncio.Task] = None
         self._final_result: Optional[TaskEnd] = None
+        self.file_dir: Optional[str] = None
+        self.session_version_id: Optional[str] = None
 
     # ==================== 资源管理 ====================
 
     @asynccontextmanager
-    async def _managed_execution(self, session_version_id: str):
+    async def _managed_execution(self):
         """管理执行资源的上下文管理器"""
-        file_dir = None
 
-        self._state_manager = LinsightStateMessageManager(session_version_id)
-        session_model = await self._get_session_model(session_version_id)
+        self._state_manager = LinsightStateMessageManager(self.session_version_id)
+        session_model = await self._get_session_model(self.session_version_id)
 
         # 检查会话状态
         if await self._is_session_in_progress(session_model):
@@ -75,22 +76,22 @@ class LinsightWorkflowTask:
             await self._start_termination_monitor(session_model)
 
             # 初始化文件目录
-            file_dir = await self._init_file_directory(session_model)
+            self.file_dir = await self._init_file_directory(session_model)
 
-            yield session_model, file_dir
+            yield session_model
 
         finally:
-            await self._cleanup_resources(file_dir)
+            await self._cleanup_resources()
 
-    async def _cleanup_resources(self, file_dir: Optional[str] = None):
+    async def _cleanup_resources(self):
         """清理资源"""
         try:
             # 停止终止监控
             await self._stop_termination_monitor()
 
             # 清理文件目录
-            if file_dir and os.path.exists(file_dir):
-                shutil.rmtree(file_dir, ignore_errors=True)
+            if self.file_dir and os.path.exists(self.file_dir):
+                shutil.rmtree(self.file_dir, ignore_errors=True)
 
         except Exception as e:
             logger.error(f"资源清理失败: {e}")
@@ -100,26 +101,28 @@ class LinsightWorkflowTask:
     async def async_run(self, session_version_id: str) -> None:
         """异步任务执行入口"""
 
-        with logger.contextualize(trace_id=session_version_id):
-            logger.info(f"开始执行任务: session_version_id={session_version_id}")
+        self.session_version_id = session_version_id
+
+        with logger.contextualize(trace_id=self.session_version_id):
+            logger.info(f"开始执行任务: session_version_id={self.session_version_id}")
 
             try:
 
-                async with self._managed_execution(session_version_id) as (session_model, file_dir):
-                    await self._execute_workflow(session_model, file_dir)
+                async with self._managed_execution() as session_model:
+                    await self._execute_workflow(session_model)
 
             except UserTerminationError:
-                logger.info(f"任务被用户主动终止: session_version_id={session_version_id}")
+                logger.info(f"任务被用户主动终止: session_version_id={self.session_version_id}")
             except TaskAlreadyInProgressError:
-                logger.warning(f"任务已在进行中: session_version_id={session_version_id}")
+                logger.warning(f"任务已在进行中: session_version_id={self.session_version_id}")
             except TaskExecutionError as e:
-                logger.exception(f"任务执行失败: session_version_id={session_version_id}")
-                await self._handle_execution_error(session_version_id, e)
+                logger.exception(f"任务执行失败: session_version_id={self.session_version_id}")
+                await self._handle_execution_error(e)
             except Exception as e:
-                logger.exception(f"未知错误: session_version_id={session_version_id}, error={e}")
-                await self._handle_execution_error(session_version_id, e)
+                logger.exception(f"未知错误: session_version_id={self.session_version_id}, error={e}")
+                await self._handle_execution_error(e)
 
-    async def _execute_workflow(self, session_model: LinsightSessionVersion, file_dir: str):
+    async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """执行工作流的核心逻辑"""
 
         # 更新会话状态为进行中
@@ -129,10 +132,10 @@ class LinsightWorkflowTask:
         llm = await self._get_llm()
         # 生成工具列表
         tools = await self._generate_tools(session_model, llm)
-        linsight_tools = await ToolServices.init_linsight_tools(root_path=file_dir)
+        linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
         tools.extend(linsight_tools)
         # 创建智能体
-        agent = await self._create_agent(session_model, llm, tools, file_dir)
+        agent = await self._create_agent(session_model, llm, tools)
 
         # 检查是否在初始化过程中被终止
         self._check_termination()
@@ -145,7 +148,7 @@ class LinsightWorkflowTask:
         success = await self._execute_agent_tasks(agent, task_info, session_model)
 
         if success:
-            await self._handle_task_completion(session_model, llm, file_dir)
+            await self._handle_task_completion(session_model, llm)
         else:
             await self._handle_user_termination(session_model)
             raise UserTerminationError("任务被用户终止")
@@ -185,6 +188,7 @@ class LinsightWorkflowTask:
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
         """初始化文件目录"""
         file_dir = os.path.join(CACHE_DIR, "linsight", session_model.id[:8])
+        file_dir = os.path.normpath(file_dir)
         os.makedirs(file_dir, exist_ok=True)
 
         if not session_model.files:
@@ -236,8 +240,7 @@ class LinsightWorkflowTask:
 
         return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm)
 
-    async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List,
-                            file_dir: str) -> LinsightAgent:
+    async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List) -> LinsightAgent:
 
         workbench_conf = await LLMService.get_workbench_llm()
         linsight_conf = settings.get_linsight_conf()
@@ -248,7 +251,7 @@ class LinsightWorkflowTask:
             llm=llm,
             query=session_model.question,
             tools=tools,
-            file_dir=file_dir,
+            file_dir=self.file_dir,
             task_mode=workbench_conf.linsight_executor_mode,
             exec_config=exec_config,
         )
@@ -412,6 +415,10 @@ class LinsightWorkflowTask:
 
     async def _handle_exec_step(self, agent: LinsightAgent, event: ExecStep, session_model: LinsightSessionVersion):
         """处理执行步骤事件"""
+
+        # 额外处理步骤事件
+        event = await linsight_execute_utils.handle_step_event_extra(event, self)
+
         await self._state_manager.add_execution_task_step(event.task_id, step=event)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=event.model_dump())
@@ -538,22 +545,22 @@ class LinsightWorkflowTask:
 
     # ==================== 任务完成处理 ====================
 
-    async def _handle_task_completion(self, session_model: LinsightSessionVersion, llm: BishengLLM, file_dir: str):
+    async def _handle_task_completion(self, session_model: LinsightSessionVersion, llm: BishengLLM):
         """处理任务完成"""
         if not self._final_result:
             logger.error("没有找到最终任务结果")
             return
 
         if self._final_result.status == TaskStatus.SUCCESS.value:
-            await self._handle_task_success(session_model, llm, file_dir)
+            await self._handle_task_success(session_model, llm)
         else:
             await self._handle_task_failure(session_model, "任务执行失败")
 
-    async def _handle_task_success(self, session_model: LinsightSessionVersion, llm: BishengLLM, file_dir: str):
+    async def _handle_task_success(self, session_model: LinsightSessionVersion, llm: BishengLLM):
         """处理任务成功"""
         try:
             # 读取文件目录文件详情
-            file_details = await linsight_execute_utils.read_file_directory(file_dir)
+            file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
             logger.debug(f"读取文件目录文件详情: {file_details}")
 
             final_result_files = await linsight_execute_utils.get_final_result_file(
@@ -625,10 +632,10 @@ class LinsightWorkflowTask:
         if linsight_invitation_code:
             await InviteCodeService.revoke_invite_code(user_id=session_model.user_id)
 
-    async def _handle_execution_error(self, session_version_id: str, error: Exception):
+    async def _handle_execution_error(self, error: Exception):
         """处理执行错误"""
         try:
-            session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+            session_model = await LinsightSessionVersionDao.get_by_id(self.session_version_id)
             await self._handle_task_failure(session_model, str(error))
         except Exception as e:
-            logger.error(f"处理执行错误失败: session_version_id={session_version_id}, error={e}")
+            logger.error(f"处理执行错误失败: session_version_id={self.session_version_id}, error={e}")

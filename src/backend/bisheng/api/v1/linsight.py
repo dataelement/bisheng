@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from typing import List, Literal, Optional
 from urllib import parse
 
@@ -26,7 +27,7 @@ from bisheng.database.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.database.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
-from bisheng.linsight.state_message_manager import LinsightStateMessageManager
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.settings import settings
 
 router = APIRouter(prefix="/linsight", tags=["灵思"])
@@ -456,6 +457,19 @@ async def terminate_execute(
     state_message_manager = LinsightStateMessageManager(session_version_id=linsight_session_version_id)
 
     await state_message_manager.set_session_version_info(session_version_model)
+
+    state_message_manager = LinsightStateMessageManager(session_version_id=session_version_model.id)
+    # 推送终止消息
+    await state_message_manager.push_message(
+        MessageData(
+            event_type=MessageEventType.TASK_TERMINATED,
+            data={
+                "message": "任务已被用户主动停止",
+                "session_id": session_version_model.id,
+                "terminated_at": datetime.now().isoformat()
+            }
+        )
+    )
 
     return resp_200(data=True, message="灵思执行已终止")
 

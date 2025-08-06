@@ -7,11 +7,19 @@ from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import sync_func_to_async
+from bisheng_langchain.linsight.event import ExecStep
 
 # 灵思文件处理工具对应文件参数名
 local_file_tool_dict = {
-    "write_text_file": "file_path",
+    "add_text_to_file": "file_path",
     "replace_file_lines": "file_path"
+}
+
+# 步骤事件额外处理工具对应参数名、
+step_event_extra_tool_dict = {
+    "add_text_to_file": "file_path",
+    "replace_file_lines": "file_path",
+    "read_text_file": "file_path"
 }
 
 
@@ -191,3 +199,56 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
             logger.warning(f"部分文件上传失败: {len(failed_uploads)} 个文件")
 
     return final_result_files
+
+
+# 步骤事件额外处理
+async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
+    """
+    处理步骤事件的额外逻辑
+    :param task_exec_obj:
+    :param event: 事件对象
+    """
+    logger.debug(f"步骤事件额外处理，call_id: {event.call_id}, name: {event.name}, status: {event.status}")
+    try:
+        if event.status == "end" and event.name in step_event_extra_tool_dict.keys():
+            file_path = event.params.get(step_event_extra_tool_dict[event.name], "")
+            if not file_path:
+                return event
+
+            file_name = os.path.basename(file_path)
+            logger.debug(f"步骤事件额外处理，文件名: {file_name}")
+
+            # 文件路径处理
+            if not os.path.isabs(file_path):
+                # 相对路径，转换为绝对路径
+                file_path = os.path.join(task_exec_obj.file_dir, file_path)
+                file_path = os.path.normpath(file_path)
+
+            logger.debug(f"步骤事件额外处理，转换后的文件路径: {file_path}")
+
+            if not os.path.exists(file_path):
+                logger.error(f"步骤事件额外处理，文件不存在: {file_path}")
+                return event
+
+            file_md5 = await util.async_calculate_md5(file_path)
+
+            object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
+            logger.debug(f"步骤事件额外处理，上传文件到MinIO: {object_name}")
+
+            # 上传文件到MinIO
+            await sync_func_to_async(minio_client.upload_minio)(
+                bucket_name=minio_client.bucket,
+                object_name=object_name,
+                file_path=file_path
+            )
+            event.extra_info["file_info"] = {
+                "file_name": file_name,
+                "file_md5": file_md5,
+                "file_url": object_name
+            }
+
+    except Exception as e:
+        logger.error(f"步骤事件额外处理异常: {e}")
+        # 发生异常时，返回原始事件，不做任何修改
+
+    return event
