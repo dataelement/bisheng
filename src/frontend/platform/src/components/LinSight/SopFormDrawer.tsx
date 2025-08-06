@@ -62,10 +62,10 @@ const SopFormDrawer = ({
     return isValid;
   };
 
-const handleInputChange = (field, value) => {
+  const handleInputChange = (field, value) => {
     // 计算实际内容长度（去除Markdown标记字符）
-    const rawContent = field === 'content' 
-      ? value.replace(/[#*_\-`~\[\]()]/g, '') 
+    const rawContent = field === 'content'
+      ? value.replace(/[#*_\-`~\[\]()]/g, '')
       : value;
     const length = rawContent.length;
 
@@ -88,14 +88,14 @@ const handleInputChange = (field, value) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
-  toast({
-                    variant: 'error',
-                    title: 'SOP 导入失败',
-                    description: `${sopForm.name}内容超长`
-                })
+    // toast({
+    //   variant: 'error',
+    //   title: 'SOP 导入失败',
+    //   description: `${sopForm.name}内容超长`
+    // })
     if (validateForm()) {
       setIsSubmitting(true);
-      
+
       try {
         await handleSaveSOP();
       } catch (error) {
@@ -122,10 +122,10 @@ const handleInputChange = (field, value) => {
 
   return (
     <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-     <SheetContent 
-    className="w-[40%]"
-    style={{ minWidth: '40%', maxWidth: '40%' }}
-  >
+      <SheetContent
+        className="w-[40%]"
+        style={{ minWidth: '40%', maxWidth: '40%' }}
+      >
         <div className="flex flex-col ">
           <div className="flex items-center justify-between px-4 pt-5 border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">

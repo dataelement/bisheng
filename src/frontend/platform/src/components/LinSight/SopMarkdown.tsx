@@ -140,6 +140,8 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
                     const name = replaceMarkersToBraces(value, valueToNameRef.current, nameToValueRef.current)
                     vditor.insertValue(name);
                 })
+                // 禁用
+                disabled ? vditor.disabled() : vditor.enable()
             },
             input: (val) => onChange(replaceBracesToMarkers(val, nameToValueRef.current)),
             hint: {
@@ -173,8 +175,7 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
                 }
             },
             tab: "\t",
-            offPaste: true,
-            disabled: disabled
+            offPaste: true
         });
 
         return () => {
@@ -347,7 +348,7 @@ const useSopTools = (tools) => {
         // 5. 转换tools数据
         if (tools && tools.length > 0) {
             tools.forEach(toolGroup => {
-                tree.push({
+                toolGroup.children.length && tree.push({
                     label: toolGroup.name,
                     value: toolGroup.id,
                     desc: toolGroup.description,
@@ -520,7 +521,7 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
             return `{{@${id}@}}`;
         }
         console.warn('转换ui时未找到对应的ID  :>> ', valueToNameMap, id);
-        return `{{#${id}#}}`; // 未找到时标记红色
+        return `{{@${id}@}}`; // 未找到时标记红色
     });
 }
 

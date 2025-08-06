@@ -3,27 +3,24 @@ import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 
+import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
+import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
+import SopTable from "@/components/LinSight/SopTable";
+import ToolSelectorContainer from "@/components/LinSight/ToolSelectorContainer";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
+import { getAssistantToolsApi } from "@/controllers/API/assistant";
+import { sopApi } from "@/controllers/API/linsight";
+import { useAssistantStore } from "@/store/assistantStore";
+import { cloneDeep } from "lodash-es";
+import { Search } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
-import { Model, ModelManagement } from "./ModelManagement";
+import { Model } from "./ModelManagement";
 import Preview from "./Preview";
-import { useAssistantStore } from "@/store/assistantStore";
-import { Search, Star, X } from "lucide-react";
-import { t } from "i18next";
-import { sopApi} from "@/controllers/API/linsight";
-import { getAssistantToolsApi } from "@/controllers/API/assistant";
-import ToolSelector from "@/components/LinSight/ToolSelector";
-import ToolSelectorContainer  from "@/components/LinSight/ToolSelectorContainer";
-import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
-import SopTable from "@/components/LinSight/SopTable";
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
-import { cloneDeep } from "lodash-es";
-import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 
 export interface FormErrors {
@@ -398,6 +395,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
 
+    // 关闭弹窗刷新下数据
+    useEffect(() => {
+        if (!importDialogOpen) {
+            fetchData({
+                keyword: '',
+                page,
+                pageSize
+            });
+        }
+    }, [importDialogOpen])
+
 
     const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -485,56 +493,56 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
         fetchData(requestParams);
     };
- const handleBatchDelete = async () => {
-    setBatchDeleting(true);
-    try {
-        await sopApi.batchDeleteSop(selectedItems);
+    const handleBatchDelete = async () => {
+        setBatchDeleting(true);
+        try {
+            await sopApi.batchDeleteSop(selectedItems);
 
-        // 计算新的总数
-        const newTotal = total - selectedItems.length;
-        const newTotalPages = Math.ceil(newTotal / pageSize);
-        
-        // 确定新的当前页
-        let newPage = page;
-        
-        if (datalist.length === selectedItems.length) {
-            if (page > 1) {
-                newPage = page - 1;
-            } 
-            else if (newTotal > 0) {
-                newPage = 1;
+            // 计算新的总数
+            const newTotal = total - selectedItems.length;
+            const newTotalPages = Math.ceil(newTotal / pageSize);
+
+            // 确定新的当前页
+            let newPage = page;
+
+            if (datalist.length === selectedItems.length) {
+                if (page > 1) {
+                    newPage = page - 1;
+                }
+                else if (newTotal > 0) {
+                    newPage = 1;
+                }
             }
+            if (newPage > newTotalPages && newTotalPages > 0) {
+                newPage = newTotalPages;
+            }
+
+            // 更新状态
+            setTotal(newTotal);
+            setSelectedItems([]);
+            setPage(newPage);  // 确保更新page状态
+            setPageInputValue(newPage.toString());
+
+            // 重新获取数据
+            fetchData({
+                page: newPage,
+                pageSize: pageSize,
+                keyword: keywords,
+            });
+
+            toast({
+                variant: 'success',
+                description: `成功删除 ${selectedItems.length} 个 SOP`
+            });
+        } catch (error) {
+            toast({
+                variant: 'error',
+                description: '删除失败，请稍后重试'
+            });
+        } finally {
+            setBatchDeleting(false);
         }
-        if (newPage > newTotalPages && newTotalPages > 0) {
-            newPage = newTotalPages;
-        }
-
-        // 更新状态
-        setTotal(newTotal);
-        setSelectedItems([]);
-        setPage(newPage);  // 确保更新page状态
-        setPageInputValue(newPage.toString());
-
-        // 重新获取数据
-        fetchData({
-            page: newPage,
-            pageSize: pageSize,
-            keyword: keywords,
-        });
-
-        toast({ 
-            variant: 'success', 
-            description: `成功删除 ${selectedItems.length} 个 SOP` 
-        });
-    } catch (error) {
-        toast({ 
-            variant: 'error', 
-            description: '删除失败，请稍后重试' 
-        });
-    } finally {
-        setBatchDeleting(false);
-    }
-};
+    };
     const handleSelectAll = useCallback(() => {
         const currentPageIds = datalist.map(item => item.id);
         if (currentPageIds.every(id => selectedItems.includes(id))) {
@@ -699,21 +707,21 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             }} error={""} />
                         <div className="mb-6">
                             <p className="text-lg font-bold mb-2">灵思可选工具</p>
-                         <ToolSelectorContainer
-            toolsData={toolsData}
-            selectedTools={selectedTools}
-            toggleTool={toggleTool}
-            removeTool={removeTool}
-            isToolSelected={isToolSelected}
-            handleDragEnd={handleDragEnd}
-            toggleGroup={toggleGroup}
-             activeToolTab={activeToolTab}
-  setActiveToolTab={setActiveToolTab}
-  showToolSelector={showToolSelector}
-  setShowToolSelector={setShowToolSelector}
-   toolSearchTerm={toolSearchTerm}
-  setToolSearchTerm={setToolSearchTerm}
-          />
+                            <ToolSelectorContainer
+                                toolsData={toolsData}
+                                selectedTools={selectedTools}
+                                toggleTool={toggleTool}
+                                removeTool={removeTool}
+                                isToolSelected={isToolSelected}
+                                handleDragEnd={handleDragEnd}
+                                toggleGroup={toggleGroup}
+                                activeToolTab={activeToolTab}
+                                setActiveToolTab={setActiveToolTab}
+                                showToolSelector={showToolSelector}
+                                setShowToolSelector={setShowToolSelector}
+                                toolSearchTerm={toolSearchTerm}
+                                setToolSearchTerm={setToolSearchTerm}
+                            />
                         </div>
 
                         <div className="mb-6">
@@ -745,7 +753,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     <Button
                                         variant="default"
                                         size="sm"
-                                       onClick={() => setImportDialogOpen(true)}
+                                        onClick={() => setImportDialogOpen(true)}
                                     >
                                         从运行记录中导入
                                     </Button>
@@ -793,11 +801,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     </Button>
                                 </div>
                             </div>
-                            <ImportFromRecordsDialog 
-                                open={importDialogOpen} 
+                            <ImportFromRecordsDialog
+                                open={importDialogOpen}
                                 tools={selectedTools}
-                                onOpenChange={setImportDialogOpen} 
-                                />
+                                onOpenChange={setImportDialogOpen}
+                            />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
                             {deleteConfirmModal.open && (
@@ -865,44 +873,44 @@ const useChatConfig = (
 ) => {
     const { toast } = useToast();
 
-const handleSave = async (formData: ChatConfigForm) => {
-  // 保留所有必要的字段
-  console.log(formData, 'formData',selectedTools,22);
-  
-  const processedTools = selectedTools.map(tool => ({
-    id: tool.id,
-    name: tool.name,
-    is_preset: tool.is_preset,
-    tool_key: tool.tool_key,
-    description: tool.description,
-    children: tool.children?.map(child => ({
-      id: child.id,
-      name: child.name,
-      tool_key: child.tool_key,
-      desc: child.desc 
-    }))
-  }));
+    const handleSave = async (formData: ChatConfigForm) => {
+        // 保留所有必要的字段
+        console.log(formData, 'formData', selectedTools, 22);
 
-  const dataToSave = {
-    ...formData,
-    linsightConfig: {
-      input_placeholder: formData.linsightConfig?.input_placeholder || '',
-      tools: processedTools
-    }
-  };
+        const processedTools = selectedTools.map(tool => ({
+            id: tool.id,
+            name: tool.name,
+            is_preset: tool.is_preset,
+            tool_key: tool.tool_key,
+            description: tool.description,
+            children: tool.children?.map(child => ({
+                id: child.id,
+                name: child.name,
+                tool_key: child.tool_key,
+                desc: child.desc
+            }))
+        }));
 
-  try {
-    const res = await setWorkstationConfigApi(dataToSave);
-    if (res) {
-      setFormData(dataToSave);
-      toast({ variant: 'success', description: '配置保存成功' });
-      return true;
-    }
-  } catch (error) {
-    toast({ variant: 'error', description: '保存失败' });
-    return false;
-  }
-};
+        const dataToSave = {
+            ...formData,
+            linsightConfig: {
+                input_placeholder: formData.linsightConfig?.input_placeholder || '',
+                tools: processedTools
+            }
+        };
+
+        try {
+            const res = await setWorkstationConfigApi(dataToSave);
+            if (res) {
+                setFormData(dataToSave);
+                toast({ variant: 'success', description: '配置保存成功' });
+                return true;
+            }
+        } catch (error) {
+            toast({ variant: 'error', description: '保存失败' });
+            return false;
+        }
+    };
 
     return { handleSave };
 };

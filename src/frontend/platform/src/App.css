@@ -301,6 +301,10 @@
 	display: none;
 }
 
+.linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
+	opacity: 0.8;
+}
+
 .linsi-span {
 	background: #E9F1FF;
 	color: #2A3F73;
