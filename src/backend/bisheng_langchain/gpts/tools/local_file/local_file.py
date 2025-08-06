@@ -39,8 +39,6 @@ class SearchTextInput(BaseModel):
 class WriteFileInput(BaseModel):
     file_path: str = Field(..., description="目标文件路径")
     content: str = Field(..., description="要写入的内容")
-    start_line: Optional[int] = Field(default=-1,
-                                      description="开始写入的行号（1-based）。-1 表示追加，0 表示从头覆盖，正数表示插入")
 
 
 class ReplaceFileInput(BaseModel):
@@ -395,17 +393,16 @@ class LocalFileTool(BaseModel):
 
         return result
 
-    async def write_text_file(self, file_path: str, content: str, start_line: int = -1) -> Dict[str, Any]:
+    async def add_text_to_file(self, file_path: str, content: str) -> Dict[str, Any]:
         """
-        将内容写入文本文件，支持插入、覆盖和追加
+            将文本内容追加到文本文件，如果文件不存在，则创建文件
 
-        Args:
-            file_path: 目标文件路径
-            content: 要写入的内容
-            start_line: 开始写入的行号（1-based）。-1 表示追加，0 表示从头覆盖，正数表示插入
+            Args:
+                file_path: 目标文件路径
+                content: 要写入的内容
 
-        Returns:
-            包含操作结果的字典
+            Returns:
+                包含操作结果的字典
         """
         is_valid, normalized_path, error_msg = self.validate_file_path(file_path)
         if not is_valid:
@@ -415,65 +412,18 @@ class LocalFileTool(BaseModel):
         os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
 
         # 追加模式
-        if start_line == -1:
-            async with aiofiles.open(normalized_path, "a", encoding="utf-8") as f:
-                await f.write(content + '\n')
-            lines = []
-            if os.path.exists(normalized_path):
-                async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
-                    lines = await f.readlines()
-            return {
-                "状态": "成功",
-                "文件路径": normalized_path,
-                "追加行数": len(content.split('\n')),
-                "文件行数": len(lines)
-            }
-
-        # 从头覆盖模式
-        if start_line == 0:
-            async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
-                await f.write(content + '\n')
-            lines = []
-            if os.path.exists(normalized_path):
-                async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
-                    lines = await f.readlines()
-            return {
-                "状态": "成功",
-                "文件路径": normalized_path,
-                "覆盖行数": len(content.split('\n')),
-                "文件行数": len(lines)
-            }
-
-        # 插入模式
-        if start_line > 0:
-            lines = []
-            if os.path.exists(normalized_path):
-                async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
-                    lines = await f.readlines()
-
-            # 插入新内容
-            index = start_line - 1
-            # 在指定行号前插入，如果行号超出范围，则在末尾追加
-            if index > len(lines):
-                index = len(lines)
-
-            # 分割要插入的多行内容
-            new_lines = [line + '\n' for line in content.split('\n')]
-
-            lines[index:index] = new_lines
-
-            async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
-                await f.writelines(lines)
-
-            return {
-                "状态": "成功",
-                "文件路径": normalized_path,
-                "插入行号": start_line,
-                "插入行数": len(new_lines),
-                "文件行数": len(lines)
-            }
-
-        raise Exception(f"无效的起始行号: {start_line}")
+        async with aiofiles.open(normalized_path, "a", encoding="utf-8") as f:
+            await f.write(content + '\n')
+        lines = []
+        if os.path.exists(normalized_path):
+            async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
+                lines = await f.readlines()
+        return {
+            "状态": "成功",
+            "文件路径": normalized_path,
+            "追加行数": len(content.split('\n')),
+            "文件行数": len(lines)
+        }
 
     async def replace_file_lines(self, file_path: str, start_line: int, end_line: int, replacement_text: str) \
             -> Dict[str, Any]:
@@ -586,12 +536,12 @@ class LocalFileTool(BaseModel):
                 args_schema=SearchTextInput,
                 coroutine=obj.search_text_in_file,
             )
-        elif name == "write_text_file":
+        elif name == "add_text_to_file":
             return StructuredTool(
-                name=f"{cls.write_text_file.__name__}",
-                description=cls.write_text_file.__doc__,
+                name=f"{cls.add_text_to_file.__name__}",
+                description=cls.add_text_to_file.__doc__,
                 args_schema=WriteFileInput,
-                coroutine=obj.write_text_file,
+                coroutine=obj.add_text_to_file,
             )
         elif name == "replace_file_lines":
             return StructuredTool(
