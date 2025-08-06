@@ -139,6 +139,7 @@ class SOPManageService:
 
         if override:
             # 先更新已有的sop库
+            override_name_dict = {}
             for one in sop_list:
                 if one_record := records_name_dict.get(one.name):
                     await SOPManageService.update_sop(SOPManagementUpdateSchema(
@@ -148,9 +149,11 @@ class SOPManageService:
                         content=one_record.content,
                         rating=one_record.rating,
                     ))
-                    del records_name_dict[one.name]
+                    override_name_dict[one.name] = True
             # 再新增剩下的sop记录
             for one in records_name_dict.values():
+                if one not in override_name_dict:
+                    continue
                 await SOPManageService.add_sop(SOPManagementSchema(
                     name=one.name,
                     description=one.description,
