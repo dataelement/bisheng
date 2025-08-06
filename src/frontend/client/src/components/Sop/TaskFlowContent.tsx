@@ -20,7 +20,19 @@ import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 
-const Tool = ({ data }) => {
+const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
+    const name = params.file_path.split('/').pop();
+    return <Button
+        variant="link"
+        className='text-xs p-0 h-4 underline underline-offset-2'
+        onClick={() => setCurrentDirectFile({
+            content: params.content,
+            name,
+        })}
+    >{name}</Button>
+}
+
+const Tool = ({ data, setCurrentDirectFile }) => {
     const { name, step_type, params } = data;
     // 过滤尾部hash值
     const toolName = useMemo(() => {
@@ -44,8 +56,12 @@ const Tool = ({ data }) => {
         get_file_details: "正在获取文件详细信息",
         search_files: "正在搜索文件",
         read_text_file: "正在阅读文件",
-        write_text_file: "正在向文件添加内容",
+        add_text_to_file: "正在向文件添加内容",
         replace_file_lines: "正在编辑文件",
+        web_content_to_markdown_llm: <a href={params.url} target='_blank'><Button
+            variant="link"
+            className='text-xs p-0 h-4 underline underline-offset-2'
+        >正在使用 {toolName} 工具</Button></a>,
         default: `正在使用 ${toolName} 工具`
     };
 
@@ -56,9 +72,9 @@ const Tool = ({ data }) => {
         list_files: () => params.directory_path,
         get_file_details: () => params.file_path.split('/').pop(),
         search_files: () => params.pattern,
-        read_text_file: () => params.file_path.split('/').pop(),
-        write_text_file: () => params.file_path.split('/').pop(),
-        replace_file_lines: () => params.file_path.split('/').pop(),
+        read_text_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
+        add_text_to_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
+        replace_file_lines: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
         default: () => '',
     };
 
@@ -70,7 +86,7 @@ const Tool = ({ data }) => {
         get_file_details: FileText,
         search_files: FileText,
         read_text_file: FileText,
-        write_text_file: FileText,
+        add_text_to_file: FileText,
         replace_file_lines: FileText,
         default: WrenchIcon
     };
@@ -91,15 +107,23 @@ const Tool = ({ data }) => {
     return (
         <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
-            <div className='flex gap-4'>
+            <div className='flex gap-4 items-center'>
                 <span className='text-xs text-gray-600 truncate'>{displayName}</span>
-                <span className='text-xs text-[#82868C] truncate w-72'>{paramValue()}</span>
+                <span className='text-xs text-[#82868C] truncate max-w-72'>{paramValue()}</span>
             </div>
         </div>
     )
 }
 
-const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null }) => {
+const Task = ({
+    task,
+    lvl1 = false,
+    que,
+    hasSubTask,
+    sendInput,
+    setCurrentDirectFile,
+    children = null
+}) => {
     const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
     // 根据状态选择对应的图标
@@ -215,7 +239,7 @@ const Task = ({ task, lvl1 = false, que, hasSubTask, sendInput, children = null 
                                 {history.map((_history, index) => (
                                     <div>
                                         <p key={index}>{_history.call_reason}</p>
-                                        <Tool data={_history} />
+                                        <Tool data={_history} setCurrentDirectFile={setCurrentDirectFile} />
                                     </div>
                                 ))}
                             </div> : null
@@ -269,6 +293,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [currentPreviewFileId, setCurrentPreviewFileId] = useState<string>("")
+    const [currentDirectFile, setCurrentDirectFile] = useState<any>(null)
     // 由卡片触发抽屉展开
     const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     useFoucsInput(tasks);
@@ -343,9 +368,22 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                     lvl1
                     task={task}
                     hasSubTask={!!task.children?.length}
+                    setCurrentDirectFile={(file) => {
+                        setIsPreviewOpen(true);
+                        setCurrentDirectFile(file)
+                    }}
                     sendInput={sendInput} >
                     {
-                        task.children?.map((_task, i) => <Task key={_task.id} que={i + 1} task={_task} sendInput={sendInput} />)
+                        task.children?.map((_task, i) => <Task
+                            key={_task.id}
+                            que={i + 1}
+                            task={_task}
+                            sendInput={sendInput}
+                            setCurrentDirectFile={(file) => {
+                                setIsPreviewOpen(true);
+                                setCurrentDirectFile(file)
+                            }}
+                        />)
                     }
                 </Task>
                 )
@@ -371,6 +409,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                                     if (file.file_name.split('.').pop() === 'html') {
                                         return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
                                     }
+                                    setCurrentDirectFile(null);
                                     setCurrentPreviewFileId(file.file_id);
                                     setIsPreviewOpen(true);
                                     setTriggerDrawerFromCard(true);
@@ -429,6 +468,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 onOpenChange={setIsDrawerOpen}
                 downloadFile={downloadFile}
                 onPreview={(id) => {
+                    setCurrentDirectFile(null);
                     setCurrentPreviewFileId(id);
                     setIsDrawerOpen(false)
                     setIsPreviewOpen(true)
@@ -441,6 +481,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 isOpen={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
                 downloadFile={downloadFile}
+                directFile={currentDirectFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
                 onBack={triggerDrawerFromCard ? undefined : (() => {

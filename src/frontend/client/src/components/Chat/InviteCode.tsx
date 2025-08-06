@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { bindInviteCode } from "~/api/linsight";
-import { useGetUserLinsightCountQuery } from "~/data-provider";
+import { useGetBsConfig, useGetUserLinsightCountQuery } from "~/data-provider";
 import { useToastContext } from "~/Providers";
 import { Button, Dialog, DialogContent, Input } from "../ui";
 
@@ -10,6 +10,7 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
     const [isLoading, setIsLoading] = useState(false)
     const { refetch } = useGetUserLinsightCountQuery()
     const { showToast } = useToastContext();
+    const { data: bsConfig } = useGetBsConfig()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -80,6 +81,7 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
                         </div>
                         {/* Error Message */}
                         <p className="text-red-500 text-sm mt-3 px-2 h-6">{error}</p>
+                        {bsConfig?.waiting_list_url && <p className="text-xs mt-3 px-2 h-6">没有邀请码？: <a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">点击这里申请体验资格</a></p>}
                     </form>
                 </div>
             </DialogContent>

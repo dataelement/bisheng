@@ -1,13 +1,10 @@
 "use client"
-
 import type React from "react"
-
-import { ChevronLeft, Download } from "lucide-react"
+import { ChevronLeft, Download } from 'lucide-react'
 import { useState } from "react"
 import { Button, TooltipAnchor } from "../ui"
 import FileIcon from "../ui/icon/File"
 import { Sheet, SheetContent, SheetHeader } from "../ui/Sheet"
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip2"
 import FilePreview from "./FilePreview"
 
 interface FileItem {
@@ -19,14 +16,20 @@ interface FileItem {
 }
 
 interface FilePreviewDrawerProps {
-    files: FileItem[]
-    isOpen: boolean
-    onOpenChange: (open: boolean) => void
+    // 原有方式的 props
+    files?: FileItem[]
     currentFileId?: string
     onFileChange?: (fileId: string) => void
+    downloadFile?: (file: any) => void
+
+    // 新增：直接文件预览方式的 props
+    directFile?: any
+
+    // 通用 props
+    isOpen: boolean
+    onOpenChange: (open: boolean) => void
     onBack?: () => void
-    downloadFile: (file: any) => void
-    children?: React.ReactNode // 预览内容组件
+    children?: React.ReactNode
 }
 
 export default function FilePreviewDrawer({
@@ -36,9 +39,10 @@ export default function FilePreviewDrawer({
     currentFileId,
     onFileChange,
     downloadFile,
+    directFile,
     onBack,
 }: FilePreviewDrawerProps) {
-    const [selectedFileId, setSelectedFileId] = useState(currentFileId || files[0]?.file_id || "")
+    // const [selectedFileId, setSelectedFileId] = useState(currentFileId || files?.[0]?.file_id || "")
 
     // 获取文件扩展名
     const getFileExtension = (fileName: string): string => {
@@ -48,17 +52,50 @@ export default function FilePreviewDrawer({
 
     // 处理文件切换
     const handleFileChange = (fileId: string) => {
-        setSelectedFileId(fileId)
+        // setSelectedFileId(fileId)
         onFileChange?.(fileId)
     }
 
-    // 获取当前选中的文件
-    const currentFile = files.find((file) => file.file_id === currentFileId)
+    // 获取当前显示的文件信息
+    const getCurrentDisplayFile = () => {
+        if (directFile) {
+            return {
+                file_name: directFile.name,
+                file_id: 'direct-file'
+            }
+        }
+
+        if (files && currentFileId) {
+            return files.find((file) => file.file_id === currentFileId)
+        }
+
+        return null
+    }
+
+    const currentDisplayFile = getCurrentDisplayFile()
+
+    // 处理下载（仅对原有文件方式有效）
+    const handleDownload = () => {
+        if (directFile) {
+            // 对于直接文件，创建下载链接
+            const blob = new Blob([directFile.content], { type: 'text/plain' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = directFile.name
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+        } else if (currentDisplayFile && downloadFile) {
+            downloadFile(currentDisplayFile)
+        }
+    }
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
             <SheetContent className="w-[800px] sm:max-w-[800px] p-0">
-                <SheetHeader className=" px-6 py-4">
+                <SheetHeader className="px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 flex-1">
                             {/* 返回按钮 */}
@@ -68,45 +105,31 @@ export default function FilePreviewDrawer({
                                 </Button>
                             )}
 
-                            {/* 文件选择下拉框 */}
+                            {/* 文件信息显示 */}
                             <div className="flex items-center space-x-3 flex-1">
-                                {/* <Select value={selectedFileId} onValueChange={handleFileChange}>
-                                    <SelectTrigger className="max-w-80 shadow-none p-0 h-8 px-2 focus:ring-0">
-                                        <SelectValue>
-                                            <div className="flex items-center space-x-3">
-                                                {currentFile && <FileIcon type={getFileExtension(currentFile.file_name)} className="w-4 h-4" />}
-                                                <span className="font-medium text-gray-900">
-                                                    {currentFile?.file_name || "选择文件"}
-                                                </span>
-                                            </div>
-                                        </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {files.map((file) => (
-                                            <SelectItem key={file.file_id} value={file.file_id}>
-                                                <div className="flex items-center space-x-3">
-                                                    <FileIcon type={getFileExtension(file.file_name)} className="w-4 h-4" />
-                                                    <span className="text-sm">{file.file_name}</span>
-                                                </div>
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select> */}
                                 <div className="flex items-center space-x-3">
-                                    {currentFile && <FileIcon type={getFileExtension(currentFile.file_name)} className="w-4 h-4" />}
-                                    <TooltipAnchor side="bottom" description={currentFile?.file_name || "选择文件"}>
+                                    {currentDisplayFile && (
+                                        <FileIcon
+                                            type={getFileExtension(currentDisplayFile.file_name)}
+                                            className="w-4 h-4"
+                                        />
+                                    )}
+                                    <TooltipAnchor side="bottom" description={currentDisplayFile?.file_name || "选择文件"}>
                                         <p className="font-medium text-gray-900 truncate max-w-96">
-                                            {currentFile?.file_name || "选择文件"}
+                                            {currentDisplayFile?.file_name || "选择文件"}
                                         </p>
                                     </TooltipAnchor>
                                 </div>
 
-                                {/* 关闭按钮 */}
-                                <TooltipAnchor
-                                    side="bottom"
-                                    description='下载'
-                                >
-                                    <Button variant="ghost" size="icon" onClick={() => downloadFile(currentFile)} className="h-8 w-8">
+                                {/* 下载按钮 */}
+                                <TooltipAnchor side="bottom" description='下载'>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleDownload}
+                                        className="h-8 w-8"
+                                        disabled={!currentDisplayFile}
+                                    >
                                         <Download size={14} />
                                     </Button>
                                 </TooltipAnchor>
@@ -117,7 +140,11 @@ export default function FilePreviewDrawer({
 
                 {/* 预览内容区域 */}
                 <div className="flex-1 overflow-auto">
-                    <FilePreview files={files} fileId={currentFileId} />
+                    <FilePreview
+                        files={files}
+                        fileId={currentFileId}
+                        directFile={directFile}
+                    />
                 </div>
             </SheetContent>
         </Sheet>

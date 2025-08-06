@@ -484,7 +484,7 @@ const getMarkdownPaste = async (editorElement, callBack) => {
     // 示例处理函数
     async function processText(text) {
         // 在这里实现你的文本处理逻辑
-        return text;
+        return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     async function processHTML(html) {

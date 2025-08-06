@@ -127,15 +127,15 @@ function AccountSettings() {
           {localize('com_nav_settings')}
         </Select.SelectItem> */}
         {/* <DropdownMenuSeparator /> */}
-        <Select.SelectItem
-          aria-selected={true}
-          className="select-item text-sm"
-        >
-          <GanttChartIcon className="icon-md" />
-          <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
+        <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
+          <Select.SelectItem
+            aria-selected={true}
+            className="select-item text-sm"
+          >
+            <GanttChartIcon className="icon-md" />
             管理后台
-          </a>
-        </Select.SelectItem>
+          </Select.SelectItem>
+        </a>
         <Select.SelectItem
           aria-selected={true}
           onClick={() => logout()}

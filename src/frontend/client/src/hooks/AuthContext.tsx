@@ -95,7 +95,7 @@ const AuthContextProvider = ({
       setUserContext({
         token: undefined,
         isAuthenticated: false,
-        user: undefined,
+        // user: undefined,
         redirect: `${location.origin}/${__APP_ENV__.BISHENG_HOST}?from=workspace` // data.redirect ?? bsConfig?.host,
       });
     },

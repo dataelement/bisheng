@@ -7,8 +7,8 @@ import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
 const app_env = {
-  BASE_URL: '',
-  BISHENG_HOST: 'console'
+  BASE_URL: '/workspace',
+  BISHENG_HOST: ''
 }
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -22,15 +22,15 @@ export default defineConfig({
       //   // target: 'http://localhost:3080',
       //   changeOrigin: true,
       // },
-      '/bisheng': {
+      '/workspace/bisheng': {
         target: "http://192.168.106.120:3002",
         changeOrigin: true,
         secure: false,
-        // rewrite: (path) => {
-        //   return path.replace(/^\/workspace/, '');
-        // },
+        rewrite: (path) => {
+          return path.replace(/^\/workspace/, '');
+        },
       },
-      '/api': {
+      '/workspace/api': {
         target: 'http://192.168.106.120:3002',
         changeOrigin: true,
         secure: false,
@@ -39,12 +39,18 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq, req, res) => {
             console.log('Proxying request to:', proxyReq.path);
           });
-        }
+        },
+        rewrite: (path) => {
+          return path.replace(/^\/workspace/, '');
+        },
       },
-      '/tmp-dir': {
+      '/workspace/tmp-dir': {
         target: 'http://192.168.106.116:9000',
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => {
+          return path.replace(/^\/workspace/, '');
+        },
       }
     },
   },

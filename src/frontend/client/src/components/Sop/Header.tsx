@@ -8,7 +8,6 @@ import { Button, Skeleton } from '../ui';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
 
 export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
-    const [open2, setOpen2] = useState(false);
     const { getLinsight } = useLinsightManager()
     const linsight = useMemo(() => {
         return getLinsight(versionId)
@@ -30,20 +29,18 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
             }
 
             <div className="flex items-center gap-3">
-                <Popover open={open2}>
+                <Popover>
                     <PopoverTrigger asChild>
                         <Button
                             variant="outline"
                             size="sm"
                             className="h-7 px-3 rounded-lg shadow-sm focus-visible:outline-0"
-                            onMouseEnter={() => setOpen2(true)}
-                            onMouseLeave={() => setOpen2(false)}
                         >
                             <MessageCircleMoreIcon className="size-4" />
                             <span className="text-xs">任务描述</span>
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-96 border bg-white rounded-xl">
+                    <PopoverContent hideWhenDetached className="w-96 border bg-white rounded-xl">
                         <p className='text-md font-bold mb-2 flex gap-2 items-center'>
                             <div className='size-5 rounded-sm overflow-hidden'>
                                 <div className='size-full rounded-full rounded-br-2xl bg-primary text-white text-center'>

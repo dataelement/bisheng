@@ -3,66 +3,150 @@ import '../../markdown.css';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui";
 
-export default function FilePreview({ files, fileId }) {
+interface FilePreviewProps {
+    // 原有方式：通过 fileId 查找文件
+    files?: any[]
+    fileId?: string
+    // 新增方式：直接传入文件对象
+    directFile?: any
+}
 
-    const currentFile = files.find(file => file.file_id === fileId)
+export default function FilePreview({ files, fileId, directFile }: FilePreviewProps) {
+    // 获取当前文件信息
+    const getCurrentFile = () => {
+        if (directFile) {
+            return {
+                file_name: directFile.name,
+                file_url: '', // 直接文件模式不需要 URL
+                content: directFile.content,
+                isDirect: true
+            }
+        }
+
+        if (files && fileId) {
+            const currentFile = files.find(file => file.file_id === fileId)
+            return currentFile ? {
+                file_name: currentFile.file_name,
+                file_url: currentFile.file_url,
+                content: '',
+                isDirect: false
+            } : null
+        }
+
+        return null
+    }
+
+    const currentFile = getCurrentFile()
+
     // 获取文件扩展名
     const getFileExtension = (fileName: string): string => {
         const lastDot = fileName.lastIndexOf(".")
-        return lastDot !== -1 ? fileName.substring(lastDot + 1) : ""
+        return (lastDot !== -1 ? fileName.substring(lastDot + 1) : "").toLowerCase()
     }
 
     const render = () => {
-        const { file_url, file_name } = currentFile
-        const url = `${location.origin}/bisheng/${file_url}`
+        if (!currentFile) {
+            return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
+        }
+
+        const { file_url, file_name, content, isDirect } = currentFile
         const type = getFileExtension(file_name)
 
-        if (!url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
+        // 对于直接文件模式，不需要 URL
+        const url = isDirect ? '' : `${location.origin}/bisheng/${file_url}`
+
+        if (!isDirect && !url) {
+            return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
+        }
+
         switch (type) {
             case 'doc':
             case 'docx':
-            case 'md': return <TxtFileViewer markdown filePath={url} />
-            case 'csv': return <TxtFileViewer csv filePath={url} />
-            case 'txt': return <TxtFileViewer filePath={url} />
-            case 'html': return <TxtFileViewer html filePath={url} />
+            case 'md':
+                return <TxtFileViewer
+                    markdown
+                    filePath={isDirect ? undefined : url}
+                    directContent={isDirect ? content : undefined}
+                />
+            case 'csv':
+                return <TxtFileViewer
+                    csv
+                    filePath={isDirect ? undefined : url}
+                    directContent={isDirect ? content : undefined}
+                />
+            case 'txt':
+                return <TxtFileViewer
+                    filePath={isDirect ? undefined : url}
+                    directContent={isDirect ? content : undefined}
+                />
+            case 'html':
+                return <TxtFileViewer
+                    html
+                    filePath={isDirect ? undefined : url}
+                    directContent={isDirect ? content : undefined}
+                />
             case 'png':
             case 'jpg':
             case 'jpeg':
-            case 'bmp': return <img
-                className="border"
-                src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)} alt="" />
+            case 'bmp':
+                if (isDirect) {
+                    // 对于直接传入的图片内容，假设 content 是 base64 或 blob URL
+                    return <img className="border" src={content || "/placeholder.svg"} alt={file_name} />
+                }
+                return <img
+                    className="border"
+                    src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL) || "/placeholder.svg"}
+                    alt={file_name}
+                />
             default:
                 return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
         }
     }
 
+    return <div className="relative h-[calc(100vh-84px)] overflow-y-auto">{render()}</div>
+}
 
-    return <div className="relative h-[calc(100vh-84px)] overflow-y-auto">
-        {render()}
-    </div>
-};
+interface TxtFileViewerProps {
+    html?: boolean
+    markdown?: boolean
+    csv?: boolean
+    filePath?: string
+    directContent?: string // 新增：直接传入的内容
+}
 
-
-const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }) => {
+const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath, directContent }: TxtFileViewerProps) => {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        // 如果有直接内容，直接使用
+        if (directContent !== undefined) {
+            setContent(directContent);
+            setLoading(false);
+            setError(null);
+            return;
+        }
+
+        // 否则从文件路径获取内容
+        if (!filePath) {
+            setError('No file path or direct content provided');
+            setLoading(false);
+            return;
+        }
+
         const fetchTextFile = async () => {
             try {
                 setLoading(true);
                 const response = await fetch(filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL));
-
                 if (!response.ok) {
                     throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
                 }
-
                 const text = await response.text();
                 setContent(text);
                 setError(null);
             } catch (err) {
-                setError(err.message);
+                setError(err instanceof Error ? err.message : 'Unknown error');
                 setContent('');
             } finally {
                 setLoading(false);
@@ -70,12 +154,12 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
         };
 
         fetchTextFile();
-    }, [filePath]);
+    }, [filePath, directContent]);
 
     if (loading) {
         return (
             <div className="p-4 text-sm text-gray-500">
-                Loading text file...
+                <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
             </div>
         );
     }
@@ -90,7 +174,7 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
 
     if (html) return <iframe
         className="w-full h-full border"
-        srcDoc={content}  // 使用srcdoc直接嵌入HTML内容
+        srcDoc={content}
         sandbox="allow-scripts"
     />
 
@@ -107,7 +191,6 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }
     );
 };
 
-
 interface CsvTableViewerProps {
     csvText: string;
 }
@@ -116,7 +199,6 @@ export function CsvTableViewer({ csvText }: CsvTableViewerProps) {
     // 改进的CSV解析：只有逗号后无空格才分割
     const parseCsv = (text: string) => {
         const rows = text.split('\n').filter(row => row.trim() !== '');
-
         return rows.map(row => {
             // 关键修改：使用负向零宽断言 (?<!\s) 确保逗号前没有空格
             const cells = row.split(/,(?!\s)/);
