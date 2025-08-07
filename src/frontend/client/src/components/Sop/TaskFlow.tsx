@@ -10,6 +10,7 @@ import { SopStatus } from './SOPEditor';
 import { TaskControls } from './TaskControls';
 import { TaskFlowContent } from './TaskFlowContent';
 import { formatTime } from '~/utils';
+import { useAutoScroll } from '~/hooks/useAutoScroll';
 
 export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
@@ -85,12 +86,15 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
         })
     }
 
+    // 自动滚动到底部
     const flowScrollRef = useRef(null)
     useEffect(() => {
         if ([SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(linsight.status) && flowScrollRef.current) {
             flowScrollRef.current.scrollTop = flowScrollRef.current.scrollHeight;
         }
     }, [linsight.status, versionId])
+
+    useAutoScroll(flowScrollRef, linsight.tasks)
 
     return (
         <motion.div

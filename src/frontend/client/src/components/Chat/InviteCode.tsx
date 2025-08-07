@@ -81,7 +81,7 @@ export default function InvitationCodeForm({ showCode, setShowCode }) {
                         </div>
                         {/* Error Message */}
                         <p className="text-red-500 text-sm mt-3 px-2 h-6">{error}</p>
-                        {bsConfig?.waiting_list_url && <p className="text-xs mt-3 px-2 h-6">没有邀请码？: <a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">点击这里申请体验资格</a></p>}
+                        {bsConfig?.waiting_list_url && <p className="text-xs mt-3 px-2 h-6">没有邀请码？<a className="text-primary" href={bsConfig.waiting_list_url} target="_blank" rel="noreferrer">点击这里申请体验资格</a></p>}
                     </form>
                 </div>
             </DialogContent>

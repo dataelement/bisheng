@@ -21,19 +21,16 @@ import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
-    const name = params.file_path.split('/').pop();
+    if (!params) return null
     return <Button
         variant="link"
         className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
-        onClick={() => setCurrentDirectFile({
-            content: params.content,
-            name,
-        })}
-    >{name}</Button>
+        onClick={() => setCurrentDirectFile(params.file_info)}
+    >{params.file_info?.file_name}</Button>
 }
 
 const Tool = ({ data, setCurrentDirectFile }) => {
-    const { name, step_type, params } = data;
+    const { name, step_type, params, extra_info } = data;
     // 过滤尾部hash值
     const toolName = useMemo(() => {
         const lastUnderscoreIndex = name.lastIndexOf('_');
@@ -68,9 +65,9 @@ const Tool = ({ data, setCurrentDirectFile }) => {
         list_files: () => params.directory_path,
         get_file_details: () => params.file_path.split('/').pop(),
         search_files: () => params.pattern,
-        read_text_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
-        add_text_to_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
-        replace_file_lines: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
+        read_text_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
+        add_text_to_file: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
+        replace_file_lines: () => <ToolButtonLink params={extra_info} setCurrentDirectFile={setCurrentDirectFile} />,
         web_content_to_markdown_llm: () => <a href={params.url} target='_blank'><Button
             variant="link"
             className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
@@ -305,7 +302,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
-        const url = `${__APP_ENV__.BASE_URL}/bisheng/${file_url}`;
+        const url = `${__APP_ENV__.BASE_URL}${file_url}`;
 
         return axios.get(url, { responseType: "blob" }).then((res: any) => {
             let blob: any = null
@@ -484,7 +481,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 directFile={currentDirectFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
-                onBack={triggerDrawerFromCard ? undefined : (() => {
+                onBack={currentDirectFile || triggerDrawerFromCard ? undefined : (() => {
                     setIsDrawerOpen(true);
                     setIsPreviewOpen(false);
                 })}

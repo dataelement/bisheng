@@ -1,7 +1,7 @@
 "use client"
-import type React from "react"
 import { ChevronLeft, Download } from 'lucide-react'
-import { useState } from "react"
+import type React from "react"
+import { useMemo } from "react"
 import { Button, TooltipAnchor } from "../ui"
 import FileIcon from "../ui/icon/File"
 import { Sheet, SheetContent, SheetHeader } from "../ui/Sheet"
@@ -23,7 +23,7 @@ interface FilePreviewDrawerProps {
     downloadFile?: (file: any) => void
 
     // 新增：直接文件预览方式的 props
-    directFile?: any
+    directFile?: { name: string, url: string }
 
     // 通用 props
     isOpen: boolean
@@ -57,11 +57,11 @@ export default function FilePreviewDrawer({
     }
 
     // 获取当前显示的文件信息
-    const getCurrentDisplayFile = () => {
+    const currentDisplayFile = useMemo(() => {
         if (directFile) {
             return {
-                file_name: directFile.name,
-                file_id: 'direct-file'
+                file_id: 'direct-file',
+                ...directFile
             }
         }
 
@@ -70,27 +70,9 @@ export default function FilePreviewDrawer({
         }
 
         return null
-    }
+    }, [files, currentFileId, directFile])
 
-    const currentDisplayFile = getCurrentDisplayFile()
-
-    // 处理下载（仅对原有文件方式有效）
-    const handleDownload = () => {
-        if (directFile) {
-            // 对于直接文件，创建下载链接
-            const blob = new Blob([directFile.content], { type: 'text/plain' })
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = directFile.name
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            URL.revokeObjectURL(url)
-        } else if (currentDisplayFile && downloadFile) {
-            downloadFile(currentDisplayFile)
-        }
-    }
+    if (!isOpen) return null
 
     return (
         <Sheet open={isOpen} onOpenChange={onOpenChange}>
@@ -126,7 +108,7 @@ export default function FilePreviewDrawer({
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        onClick={handleDownload}
+                                        onClick={() => downloadFile?.(currentDisplayFile)}
                                         className="h-8 w-8"
                                         disabled={!currentDisplayFile}
                                     >
@@ -143,7 +125,7 @@ export default function FilePreviewDrawer({
                     <FilePreview
                         files={files}
                         fileId={currentFileId}
-                        directFile={directFile}
+                        currentDisplayFile={currentDisplayFile}
                     />
                 </div>
             </SheetContent>

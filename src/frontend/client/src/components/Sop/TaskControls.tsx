@@ -1,8 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, CheckCircle, CheckIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useGetBsConfig, useGetUserLinsightCountQuery } from '~/data-provider';
-import { Button, Checkbox, Switch, Textarea } from '../ui';
+import { CheckIcon } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { Button, Switch, Textarea } from '../ui';
 import StarIcon from '../ui/icon/Star';
 import { SopStatus } from './SOPEditor';
 

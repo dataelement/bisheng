@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import '../../markdown.css';
 import Markdown from '../Chat/Messages/Content/Markdown';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui";
@@ -8,35 +8,23 @@ interface FilePreviewProps {
     files?: any[]
     fileId?: string
     // 新增方式：直接传入文件对象
-    directFile?: any
+    currentDisplayFile?: any
 }
 
-export default function FilePreview({ files, fileId, directFile }: FilePreviewProps) {
+export default function FilePreview({ files, fileId, currentDisplayFile }: FilePreviewProps) {
     // 获取当前文件信息
-    const getCurrentFile = () => {
-        if (directFile) {
-            return {
-                file_name: directFile.name,
-                file_url: '', // 直接文件模式不需要 URL
-                content: directFile.content,
-                isDirect: true
-            }
+    const currentFile = useMemo(() => {
+        if (currentDisplayFile) {
+            return currentDisplayFile
         }
 
         if (files && fileId) {
             const currentFile = files.find(file => file.file_id === fileId)
-            return currentFile ? {
-                file_name: currentFile.file_name,
-                file_url: currentFile.file_url,
-                content: '',
-                isDirect: false
-            } : null
+            return currentFile
         }
 
         return null
-    }
-
-    const currentFile = getCurrentFile()
+    }, [files, fileId, currentDisplayFile])
 
     // 获取文件扩展名
     const getFileExtension = (fileName: string): string => {
@@ -45,19 +33,15 @@ export default function FilePreview({ files, fileId, directFile }: FilePreviewPr
     }
 
     const render = () => {
-        if (!currentFile) {
+        if (!currentFile && !currentFile?.file_url) {
             return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
         }
 
-        const { file_url, file_name, content, isDirect } = currentFile
+        const { file_url, file_name } = currentFile
         const type = getFileExtension(file_name)
 
         // 对于直接文件模式，不需要 URL
-        const url = isDirect ? '' : `${location.origin}/bisheng/${file_url}`
-
-        if (!isDirect && !url) {
-            return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>
-        }
+        const url = `${location.origin}${file_url}`
 
         switch (type) {
             case 'doc':
@@ -65,34 +49,26 @@ export default function FilePreview({ files, fileId, directFile }: FilePreviewPr
             case 'md':
                 return <TxtFileViewer
                     markdown
-                    filePath={isDirect ? undefined : url}
-                    directContent={isDirect ? content : undefined}
+                    filePath={url}
                 />
             case 'csv':
                 return <TxtFileViewer
                     csv
-                    filePath={isDirect ? undefined : url}
-                    directContent={isDirect ? content : undefined}
+                    filePath={url}
                 />
             case 'txt':
                 return <TxtFileViewer
-                    filePath={isDirect ? undefined : url}
-                    directContent={isDirect ? content : undefined}
+                    filePath={url}
                 />
             case 'html':
                 return <TxtFileViewer
                     html
-                    filePath={isDirect ? undefined : url}
-                    directContent={isDirect ? content : undefined}
+                    filePath={url}
                 />
             case 'png':
             case 'jpg':
             case 'jpeg':
             case 'bmp':
-                if (isDirect) {
-                    // 对于直接传入的图片内容，假设 content 是 base64 或 blob URL
-                    return <img className="border" src={content || "/placeholder.svg"} alt={file_name} />
-                }
                 return <img
                     className="border"
                     src={url.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL) || "/placeholder.svg"}
@@ -114,21 +90,12 @@ interface TxtFileViewerProps {
     directContent?: string // 新增：直接传入的内容
 }
 
-const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath, directContent }: TxtFileViewerProps) => {
+const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath }: TxtFileViewerProps) => {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // 如果有直接内容，直接使用
-        if (directContent !== undefined) {
-            setContent(directContent);
-            setLoading(false);
-            setError(null);
-            return;
-        }
-
-        // 否则从文件路径获取内容
         if (!filePath) {
             setError('No file path or direct content provided');
             setLoading(false);
@@ -138,7 +105,8 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath, 
         const fetchTextFile = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL));
+                const url = filePath.replace(/https?:\/\/[^\/]+/, __APP_ENV__.BASE_URL)
+                const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
                 }
@@ -154,7 +122,7 @@ const TxtFileViewer = ({ html = false, markdown = false, csv = false, filePath, 
         };
 
         fetchTextFile();
-    }, [filePath, directContent]);
+    }, [filePath]);
 
     if (loading) {
         return (

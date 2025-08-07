@@ -8,7 +8,7 @@ export default function WebView() {
     const [content, setContent] = useState('');
 
     useEffect(() => {
-        const baseUrl = `${__APP_ENV__.BASE_URL}/bisheng/${decodeURIComponent(url || '')}`
+        const baseUrl = `${__APP_ENV__.BASE_URL}${decodeURIComponent(url || '')}`
         const fetchTextFile = async () => {
             try {
                 const response = await fetch(baseUrl);

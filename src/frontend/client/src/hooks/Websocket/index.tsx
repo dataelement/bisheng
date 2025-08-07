@@ -14,12 +14,13 @@ export const useLinsightWebSocket = (versionId) => {
     const { getLinsight, updateLinsight } = useLinsightManager()
     const { showToast } = useToastContext();
 
+    const linsight = getLinsight(versionId);
     const task = useMemo(() => {
         const linsight = getLinsight(versionId);
         return linsight
             ? { versionId, running: linsight.status === SopStatus.Running }
             : { versionId, running: false };
-    }, [getLinsight, versionId]);
+    }, [linsight?.status, versionId]);
 
     // 使用 ref 存储当前活跃版本 ID
     const activeVersionIdRef = useRef(versionId);

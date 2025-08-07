@@ -41,9 +41,9 @@ export const Header = ({ isLoading, setVersionId, versionId, versions }) => {
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent hideWhenDetached className="w-96 border bg-white rounded-xl">
-                        <p className='text-md font-bold mb-2 flex gap-2 items-center'>
+                        <p className='text-sm font-bold mb-2 flex gap-1.5 items-center'>
                             <div className='size-5 rounded-sm overflow-hidden'>
-                                <div className='size-full rounded-full rounded-br-2xl bg-primary text-white text-center'>
+                                <div className='size-full rounded-full rounded-br-2xl bg-primary text-white text-center scale-75'>
                                     <span className='relative -top-1 '>...</span>
                                 </div>
                             </div>

@@ -1,6 +1,6 @@
 // src/hooks/useLinsightManager.ts
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     useRecoilCallback,
     useRecoilState,
@@ -91,6 +91,7 @@ export const useLinsightManager = () => {
                 newStatus = execute_feedback ? SopStatus.FeedbackCompleted : SopStatus.completed;
                 break;
             case 'terminated':
+            case 'failed':
                 newStatus = SopStatus.Stoped;
                 break;
             default:
@@ -105,6 +106,7 @@ export const useLinsightManager = () => {
             status: newStatus,
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: buildTaskTree(tasks),
+            taskError: 'failed' === status ? output_result?.error_message : '',
             file_list: output_result?.final_files || [],
             sop: 'sop_generation_failed' === status ? '' : sop,
             sopError: 'sop_generation_failed' === status ? sop : '',
@@ -176,6 +178,12 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
     const { showToast } = useToastContext();
     const [error, setError] = useState(false);
     const { setConversation } = store.useCreateConversationAtom(0);
+    // 使用 ref 存储当前活跃版本 ID
+    const activeVersionIdRef = useRef(versionId);
+    // 同步最新活跃版本 ID
+    useEffect(() => {
+        activeVersionIdRef.current = versionId;
+    }, [versionId]);
 
     // 切换非新建会话不展示loading
     useEffect(() => {
@@ -220,14 +228,13 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
             })
         })
 
-
         sse.addEventListener('search_sop_error', (e: MessageEvent) => {
             // const data = JSON.parse(e.data);
             showToast({
                 message: e.data,
                 status: 'warning',
             });
-            updateLinsight(versionId, {
+            updateLinsight(_versionId, {
                 sopError: e.data
             })
         })
@@ -239,13 +246,15 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
         sse.addEventListener('error', async (e: MessageEvent) => {
             console.error('object :>> ', e);
-            showToast({
-                message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
-                status: 'error',
-            });
-            setError(true)
-            setLoading(false)
-            updateLinsight(versionId, {
+            if (_versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
+                showToast({
+                    message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
+                    status: 'error',
+                });
+                setError(true)
+                setLoading(false)
+            }
+            updateLinsight(_versionId, {
                 sopError: e.data,
                 status: SopStatus.SopGenerated,
             })
@@ -360,13 +369,16 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
                 sse.addEventListener('error', async (e: MessageEvent) => {
                     console.error('object :>> ', e);
-                    showToast({
-                        message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
-                        status: 'error',
-                    });
-                    setError(true)
-                    setLoading(false)
+                    if (versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
+                        showToast({
+                            message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
+                            status: 'error',
+                        });
+                        setError(true)
+                        setLoading(false)
+                    }
                     updateLinsight(versionId, {
+                        sopError: e.data,
                         status: SopStatus.SopGenerated,
                     })
                 })
