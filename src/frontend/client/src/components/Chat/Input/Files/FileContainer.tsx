@@ -45,17 +45,17 @@ const FileContainer = ({
 
   return (
     <div className="group relative inline-block text-sm text-text-primary">
-      <div className="relative overflow-hidden rounded-2xl border border-border-light">
-        <div className="w-56 bg-surface-hover-alt p-1.5">
+      <div className="relative overflow-hidden rounded-2xl border">
+        <div className="w-56 bg-white p-4">
           <div className="flex flex-row items-center gap-2">
             <FilePreview file={file} fileType={fileType} className="relative" />
             <div className="overflow-hidden">
-              <div className="truncate font-medium" title={file.filename}>
+              <div className="truncate" title={file.filename}>
                 {file.filename}
               </div>
-              <div className="truncate text-text-secondary" title={fileType.title}>
+              {/* <div className="truncate text-text-secondary" title={fileType.title}>
                 {fileType.title}
-              </div>
+              </div> */}
             </div>
           </div>
         </div>

@@ -2780,6 +2780,21 @@ button.scroll-convo {
   word-break: break-all !important;
 }
 
+.linsight-vditor .vditor-reset h1,
+.linsight-vditor .vditor-reset h2 {
+  margin-top: 8px;
+  border: none;
+}
+
+.vditor-reset li,
+.vditor-reset li+li {
+  margin-top: 0.5em;
+}
+
+.vditor-reset hr {
+  border-width: 1px;
+}
+
 .linsight-vditor .vditor-reset {
   font-size: 14px;
   padding: 0 20px 160px 0 !important;
@@ -2866,5 +2881,20 @@ button.scroll-convo {
 
   to {
     transform: rotate(-360deg);
+  }
+}
+
+@keyframes loadingDots {
+
+  0%,
+  80%,
+  100% {
+    opacity: 1;
+    background-color: rgb(0, 0, 0);
+  }
+
+  40% {
+    opacity: 0.3;
+    background-color: rgb(156, 163, 175);
   }
 }

@@ -67,7 +67,7 @@ const SopTable = ({
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">描述</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             <div className="flex items-center h-full">
                                 <span className="align-middle">星级评分</span>
                                 {loading && <LoadIcon className="animate-spin w-4 h-4 ml-1" />}
@@ -86,7 +86,7 @@ const SopTable = ({
                                     </button>
                                 </div>
                             </div>
-                        </th>
+                        </th> */}
                         <th className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
                     </tr>
                 </thead>
@@ -138,9 +138,9 @@ const SopTable = ({
                                         </Tooltip>
                                     </TooltipProvider>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
+                                {/* <td className="px-6 py-4 whitespace-nowrap">
                                     {ratingDisplay(item.rating || 0)}
-                                </td>
+                                </td> */}
                                 <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
                                     <Button
                                         variant="ghost"

@@ -1,28 +1,27 @@
-import { playDing } from './index';
 import React from 'react';
 
-export * from './map';
-export * from './json';
-export * from './files';
-export * from './latex';
-export * from './theme';
-export * from './forms';
+export { default as buildDefaultConvo } from './buildDefaultConvo';
+export { default as buildTree } from './buildTree';
+export { default as cleanupPreset } from './cleanupPreset';
+export { default as cn } from './cn';
 export * from './convos';
+export * from './endpoints';
+export * from './files';
+export * from './forms';
+export { default as getDefaultEndpoint } from './getDefaultEndpoint';
+export { default as getLoginError } from './getLoginError';
+export * from './json';
+export * from './languages';
+export * from './latex';
+export * from './localStorage';
+export { default as logger } from './logger';
+export * from './map';
+export * from './messages';
 export * from './presets';
+export * from './promptGroups';
 export * from './prompts';
 export * from './textarea';
-export * from './messages';
-export * from './languages';
-export * from './endpoints';
-export * from './localStorage';
-export * from './promptGroups';
-export { default as cn } from './cn';
-export { default as logger } from './logger';
-export { default as buildTree } from './buildTree';
-export { default as getLoginError } from './getLoginError';
-export { default as cleanupPreset } from './cleanupPreset';
-export { default as buildDefaultConvo } from './buildDefaultConvo';
-export { default as getDefaultEndpoint } from './getDefaultEndpoint';
+export * from './theme';
 
 export const languages = [
   'java',
@@ -148,6 +147,7 @@ export const playDing = () => {
  * @param {boolean} shouldExpand - true表示展开，false表示关闭
  */
 export const toggleNav = (shouldExpand) => {
+  return // 去掉自动收起展开
   // 获取导航栏切换按钮元素
   const navToggle = document.querySelector('div[id="toggle-left-nav"]');
 
@@ -164,4 +164,15 @@ export const toggleNav = (shouldExpand) => {
     // 触发点击事件来切换状态
     navToggle.click();
   }
+}
+
+/**
+ * 时间字符串格式化函数
+ * @param {string} time - 时间字符串，格式为 "YYYY-mm-ddTHH:MM:SS"
+ * @param {boolean} hideTime - 是否隐藏时分秒
+ * @return {string} 格式化后的时间字符串，格式为 "YYYY-mm-dd HH:MM:SS"
+ */
+export const formatTime = (time: string, hideTime: boolean = false) => {
+  const value = time.replace('T', ' ').replaceAll('-', '/');
+  return hideTime ? value.slice(0, -3) : value
 }

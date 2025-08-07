@@ -9,18 +9,45 @@ import {
     Search,
     WrenchIcon
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SendIcon } from '~/components/svg';
 import { playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';
+import DownIcon from '../svg/DownIcon';
 import { Button, Textarea } from '../ui';
 import FileIcon from '../ui/icon/File';
 import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 
-const Tool = ({ data }) => {
-    const { name: toolName, step_type, params } = data;
+const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
+    const name = params.file_path.split('/').pop();
+    return <Button
+        variant="link"
+        className='text-xs p-0 h-4 underline underline-offset-2'
+        onClick={() => setCurrentDirectFile({
+            content: params.content,
+            name,
+        })}
+    >{name}</Button>
+}
+
+const Tool = ({ data, setCurrentDirectFile }) => {
+    const { name, step_type, params } = data;
+    // 过滤尾部hash值
+    const toolName = useMemo(() => {
+        const lastUnderscoreIndex = name.lastIndexOf('_');
+        if (lastUnderscoreIndex === -1) return name;
+
+        const afterLastUnderscore = name.slice(lastUnderscoreIndex + 1);
+
+        const isHash = afterLastUnderscore.length >= 8 &&
+            /^[a-z0-9]+$/.test(afterLastUnderscore) &&
+            !/^\d+$/.test(afterLastUnderscore);
+
+        return isHash ? name.slice(0, lastUnderscoreIndex) : name;
+    }, [name])
+
     // 工具名称映射
     const nameMap = {
         web_search: "正在联网搜索",
@@ -29,8 +56,12 @@ const Tool = ({ data }) => {
         get_file_details: "正在获取文件详细信息",
         search_files: "正在搜索文件",
         read_text_file: "正在阅读文件",
-        write_text_file: "正在向文件添加内容",
+        add_text_to_file: "正在向文件添加内容",
         replace_file_lines: "正在编辑文件",
+        web_content_to_markdown_llm: <a href={params.url} target='_blank'><Button
+            variant="link"
+            className='text-xs p-0 h-4 underline underline-offset-2'
+        >正在使用 {toolName} 工具</Button></a>,
         default: `正在使用 ${toolName} 工具`
     };
 
@@ -41,9 +72,9 @@ const Tool = ({ data }) => {
         list_files: () => params.directory_path,
         get_file_details: () => params.file_path.split('/').pop(),
         search_files: () => params.pattern,
-        read_text_file: () => params.file_path.split('/').pop(),
-        write_text_file: () => params.file_path.split('/').pop(),
-        replace_file_lines: () => params.file_path.split('/').pop(),
+        read_text_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
+        add_text_to_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
+        replace_file_lines: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
         default: () => '',
     };
 
@@ -55,7 +86,7 @@ const Tool = ({ data }) => {
         get_file_details: FileText,
         search_files: FileText,
         read_text_file: FileText,
-        write_text_file: FileText,
+        add_text_to_file: FileText,
         replace_file_lines: FileText,
         default: WrenchIcon
     };
@@ -76,23 +107,31 @@ const Tool = ({ data }) => {
     return (
         <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
-            <div className='flex gap-4 truncate'>
-                <span className='text-xs text-gray-600'>{displayName}</span>
-                <span className='text-xs text-[#82868C]'>{paramValue()}</span>
+            <div className='flex gap-4 items-center'>
+                <span className='text-xs text-gray-600 truncate'>{displayName}</span>
+                <span className='text-xs text-[#82868C] truncate max-w-72'>{paramValue()}</span>
             </div>
         </div>
     )
 }
 
-const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
-    const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+const Task = ({
+    task,
+    lvl1 = false,
+    que,
+    hasSubTask,
+    sendInput,
+    setCurrentDirectFile,
+    children = null
+}) => {
+    const [isExpanded, setIsExpanded] = useState(true);
     const [inputValue, setInputValue] = useState('');
-
     // 根据状态选择对应的图标
     const renderStatusIcon = () => {
         const status = (task.children?.some(child => child.status === 'user_input') && 'user_input') || task.status;
         switch (status) {
             case "failed":
+            case "user_input":
             case "terminated":
                 return <Pause size={18} className='min-w-4 p-0.5 rounded-full mr-2' />;
             // case "user_input":
@@ -158,14 +197,6 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
         return result;
     }, [task.history])
 
-    const historyContainerRef = useRef(null);
-
-    useEffect(() => {
-        if (isHistoryExpanded && historyContainerRef.current) {
-            // 滚动到底部
-            historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight;
-        }
-    }, [isHistoryExpanded, history]);
 
     // 未开始执行的任务不展示
     if (task.status === 'not_started') {
@@ -173,20 +204,29 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
     }
 
     return (
-        <div className={`${lvl1 ? '' : 'pl-10'}`}>
+        <div className={`${lvl1 ? '' : 'pl-6'}`}>
             <div className={`flex items-start relative`}>
-                <ChevronDown
-                    size={18}
-                    className={`absolute top-0 -left-6 text-gray-500 mt-0.5 cursor-pointer transition-transform 
-                                ${isHistoryExpanded ? 'rotate-180' : ''} 
-                                ${history.length ? 'visible' : 'invisible'}
+                <div className={`absolute right-full flex gap-2 pr-2 items-center top-0 h-6`}>
+                    {/* 折叠 */}
+                    {lvl1 ? (history.length > 0 || hasSubTask) && <DownIcon
+                        className={`text-gray-500 mt-0.5 cursor-pointer size-3 transition-transform 
+                                ${isExpanded ? 'rotate-180' : ''}
                             `}
-                    onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
-                />
+                        onClick={() => setIsExpanded(!isExpanded)}
+                    />
+                        : history.length > 0 && <ChevronDown
+                            size={18}
+                            className={`text-gray-500 mt-0.5 cursor-pointer transition-transform 
+                                ${isExpanded ? 'rotate-180' : ''} 
+                            `}
+                            onClick={() => setIsExpanded(!isExpanded)}
+                        />
+                    }
+                </div>
                 {lvl1 && <div className='mt-[5px]'>{renderStatusIcon()}</div>}
                 {
                     lvl1 ? <h2 className="font-semibold mb-4">{que}.{task.name}</h2> :
-                        <span className='text-sm mb-3'>{que}.{task.name}</span>
+                        <span className='text-sm mb-3'>{task.name}</span>
                 }
             </div>
 
@@ -195,11 +235,11 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
                 <div className='mb-2'>
                     <div className='flex'>
                         {
-                            isHistoryExpanded ? <div ref={historyContainerRef} className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 max-h-60 scroll-hover`}>
+                            isExpanded ? <div className={`${lvl1 ? 'pl-6' : 'pl-0'} w-full text-sm text-gray-400 leading-6 scroll-hover`}>
                                 {history.map((_history, index) => (
                                     <div>
                                         <p key={index}>{_history.call_reason}</p>
-                                        <Tool data={_history} />
+                                        <Tool data={_history} setCurrentDirectFile={setCurrentDirectFile} />
                                     </div>
                                 ))}
                             </div> : null
@@ -222,7 +262,7 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
                             className='border-none ![box-shadow:initial] pl-0 pr-10 pt-4 h-auto'
                             rows={1}
                             value={inputValue}
-                            maxLength={200}
+                            maxLength={10000}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
                         />
@@ -236,18 +276,26 @@ const Task = ({ task, lvl1 = false, que, sendInput, children = null }) => {
                     </div>
                 </div>
             )}
-
-            {children}
+            <div className={isExpanded ? 'block' : 'hidden'}>
+                {children}
+            </div>
+            {/* error */}
+            {task.status === 'failed' && task.errorMsg && <p className='bg-red-100 p-2 rounded-md text-sm text-red-500 mb-2'>任务执行中断：{task.errorMsg}</p>}
         </div>
     );
 };
 
 
-export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendInput }) => {
-    console.log('TaskFlowContent tasks :>> ', tasks, files);
+export const TaskFlowContent = ({ linsight, sendInput }) => {
+    const { status, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
+    const allFiles = linsight?.output_result?.all_from_session_files || []
+
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
     const [isPreviewOpen, setIsPreviewOpen] = useState(false)
     const [currentPreviewFileId, setCurrentPreviewFileId] = useState<string>("")
+    const [currentDirectFile, setCurrentDirectFile] = useState<any>(null)
+    // 由卡片触发抽屉展开
+    const [triggerDrawerFromCard, setTriggerDrawerFromCard] = useState(false)
     useFoucsInput(tasks);
 
     const mergeFiles = useMemo(() => {
@@ -257,19 +305,55 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
 
     const downloadFile = (file) => {
         const { file_name, file_url } = file;
-        const url = `${__APP_ENV__.BASE_URL}/bisheng/${file_url}`
+        const url = `${__APP_ENV__.BASE_URL}/bisheng/${file_url}`;
+
         return axios.get(url, { responseType: "blob" }).then((res: any) => {
-            const blob = new Blob([res.data]);
+            let blob: any = null
+            if (file_url.endsWith(".csv")) {
+                // 添加 UTF-8 BOM（\uFEFF）
+                const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // UTF-8 BOM
+                blob = new Blob([bom, res.data], { type: "text/csv;charset=utf-8;" });
+            } else {
+                blob = new Blob([res.data]);
+            }
+
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
             link.download = file_name;
             link.click();
             URL.revokeObjectURL(link.href);
         }).catch(console.error);
+    };
+
+    if (queueCount) {
+        const totalMinutes = queueCount * 8;
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        let timeText;
+        if (hours > 0) {
+            timeText = `${hours} 小时 ${minutes} 分钟`;
+        } else {
+            timeText = `${minutes} 分钟`;
+        }
+
+        return (
+            <div className='size-full flex flex-col items-center justify-center text-sm'>
+                <img src={__APP_ENV__.BASE_URL + '/assets/queue.png'} alt="" />
+                <p className='mt-9'>目前使用人数较多，正在排队中...</p>
+                <p className='mt-4 font-bold'>预计等待 {timeText}</p>
+            </div>
+        );
     }
 
     return (
         <div className="w-[80%] mx-auto p-5 text-gray-800 leading-relaxed">
+            {/* load */}
+            {!tasks?.length && status === SopStatus.Running && <p className='mt-0.5 text-sm flex gap-2'>
+                <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
+                正在整理内容...
+            </p>}
+            {/* 任务 */}
             {!!tasks?.length && <div className='pl-6'>
                 <p className='text-sm text-gray-400 mt-6 mb-4'>规划任务执行路径：</p>
                 {tasks.map((task, i) => (
@@ -277,19 +361,38 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                 ))}
                 <p className='text-sm text-gray-400 mt-6 mb-4'>接下来为你执行对应任务：</p>
             </div>}
-            {/* 任务 */}
-            {!tasks?.length && status === SopStatus.Running && <LucideLoaderCircle size={16} className='text-primary mr-2 animate-spin' />}
             {
-                tasks?.map((task, i) => <Task key={task.id} que={i + 1} lvl1 task={task} sendInput={sendInput} >
+                tasks?.map((task, i) => <Task
+                    key={task.id}
+                    que={i + 1}
+                    lvl1
+                    task={task}
+                    hasSubTask={!!task.children?.length}
+                    setCurrentDirectFile={(file) => {
+                        setIsPreviewOpen(true);
+                        setCurrentDirectFile(file)
+                    }}
+                    sendInput={sendInput} >
                     {
-                        task.children?.map((_task, i) => <Task key={_task.id} que={i + 1} task={_task} sendInput={sendInput} />)
+                        task.children?.map((_task, i) => <Task
+                            key={_task.id}
+                            que={i + 1}
+                            task={_task}
+                            sendInput={sendInput}
+                            setCurrentDirectFile={(file) => {
+                                setIsPreviewOpen(true);
+                                setCurrentDirectFile(file)
+                            }}
+                        />)
                     }
                 </Task>
                 )
             }
+            {/* error */}
+            {taskError && <p className='bg-red-100 p-2 rounded-md text-sm text-red-500 mb-2'>任务执行中断：{taskError}</p>}
             {/* 总结 */}
             {
-                summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6'>
+                summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
                     <Markdown content={summary} isLatestMessage={true} webContent={false} />
                     <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
                 </div>
@@ -303,8 +406,13 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                             <div
                                 key={file.file_id}
                                 onClick={() => {
+                                    if (file.file_name.split('.').pop() === 'html') {
+                                        return window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank')
+                                    }
+                                    setCurrentDirectFile(null);
                                     setCurrentPreviewFileId(file.file_id);
                                     setIsPreviewOpen(true);
+                                    setTriggerDrawerFromCard(true);
                                 }}
                                 className='w-[calc(50%-6px)] p-2 rounded-2xl border border-[#ebeef2] cursor-pointer'
                             >
@@ -346,16 +454,25 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                     }
                 </div>
             }
+            {/* running */}
+            {
+                tasks?.length > 0 && status === SopStatus.Running && <p className='text-sm flex gap-2 mt-10'>
+                    <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
+                </p>
+            }
             {/* 文件列表抽屉 */}
             <FileDrawer
+                title={title}
                 files={allFiles}
                 isOpen={isDrawerOpen}
                 onOpenChange={setIsDrawerOpen}
                 downloadFile={downloadFile}
                 onPreview={(id) => {
+                    setCurrentDirectFile(null);
                     setCurrentPreviewFileId(id);
                     setIsDrawerOpen(false)
                     setIsPreviewOpen(true)
+                    setTriggerDrawerFromCard(false)
                 }}
             />
             {/* 文件预览抽屉 */}
@@ -364,9 +481,13 @@ export const TaskFlowContent = ({ tasks, status, summary, files, allFiles, sendI
                 isOpen={isPreviewOpen}
                 onOpenChange={setIsPreviewOpen}
                 downloadFile={downloadFile}
+                directFile={currentDirectFile}
                 currentFileId={currentPreviewFileId}
                 onFileChange={(fileId) => setCurrentPreviewFileId(fileId)}
-                onBack={setIsPreviewOpen}
+                onBack={triggerDrawerFromCard ? undefined : (() => {
+                    setIsDrawerOpen(true);
+                    setIsPreviewOpen(false);
+                })}
             >
             </FilePreviewDrawer>
         </div >

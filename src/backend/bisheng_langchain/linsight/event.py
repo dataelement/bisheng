@@ -18,6 +18,8 @@ class ExecStep(BaseEvent):
     step_type: Optional[str] = Field(default="tool_call",
                                      description='步骤类型。tool_call: 工具调用；react_step: 固定步骤或回答;')
     status: str = Field(..., description='执行状态，start: 开始执行；end：执行结束')
+    # 额外信息
+    extra_info: Optional[dict] = Field(default={}, description='额外信息，包含文件上传等其他信息')
 
 
 # 生成子任务的事件

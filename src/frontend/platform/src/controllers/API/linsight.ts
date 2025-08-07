@@ -37,6 +37,11 @@ export const sopApi = {
   },
   setToolList:(data) => {
      return axios.post(`api/v1/workstation/config`, data);
-  }
-  
+  },
+   GetSopRecord(params: { keyword?: string; page?: number; page_size?: number;sort?: string }) {
+    return axios.get('/api/v1/linsight/sop/record', { params });
+  },
+   SyncSopRecord:(data) => {
+     return axios.post(`/api/v1/linsight/sop/record/sync`, data);
+  },
 }

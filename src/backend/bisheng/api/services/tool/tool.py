@@ -264,7 +264,7 @@ class ToolServices(BaseModel):
             "search_files": {"root_path": root_path},
             # "search_text_in_file": {"root_path": root_path},
             "read_text_file": {"root_path": root_path},
-            "write_text_file": {"root_path": root_path},
+            "add_text_to_file": {"root_path": root_path},
             "replace_file_lines": {"root_path": root_path},
         })
         knowledge_tools = [SearchKnowledgeBase()]
@@ -300,7 +300,7 @@ class ToolServices(BaseModel):
                     GptsTools(
                         id=200002,
                         name="获取文件详细信息",
-                        desc="获取指定文件的文件名、文件大小、文件地址等详细信息。",
+                        desc="获取指定文件的文件名、文件大小、文件地址、字数、行数等详细信息。",
                         tool_key="get_file_details"
                     ),
                     GptsTools(
@@ -318,8 +318,8 @@ class ToolServices(BaseModel):
                     GptsTools(
                         id=200005,
                         name="写入文件内容",
-                        desc="将内容写入文本文件，支持插入、覆盖和追加。",
-                        tool_key="write_text_file"
+                        desc="将文本内容追加到文本文件，如果文件不存在，则创建文件",
+                        tool_key="add_text_to_file"
                     ),
                     GptsTools(
                         id=200006,

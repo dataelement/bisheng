@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRecoilState, useResetRecoilState, useSetRecoilState } from 'recoil';
-import { useGetMessagesByConvoId } from '~/data-provider/data-provider/src/react-query';
+import { checkFileParseStatus } from '~/api/linsight';
 import type { TMessage } from '~/data-provider/data-provider/src';
-import useChatFunctions from '~/hooks/Chat/useChatFunctions';
+import { QueryKeys } from '~/data-provider/data-provider/src';
+import { useGetMessagesByConvoId } from '~/data-provider/data-provider/src/react-query';
 import { useAuthContext } from '~/hooks/AuthContext';
+import useChatFunctions from '~/hooks/Chat/useChatFunctions';
 import useNewConvo from '~/hooks/useNewConvo';
+import { useToastContext } from '~/Providers';
 import store from '~/store';
 import { filesByIndex } from '~/store/linsight';
-import { checkFileParseStatus } from '~/api/linsight';
 
 // this to be set somewhere else
 export default function useChatHelpers(index = 0, paramId?: string, isLingsight = false) {
@@ -186,6 +187,8 @@ const useLinsighFiles = (index) => {
   const [files, setLinsightFiles] = useRecoilState(filesByIndex(index));
   const filesRef = useRef(new Map()); // 用于跟踪文件状态
 
+  const { showToast } = useToastContext();
+
   const newFiles = useMemo(() => {
     const newFiles = new Map(files);
 
@@ -210,8 +213,8 @@ const useLinsighFiles = (index) => {
 
       // 收集需要检查的文件：上传完成但未解析完成的文件
       currentFiles.forEach(file => {
-        if (file.parsing_status !== 'completed') {
-          filesToCheck.push(file.file_id);
+        if (!['failed', 'completed'].includes(file.parsing_status)) {
+          file.file_id.indexOf('-') === -1 && filesToCheck.push(file.file_id);
         }
       });
 
@@ -236,6 +239,10 @@ const useLinsighFiles = (index) => {
                 parsing_status: 'completed',
                 // 可添加其他解析完成后的元数据
               });
+              needsUpdate = true;
+            } else if (status === 'failed') {
+              updatedFiles.delete(key);
+              showToast({ message: `文件 ${file.filename} 解析失败, 自动移除`, status: 'error' });
               needsUpdate = true;
             }
           }

@@ -26,7 +26,7 @@ class SearchFilesInput(BaseModel):
 class ReadFileInput(BaseModel):
     file_path: str = Field(..., description="要读取的文件路径")
     start_line: Optional[int] = Field(default=1, description="起始行号（从1开始计数）")
-    num_lines: Optional[int] = Field(default=50, description="需要读取的行数，最多50行")
+    num_lines: Optional[int] = Field(default=50, description="需要读取的行数，最多250行")
 
 
 class SearchTextInput(BaseModel):
@@ -39,8 +39,6 @@ class SearchTextInput(BaseModel):
 class WriteFileInput(BaseModel):
     file_path: str = Field(..., description="目标文件路径")
     content: str = Field(..., description="要写入的内容")
-    start_line: Optional[int] = Field(default=-1,
-                                      description="开始写入的行号（1-based）。-1 表示追加，0 表示从头覆盖，正数表示插入")
 
 
 class ReplaceFileInput(BaseModel):
@@ -67,23 +65,20 @@ class LocalFileTool(BaseModel):
         Returns:
             Tuple[bool, str, str]: (是否有效, 规范化后的路径, 错误信息)
         """
-        try:
-            # 如果是相对路径，则拼接到默认根目录
-            if not os.path.isabs(file_path):
-                normalized_path = os.path.join(self.root_path, file_path)
-            else:
-                normalized_path = file_path
+        # 如果是相对路径，则拼接到默认根目录
+        if not os.path.isabs(file_path):
+            normalized_path = os.path.join(self.root_path, file_path)
+        else:
+            normalized_path = file_path
 
-            # 获取规范化的绝对路径
-            normalized_path = os.path.abspath(normalized_path)
-            root_path = os.path.abspath(self.root_path)
+        # 获取规范化的绝对路径
+        normalized_path = os.path.abspath(normalized_path)
+        root_path = os.path.abspath(self.root_path)
 
-            # 检查路径是否在允许的根目录下
-            if not normalized_path.startswith(root_path):
-                return False, "", f"没有权限访问 '{file_path}'，路径超出允许范围"
-            return True, normalized_path, ""
-        except Exception as e:
-            return False, "", f"路径验证失败: {str(e)}"
+        # 检查路径是否在允许的根目录下
+        if not normalized_path.startswith(root_path):
+            raise Exception(f"没有权限访问 '{file_path}'，路径超出允许范围")
+        return True, normalized_path, ""
 
     def list_files(self, directory_path: str) -> List[str]:
         """
@@ -95,56 +90,52 @@ class LocalFileTool(BaseModel):
         Returns:
             目录中所有文件和子目录的列表
         """
-        try:
-            # 验证路径权限
-            is_valid, normalized_path, error_msg = self.validate_file_path(directory_path)
-            if not is_valid:
-                return [f"错误: {error_msg}"]
+        # 验证路径权限
+        is_valid, normalized_path, error_msg = self.validate_file_path(directory_path)
+        if not is_valid:
+            return [f"错误: {error_msg}"]
 
-            directory_path = normalized_path
+        directory_path = normalized_path
 
-            # 确保路径存在
-            if not os.path.exists(directory_path):
-                return [f"错误: 路径 '{directory_path}' 不存在"]
+        # 确保路径存在
+        if not os.path.exists(directory_path):
+            raise Exception(f"错误: 路径 '{directory_path}' 不存在")
 
-            if not os.path.isdir(directory_path):
-                return [f"错误: '{directory_path}' 不是一个目录"]
+        if not os.path.isdir(directory_path):
+            raise Exception(f"错误: '{directory_path}' 不是一个目录")
 
-            if directory_path == ".":
-                directory_path = os.getcwd()
+        if directory_path == ".":
+            directory_path = os.getcwd()
 
-            # 获取目录内容
-            items = os.listdir(directory_path)
+        # 获取目录内容
+        items = os.listdir(directory_path)
 
-            # 构建结果列表，标记文件和目录
-            result = []
-            for item in items:
-                full_path = os.path.join(directory_path, item)
-                if os.path.isdir(full_path):
-                    result.append({
-                        "type": "directory",
-                        "name": item,
-                        "path": full_path
-                    })
-                else:
-                    # 获取文件大小
-                    size = os.path.getsize(full_path)
-                    size_str = format_size(size)
-                    result.append({
-                        "type": "file",
-                        "name": item,
-                        "size": size_str
-                    })
+        # 构建结果列表，标记文件和目录
+        result = []
+        for item in items:
+            full_path = os.path.join(directory_path, item)
+            if os.path.isdir(full_path):
+                result.append({
+                    "type": "directory",
+                    "name": item,
+                    "path": full_path
+                })
+            else:
+                # 获取文件大小
+                size = os.path.getsize(full_path)
+                size_str = format_size(size)
+                result.append({
+                    "type": "file",
+                    "name": item,
+                    "size": size_str
+                })
 
-            if not result:
-                return ["目录为空"]
+        if not result:
+            return ["目录为空"]
 
-            return result
+        return result
 
-        except Exception as e:
-            return [f"发生错误: {str(e)}"]
-
-    def get_file_details(self, file_path: str) -> Dict[str, Any]:
+    async def get_file_details(self, file_path: str) -> Dict[str, Any]:
         """
         获取指定文件的详细信息
 
@@ -154,30 +145,35 @@ class LocalFileTool(BaseModel):
         Returns:
             包含文件详细信息的字典
         """
-        try:
-            # 验证路径权限
-            is_valid, normalized_path, error_msg = self.validate_file_path(file_path)
-            if not is_valid:
-                return {"error": error_msg}
+        # 验证路径权限
+        is_valid, normalized_path, error_msg = self.validate_file_path(file_path)
+        if not is_valid:
+            return {"error": error_msg}
 
-            file_path = normalized_path
+        file_path = normalized_path
 
-            if not os.path.exists(file_path):
-                return {"error": f"文件 '{file_path}' 不存在"}
+        if not os.path.exists(file_path):
+            raise Exception(f"文件 '{file_path}' 不存在")
 
-            stats = os.stat(file_path)
+        stats = os.stat(file_path)
+        line_num = 0
+        str_num = 0
+        async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+            async for line in f:
+                line_num += 1
+                str_num += len(line)
 
-            return {
-                "名称": os.path.basename(file_path),
-                "路径": file_path,
-                "大小": format_size(stats.st_size),
-                "大小(字节)": stats.st_size,
-                "修改时间": stats.st_mtime,
-                "是目录": os.path.isdir(file_path),
-                "是文件": os.path.isfile(file_path)
-            }
-        except Exception as e:
-            return {"error": str(e)}
+        return {
+            "名称": os.path.basename(file_path),
+            "路径": file_path,
+            "大小": format_size(stats.st_size),
+            "大小(字节)": stats.st_size,
+            "行数": line_num,
+            "字符数": str_num,
+            "修改时间": stats.st_mtime,
+            "是目录": os.path.isdir(file_path),
+            "是文件": os.path.isfile(file_path)
+        }
 
     def search_files(self, directory_path: str, pattern: str = "", max_depth: int = 5) -> List[str]:
         """
@@ -193,69 +189,65 @@ class LocalFileTool(BaseModel):
         """
         results = []
 
-        try:
-            # 验证路径权限
-            is_valid, normalized_path, error_msg = self.validate_file_path(directory_path)
-            if not is_valid:
-                return [f"错误: {error_msg}"]
+        # 验证路径权限
+        is_valid, normalized_path, error_msg = self.validate_file_path(directory_path)
+        if not is_valid:
+            return [f"错误: {error_msg}"]
 
-            directory_path = normalized_path
+        directory_path = normalized_path
 
-            if not os.path.exists(directory_path) or not os.path.isdir(directory_path):
-                return [f"错误: '{directory_path}' 不是有效目录"]
+        if not os.path.exists(directory_path) or not os.path.isdir(directory_path):
+            raise Exception(f"错误: '{directory_path}' 不是有效目录")
 
-            # 如果提供了pattern，则编译正则表达式
-            regex = None
-            if pattern:
-                try:
-                    regex = re.compile(pattern, re.IGNORECASE)
-                except re.error:
-                    return [f"错误: '{pattern}' 不是有效的正则表达式"]
+        # 如果提供了pattern，则编译正则表达式
+        regex = None
+        if pattern:
+            try:
+                regex = re.compile(pattern, re.IGNORECASE)
+            except re.error:
+                raise Exception(f"错误: '{pattern}' 不是有效的正则表达式")
 
-            def search_recursive(current_path, current_depth):
-                if current_depth > max_depth:
-                    return
+        def search_recursive(current_path, current_depth):
+            if current_depth > max_depth:
+                return
 
-                try:
-                    items = os.listdir(current_path)
-                    for item in items:
-                        full_path = os.path.join(current_path, item)
+            try:
+                items = os.listdir(current_path)
+                for item in items:
+                    full_path = os.path.join(current_path, item)
 
-                        # 检查文件名是否匹配
-                        if not pattern:
-                            # 无模式，包含所有文件
-                            matched = True
-                        else:
-                            # 使用正则表达式匹配
-                            matched = bool(regex.search(item))
+                    # 检查文件名是否匹配
+                    if not pattern:
+                        # 无模式，包含所有文件
+                        matched = True
+                    else:
+                        # 使用正则表达式匹配
+                        matched = bool(regex.search(item))
 
-                        if matched:
-                            if os.path.isdir(full_path):
-                                results.append(f"📁 {full_path}/")
-                            else:
-                                size = os.path.getsize(full_path)
-                                size_str = format_size(size)
-                                results.append(f"📄 {full_path} ({size_str})")
-
-                        # 如果是目录，递归搜索
+                    if matched:
                         if os.path.isdir(full_path):
-                            search_recursive(full_path, current_depth + 1)
-                except (PermissionError, OSError):
-                    # 忽略无法访问的目录
-                    pass
+                            results.append(f"directory: {full_path}/")
+                        else:
+                            size = os.path.getsize(full_path)
+                            size_str = format_size(size)
+                            results.append(f"file: {full_path} ({size_str})")
 
-            search_recursive(directory_path, 1)
+                    # 如果是目录，递归搜索
+                    if os.path.isdir(full_path):
+                        search_recursive(full_path, current_depth + 1)
+            except (PermissionError, OSError):
+                # 忽略无法访问的目录
+                pass
 
-            if not results:
-                if pattern:
-                    return [f"未找到匹配 '{pattern}' 的文件"]
-                else:
-                    return ["未找到文件"]
+        search_recursive(directory_path, 1)
 
-            return results
+        if not results:
+            if pattern:
+                return [f"未找到匹配 '{pattern}' 的文件"]
+            else:
+                return ["未找到文件"]
 
-        except Exception as e:
-            return [f"搜索错误: {str(e)}"]
+        return results
 
     async def judge_file_can_read(self, file_path: str) -> (bool, Any):
         # 验证路径权限
@@ -267,11 +259,11 @@ class LocalFileTool(BaseModel):
 
         # 检查文件是否存在
         if not os.path.exists(file_path):
-            return False, {"error": f"文件 '{file_path}' 不存在"}
+            raise Exception(f"文件 '{file_path}' 不存在")
 
         # 检查是否是文件
         if not os.path.isfile(file_path):
-            return False, {"error": f"'{file_path}' 不是一个文件"}
+            raise Exception(f"'{file_path}' 不是一个文件")
 
         # 尝试读取文件内容
         try:
@@ -285,7 +277,7 @@ class LocalFileTool(BaseModel):
                     lines = await f.readlines()
                     return True, lines
             except UnicodeDecodeError:
-                return False, {"error": "无法解码文件内容，可能是二进制文件"}
+                raise Exception("无法解码文件内容，可能是二进制文件")
 
     async def read_text_file(self, file_path: str, start_line: int = 1, num_lines: int = 50) -> Dict[str, Any]:
         """
@@ -294,43 +286,40 @@ class LocalFileTool(BaseModel):
         Args:
             file_path: 要读取的文件路径
             start_line: 起始行号（从1开始计数）
-            num_lines: 需要读取的行数，最多50行
+            num_lines: 需要读取的行数，最多250行
 
         Returns:
             包含文件内容和元数据的字典
         """
-        try:
-            flag, lines = await self.judge_file_can_read(file_path)
-            if not flag:
-                return lines
+        flag, lines = await self.judge_file_can_read(file_path)
+        if not flag:
+            return lines
 
-            # 调整起始行（用户输入从1开始，Python从0开始）
-            start_idx = max(0, start_line - 1)
+        # 调整起始行（用户输入从1开始，Python从0开始）
+        start_idx = max(0, start_line - 1)
 
-            # 计算结束行
-            if num_lines > 50:
-                num_lines = 50
+        # 计算结束行
+        if num_lines > 250:
+            num_lines = 250
 
-            end_idx = min(start_idx + num_lines, len(lines))
+        end_idx = min(start_idx + num_lines, len(lines))
 
-            # 提取指定行的内容
-            content = ''
-            for idx in range(start_idx, end_idx):
-                content += f"第{idx + 1}行内容: {lines[idx]}"
+        # 提取指定行的内容
+        content = ''
+        for idx in range(start_idx, end_idx):
+            content += f"第{idx + 1}行内容: {lines[idx]}"
 
-            # 构建结果
-            total_lines = len(lines)
-            result = {
-                "文件名": os.path.basename(file_path),
-                "总行数": total_lines,
-                "读取范围": f"{start_line}-{end_idx + 1}",
-                "实际读取行数": end_idx - start_idx,
-                "内容": content
-            }
+        # 构建结果
+        total_lines = len(lines)
+        result = {
+            "文件名": os.path.basename(file_path),
+            "总行数": total_lines,
+            "读取范围": f"{start_line}-{end_idx + 1}",
+            "实际读取行数": end_idx - start_idx,
+            "内容": content
+        }
 
-            return result
-        except Exception as e:
-            return {"error": str(e)}
+        return result
 
     async def search_text_in_file(self, file_path: str, keyword: str, result_index: int = 0,
                                   context_lines: int = 25) -> Dict[str, Any]:
@@ -346,156 +335,95 @@ class LocalFileTool(BaseModel):
         Returns:
             包含搜索结果和上下文的字典，包括匹配总数、当前匹配索引和上下文内容
         """
-        try:
-            flag, lines = await self.judge_file_can_read(file_path)
-            if not flag:
-                return lines
+        flag, lines = await self.judge_file_can_read(file_path)
+        if not flag:
+            return lines
 
-            # 查找所有匹配的行
-            matches = []
-            for i, line in enumerate(lines):
-                if keyword in line:
-                    matches.append(i)
+        # 查找所有匹配的行
+        matches = []
+        for i, line in enumerate(lines):
+            if keyword in line:
+                matches.append(i)
 
-            # 检查是否有匹配结果
-            total_matches = len(matches)
-            if total_matches == 0:
-                return {
-                    "文件名": os.path.basename(file_path),
-                    "关键词": keyword,
-                    "匹配总数": 0,
-                    "内容": f"未找到关键词 '{keyword}'"
-                }
-
-            # 检查请求的索引是否有效
-            if result_index < 0 or result_index >= total_matches:
-                return {
-                    "文件名": os.path.basename(file_path),
-                    "关键词": keyword,
-                    "匹配总数": total_matches,
-                    "错误": f"请求的索引 {result_index} 超出范围 (0-{total_matches - 1})"
-                }
-
-            # 获取匹配行的索引
-            match_line_index = matches[result_index]
-
-            # 计算上下文范围
-            start_line = max(0, match_line_index - context_lines)
-            end_line = min(len(lines), match_line_index + context_lines + 1)
-
-            # 提取上下文内容
-            context = []
-            for i in range(start_line, end_line):
-                line_number = i + 1  # 用户友好的行号（从1开始）
-                line_content = lines[i].rstrip('\n')
-
-                # 标记匹配行
-                if i == match_line_index:
-                    line_prefix = f">> {line_number}: "
-                else:
-                    line_prefix = f"   {line_number}: "
-
-                context.append(f"{line_prefix}{line_content}")
-
-            # 构建结果
-            result = {
+        # 检查是否有匹配结果
+        total_matches = len(matches)
+        if total_matches == 0:
+            return {
                 "文件名": os.path.basename(file_path),
                 "关键词": keyword,
-                "匹配总数": total_matches,
-                "当前匹配索引": result_index,
-                "当前匹配行号": match_line_index + 1,
-                "总行数": len(lines),
-                "上下文": "\n".join(context)
+                "匹配总数": 0,
+                "内容": f"未找到关键词 '{keyword}'"
             }
 
-            return result
-        except Exception as e:
-            return {"error": str(e)}
+        # 检查请求的索引是否有效
+        if result_index < 0 or result_index >= total_matches:
+            raise Exception(f"请求的索引 {result_index} 超出范围 (0-{total_matches - 1})")
 
-    async def write_text_file(self, file_path: str, content: str, start_line: int = -1) -> Dict[str, Any]:
+        # 获取匹配行的索引
+        match_line_index = matches[result_index]
+
+        # 计算上下文范围
+        start_line = max(0, match_line_index - context_lines)
+        end_line = min(len(lines), match_line_index + context_lines + 1)
+
+        # 提取上下文内容
+        context = []
+        for i in range(start_line, end_line):
+            line_number = i + 1  # 用户友好的行号（从1开始）
+            line_content = lines[i].rstrip('\n')
+
+            # 标记匹配行
+            if i == match_line_index:
+                line_prefix = f">> {line_number}: "
+            else:
+                line_prefix = f"   {line_number}: "
+
+            context.append(f"{line_prefix}{line_content}")
+
+        # 构建结果
+        result = {
+            "文件名": os.path.basename(file_path),
+            "关键词": keyword,
+            "匹配总数": total_matches,
+            "当前匹配索引": result_index,
+            "当前匹配行号": match_line_index + 1,
+            "总行数": len(lines),
+            "上下文": "\n".join(context)
+        }
+
+        return result
+
+    async def add_text_to_file(self, file_path: str, content: str) -> Dict[str, Any]:
         """
-        将内容写入文本文件，支持插入、覆盖和追加
+            将文本内容追加到文本文件，如果文件不存在，则创建文件
 
-        Args:
-            file_path: 目标文件路径
-            content: 要写入的内容
-            start_line: 开始写入的行号（1-based）。-1 表示追加，0 表示从头覆盖，正数表示插入
+            Args:
+                file_path: 目标文件路径
+                content: 要写入的内容
 
-        Returns:
-            包含操作结果的字典
+            Returns:
+                包含操作结果的字典
         """
         is_valid, normalized_path, error_msg = self.validate_file_path(file_path)
         if not is_valid:
             return {"状态": "错误", "错误信息": error_msg}
 
-        try:
-            # 确保目录存在
-            os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
+        # 确保目录存在
+        os.makedirs(os.path.dirname(normalized_path), exist_ok=True)
 
-            # 追加模式
-            if start_line == -1:
-                async with aiofiles.open(normalized_path, "a", encoding="utf-8") as f:
-                    await f.write(content + '\n')
-                lines = []
-                if os.path.exists(normalized_path):
-                    async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
-                        lines = await f.readlines()
-                return {
-                    "状态": "成功",
-                    "文件路径": normalized_path,
-                    "追加行数": len(content.split('\n')),
-                    "文件行数": len(lines)
-                }
-
-            # 从头覆盖模式
-            if start_line == 0:
-                async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
-                    await f.write(content + '\n')
-                lines = []
-                if os.path.exists(normalized_path):
-                    async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
-                        lines = await f.readlines()
-                return {
-                    "状态": "成功",
-                    "文件路径": normalized_path,
-                    "覆盖行数": len(content.split('\n')),
-                    "文件行数": len(lines)
-                }
-
-            # 插入模式
-            if start_line > 0:
-                lines = []
-                if os.path.exists(normalized_path):
-                    async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
-                        lines = await f.readlines()
-
-                # 插入新内容
-                index = start_line - 1
-                # 在指定行号前插入，如果行号超出范围，则在末尾追加
-                if index > len(lines):
-                    index = len(lines)
-
-                # 分割要插入的多行内容
-                new_lines = [line + '\n' for line in content.split('\n')]
-
-                lines[index:index] = new_lines
-
-                async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
-                    await f.writelines(lines)
-
-                return {
-                    "状态": "成功",
-                    "文件路径": normalized_path,
-                    "插入行号": start_line,
-                    "插入行数": len(new_lines),
-                    "文件行数": len(lines)
-                }
-
-            return {"状态": "错误", "错误信息": f"无效的起始行号: {start_line}"}
-
-
-        except Exception as e:
-            return {"状态": "错误", "错误信息": str(e)}
+        # 追加模式
+        async with aiofiles.open(normalized_path, "a", encoding="utf-8") as f:
+            await f.write(content + '\n')
+        lines = []
+        if os.path.exists(normalized_path):
+            async with aiofiles.open(normalized_path, "r", encoding="utf-8") as f:
+                lines = await f.readlines()
+        return {
+            "状态": "成功",
+            "文件路径": normalized_path,
+            "追加行数": len(content.split('\n')),
+            "文件行数": len(lines)
+        }
 
     async def replace_file_lines(self, file_path: str, start_line: int, end_line: int, replacement_text: str) \
             -> Dict[str, Any]:
@@ -522,10 +450,7 @@ class LocalFileTool(BaseModel):
 
         # 验证行号范围
         if start_line > total_lines:
-            return {
-                "状态": "错误",
-                "错误信息": f"起始行号 {start_line} 超出文件总行数 {total_lines}"
-            }
+            raise Exception(f"起始行号 {start_line} 超出文件总行数 {total_lines}")
 
         # 调整end_line，确保不超出文件范围
         actual_end_line = min(end_line, total_lines + 1)
@@ -550,14 +475,8 @@ class LocalFileTool(BaseModel):
         new_lines = lines[:start_idx] + replacement_lines + lines[end_idx:]
 
         # 写回文件
-        try:
-            async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
-                await f.writelines(new_lines)
-        except Exception as e:
-            return {
-                "状态": "错误",
-                "错误信息": f"写入文件时出错: {str(e)}"
-            }
+        async with aiofiles.open(normalized_path, "w", encoding="utf-8") as f:
+            await f.writelines(new_lines)
 
         # 构建结果
         result = {
@@ -594,7 +513,7 @@ class LocalFileTool(BaseModel):
                 name=f"{cls.get_file_details.__name__}",
                 description=cls.get_file_details.__doc__,
                 args_schema=FileToolInput,
-                func=obj.get_file_details,
+                coroutine=obj.get_file_details,
             )
         elif name == "search_files":
             return StructuredTool(
@@ -617,12 +536,12 @@ class LocalFileTool(BaseModel):
                 args_schema=SearchTextInput,
                 coroutine=obj.search_text_in_file,
             )
-        elif name == "write_text_file":
+        elif name == "add_text_to_file":
             return StructuredTool(
-                name=f"{cls.write_text_file.__name__}",
-                description=cls.write_text_file.__doc__,
+                name=f"{cls.add_text_to_file.__name__}",
+                description=cls.add_text_to_file.__doc__,
                 args_schema=WriteFileInput,
-                coroutine=obj.write_text_file,
+                coroutine=obj.add_text_to_file,
             )
         elif name == "replace_file_lines":
             return StructuredTool(

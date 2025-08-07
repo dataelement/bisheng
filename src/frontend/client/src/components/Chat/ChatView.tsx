@@ -1,6 +1,6 @@
 import { memo, useCallback, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import type { ChatFormValues } from '~/common';
 import { Spinner } from '~/components/svg';
@@ -23,6 +23,7 @@ function ChatView({ index = 0 }: { index?: number }) {
   const addedSubmission = useRecoilValue(store.submissionByIndex(index + 1));
   const [showCode, setShowCode] = useState(false);
 
+  const navigate = useNavigate();
   const fileMap = useFileMapContext();
   // console.log('fileMap :>> ', fileMap);
 
@@ -70,6 +71,12 @@ function ChatView({ index = 0 }: { index?: number }) {
     // 欢迎页
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }
+
+
+  const handleCardClick = (caseId: string) => {
+    window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
+  }
+
   return (
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
@@ -100,32 +107,30 @@ function ChatView({ index = 0 }: { index?: number }) {
                 />
               </video>
               {/* his messages */}
-              {/*   邀请码 */}
-              {showCode &&
-                <InvitationCodeForm setShowCode={setShowCode} />}
-              <div className={showCode ? "hidden" : ""}>
+              <div className={showCode ? "hidden" : "flex h-full flex-col justify-center"}>
                 {content}
                 <div className="w-full border-t-0 pl-0 pt-2 dark:border-white/20 md:w-[calc(100%-.5rem)] md:border-t-0 md:border-transparent md:pl-0 md:pt-0 md:dark:border-transparent">
                   {/* input */}
                   <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} />
                   {/* <Footer /> */}
-                  {/* {isLingsi && <div className='relative'>
-                  <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
-                  <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-8'>
-                  <div className='border rounded-xl p-4 text-sm hover:shadow-md cursor-pointer'>
-                  <p className='font-bold'>查询近 7 日的销售数据趋势</p>
-                  <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
-                  </div>
-                  <div className='border rounded-xl p-4 text-sm hover:shadow-md cursor-pointer'>
-                  <p className='font-bold'>查询近 7 日的销售数据趋势</p>
-                  <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
-                  </div>
-                  </div>
-                  </div>} */}
-                  <div className="h-[20vh]"></div>
+                  {isLingsi && <div className='relative mt-20'>
+                    <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
+                    <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-8'>
+                      <div className='border rounded-xl p-4 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0001')}>
+                        <p className='font-bold'>查询近 7 日的销售数据趋势</p>
+                        <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
+                      </div>
+                      <div className='border rounded-xl p-4 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0002')}>
+                        <p className='font-bold'>查询近 7 日的销售数据趋势</p>
+                        <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
+                      </div>
+                    </div>
+                  </div>}
+                  <div className="h-[2vh]"></div>
                 </div>
               </div>
-
+              {/*   邀请码 */}
+              <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
             </div>
           </Presentation>
         </AddedChatContext.Provider>

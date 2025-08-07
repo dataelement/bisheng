@@ -9,6 +9,7 @@ import { useToastContext } from '~/Providers';
 import { SopStatus } from './SOPEditor';
 import { TaskControls } from './TaskControls';
 import { TaskFlowContent } from './TaskFlowContent';
+import { formatTime } from '~/utils';
 
 export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
     const { data: bsConfig } = useGetBsConfig();
@@ -18,7 +19,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
 
     const linsight = useMemo(() => {
         const linsight = getLinsight(versionId)
-        return linsight || { sop: '', tools: [], tasks: [], status: '' }
+        return linsight || { sop: '', tools: [], tasks: [], status: '', queueCount: 0 }
     }, [getLinsight, versionId])
 
     const showTask = [SopStatus.Running, SopStatus.completed, SopStatus.FeedbackCompleted, SopStatus.Stoped].includes(linsight.status)
@@ -44,9 +45,13 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             cancel_feedback: cancel
         }).then(res => {
             console.log('res :>> ', res);
+            if (res.status_code !== 200) {
+                return showToast({ status: 'error', message: res.status_message })
+            }
+
             const newVersionId = res.data.id
             updateLinsight(versionId, { status: SopStatus.FeedbackCompleted })
-            showToast({ status: 'success', message: res.status_message })
+            !cancel && showToast({ status: 'success', message: '提交成功' })
             if (res.data === true) return
 
             // 克隆当前版本
@@ -63,7 +68,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
 
             setVersions((prve) => [{
                 id: newVersionId,
-                name: res.data.version.replace('T', ' ').replaceAll('-', '/').slice(0, -3)
+                name: formatTime(res.data.version, true)
             }, ...prve])
             setVersionId(newVersionId)
             // 切换版本
@@ -98,7 +103,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 任务流
             </div>
 
-            <div ref={flowScrollRef} className='relative flex-1 pb-40 min-h-0 scroll-hover'>
+            <div ref={flowScrollRef} className='relative flex-1 pb-80 min-h-0 scroll-hover'>
                 {!showTask && (
                     <div className='flex flex-col h-full justify-center text-center bg-gradient-to-b from-[#F4F8FF] to-white'>
                         <div className='size-10 mx-auto'>
@@ -114,11 +119,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 {
                     showTask && <TaskFlowContent
                         key={versionId}
-                        status={linsight.status}
-                        tasks={linsight.tasks}
-                        summary={linsight?.summary}
-                        files={linsight?.file_list}
-                        allFiles={linsight?.output_result?.all_from_session_files || []}
+                        linsight={linsight}
                         sendInput={sendInput}
                     />
                 }
@@ -129,6 +130,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                 current={currentTask}
                 tasks={linsight.tasks}
                 status={linsight.status}
+                queueCount={linsight.queueCount}
                 feedbackProvided={!!linsight.execute_feedback}
                 onStop={stop}
                 onFeedback={handleFeedback}

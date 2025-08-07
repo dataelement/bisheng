@@ -10,7 +10,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field, BaseModel, model_validator, ConfigDict
 
-from bisheng_langchain.linsight.const import TaskStatus, TaskMode, CallUserInputToolName
+from bisheng_langchain.linsight.const import TaskStatus, TaskMode, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import BaseEvent
 from bisheng_langchain.linsight.react_task import ReactTask
 from bisheng_langchain.linsight.task import Task
@@ -41,8 +41,8 @@ class TaskManage(BaseModel):
         self.tool_map = {tool.name: tool for tool in self.tools}
         return self
 
-    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str, debug: bool,
-                      debug_id: str) -> None:
+    def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str,
+                      exec_config: ExecConfig) -> None:
         res = []
         child_map = {}  # task_id: [child_task]
         for task in self.tasks:
@@ -55,8 +55,7 @@ class TaskManage(BaseModel):
                                      llm=llm,
                                      file_dir=file_dir,
                                      finally_sop=sop,
-                                     debug=debug,
-                                     debug_id=debug_id)
+                                     exec_config=exec_config)
             else:
                 task_instance = ReactTask(**task,
                                           query=query,
@@ -64,8 +63,7 @@ class TaskManage(BaseModel):
                                           llm=llm,
                                           file_dir=file_dir,
                                           finally_sop=sop,
-                                          debug=debug,
-                                          debug_id=debug_id)
+                                          exec_config=exec_config)
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue
@@ -158,6 +156,9 @@ class TaskManage(BaseModel):
         """
         if name not in self.tool_map:
             return f"tool {name} exec error, because tool name is not found", False
+        if not params.get("call_reason"):
+            return f"tool {name} exec error, because call_reason field is required.", False
+        params.pop("call_reason")
         try:
             res = await self.tool_map[name].ainvoke(input=params)
             if not isinstance(res, str):
@@ -214,7 +215,7 @@ class TaskManage(BaseModel):
     async def get_step_answer(self, step_id: str) -> str:
         """ 获取某个步骤的答案 """
         if step_id not in self.task_step_map:
-            return ""
+            return f"not found step_id: {step_id}"
         return await self.task_step_map[step_id].get_answer()
 
     def get_processed_steps(self):
@@ -241,7 +242,7 @@ class TaskManage(BaseModel):
                 if next_task.next_id:
                     new_next_ids.extend(next_task.next_id)
             next_ids = new_next_ids
-        return ",".join(depend_steps)
+        return ",".join(list(set(depend_steps)))
 
     def get_workflow(self):
         res = []
@@ -277,7 +278,7 @@ class TaskManage(BaseModel):
             if task_exception := async_task.exception():
                 raise task_exception
             if task.status == TaskStatus.FAILED.value:
-                raise Exception(f"Task {task.step_id} failed with error: {task.get_answer()}")
+                raise Exception(f"Task {task.step_id} failed with error: {task.get_finally_answer()}")
 
     async def continue_task(self, task_id: str, user_input: str) -> None:
         """

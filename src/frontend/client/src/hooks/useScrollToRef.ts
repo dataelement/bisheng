@@ -25,7 +25,11 @@ export default function useScrollToRef({
   const logAndScroll = (behavior: 'instant' | 'smooth', callbackFn: () => void) => {
     // Debugging:
     // console.log(`Scrolling with behavior: ${behavior}, Time: ${new Date().toISOString()}`);
-    targetRef.current?.scrollIntoView({ behavior });
+    targetRef.current?.scrollIntoView({
+      behavior,
+      block: 'nearest', // 垂直方向：不强制滚动到顶部/底部
+      inline: 'nearest' // 水平方向：同上
+    });
     callbackFn();
   };
 

@@ -207,8 +207,8 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
     }));
 }, [setFormData, setWebSearchData]); // 添加依赖项
     return (
-        <div className="px-10 py-10 h-full overflow-y-scroll scrollbar-hide relative bg-background-main border-t">
-            <Card className="">
+        <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
+          <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ToggleSection
@@ -407,7 +407,7 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                         <Button onClick={handleSave}>保存</Button>
                     </div>
                 </CardContent>
-            </Card>
+            </div>
              <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
                 <DialogContent className="sm:max-w-[625px] bg-background-login">
                     <DialogHeader>

@@ -292,13 +292,17 @@
 
 .linsight-vditor .vditor-reset {
 	border-radius: 8px;
-	font-size: 14px;
+	font-size: 18px;
 	padding: 0 20px 160px 10px !important;
 	scrollbar-color: transparent transparent;
 }
 
 .linsight-vditor .vditor-toolbar {
 	display: none;
+}
+
+.linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
+	opacity: 0.8;
 }
 
 .linsi-span {

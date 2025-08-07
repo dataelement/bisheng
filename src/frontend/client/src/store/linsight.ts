@@ -9,6 +9,7 @@ export type LinsightInfo = {
     org_knowledge_enabled: boolean;
     personal_knowledge_enabled: boolean;
     sop: null | string;
+    sopError: string;
     /** 用户输入的sop */
     inputSop: boolean;
     // sop_map: { [key in string]: string };
@@ -47,8 +48,10 @@ export type LinsightInfo = {
         result: any | null;
         children: any[]
     }[],
+    taskError: string;
     summary: string;
-    file_list: any[]
+    file_list: any[];
+    queueCount: number;
 }
 
 interface ApiTool {

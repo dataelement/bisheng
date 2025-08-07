@@ -24,7 +24,7 @@ export function getLinsightSessionVersionList(ConversationId: string): Promise<a
     return res.data.map(item => {
       return {
         ...item,
-        sop: item.sop?.replace(/\`\`\`markdown/g, ' ') || '' // 去除markdown标记，否则vditor编辑器会显示为代码块
+        sop: item.sop?.replace(/\`\`\`markdown/g, '```') || '' // 去除markdown标记，否则vditor编辑器会显示为代码块
       }
     }
     )
@@ -138,5 +138,14 @@ export async function batchDownload(data: {
 export function checkFileParseStatus(ids: string[]) {
   return request.post('/api/v1/linsight/workbench/file-parsing-status', {
     file_ids: ids
+  })
+}
+
+// 检查sop排队状态
+export function checkSopQueueStatus(id: string) {
+  return request.get('/api/v1/linsight/workbench/queue-status', {
+    params: {
+      session_version_id: id
+    }
   })
 }

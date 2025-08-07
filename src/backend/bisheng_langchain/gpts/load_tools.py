@@ -129,7 +129,7 @@ _API_TOOLS.update({
     "search_files": (LocalFileTool.get_tool_by_name, ['root_path']),
     "search_text_in_file": (LocalFileTool.get_tool_by_name, ['root_path']),
     "read_text_file": (LocalFileTool.get_tool_by_name, ['root_path']),
-    "write_text_file": (LocalFileTool.get_tool_by_name, ['root_path']),
+    "add_text_to_file": (LocalFileTool.get_tool_by_name, ['root_path']),
     "replace_file_lines": (LocalFileTool.get_tool_by_name, ['root_path']),
 })
 
