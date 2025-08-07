@@ -11,7 +11,7 @@ from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
-from bisheng.api.errcode.base import UnAuthorizedError
+from bisheng.api.errcode.base import UnAuthorizedError, NotFoundError
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.linsight.message_stream_handle import MessageStreamHandle
@@ -186,14 +186,21 @@ async def generate_sop(
 
     logger.info(f"开始生成与重新规划灵思SOP，灵思会话版本ID: {linsight_session_version_id} ")
 
+    session_version = await LinsightSessionVersionDao.get_session_versions_by_session_id(linsight_session_version_id)
+
     # 获取有权限的知识库列表
-    linsight_conf = settings.get_linsight_conf()
-    res, _ = await KnowledgeService.get_knowledge(request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
-                                                  linsight_conf.max_knowledge_num)
-    knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, None,
-                                                       KnowledgeTypeEnum.PRIVATE)
-    if knowledge:
-        res.extend(knowledge)
+    if not session_version:
+        raise NotFoundError.http_exception()
+    res = []
+    if session_version[0].org_knowledge_enabled:
+        linsight_conf = settings.get_linsight_conf()
+        res, _ = await KnowledgeService.get_knowledge(request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
+                                                      linsight_conf.max_knowledge_num)
+    if session_version[0].personal_knowledge_enabled:
+        knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, None,
+                                                           KnowledgeTypeEnum.PRIVATE)
+        if knowledge:
+            res.extend(knowledge)
 
     async def event_generator():
         """
