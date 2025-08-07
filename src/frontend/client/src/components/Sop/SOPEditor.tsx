@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveSop, startLinsight } from '~/api/linsight';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { Button, Textarea } from '../ui';
-import CopyButton from './components/CopyButton';
-import { LoadingDots } from './components/sopLoading';
 import SopMarkdown from './SopMarkdown';
 
 export const enum SopStatus {
@@ -166,7 +164,9 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
                 {/* <CopyButton text={linsight.sop} /> */}
             </div>
 
-            {linsight.status === SopStatus.SopGenerating && !linsight.sop?.trim() && <LoadingDots size="md" />}
+            {linsight.status === SopStatus.SopGenerating && !linsight.sop?.trim() && <p className='p-6 text-sm flex gap-2'>
+                <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
+            </p>}
             <p className={linsight.sopError ? 'bg-red-100 p-2 rounded-md text-sm text-red-500 m-2' : 'hidden'}>SOP生成失败：{linsight.sopError}</p>
             <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'hidden'}`}>
                 <SopMarkdown ref={markdownRef} linsight={linsight} edit={showSopEdit} onChange={handleChange} />

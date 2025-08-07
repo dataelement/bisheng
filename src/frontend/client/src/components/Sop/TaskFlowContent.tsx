@@ -24,7 +24,7 @@ const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     const name = params.file_path.split('/').pop();
     return <Button
         variant="link"
-        className='text-xs p-0 h-4 underline underline-offset-2'
+        className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
         onClick={() => setCurrentDirectFile({
             content: params.content,
             name,
@@ -58,10 +58,6 @@ const Tool = ({ data, setCurrentDirectFile }) => {
         read_text_file: "正在阅读文件",
         add_text_to_file: "正在向文件添加内容",
         replace_file_lines: "正在编辑文件",
-        web_content_to_markdown_llm: <a href={params.url} target='_blank'><Button
-            variant="link"
-            className='text-xs p-0 h-4 underline underline-offset-2'
-        >正在使用 {toolName} 工具</Button></a>,
         default: `正在使用 ${toolName} 工具`
     };
 
@@ -75,6 +71,10 @@ const Tool = ({ data, setCurrentDirectFile }) => {
         read_text_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
         add_text_to_file: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
         replace_file_lines: () => <ToolButtonLink params={params} setCurrentDirectFile={setCurrentDirectFile} />,
+        web_content_to_markdown_llm: () => <a href={params.url} target='_blank'><Button
+            variant="link"
+            className='text-xs p-0 h-4 text-blue-400 underline underline-offset-2'
+        >{params.url}</Button></a>,
         default: () => '',
     };
 
@@ -105,7 +105,7 @@ const Tool = ({ data, setCurrentDirectFile }) => {
     const Icon = iconMap[toolName] || iconMap.default;
 
     return (
-        <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 px-3 py-1.5 text-muted-foreground'>
+        <div className='inline-flex items-center gap-2 bg-[#F9FAFD] border rounded-full my-1.5 mb-4 px-3 py-1.5 text-muted-foreground'>
             <Icon size={16} />
             <div className='flex gap-4 items-center'>
                 <span className='text-xs text-gray-600 truncate'>{displayName}</span>
