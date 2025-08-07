@@ -192,8 +192,8 @@ async def generate_sop(
     if not session_version:
         raise NotFoundError.http_exception()
     res = []
-    if session_version.org_knowledge_enabled:
-        linsight_conf = settings.get_linsight_conf()
+    linsight_conf = settings.get_linsight_conf()
+    if session_version.org_knowledge_enabled and linsight_conf.max_knowledge_num > 0:
         res, _ = await KnowledgeService.get_knowledge(request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
                                                       linsight_conf.max_knowledge_num)
     if session_version.personal_knowledge_enabled:
