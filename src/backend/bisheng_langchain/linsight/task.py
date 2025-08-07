@@ -9,7 +9,7 @@ from typing import List, Optional, Any
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage
 from langchain_openai.chat_models.base import _convert_message_to_dict
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from bisheng_langchain.linsight.const import TaskStatus, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
@@ -65,6 +65,23 @@ class BaseTask(BaseModel):
         if v is None or v == "":
             return values.data.get("target", "")
         return v
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_task(cls, values: dict) -> dict:
+        if values.get("target"):
+            values["target"] = str(values["target"])
+        if values.get("prompt"):
+            values["prompt"] = str(values["prompt"])
+        if values.get("step_id"):
+            values["step_id"] = str(values["step_id"])
+        if values.get("sop"):
+            values["sop"] = str(values["sop"])
+        if values.get("description"):
+            values["description"] = str(values["description"])
+        if values.get("profile"):
+            values["profile"] = str(values["profile"])
+        return values
 
     def get_task_info(self) -> dict:
         return self.model_dump(exclude={"task_manager", "llm", "file_dir", "finally_sop", "children", "exec_config"})
