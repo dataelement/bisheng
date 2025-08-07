@@ -272,10 +272,11 @@ class Settings(BaseModel):
     def get_linsight_conf(self) -> LinsightConf:
         # 获取灵思相关的配置项
         all_config = self.get_all_config()
+        conf = LinsightConf(debug=self.linsight_conf.debug)
         linsight_conf = all_config.get('linsight', {})
         for k, v in linsight_conf.items():
-            setattr(self.linsight_conf, k, v)
-        return self.linsight_conf
+            setattr(conf, k, v)
+        return conf
 
     def get_from_db(self, key: str):
         # 先获取所有的key
