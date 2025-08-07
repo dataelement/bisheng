@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Literal, Optional
 from urllib import parse
 
-from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, HTTPException
 from fastapi_jwt_auth import AuthJWT
 from loguru import logger
 from sse_starlette import EventSourceResponse
@@ -654,12 +654,13 @@ async def get_sop_record(login_user: UserPayload = Depends(get_admin_user),
 
 
 @router.post("/sop/record/sync", summary="同步sop记录到sop库", response_model=UnifiedResponseModel)
-async def sync_sop_record(login_user: UserPayload = Depends(get_admin_user),
-                          record_ids: list[int] = Body(..., description="sop记录表里的唯一id"),
-                          override: Optional[bool] = Body(default=False,
-                                                          description="是否强制覆盖"),
-                          save_new: Optional[bool] = Body(default=False,
-                                                          description="是否另存为新sop")) -> UnifiedResponseModel:
+async def sync_sop_record(
+        login_user: UserPayload = Depends(get_admin_user),
+        record_ids: list[int] = Body(..., description="sop记录表里的唯一id"),
+        override: Optional[bool] = Body(default=False,
+                                        description="是否强制覆盖"),
+        save_new: Optional[bool] = Body(default=False,
+                                        description="是否另存为新sop")) -> UnifiedResponseModel:
     """
     同步SOP记录到SOP库
     """
@@ -668,8 +669,35 @@ async def sync_sop_record(login_user: UserPayload = Depends(get_admin_user),
         return resp_200(data={
             "repeat_name": repeat_name,
         }, message="success")
+    except HTTPException as e:
+        raise e
     except Exception as e:
         logger.exception("sync_sop_record error")
+        return resp_500(code=500, message=f"SOP 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
+
+
+@router.post("/sop/upload", summary="批量导入SOP入库", response_model=UnifiedResponseModel)
+async def upload_sop_file(
+        file: UploadFile = File(..., description="上传的SOP文件"),
+        override: Optional[bool] = Body(default=False, description="是否强制覆盖"),
+        save_new: Optional[bool] = Body(default=False, description="是否另存为新sop"),
+        ignore_error: Optional[bool] = Body(default=False, description="是否忽略文件找那个错误的记录"),
+        login_user: UserPayload = Depends(get_admin_user)) -> UnifiedResponseModel:
+    """
+    批量导入SOP入库
+    """
+
+    try:
+        # 调用实现类处理文件上传
+        repeat_name = await SOPManageService.upload_sop_file(login_user, file, ignore_error, override, save_new)
+
+        return resp_200(data={
+            "repeat_name": repeat_name,
+        }, message="SOP文件上传成功")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.exception("SOP文件上传失败")
         return resp_500(code=500, message=f"SOP 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
 
 

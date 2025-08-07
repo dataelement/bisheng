@@ -1,13 +1,17 @@
+import io
 import json
 import uuid
 from typing import List, Dict
 
+import openpyxl
+from fastapi import UploadFile
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
 from bisheng.api.errcode.base import NotFoundError, ServerError
+from bisheng.api.errcode.linsight import SopFileError
 from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
@@ -107,14 +111,27 @@ class SOPManageService:
     async def update_sop_record_score(session_version_id: str, score: int) -> None:
         await LinsightSOPDao.update_sop_record_score(session_version_id, score)
 
+    @classmethod
+    async def sync_sop_record(cls, record_ids: list[int], override: bool = False, save_new: bool = False) \
+            -> list[str] | None:
+        """
+        同步SOP记录
+        :param record_ids: SOP记录ID列表
+        :param override: 是否覆盖已有的SOP
+        :param save_new: 是否保存新的SOP
+        :return: 如果有重复的SOP记录，返回重复的记录名称列表，否则返回None
+        """
+        sop_records = await LinsightSOPDao.get_sop_record_by_ids(record_ids)
+
+        return await cls._sync_sop_record(sop_records, override, save_new)
+
     @staticmethod
-    async def sync_sop_record(record_ids: list[int], override: bool = False, save_new: bool = False) \
+    async def _sync_sop_record(sop_records: list[LinsightSOPRecord], override: bool = False, save_new: bool = False) \
             -> list[str] | None:
 
         """
         如果有重复的SOP记录，返回重复的记录名称列表
         """
-        sop_records = await LinsightSOPDao.get_sop_record_by_ids(record_ids)
         records_name_dict = {}
         repeat_names = set()
         name_set = set()
@@ -187,6 +204,70 @@ class SOPManageService:
         if oversize_records:
             raise ValueError(f"{'、'.join(oversize_records)}内容超长")
         return None
+
+    @classmethod
+    async def parse_sop_file(cls, file: UploadFile) -> (list, list):
+        """
+        解析SOP文件
+        :param file: 文件路径
+        """
+        if not file.size:
+            raise NotFoundError.http_exception(msg="未找到上传的SOP文件")
+        error_rows = []
+        success_rows = []
+        wb = None
+
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file.file.read()), read_only=True, data_only=True)
+            sheet = wb.active
+            max_rows = sheet.max_row
+            for i in range(2, max_rows + 1):
+                name = sheet.cell(row=i, column=1).value
+                description = sheet.cell(row=i, column=2).value
+                content = sheet.cell(row=i, column=3).value
+                if not name:
+                    error_rows.append(f"• 第{i}行: 缺少名称")
+                elif not content:
+                    error_rows.append(f"• 第{i}行: 缺少详细内容内容")
+                elif len(str(name)) >= 500:
+                    error_rows.append(f"• 第{i}行: 名称长度超过500字符")
+                elif len(str(content)) >= 50000:
+                    error_rows.append(f"• 第{i}行: 详细内容长度超过50000字符")
+                elif description and len(str(description)) >= 1000:
+                    error_rows.append(f"• 第{i}行: 描述长度超过1000字符")
+                elif name and content:
+                    success_rows.append({
+                        "name": str(name),
+                        "description": str(description) if description is not None else "",
+                        "content": str(content),
+                    })
+        finally:
+            if wb:
+                wb.close()
+        return success_rows, error_rows
+
+    @classmethod
+    async def upload_sop_file(cls, login_user: UserPayload, file: UploadFile, ignore_error: bool, override: bool,
+                              save_new: bool) \
+            -> list[str] | None:
+        """
+        上传SOP文件
+        :param login_user: 登录用户信息
+        :param file: 文件路径
+        :param ignore_error: 是否忽略错误
+        :param override: 是否覆盖已有的SOP
+        :param save_new: 是否保存新的SOP
+        :return: 上传结果
+        """
+        success_rows, error_rows = await cls.parse_sop_file(file)
+        if error_rows and not ignore_error:
+            error_msg = "\n".join(error_rows)
+            raise SopFileError.http_exception(
+                msg=f"共计划导入{len(success_rows) + len(error_rows)}条SOP，格式正确{len(success_rows)}条，错误{len(error_rows)}条：\n {error_msg}")
+        if not success_rows:
+            raise NotFoundError.http_exception(msg="未找到格式正确的SOP数据")
+        records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
+        return await cls._sync_sop_record(records, override=override, save_new=save_new)
 
     @staticmethod
     async def add_sop(sop_obj: SOPManagementSchema, user_id) -> UnifiedResponseModel | None:
