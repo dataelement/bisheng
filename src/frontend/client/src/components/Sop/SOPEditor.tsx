@@ -5,7 +5,7 @@ import { saveSop, startLinsight } from '~/api/linsight';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { Button, Textarea } from '../ui';
 import CopyButton from './components/CopyButton';
-import { LoadingDots } from './components/sopLoading';
+import { LoadingDots } from './components/SopLoading';
 import SopMarkdown from './SopMarkdown';
 
 export const enum SopStatus {
