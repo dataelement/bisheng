@@ -6,7 +6,7 @@ import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } fro
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
 import { SopCase } from './case';
-import { LoadingBox } from './components/sopLoading';
+import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
 import { SOPEditor, SopStatus } from './SOPEditor';
 import { TaskFlow } from './TaskFlow';
