@@ -225,6 +225,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             .filter(Boolean);
     }, [toolsData, activeToolTab, toolSearchTerm]);
 
+    const refreshSopList = () => {
+  fetchData({
+    page: page,
+    pageSize: 10,
+    keyword: keywords
+  });
+};
     const fetchData = async (params: {
         page: number;
         pageSize: number;
@@ -805,7 +812,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 open={importDialogOpen}
                                 tools={selectedTools}
                                 onOpenChange={setImportDialogOpen}
-                            />
+                                 onSuccess={refreshSopList}
+                                />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
                             {deleteConfirmModal.open && (

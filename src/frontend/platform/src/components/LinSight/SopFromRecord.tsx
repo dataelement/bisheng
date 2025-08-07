@@ -24,7 +24,7 @@ interface SopRecord {
   user_name: string;
 }
 
-export default function ImportFromRecordsDialog({ open, tools, onOpenChange }) {
+export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  onSuccess }) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [records, setRecords] = useState<SopRecord[]>([]);
@@ -196,10 +196,12 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange }) {
 
       toast({ variant: 'success', description: '导入成功' });
       onOpenChange(false);
+      onSuccess?.(); // 导入成功后调用回调
     } finally {
       setLoading(false);
     }
   };
+
 
   const markdownRef = useRef(null);
   useEffect(() => {
@@ -404,7 +406,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange }) {
                     tools={tools}
                     height='h-[calc(100vh-170px)]'
                     className="h-full"
-                    disabled
+                    disabled={true}
                   />
                 </div>
                 <div className="flex justify-start gap-2 pt-4">
