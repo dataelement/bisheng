@@ -86,7 +86,7 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
                 object_name=object_name,
                 file_path=file_info["file_path"]
             )
-            file_info["file_url"] = object_name
+            file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
             return file_info
         except Exception as e:
             logger.error(f"上传文件到MinIO失败 {file_info['file_name']}: {e}")
@@ -171,7 +171,7 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
                 object_name=object_name,
                 file_path=final_file_info["file_path"]
             )
-            final_file_info["file_url"] = object_name
+            final_file_info["file_url"] = minio_client.clear_minio_share_host(minio_client.get_share_link(object_name))
             return final_file_info
         except Exception as e:
             logger.error(f"上传文件到MinIO失败 {final_file_info['file_name']}: {e}")
