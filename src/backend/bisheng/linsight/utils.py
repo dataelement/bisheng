@@ -1,8 +1,10 @@
 import asyncio
 import os
 import uuid
-from typing import List, Dict, Any, Coroutine
+from typing import List, Dict, Any
+
 from loguru import logger
+
 from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
@@ -258,7 +260,8 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
             event.extra_info["file_info"] = {
                 "file_name": file_name,
                 "file_md5": file_md5,
-                "file_url": object_name
+                "file_url": minio_client.clear_minio_share_host(
+                    minio_client.get_share_link(object_name, minio_client.bucket))
             }
 
             # 添加到步骤事件额外文件列表
