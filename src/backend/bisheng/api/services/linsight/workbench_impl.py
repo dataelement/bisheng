@@ -415,7 +415,7 @@ class LinsightWorkbenchImpl:
     async def _prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
         """准备文件列表"""
         file_list = []
-        template_str = """@{filename}的文件储存信息:{{"文件储存在语义检索库中的id":"{file_id}","文件储存地址":"{markdown}"}}@"""
+        template_str = """@{filename}的文件储存信息:{{'文件储存在语义检索库中的id':'{file_id}','文件储存地址':'{markdown}'}}@"""
         if not session_version.files:
             return file_list
         for file in session_version.files:
@@ -430,7 +430,7 @@ class LinsightWorkbenchImpl:
         if not knowledge_list:
             return res
         # 查询是否有个人知识库
-        template_str = """@{name}的储存信息:{{"知识库储存在语义检索库中的id":"{id}"}}@"""
+        template_str = """@{name}的储存信息:{{'知识库储存在语义检索库中的id':'{id}'}}@"""
         for one in knowledge_list:
             if one.type == KnowledgeTypeEnum.PRIVATE.value:
                 res.append(template_str.format(name="个人知识库", id=one.id))
