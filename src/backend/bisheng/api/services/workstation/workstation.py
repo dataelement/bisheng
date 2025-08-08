@@ -80,8 +80,9 @@ class WorkStationService(BaseService):
             if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
                 ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
-            # 判断工具是否被删除, 同步工具最新的信息名称和描述等
-            ret.linsightConfig.tools = cls.sync_tool_info(ret.linsightConfig.tools)
+            if ret.linsightConfig:
+                # 判断工具是否被删除, 同步工具最新的信息名称和描述等
+                ret.linsightConfig.tools = cls.sync_tool_info(ret.linsightConfig.tools)
             return ret
         return None
 
