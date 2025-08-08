@@ -171,7 +171,7 @@ class SOPManageService:
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录
             for one in records_name_dict.values():
-                if one not in override_name_dict:
+                if one.name not in override_name_dict:
                     continue
                 await SOPManageService.add_sop(SOPManagementSchema(
                     name=one.name,
