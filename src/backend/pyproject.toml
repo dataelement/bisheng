@@ -114,12 +114,10 @@ filetype = "1.2.0"
 aiomysql = "^0.2.0"
 sse-starlette = "^2.3.6"
 transformers = "^4.53.0"
-<<<<<<< HEAD
 ibm-db = "^3.2.6"
 ibm-db-sa = "^0.4.2"
 opengauss-sqlalchemy = "^2.4.0"
 oracledb = "^3.3.0"
-=======
 llama-index = "0.13.0"
 llama-index-core = ">=0.13.0,<0.14"
 llama-index-cli = ">=0.5.0,<0.6"
@@ -129,7 +127,6 @@ llama-index-readers-file = ">=0.5,<0.6"
 llama-index-readers-llama-parse = "0.5.0"
 llama-index-indices-managed-llama-cloud = "0.9.0"
 llama-cloud = "0.1.35"
->>>>>>> chore: bump llama-index version to 0.13.0 and add relevant dependencies
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
