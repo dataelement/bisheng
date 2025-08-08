@@ -24,6 +24,9 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 200) {
         return response.data.data;
     }
+      if (response.data.status_code === 11010) {
+        return response.data;
+    }
     const i18Msg = i18next.t(`errors.${response.data.status_code}`)
     const errorMessage = i18Msg === `errors.${response.data.status_code}` ? response.data.status_message : i18Msg
 

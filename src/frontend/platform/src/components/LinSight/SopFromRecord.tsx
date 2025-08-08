@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { LoadIcon } from '../bs-icons/loading';
 import AutoPagination from '../bs-ui/pagination/autoPagination';
 import SopMarkdown from './SopMarkdown';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../bs-ui/tooltip';
 
 interface SopRecord {
   id: number;
@@ -24,7 +25,7 @@ interface SopRecord {
   user_name: string;
 }
 
-export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  onSuccess }) {
+export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onSuccess, setDuplicateNames, duplicateNames, duplicateDialogOpen, setDuplicateDialogOpen, importFormData }) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [records, setRecords] = useState<SopRecord[]>([]);
@@ -37,45 +38,34 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
     key: 'create_time',
     direction: 'desc' as 'asc' | 'desc'
   });
-  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
-  const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
+
   const [pageInputValue, setPageInputValue] = useState(page.toString());
   const [selectedRecordIds, setSelectedRecordIds] = useState<number[]>([]);
-
+  const [allRecords, setAllRecords] = useState<SopRecord[]>([]);
+  const [selectedRecords, setSelectedRecords] = useState<SopRecord[]>([]);
+  const [isSavingAsNew, setIsSavingAsNew] = useState(false);
+  const [isOverwriting, setIsOverwriting] = useState(false);
   // 获取SOP记录
-  const fetchRecords = async () => {
+  const fetchRecords = async (isSearch = false) => {
     setLoading(true);
     try {
-      const res = await sopApi.GetSopRecord({
+      const params = {
         keyword: searchTerm,
-        page,
-        page_size: pageSize,
-        sort: sortConfig.direction
-      });
+        ...(isSearch ? {} : { page, page_size: pageSize }),
+        sort: sortConfig.direction,
+      };
 
-      console.log('API响应:', res);
+      const res = await sopApi.GetSopRecord(params);
+
       if (Array.isArray(res)) {
-        setRecords(res);
+        setAllRecords(res);  // 存储所有数据
+        setRecords(res);     // 当前页数据
         setTotal(res.length);
-        setCurrentRecord(res[0] || null);
+      } else if (res?.list) {
+        setAllRecords(res.list);  // 存储所有数据
+        setRecords(res.list);     // 当前页数据
+        setTotal(res.total);
       }
-      else if (res && Array.isArray(res.list)) {
-        setRecords(res.list);
-        setTotal(res.total || res.list.length);
-        setCurrentRecord(res.list[0] || null);
-      }
-      else {
-        throw new Error('API返回的数据结构不符合预期');
-      }
-    } catch (error) {
-      console.error('获取数据失败:', error);
-      toast({
-        variant: 'error',
-        description: error.message || '获取数据失败，请检查API响应结构'
-      });
-      setRecords([]);
-      setTotal(0);
-      setCurrentRecord(null);
     } finally {
       setLoading(false);
     }
@@ -92,14 +82,27 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
       setPage(1);
     }
   }, [open]);
-
-  // 搜索和分页变化时重新获取数据
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (open) fetchRecords();
+      if (open) {
+        if (searchTerm) {
+          // 执行搜索时，重置页码为1并使用全局搜索
+          setPage(1);
+          fetchRecords(true);  // 传入true表示是搜索请求
+        } else {
+          // 没有搜索词时，恢复普通分页模式
+          fetchRecords();
+        }
+      }
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchTerm, page, pageSize, sortConfig]);
+  }, [searchTerm]);
+  // 搜索和分页变化时重新获取数据
+  useEffect(() => {
+    if (open && !searchTerm) {
+      fetchRecords();
+    }
+  }, [page, pageSize, sortConfig]);
 
   // 排序处理
   const sortedRecords = useMemo(() => {
@@ -156,11 +159,20 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
 
   const handleToggleSelect = (record: SopRecord, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedRecordIds(prev =>
-      prev.includes(record.id)
+    setSelectedRecordIds(prev => {
+      const newIds = prev.includes(record.id)
         ? prev.filter(id => id !== record.id)
-        : [...prev, record.id]
-    );
+        : [...prev, record.id];
+
+      // 同步更新selectedRecords
+      setSelectedRecords(prevRecords =>
+        prev.includes(record.id)
+          ? prevRecords.filter(r => r.id !== record.id)
+          : [...prevRecords, record]
+      );
+
+      return newIds;
+    });
     setCurrentRecord(record);
   };
   // 全选/取消全选当前页
@@ -173,6 +185,16 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
         ? prev.filter(id => !currentPageIds.includes(id))
         : [...new Set([...prev, ...currentPageIds])]
     );
+
+    // 同步更新selectedRecords
+    setSelectedRecords(prev => {
+      if (allSelected) {
+        return prev.filter(r => !currentPageIds.includes(r.id));
+      } else {
+        const newRecords = records.filter(r => !prev.some(p => p.id === r.id));
+        return [...prev, ...newRecords];
+      }
+    });
   };
 
   const importSops = async (recordsToImport: SopRecord[], overwrite = false, saveNew = false) => {
@@ -196,12 +218,14 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
 
       toast({ variant: 'success', description: '导入成功' });
       onOpenChange(false);
-      onSuccess?.(); // 导入成功后调用回调
+
+      // 导入成功后清空所有选择状态
+      setSelectedRecordIds([]);
+      setSelectedRecords([]);
     } finally {
       setLoading(false);
     }
   };
-
 
   const markdownRef = useRef(null);
   useEffect(() => {
@@ -210,10 +234,10 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[87.5vw] min-w-[85vw]">
+      <SheetContent className="w-[87.5vw] min-w-[87.5vw]">
         <div className="flex h-full" onClick={e => e.stopPropagation()}>
           {/* 左侧记录列表 */}
-          <div className="p-6 w-[50%]">
+          <div className="p-6 w-[50%] min-w-160">
             <SheetHeader>
               <SheetTitle>从运行记录中导入SOP</SheetTitle>
             </SheetHeader>
@@ -231,8 +255,10 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
 
             <div className="flex-1 overflow-y-auto h-[calc(100%-180px)]">
               {loading ? (
-                <div className="flex justify-center items-center h-full">
-                  <LoadIcon className="animate-spin w-8 h-8" />
+                <div className="flex justify-center items-center h-full bg-gray-50 rounded-lg">
+                  <div className="flex flex-col items-center gap-2">
+                    <LoadIcon className="animate-spin w-10 h-10 text-primary" />
+                  </div>
                 </div>
               ) : records.length === 0 ? (
                 <div className="text-center text-muted-foreground py-4">
@@ -341,8 +367,8 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
                   </div>
                   {records.length > 0 && (
                     <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200">
-                      <div className="flex items-center">
-                        <span className="text-sm text-gray-700">
+                      <div className="flex items-center whitespace-nowrap min-w-16">
+                        <span className="text-sm  text-gray-700">
                           共 {total} 条记录
                         </span>
                       </div>
@@ -380,8 +406,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
               <span>已选择 {selectedRecordIds.length} 项</span>
               <Button
                 onClick={() => {
-                  const selected = records.filter(r => selectedRecordIds.includes(r.id));
-                  importSops(selected, false, false);
+                  importSops(selectedRecords, false, false);
                 }}
                 disabled={selectedRecordIds.length === 0 || loading}
                 className="ml-4"
@@ -397,7 +422,16 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
               <>
                 <div className="mb-4">
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
-                  <p className="text-muted-foreground truncate">{currentRecord.description}</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p className="text-muted-foreground truncate max-w-[200px]">
+                        {currentRecord.description}
+                      </p>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-[300px] break-words">{currentRecord.description}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <div className="flex-1 overflow-y-auto bg-gray-50 rounded-md">
                   <SopMarkdown
@@ -413,11 +447,11 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
                   <Button
                     onClick={() => {
                       if (!currentRecord) return;
-
+                      setSelectedRecordIds([]);
+                      setSelectedRecords([]);
                       // 直接尝试导入当前SOP
                       importSops([currentRecord]).then((hasDuplicate) => {
                         if (hasDuplicate === false) {
-                          // 如果有重复，打开重复对话框
                           setDuplicateDialogOpen(true);
                         }
                       });
@@ -460,30 +494,90 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange,  on
           <div className="flex justify-end gap-2 pt-4">
             <Button
               variant="outline"
-              onClick={() => {
-                const recordsToUse = selectedRecordIds.length > 0
-                  ? records.filter(r => selectedRecordIds.includes(r.id))
-                  : currentRecord
-                    ? [currentRecord]
-                    : [];
-                importSops(recordsToUse, false, true);
-                setDuplicateDialogOpen(false);
+              onClick={async () => {
+                   setIsSavingAsNew(true);
+                if (importFormData) {
+                  const newFormData = new FormData();
+                  for (const [key, value] of importFormData.entries()) {
+                    if (key === 'override' || key === 'save_new') continue;
+                    newFormData.append(key, value);
+                  }
+
+                  newFormData.append('override', 'false');
+                  newFormData.append('save_new', 'true');
+
+
+                  try {
+                    setLoading(true); // 添加加载状态
+                    await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(newFormData)) // 等待请求完成
+                    toast({ variant: 'success', description: '导入成功' });
+                    setDuplicateDialogOpen(false);
+                    onOpenChange(false); // 关闭主弹窗
+                  } finally {
+                    setLoading(false);
+                      setIsSavingAsNew(false);
+                  }
+                } else {
+                  const recordsToUse = selectedRecords.length > 0
+                    ? selectedRecords
+                    : currentRecord
+                      ? [currentRecord]
+                      : [];
+                  importSops(recordsToUse, false, true);
+                  setDuplicateDialogOpen(false);
+                }
+
               }}
             >
-              不覆盖，另存为新SOP
+              {isSavingAsNew  ? (
+                <div className="flex items-center gap-2">
+                  <LoadIcon className="animate-spin w-4 h-4" />
+                  正在另存为新SOP...
+                </div>
+              ) : '不覆盖，另存为新SOP'}
             </Button>
             <Button
-              onClick={() => {
-                const recordsToUse = selectedRecordIds.length > 0
-                  ? records.filter(r => selectedRecordIds.includes(r.id))
-                  : currentRecord
-                    ? [currentRecord]
-                    : [];
-                importSops(recordsToUse, true, false);
-                setDuplicateDialogOpen(false);
+              onClick={async () => {
+                  setIsOverwriting(true);
+                if (importFormData) {
+                  const newFormData = new FormData();
+                  for (const [key, value] of importFormData.entries()) {
+                    if (key === 'override' || key === 'save_new') continue;
+                    newFormData.append(key, value);
+                  }
+                  newFormData.append('override', 'true');
+                  newFormData.append('save_new', 'false');
+
+                  try {
+                    setLoading(true);
+                    await sopApi.UploadSopRecord(newFormData);
+                    toast({ variant: 'success', description: '导入成功' });
+                    setDuplicateDialogOpen(false);
+                    onOpenChange(false);
+                  } catch (error) {
+                    toast({ variant: 'error', description: '导入失败' });
+                  } finally {
+                    setLoading(false);
+                     setIsOverwriting(false);
+                  }
+                } else {
+                  const recordsToUse = selectedRecordIds.length > 0
+                    ? records.filter(r => selectedRecordIds.includes(r.id))
+                    : currentRecord
+                      ? [currentRecord]
+                      : [];
+                  importSops(recordsToUse, true, false);
+                  setDuplicateDialogOpen(false);
+                }
+
               }}
             >
-              覆盖
+              {isOverwriting  ? (
+                <div className="flex items-center gap-2">
+                  <LoadIcon className="animate-spin w-4 h-4" />
+                  正在覆盖SOP...
+                </div>
+              ) : '覆盖'}
             </Button>
           </div>
         </DialogContent>

@@ -2,7 +2,7 @@
 import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
-
+import { AlertTriangle } from "lucide-react";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
 import SopTable from "@/components/LinSight/SopTable";
@@ -21,6 +21,12 @@ import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
+import { useDropzone } from "react-dropzone";
+import { useTranslation } from "react-i18next";
+import { locationContext } from "@/contexts/locationContext";
+import { UploadIcon } from "@/components/bs-icons";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 
 
 export interface FormErrors {
@@ -101,6 +107,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [manuallyExpandedItems, setManuallyExpandedItems] = useState<string[]>([]);
     const [initialized, setInitialized] = useState(false);
     const [importDialogOpen, setImportDialogOpen] = useState(false);
+    const [localFileDialogOpen, setLocalFileDialogOpen] = useState(false);
+const [importFile, setImportFile] = useState<File | null>(null);
+const [importFiles, setImportFiles] = useState<File[]>([]);
+const [isImporting, setIsImporting] = useState(false);
+const [validationDialog, setValidationDialog] = useState({
+  open: false,
+  status_message: "共计划导入0条SOP，格式正确0条，错误0条"
+});
+  const [importFilesData, setImportFilesData] = useState<File[]>([]);
+    const [duplicateNames, setDuplicateNames] = useState<string[]>([]);
+      const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
     const [deleteConfirmModal, setDeleteConfirmModal] = useState({
         open: false,
         title: '确认删除',
@@ -156,6 +173,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         api: [],
         mcp: []
     });
+const [importFormData, setImportFormData] = useState<FormData | null>(null);
+
     const fetchTools = async (type: 'builtin' | 'api' | 'mcp') => {
         setLoading(true);
         try {
@@ -225,13 +244,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             .filter(Boolean);
     }, [toolsData, activeToolTab, toolSearchTerm]);
 
-    const refreshSopList = () => {
-  fetchData({
-    page: page,
-    pageSize: 10,
-    keyword: keywords
-  });
-};
+//     const refreshSopList = () => {
+//   fetchData({
+//     page: page,
+//     pageSize: 10,
+//     keyword: keywords
+//   });
+// };
     const fetchData = async (params: {
         page: number;
         pageSize: number;
@@ -243,7 +262,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             const res = await sopApi.getSopList({
                 page_size: params.pageSize,
                 page: params.page,
-                keywords: params.keyword || keywords,
+                keywords: params.keyword || '',
                 sort: params.sort,
             });
 
@@ -384,23 +403,25 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
     const [selectedItems, setSelectedItems] = useState([]);
     const [sortConfig, setSortConfig] = useState({ key: null, direction: '' });
-    const handleSearch = (keyword: string, resetPage: boolean = false) => {
-        const newKeywords = keyword;
-        const newPage = resetPage || newKeywords.trim() === '' ? 1 : page;
+    const { t } = useTranslation()
+        const { appConfig } = useContext(locationContext)
+ const handleSearch = (keyword: string, resetPage: boolean = false) => {
+    const newKeywords = keyword;
+    const newPage = resetPage || newKeywords.trim() === '' ? 1 : page;
 
-        fetchData({
-            keyword: newKeywords,
-            page: newPage,
-            pageSize
-        });
+    fetchData({
+        keyword: newKeywords,
+        page: newPage,
+        pageSize
+    });
 
-        // 更新状态
-        setKeywords(newKeywords);
-        setPageInputValue(newPage.toString());
-        if (newPage !== page) {
-            setPage(newPage);
-        }
-    };
+    // 更新状态
+    setKeywords(newKeywords);
+    setPageInputValue(newPage.toString());
+    if (newPage !== page) {
+        setPage(newPage);
+    }
+};
 
     // 关闭弹窗刷新下数据
     useEffect(() => {
@@ -687,6 +708,80 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             return [...tools];
         });
     }, []);
+const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
+    accept: {
+        'application/*': appConfig.enableEtl4lm ?
+            ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
+            : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV']
+    },
+    multiple: true, // 允许选择多个文件
+    onDrop: (acceptedFiles) => {
+        setImportFiles(prev => [...prev, ...acceptedFiles]); // 追加新文件
+    }
+});
+const handleLocalFileImport = async () => {
+    setIsImporting(true);
+    try {
+        const formData = new FormData();
+          formData.append('file', importFiles[0]);
+        
+        setImportFilesData([importFiles[0]]); // 只保存一个文件
+        const res = await sopApi.UploadSopRecord(formData);
+        console.log('API Response:', res); // 调试用
+        if(res.status_code === 11010){
+            setValidationDialog({
+                open: true,
+                status_message: res.status_message
+            });
+        }
+        if(res.status_code === 200){
+              const formData = new FormData();
+        importFilesData.forEach(file => {
+            formData.append('file', file);
+        });
+         formData.append('ignore_error', 'false');
+        formData.append('override', 'false');
+        formData.append('save_new', 'false');
+        const res = await sopApi.UploadSopRecord(formData);
+        if(res?.repeat_name){
+            setImportDialogOpen(true)
+   setDuplicateNames(res.repeat_name);
+ setDuplicateDialogOpen(true);
+  setImportFormData(formData);
+        }else{
+             toast({ variant: 'success', description: '提交成功' });
+        }
+        }
+        
+    } finally {
+        setIsImporting(false);
+    }
+};
+const handleValidationDialogConfirm = async () => {
+    console.log(111);
+      const formData = new FormData();
+        importFilesData.forEach(file => {
+            formData.append('file', file);
+        });
+         formData.append('ignore_error', 'true');
+        formData.append('override', 'false');
+        formData.append('save_new', 'false');
+        
+    setValidationDialog(prev => ({...prev, open: false}));
+    
+
+
+        const res = await sopApi.UploadSopRecord(formData);
+        if(res?.repeat_name){
+            setImportDialogOpen(true)
+   setDuplicateNames(res.repeat_name);
+ setDuplicateDialogOpen(true);
+  setImportFormData(formData);
+              return
+        }else{
+             toast({ variant: 'success', description: '提交成功' });
+        }
+};
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative bg-background-main">
             {loading && (
@@ -744,7 +839,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                             onChange={(e) => {
                                                 const newValue = e.target.value;
                                                 setKeywords(newValue);
-                                                handleSearch(newValue, newValue.trim() === '');
+                                                handleSearch(newValue);
                                             }}
                                             onKeyDown={(e) => {
                                                 if (e.key === 'Enter') {
@@ -760,12 +855,20 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     <Button
                                         variant="default"
                                         size="sm"
-                                        onClick={() => setImportDialogOpen(true)}
+                                        onClick={() => {setImportDialogOpen(true);setImportFilesData(null)}}
                                     >
-                                        从运行记录中导入
+                                        从运行记录导入
                                     </Button>
+                           <Button
+    variant="outline"
+    size="sm"
+    onClick={() => setLocalFileDialogOpen(true)}
+>
+    从本地文件导入
+</Button>
+                                 
                                     <Button
-                                        variant="default"
+                                        variant="outline"
                                         size="sm"
                                         onClick={() => {
                                             setIsEditing(false);
@@ -812,7 +915,12 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 open={importDialogOpen}
                                 tools={selectedTools}
                                 onOpenChange={setImportDialogOpen}
-                                 onSuccess={refreshSopList}
+                                //  onSuccess={refreshSopList}
+                                 setDuplicateNames={setDuplicateNames}
+                                 duplicateNames={duplicateNames}
+                                 duplicateDialogOpen={duplicateDialogOpen}
+                                 setDuplicateDialogOpen={setDuplicateDialogOpen}
+                                 importFormData={importFormData}
                                 />
                             {/* 表格区域 */}
                             <SopTable datalist={datalist} selectedItems={selectedItems} handleSelectItem={handleSelectItem} handleSelectAll={handleSelectAll} handleSort={handleSort} handleEdit={handleEdit} handleDelete={handleDelete} page={page} pageSize={pageSize} total={total} loading={loading} pageInputValue={pageInputValue} handlePageChange={handlePageChange} handlePageInputChange={handlePageInputChange} handlePageInputConfirm={handlePageInputConfirm} handleKeyDown={handleKeyDown} />
@@ -865,6 +973,114 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     </div>
                 </CardContent>
             </Card>
+            <Dialog open={localFileDialogOpen} onOpenChange={setLocalFileDialogOpen}>
+    <DialogContent className="sm:max-w-[1200px]">
+        <DialogHeader>
+            <DialogTitle>导入SOP</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid gap-4 py-4">
+            <div className="flex items-center gap-2">
+                <span className="text-red-500">*</span>
+                <span>请上传文件</span>
+                <button 
+                    className="text-blue-600 hover:underline ml-auto"
+                
+                >
+                    <span className="text-black">示例文件：</span>
+                    SOP导入格式示例.xlsx
+                </button>
+            </div>
+
+<div 
+    {...getLocalFileRootProps()} 
+    className="group h-48 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
+>
+    <input {...getLocalFileInputProps()} />
+    <UploadIcon className="group-hover:text-primary size-5" />
+    <p className="text-sm">{t('code.clickOrDragHere')}</p>
+    {importFiles.length > 0 && (
+        <div className="w-full max-h-32 overflow-y-auto">
+   {importFiles.slice(0, 1).map((file, index) => ( // 只显示一个文件
+                <div key={index} className="flex items-center justify-between p-1 bg-gray-200 mt-14">
+                    <span className="text-sm text-gray-600 truncate max-w-xs">
+                        {file.name}
+                    </span>
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setImportFiles([]); // 清空文件列表
+                        }}
+                        className="text-red-500 hover:text-red-700"
+                    >
+                        ×
+                    </button>
+                </div>
+            ))}
+        </div>
+    )}
+</div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+            <Button 
+                variant="outline" 
+              onClick={() => {
+    setLocalFileDialogOpen(false);
+    setImportFiles([]);
+}}
+            >
+                取消
+            </Button>
+            <Button 
+                onClick={async () => {
+    await handleLocalFileImport(); // 等待导入完成
+    setLocalFileDialogOpen(false); // 关闭弹窗
+  }}
+                disabled={isImporting || importFiles.length === 0}
+            >
+                {isImporting ? "导入中..." : "提交"}
+            </Button>
+        </div>
+    </DialogContent>
+</Dialog>
+<Dialog open={validationDialog.open} onOpenChange={(open) => setValidationDialog(prev => ({...prev, open}))}>
+  <DialogContent className="sm:max-w-[500px]">
+    <DialogHeader>
+      <div className="flex items-center gap-4">
+        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+          <AlertTriangle className="h-4 w-4 text-white" />
+        </div>
+        <DialogTitle>文件导入结果</DialogTitle>
+      </div>
+    </DialogHeader>
+
+    <div className="py-4">
+      {validationDialog.status_message && (
+        <>
+          <p>
+            {validationDialog.status_message.split("：")[0]}
+          </p>
+          {validationDialog.status_message.includes("：") && (
+            <div className="mt-2 text-sm text-gray-600">
+              {validationDialog.status_message.split("：")[1].split("\n").map((line, index) => (
+                <p key={index} className="mb-1">{line.trim()}</p>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+
+    <div className="flex justify-end">
+       <Button 
+        onClick={handleValidationDialogConfirm}
+      >
+        知道了
+      </Button>
+    </div>
+  </DialogContent>
+</Dialog>
         </div>
     );
 }

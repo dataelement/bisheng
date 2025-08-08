@@ -44,4 +44,7 @@ export const sopApi = {
    SyncSopRecord:(data) => {
      return axios.post(`/api/v1/linsight/sop/record/sync`, data);
   },
+  UploadSopRecord:(data) => {
+     return axios.post(`/api/v1/linsight/sop/upload`, data);
+  },
 }

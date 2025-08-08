@@ -146,7 +146,7 @@ const SopFormDrawer = ({
                   ref={nameInputRef}
                   value={sopForm.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
-                  className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-lg`}
+                  className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]`}
                   placeholder="请输入SOP名称"
                 />
                 <div className="flex justify-between">
@@ -166,7 +166,7 @@ const SopFormDrawer = ({
                   rows={3}
                   value={sopForm.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-lg"
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]"
                   placeholder="请输入SOP描述"
                 />
               </div>
