@@ -24,6 +24,7 @@ from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.user import UserDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.embedding import decide_embeddings
 from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
@@ -44,7 +45,8 @@ class SOPManageService:
         try:
             if llm is None:
                 workbench_conf = await LLMService.get_workbench_llm()
-                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+                linsight_conf = settings.get_linsight_conf()
+                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
             prompt_service = app_ctx.get_prompt_loader()
             prompt_obj = prompt_service.render_prompt(
                 namespace="sop",

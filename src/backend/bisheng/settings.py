@@ -117,6 +117,8 @@ class LinsightConf(BaseModel):
     max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
     max_knowledge_num: int = Field(default=20, description='生成SOP时，prompt里放的知识库信息的数量')
     waiting_list_url: str = Field(default=None, description='waiting list 跳转链接')
+    default_temperature: float = Field(default=0, description='模型请求时的默认温度')
+    retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
 
 
 class Settings(BaseModel):

@@ -181,7 +181,8 @@ class LinsightWorkflowTask:
         """获取LLM实例"""
         try:
             workbench_conf = await LLMService.get_workbench_llm()
-            return BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+            linsight_conf = settings.get_linsight_conf()
+            return BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
         except Exception as e:
             raise TaskExecutionError("任务已终止，请联系管理员检查灵思任务执行模型状态")
 

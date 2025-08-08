@@ -12,6 +12,7 @@ class ExecConfig(BaseModel):
     retry_num: int = Field(default=3, description='灵思任务执行过程中模型调用重试次数')
     retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')
     max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
+    retry_temperature: float = Field(default=1, description='重试时的模型温度')
 
 
 CallUserInputToolName = "call_user_input"

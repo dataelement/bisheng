@@ -83,6 +83,16 @@ class LinsightWorkbenchImpl:
         pass
 
     @classmethod
+    async def _get_llm(cls) -> (BishengLLM, Any):
+        # 获取并验证工作台配置
+        workbench_conf = await cls._get_workbench_config()
+
+        # 创建LLM实例
+        linsight_conf = settings.get_linsight_conf()
+        llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=linsight_conf.default_temperature)
+        return llm, workbench_conf
+
+    @classmethod
     async def submit_user_question(cls, submit_obj: LinsightQuestionSubmitSchema,
                                    login_user: UserPayload) -> tuple[MessageSession, LinsightSessionVersion]:
         """
@@ -197,11 +207,7 @@ class LinsightWorkbenchImpl:
             包含任务标题的字典
         """
         try:
-            # 获取并验证工作台配置
-            workbench_conf = await cls._get_workbench_config()
-
-            # 创建LLM实例
-            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+            llm, _ = await cls._get_llm()
 
             # 生成prompt
             prompt = await cls._generate_title_prompt(question)
@@ -318,7 +324,6 @@ class LinsightWorkbenchImpl:
         error_message = None
         try:
             # 获取工作台配置和会话版本
-            workbench_conf = await cls._get_workbench_config()
             session_version = await cls._get_session_version(linsight_session_version_id)
 
             if login_user.user_id != session_version.user_id:
@@ -326,7 +331,7 @@ class LinsightWorkbenchImpl:
                 return
             try:
                 # 创建LLM和工具
-                llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+                llm, workbench_conf = await cls._get_llm()
             except Exception as e:
                 logger.error(f"生成SOP内容失败: session_version_id={linsight_session_version_id}, error={str(e)}")
                 raise cls.BishengLLMError(str(e))
@@ -852,11 +857,9 @@ class LinsightWorkbenchImpl:
         """
         try:
             file_list = await cls._prepare_file_list(session_version_model)
-            # 获取工作台配置
-            workbench_conf = await cls._get_workbench_config()
 
             # 创建LLM和工具
-            llm = BishengLLM(model_id=workbench_conf.task_model.id, temperature=0)
+            llm, workbench_conf = await cls._get_llm()
             tools = await cls._prepare_tools(session_version_model, llm)
 
             # 获取历史摘要

@@ -222,7 +222,7 @@ class BaseTask(BaseModel):
         sub_task = None
         for i in range(self.exec_config.retry_num):
             if i > 0:
-                res = await self._ainvoke_llm_without_tools(messages, temperature=1)
+                res = await self._ainvoke_llm_without_tools(messages, temperature=self.exec_config.retry_temperature)
             else:
                 res = await self._ainvoke_llm_without_tools(messages)
             try:

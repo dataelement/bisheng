@@ -183,7 +183,7 @@ class ReactTask(BaseTask):
         for i in range(self.exec_config.max_steps):
             messages = await self.build_messages_with_history()
             if json_decode_error > 0:
-                res = await self._ainvoke_llm_without_tools(messages, temperature=1)
+                res = await self._ainvoke_llm_without_tools(messages, temperature=self.exec_config.retry_temperature)
             else:
                 res = await self._ainvoke_llm_without_tools(messages)
             try:
