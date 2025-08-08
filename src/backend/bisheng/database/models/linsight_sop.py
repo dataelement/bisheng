@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List, Literal
 
 from loguru import logger
 from sqlalchemy import update
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR, ForeignKey
 
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
@@ -18,7 +19,7 @@ class LinsightSOPBase(SQLModelSerializable):
     description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOP内容',
-                         sa_column=Column(Text, nullable=False, comment="SOP内容"))
+                         sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
 
@@ -53,7 +54,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     description: Optional[str] = Field(default=None, description='SOP描述', sa_column=Column(Text))
     user_id: int = Field(..., description='用户ID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOP内容',
-                         sa_column=Column(Text, nullable=False, comment="SOP内容"))
+                         sa_column=Column(LONGTEXT, nullable=False, comment="SOP内容"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOP评分，范围0-5')
     linsight_version_id: Optional[str] = Field(default=None, description='灵思会话版本id，同步评分')
