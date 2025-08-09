@@ -46,30 +46,38 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
   const [isSavingAsNew, setIsSavingAsNew] = useState(false);
   const [isOverwriting, setIsOverwriting] = useState(false);
   // 获取SOP记录
-  const fetchRecords = async (isSearch = false) => {
-    setLoading(true);
-    try {
-      const params = {
-        keyword: searchTerm,
-        ...(isSearch ? {} : { page, page_size: pageSize }),
-        sort: sortConfig.direction,
-      };
+const fetchRecords = async (isSearch = false) => {
+  setLoading(true);
+  try {
+    const params = {
+      keyword: searchTerm,
+      ...(isSearch ? {} : { page, page_size: pageSize }),
+      sort: sortConfig.direction,
+    };
 
-      const res = await sopApi.GetSopRecord(params);
+    const res = await sopApi.GetSopRecord(params);
 
-      if (Array.isArray(res)) {
-        setAllRecords(res);  // 存储所有数据
-        setRecords(res);     // 当前页数据
-        setTotal(res.length);
-      } else if (res?.list) {
-        setAllRecords(res.list);  // 存储所有数据
-        setRecords(res.list);     // 当前页数据
-        setTotal(res.total);
+    if (Array.isArray(res)) {
+      setAllRecords(res);  // 存储所有数据
+      setRecords(res);     // 当前页数据
+      setTotal(res.length);
+      // 默认选中第一项
+      if (res.length > 0) {
+        setCurrentRecord(res[0]);
       }
-    } finally {
-      setLoading(false);
+    } else if (res?.list) {
+      setAllRecords(res.list);  // 存储所有数据
+      setRecords(res.list);     // 当前页数据
+      setTotal(res.total);
+      // 默认选中第一项
+      if (res.list.length > 0) {
+        setCurrentRecord(res.list[0]);
+      }
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
   // 初始化数据
   useEffect(() => {
     if (open) {
@@ -424,7 +432,7 @@ export default function ImportFromRecordsDialog({ open, tools, onOpenChange, onS
                   <h3 className="text-lg font-semibold truncate">{currentRecord.name}</h3>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <p className="text-muted-foreground truncate max-w-[200px]">
+                      <p className="text-muted-foreground truncate max-w-[460px]">
                         {currentRecord.description}
                       </p>
                     </TooltipTrigger>
