@@ -134,6 +134,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
         }
 
         const newConfig = {
+            enabled: true,
             type: selectedTool,
             config: allToolsConfig
         };

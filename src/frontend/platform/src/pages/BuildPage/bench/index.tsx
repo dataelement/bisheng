@@ -20,6 +20,8 @@ import { Settings } from "lucide-react";
 import { useWebSearchStore } from "../tools/webSearchStore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
+import { getAssistantToolsApi, updateAssistantToolApi } from "@/controllers/API/assistant";
+
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -161,9 +163,19 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             [`${type}Icon`]: { ...prev[`${type}Icon`], image: fileUrl, relative_path: relativePath }
         }));
     };
-    const handleWebSearchSave = (config) => {
-        setWebSearchData(config) // 更新全局状态
-        setFormData(prev => ({ ...prev, webSearch: config })) // 更新本地状态
+    const handleWebSearchSave = async (config) => {
+           const res = await getAssistantToolsApi('default');
+    console.log(res, 222);
+    const webSearchTool = res.find(tool => tool.name === "联网搜索");
+    
+    if (!webSearchTool) {
+      console.error("Web search tool not found");
+      return;
+    }
+    const toolId = webSearchTool.id;
+             setWebSearchData(config);
+        setFormData(prev => ({ ...prev, webSearch: config }));
+        await updateAssistantToolApi(toolId, config);
           setWebSearchDialogOpen(false)
     }
     const handleModelChange = (index: number, id: string) => {
@@ -354,7 +366,7 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                                     onClick={handleOpenWebSearchSettings}
                                     className="p-1 h-auto"
                                 >
-                                    <Settings className="h-4 w-4" />
+                                    <Settings className="-ml-2 h-4 w-4" />
                                 </Button>
                             }
                         >

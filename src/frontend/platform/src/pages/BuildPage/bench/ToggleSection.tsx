@@ -20,7 +20,7 @@ export const ToggleSection = ({
             <p className="text-lg font-bold flex items-center">
                 <span>{title}</span>
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-2">
                
                 <Switch checked={enabled} onCheckedChange={onToggle} />
                  {extra} {/* 在这里渲染extra内容 */}
