@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
@@ -52,6 +52,13 @@ function ChatView({ index = 0 }: { index?: number }) {
   const methods = useForm<ChatFormValues>({
     defaultValues: { text: '' },
   });
+
+  // 会话关闭linsight模式
+  useEffect(() => {
+    if (messagesTree && messagesTree.length !== 0) {
+      setIsLingsi(false);
+    }
+  }, [messagesTree])
 
   const isNew = conversationId === 'new';
   let content: JSX.Element | null | undefined;

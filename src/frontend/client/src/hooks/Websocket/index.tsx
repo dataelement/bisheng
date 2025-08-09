@@ -257,9 +257,10 @@ export const useLinsightWebSocket = (versionId) => {
                     console.error(taskData.data.error, id, activeVersionIdRef.current)
                     if (id === activeVersionIdRef.current) {
                         updateLinsight(id, {
-                            taskError: taskData.data.error
+                            taskError: taskData.data.error,
+                            status: SopStatus.Stoped
                         })
-                        showToast({ message: taskData.data.error, status: 'error' });
+                        // showToast({ message: taskData.data.error, status: 'error' });
                     }
             }
         };

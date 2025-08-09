@@ -39,7 +39,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
             if (dataRef.current.length) {
                 // change name
                 const oldItem = dataRef.current.find(l => l.value === d.value)
-                return { ...oldItem, label: d?.label }
+                return d ? { ...oldItem, label: d.label, value: d.value } : oldItem
             }
             const res = labels.find(l => l.value === d.value)
             return res ? { ...d, selected: true } : d
@@ -148,7 +148,7 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
             setData([addItem])
             onUpdate({
                 type: UPDATETYPE.CREATELABEL,
-                data: res.name
+                data: addItem
             })
         })
     }

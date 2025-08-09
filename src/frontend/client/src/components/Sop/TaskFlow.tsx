@@ -74,6 +74,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
             setVersionId(newVersionId)
             // 切换版本
             check && !cancel && setLinsightSubmission(newVersionId, {
+                prevVersionId: versionId,
                 isNew: false,
                 files: [],
                 question: linsight.question,

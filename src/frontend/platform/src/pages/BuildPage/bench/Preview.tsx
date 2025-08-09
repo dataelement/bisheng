@@ -6,7 +6,7 @@ import { useState } from "react";
 export default function Preview({ onBeforView }) {
 
     const [open, setOpen] = useState(false)
-    const benchUrl = location.origin + '/'
+    const benchUrl = location.origin + '/workspace/'
 
     const handleClick = async () => {
         const res = await onBeforView()

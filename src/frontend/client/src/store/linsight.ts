@@ -94,6 +94,7 @@ export type SubmissionState = {
     model: string;
     enableWebSearch: boolean;
     useKnowledgeBase: boolean;
+    prevVersionId?: string;
 };
 
 // 使用atomFamily管理每个会话的状态 会话id-版本id:状态
@@ -104,7 +105,7 @@ export const submissionState = atomFamily<SubmissionState | null, string>({
 
 // 上传文件管理
 export const filesByIndex = atomFamily<Map<string, ExtendedFile>, string | number>({
-  key: 'linsightFilesByIndex',
-  default: new Map(),
+    key: 'linsightFilesByIndex',
+    default: new Map(),
 });
 

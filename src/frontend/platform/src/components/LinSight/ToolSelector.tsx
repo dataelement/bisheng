@@ -4,7 +4,6 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion';
 import { Plus, X, AlignJustify, User, Star, CpuIcon } from 'lucide-react';
 import { SearchInput } from '../bs-ui/input';
-import { Button } from '../bs-ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
 import { Check, Minus } from "lucide-react";
 import { LoadIcon } from '../bs-icons/loading';

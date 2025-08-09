@@ -35,7 +35,7 @@ const FilePreview = ({
   return (
     <div className={cn('size-8 shrink-0 overflow-hidden rounded-lg', className)}>
       {/* <FileIcon file={file} fileType={fileType} /> */}
-      <FontIcon name={file.filename} />
+      <FontIcon name={progress < 1 ? '' : file.filename} />
       <SourceIcon source={file?.source} />
       {progress < 1 && (
         <ProgressCircle
@@ -52,13 +52,24 @@ export default FilePreview;
 
 
 
-const FontIcon = ({ name}) => {
+const FontIcon = ({ name }) => {
   const suffix = name ? name.split('.').pop().toLowerCase() : '';
 
-  let char = 'F';
+  let char = '';
   let bg = 'bg-gray-500';
 
   switch (suffix) {
+    case 'html':
+      char = 'H';
+      bg = 'bg-red-500';
+      break;
+    case 'txt':
+      char = 'Txt';
+      bg = 'bg-gray-300';
+      break;
+    case 'md':
+      char = 'M';
+      break;
     case 'doc':
     case 'docx':
       char = 'W';
@@ -71,7 +82,7 @@ const FontIcon = ({ name}) => {
       break;
     case 'ppt':
     case 'pptx':
-      char = 'P';
+      char = 'ppt';
       bg = 'bg-orange-500';
       break;
     case 'pdf':

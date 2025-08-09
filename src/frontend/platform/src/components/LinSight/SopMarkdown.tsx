@@ -275,7 +275,7 @@ const useSopTools = (tools) => {
             };
             fileNode.children = files.map(file => {
                 const name = file.file_name;
-                const value = `${file.file_name}的文件储存信息：{"文件储存在语义检索库中的id":"${file.file_id}","文件储存地址":"./${decodeURIComponent(file.markdown_filename)}"}`;
+                const value = `${file.file_name}的文件储存信息:{'文件储存在语义检索库中的id':'${file.file_id}','文件储存地址':'./${decodeURIComponent(file.markdown_filename)}'}`;
                 nameToValueRef.current[name] = value;
                 valueToNameRef.current[value] = name;
                 return {
@@ -296,7 +296,7 @@ const useSopTools = (tools) => {
                 desc: '',
                 children: orgTools.map(tool => {
                     const name = tool.name;
-                    const value = `${tool.name}的储存信息：{"知识库储存在语义检索库中的id":"${tool.id}"}`
+                    const value = `${tool.name}的储存信息:{'知识库储存在语义检索库中的id':'${tool.id}'}`
                     nameToValueRef.current[name] = value;
                     valueToNameRef.current[value] = name;
                     return {
@@ -318,7 +318,7 @@ const useSopTools = (tools) => {
                 children: [] // 个人知识库没有子节点
             });
             const name = personalTool[0].name;
-            const value = `${personalTool[0].name}的储存信息：{"知识库储存在语义检索库中的id":"${personalTool[0].id}"}`
+            const value = `${personalTool[0].name}的储存信息:{'知识库储存在语义检索库中的id':'${personalTool[0].id}'}`
             nameToValueRef.current[name] = value;
             valueToNameRef.current[value] = name;
         }
@@ -518,6 +518,22 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
         }
         // 反推回原始值
         if (Object.prototype.hasOwnProperty.call(nameToValueMap, id)) {
+            return `{{@${id}@}}`;
+        }
+        // 文件不校验
+        const pattern = /([^@{}'\.]+?\.[^@{}'\s]+)的文件储存信息:\{(['"])[^'"]+\2:\s*(['"])[^'"]*\3,\s*(['"])[^'"]+\4:\s*(['"])[^'"]*\5\}/g
+        const _match = pattern.exec(id);
+        if (_match?.[1]) {
+            // 特殊关系
+            const name = _match[1];
+            const value = id;
+            valueToNameMap[value] = name;
+            nameToValueMap[name] = value;
+
+            return `{{@${_match[1]}@}}`;
+        }
+        // 只要包含 .md .html .csv .txt 这四种格式后缀的，都不校验
+        if (/(\.md)|(\.html)|(\.csv)|(\.txt)/g.test(id.toLowerCase())) {
             return `{{@${id}@}}`;
         }
         console.warn('转换ui时未找到对应的ID  :>> ', valueToNameMap, id);

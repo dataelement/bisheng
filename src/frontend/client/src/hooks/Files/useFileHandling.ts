@@ -314,7 +314,9 @@ const useFileHandling = (params?: UseFileHandling) => {
     event.stopPropagation();
     if (event.target.files) {
       setFilesLoading(true);
-      handleFiles(event.target.files, _toolResource);
+      Array.from(event.target.files).forEach(file => {
+        handleFiles([file], _toolResource);
+      });
       // reset the input
       event.target.value = '';
     }

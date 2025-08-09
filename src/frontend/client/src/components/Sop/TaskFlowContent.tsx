@@ -19,6 +19,7 @@ import FileIcon from '../ui/icon/File';
 import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
+import ErrorDisplay from './components/ErrorDisplay';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -277,7 +278,7 @@ const Task = ({
                 {children}
             </div>
             {/* error */}
-            {task.status === 'failed' && task.errorMsg && <p className='bg-red-100 p-2 rounded-md text-sm text-red-500 mb-2'>任务执行中断：{task.errorMsg}</p>}
+            {task.status === 'failed' && task.errorMsg && <ErrorDisplay title="任务执行中断" taskError={task.errorMsg} />}
         </div>
     );
 };
@@ -386,7 +387,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 )
             }
             {/* error */}
-            {taskError && <p className='bg-red-100 p-2 rounded-md text-sm text-red-500 mb-2'>任务执行中断：{taskError}</p>}
+            {taskError && <ErrorDisplay title="任务执行中断" taskError={taskError} />}
             {/* 总结 */}
             {
                 summary && <div className='relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>

@@ -187,18 +187,20 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
     // 切换非新建会话不展示loading
     useEffect(() => {
-        if (versionId !== 'new') setLoading(false)
+        if (versionId !== 'new') setTimeout(() => {
+            setLoading(false)
+        }, 2000);
     }, [versionId])
 
     // 生成会话
-    const generateSop = (_versionId, feedback?: string) => {
+    const generateSop = (_versionId, linsightSubmission?: any) => {
         const payload = {
             linsight_session_version_id: _versionId,
-            feedback_content: feedback,
+            feedback_content: linsightSubmission?.feedback,
             reexecute: false
         }
-        if (feedback) {
-            payload.previous_session_version_id = versionId
+        if (linsightSubmission) {
+            payload.previous_session_version_id = linsightSubmission.prevVersionId
             payload.reexecute = true
         }
 
@@ -241,7 +243,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
         sse.addEventListener('open', () => {
             console.log('connection is opened');
-            setLoading(false)
+            // setLoading(false)
         });
 
         sse.addEventListener('error', async (e: MessageEvent) => {
@@ -384,7 +386,7 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                 })
                 sse.stream();
             } else {
-                generateSop(versionId, linsightSubmission.feedback)
+                generateSop(versionId, linsightSubmission)
             }
 
             updateLinsight(versionId, {

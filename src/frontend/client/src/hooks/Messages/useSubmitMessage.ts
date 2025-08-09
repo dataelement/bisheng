@@ -43,7 +43,7 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
             parsing_status: 'completed'
           })),
           question: data?.text,
-          feedback: '',
+          // feedback: '',
           tools: data.tools,
           model: 'gpt-4',
           enableWebSearch: false,

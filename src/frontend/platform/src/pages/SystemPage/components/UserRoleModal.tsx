@@ -38,16 +38,28 @@ export default function UserRoleModal({ user, onClose, onChange }) {
 
     const { message } = useToast()
     const handleSave = async () => {
-        const map = {}
-        const items = roleItems.filter(item => {
-            if (map[item.groupId] || !item.groupId) return false
-            map[item.groupId] = true
-            return true
-        })
-        if (items.some(item => item.roles.length === 0)) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
-        if (items.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
-        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, items.reduce((res, item) => [...res, ...item.roles], [])))
-        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, items.map(item => item.groupId)))
+        const groupIdsSet = new Set();
+        const rolesSet = new Set();
+
+        roleItems.forEach(item => {
+            // 处理 groupId，注意有些可能是字符串类型
+            if (item.groupId !== undefined) {
+                groupIdsSet.add(Number(item.groupId)); // 统一转换为数字
+            }
+
+            // 处理 roles
+            if (Array.isArray(item.roles)) {
+                item.roles.forEach(role => {
+                    rolesSet.add(role.toString()); // 统一转换为字符串
+                });
+            }
+        });
+        const groupIds = Array.from(groupIdsSet);
+        const roles = Array.from(rolesSet);
+        if (roles.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
+        if (groupIds.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
+        captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, roles))
+        captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, groupIds))
         onChange()
     }
 

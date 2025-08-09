@@ -209,7 +209,7 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
             </Button>
             <Button
                 className="h-8"
-                // disabled={strategies.length === 0}
+                disabled={strategies.length === 0}
                 onClick={() => handleNext()}
             >
                 {isSubmitting && <LoadIcon className="mr-1" />}

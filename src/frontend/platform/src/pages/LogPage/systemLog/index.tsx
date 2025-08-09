@@ -201,9 +201,9 @@ const useUsers = () => {
         })
     }
     const search = (name) => {
-        const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase())
-            || selectedRef.current.includes(u.value))
-        setUsers(newUsers)
+        // const newUsers = userRef.current.filter(u => u.label.toLowerCase().includes(name.toLowerCase())
+        //     || selectedRef.current.includes(u.value))
+        // setUsers(newUsers)
     }
 
     return {

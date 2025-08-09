@@ -87,7 +87,7 @@ export default function HomePage({ onSelect }) {
     }
 
     const handleCategoryFilter = (categoryId) => {
-        setSelectedCategoryId(categoryId)
+        // setSelectedCategoryId(categoryId)
         setHasMoreData(false)
         currentPageRef.current = 1
         fetchChatData(categoryId)

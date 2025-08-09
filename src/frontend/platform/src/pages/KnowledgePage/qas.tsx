@@ -346,9 +346,9 @@ export default function QasPage() {
                     </div>
                 </div>
                 <div className="flex justify-between items-center mb-4">
-                    <div className={selectedItems.length ? 'visible' : 'invisible'}>
+                    <div className={(selectedItems.length ? 'visible' : 'invisible') + ' mr-2'}>
                         <span className="pl-1 text-sm">{t('selectedItems')}: {selectedItems.length}</span>
-                        <Button variant="link" className="text-red-500 ml-2" onClick={handleDeleteSelected}>{t('batchDelete')}</Button>
+                        {hasPermission && <Button variant="link" className="text-red-500 ml-2" onClick={handleDeleteSelected}>{t('batchDelete')}</Button>}
                     </div>
                     <div className="flex gap-4 items-center">
                         <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
@@ -404,6 +404,7 @@ export default function QasPage() {
                                     <div className="flex items-center">
                                         {el.status !== 2 && <Switch
                                             checked={el.status === 1}
+                                            disabled={!hasPermission}
                                             onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
                                         />}
                                         {el.status === 2 && (

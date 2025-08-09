@@ -535,9 +535,15 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
             return `{{@${id}@}}`;
         }
         // 文件不校验
-        const pattern = /([^@{}'\.]+?\.[^@{}'\s]+)的文件储存信息：\{'[^']+':'[^']*','[^']+':'[^']*'\}/g
+        const pattern = /([^@{}'\.]+?\.[^@{}'\s]+)的文件储存信息:\{(['"])[^'"]+\2:\s*(['"])[^'"]*\3,\s*(['"])[^'"]+\4:\s*(['"])[^'"]*\5\}/g
         const _match = pattern.exec(id);
         if (_match?.[1]) {
+            // 特殊关系记录
+            const name = _match[1];
+            const value = id;
+            valueToNameMap[value] = name;
+            nameToValueMap[name] = value;
+
             return `{{@${_match[1]}@}}`;
         }
         // 只要包含 .md .html .csv .txt 这四种格式后缀的，都不校验
