@@ -12,7 +12,7 @@ from loguru import logger
 
 from bisheng.api.errcode.base import NotFoundError, ServerError
 from bisheng.api.errcode.linsight import SopFileError
-from bisheng.api.services.knowledge_imp import decide_vectorstores
+from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
@@ -62,11 +62,13 @@ class SOPManageService:
             response = await llm.ainvoke(prompt)
             if not response.content:
                 return default_summary
-
+            code_ret = extract_code_blocks(response.content)
+            if code_ret:
+                return json.loads(code_ret[0])
             return json.loads(response.content)
 
         except Exception as e:
-            logger.error(f"生成SOP摘要失败: {e}")
+            logger.exception(f"生成SOP摘要失败: {e}")
             return default_summary
 
     @staticmethod
