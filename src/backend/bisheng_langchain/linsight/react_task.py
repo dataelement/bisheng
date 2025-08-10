@@ -76,7 +76,7 @@ class ReactTask(BaseTask):
                                                    processed_steps=self.task_manager.get_processed_steps(),
                                                    input_str=await self.get_input_str(),
                                                    step_id=self.step_id,
-                                                   target=self.prompt,
+                                                   target=self.target,
                                                    single_sop=self.sop,
                                                    history=history_str)
         return [HumanMessage(content=prompt)]

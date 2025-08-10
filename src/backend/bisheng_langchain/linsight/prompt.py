@@ -72,60 +72,69 @@ FeedBackSopPrompt = """基于以下信息创建一个标准操作流程(SOP):
 输出内容应该简练"""
 
 # 生成一级子任务的prompt模板, variables -> current_time: 当前时间；file_dir: 用户上传的文件路径；sop: 用户SOP；query: 用户问题
-GenerateTaskPrompt = """你是一个任务规划专家，请根据用户的需求和SOP，规划出完成任务需要多少个具体的机器人，每个机器人需要完成哪些任务，以及这些机器人之间是如何协同工作的。
-要求：
-1. 根据用户的需求和SOP，规划出粗粒度的步骤。
-2. 具体哪些机器人来完成这些步骤。以及他们之间的协同工作方式。协同方式有（串行）。
-3. 为每个机器人确定他们profile，target，sop,prompt,node-loop(机器人内部是否需要循环)。
-4. 如果用户需求特别简单，例如只需要执行一个步骤，请直接返回这个步骤的Json。
-5. SOP中提到的细节，例如使用了工具，对过程的详细描述，各种要求都一定要体现在生成的steps中。
-6. 通过以下Json格式返回结果：
+GenerateTaskPrompt = """<背景资料>
+你是一个任务规划专家，请根据用户的问题和指导手册，规划出完成任务需要多少个具体的步骤，每个步骤需要完成哪些任务，以及这些步骤之间是如何协同工作的。
+</背景资料>
 
-已有工具列表：
+<要求>
+1. 根据用户的问题和指导手册，规划出粗粒度的步骤。
+2. 具体哪些步骤来完成这些步骤。以及他们之间的协同工作方式。
+3. 如果用户需求特别简单，例如只需要执行一个步骤，请直接返回一个步骤的Json。
+4. 指导手册中提到的细节，例如使用了工具，对过程的详细描述，各种要求都一定要体现在生成的步骤中。
+</要求>
+
+<已有工具列表>
 {tools_str}
+</已有工具列表>
 
+<步骤规划结果Json格式要求>
 ```json
 {{
-    "thought": "思考需要拆分为几个步骤，以及为什么需要拆分成这几个步骤。",
+    "total_thought": "思考需要拆分为几个步骤，以及为什么需要拆分成这几个步骤。",
     "steps": [
         {{
-            "thought": "思考为什么需要这个步骤，以及这个步骤每一个字段应该有什么内容。",
+            "thought": "思考为什么需要这个步骤，以及这个步骤的每一个字段应该有什么内容。",
             "step_id": "step_1",
-            "description": "step_1的描述",
             "profile": "step_1的profile",
             "target": "step_1的target",
-            "sop": "step_1的sop，需要包含资源（工具，以及工具可能的参数，完整文件路径等等），步骤（当前step的步骤）等信息",
-            "prompt": "step_1的prompt",
+            "workflow": "step_1的workflow，需要包含资源（工具，以及工具可能的参数，完整文件路径等等），步骤（当前的步骤）等信息",
+            "precautions": "step_1的注意事项",
             "input_thought": "思考input需要依赖哪些前置步骤，并明确思考需要输入几个步骤的内容，分别的step_id是多少，涉及到工具使用的，需要思考应该使用这个工具的哪个参数。",
-            "input": [""]
+            "input": [""],
             "node_loop": true/false
         }}
         ,....
     ]
 }}
 ```
-字段解释：
-"thought": 思考为什么需要这个步骤，以及这个步骤每一个字段应该有什么内容，还需要思考input都需要依赖哪些前置步骤，并明确思考需要输入几个步骤的内容，分别的step_id是多少，涉及到工具使用的，需要思考应该使用这个工具的哪个参数。
-"input": 这一步的输入，必须是前置步骤的step_id或"query",可以多个。"query"代表用户的原始问题。
-"node_loop": 表示这一步是否在内部需要循环处理，通常在相似需求需要重复执行的时候需要循环.
-"prompt": 这一步的prompt，通常是这一步的输入和上一步的输出，需要包含执行这一步所需的全部输入信息。需要明确这一步需要输出的内容。
+  <字段解释>
+    "thought": 思考为什么需要这个步骤，以及这个步骤的每一个字段应该有什么内容，还需要思考input都需要依赖哪些前置步骤，并明确思考需要输入几个步骤的内容，分别的step_id是多少，涉及到工具使用的，需要思考应该使用这个工具的哪个参数。
+    "workflow": 精确描述这个步骤的执行流程，以及需要使用哪些工具，以及工具的参数。用户提供指导手册中的[工作流程]字段专门用来描述用户期望的步骤的执行流程，你必须尽可能遵守。
+    "precautions": 这一步的注意事项。用户提供的[注意事项]字段专门用来描述用户期望的步骤的注意事项，你必须尽可能遵守。
+    "input": 本步骤的输入，必须是前置步骤的step_id或"query",可以多个。"query"代表用户的原始问题。
+    "node_loop": 表示本步骤是否在内部需要拆分多个步骤来处理，通常在相似需求需要重复执行的时候需要拆分多个步骤来处理，用户提供的[拆解为多个互不影响的子步骤]字段专门用来描述用户期望本步骤是否进行拆分。
+  </字段解释>
+</步骤规划结果Json格式要求>
 
-以下是一些标准信息：
+<标准信息>
 当前时间：{current_time}
 当前路径：{file_dir}
+</标准信息>
 
-用户SOP：
+<用户提供的指导手册>
 {sop}
+</用户提供的指导手册>
 
-用户问题：
+<用户问题>
 {query}
+</用户问题>
 
-无论如何，你都应该生成完整的步骤。
+无论如何，你都应该生成完整的步骤 List Json。
 """
 
 # 单个agent的prompt模板
 # variables -> profile:agent角色; current_time: 当前时间；file_dir: 用户上传的文件路径；sop: 用户SOP；query: 用户最终问题；
-# workflow: 任务整体规划；processed_steps: 已经处理的步骤；input_str: 用户输入信息；step_id: 当前任务id
+# step_list: 任务整体规划；processed_steps: 已经处理的步骤；input_str: 用户输入信息；step_id: 当前任务id
 # target: 当前任务目标；single_sop: 当前任务遵循的SOP
 SingleAgentPrompt = """你是一个强大的{profile}，可以使用提供的工具来回答用户问题并执行任务。
 在最后的回答中，需要包含接下来需要执行步骤所需的所有信息，例如本次任务的结论，文件保存的路径等等
@@ -141,7 +150,7 @@ SingleAgentPrompt = """你是一个强大的{profile}，可以使用提供的工
 {sop}
 
 这是任务整体规划：
-{workflow}
+{step_list}
 
 {processed_steps}
 
@@ -154,10 +163,13 @@ SingleAgentPrompt = """你是一个强大的{profile}，可以使用提供的工
 当前应该遵守的SOP：
 {single_sop}
 
+注意事项：
+{precautions}
+
 请根据阶段目标，使用适当的工具来完成任务，如果是最后一步，回答需要明确当前任务的产出内容是什么。"""
 
 # 并发agent拆分子任务的prompt模板
-# variables -> query: 用户问题；sop: 用户SOP；workflow: 任务整体规划；
+# variables -> query: 用户问题；sop: 用户SOP；step_list: 任务整体规划；
 # processed_steps: 已经处理的步骤；input_str: 用户输入信息; prompt: 当前阶段问题
 LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用户提供的任务要求，将复杂内容拆分为清晰、完整且互不重复的并行操作任务。请按以下规则执行：
 你需要先分析再拆解，分析用户的问题，并根据问题进行拆解。
@@ -187,7 +199,7 @@ LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用
 {sop}
 
 这是任务整体规划：
-{workflow}
+{step_list}
 
 你现在已经完成了{processed_steps}
 
@@ -224,6 +236,9 @@ LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用
 
 阶段问题：
 {prompt}
+
+注意事项：
+{precautions}
 
 ！！！无论需求列表有多长，你都必须在输出的JSON输出完整的所有的拆分任务，不能有任何的省略。！！！
 """
@@ -278,13 +293,13 @@ SummarizeHistoryPrompt = """请基于以下对话历史记录尝试回答用户�
 回答："""
 
 # 总结答案的prompt模板, 用于总结一个Agent的执行内容，提取出下一个Agent需要的信息
-# variables -> history_str: 已经执行的步骤内容；workflow: 任务整体规划；step_id: 当前任务的step_id；depend_step: 依赖当前任务的step_id
+# variables -> history_str: 已经执行的步骤内容；step_list: 任务整体规划；step_id: 当前任务的step_id；depend_step: 依赖当前任务的step_id
 SummarizeAnswerPrompt = """现在有一个多Agent系统，现在给你其中一个Agent执行的所有步骤内容，你需要总结这个Agent传递给其他Agent所必要的信息。
 已经执行的步骤内容：
 {history_str}
 
 任务整体规划：
-{workflow}
+{step_list}
 
 当前任务为：{step_id}。
 

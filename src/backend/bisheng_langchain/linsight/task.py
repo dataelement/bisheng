@@ -47,7 +47,9 @@ class BaseTask(BaseModel):
     node_loop: bool = Field(False, description='是否循环，循环的话需要生成子任务去执行')
     profile: str = Field(default='', description='任务角色')
     description: str = Field(default='', description='任务描述')
-    prompt: str = Field(default='', description='任务的prompt')
+    prompt: Optional[str] = Field(default='', description='任务的prompt')
+    precautions: Optional[str] = Field(default='', description='任务注意事项')
+    workflow: Optional[str] = Field(default='', description='步骤的执行流程')
     input: list[str] = Field(default_factory=list,
                              description='任务输入，必须是前置步骤的step_id或"query",可以多个。"query"代表用户的原始问题')
 
@@ -169,7 +171,7 @@ class BaseTask(BaseModel):
         # This is a placeholder for the actual summarization logic.
         # You would typically call an LLM or a summarization service here.
         # For now, we will just return a truncated version of the messages_str.
-        query = self.prompt
+        query = self.target
         if self.parent_id:
             query = self.target
         prompt = SummarizeHistoryPrompt.format(sop=self.sop, query=query, history_str=messages_str)
@@ -214,10 +216,11 @@ class BaseTask(BaseModel):
         :return: List of generated subtasks.
         """
         prompt = LoopAgentSplitPrompt.format(query=self.query, sop=self.sop,
-                                             workflow=self.task_manager.get_workflow(),
+                                             step_list=self.task_manager.get_step_list(),
                                              processed_steps=self.task_manager.get_processed_steps(),
                                              input_str=await self.get_input_str(),
-                                             prompt=self.prompt)
+                                             prompt=self.target,
+                                             precautions=self.precautions)
         messages = [HumanMessage(content=prompt)]
         sub_task = None
         for i in range(self.exec_config.retry_num):
@@ -305,7 +308,7 @@ class BaseTask(BaseModel):
             return ""
 
         prompt_str = SummarizeAnswerPrompt.format(history_str=await self.get_history_str(),
-                                                  workflow=self.task_manager.get_workflow(),
+                                                  step_list=self.task_manager.get_step_list(),
                                                   step_id=self.step_id,
                                                   depend_step=self.task_manager.get_depend_step(self.step_id))
         res = await self._ainvoke_llm_without_tools([HumanMessage(content=prompt_str)])
@@ -360,12 +363,13 @@ class Task(BaseTask):
                                               file_dir=self.file_dir,
                                               query=self.query,
                                               sop=self.finally_sop,
-                                              workflow=self.task_manager.get_workflow(),
+                                              step_list=self.task_manager.get_step_list(),
                                               processed_steps=self.task_manager.get_processed_steps(),
                                               input_str=await self.get_input_str(),
                                               step_id=self.step_id,
-                                              target=self.prompt,
-                                              single_sop=self.sop)
+                                              target=self.target,
+                                              single_sop=self.sop,
+                                              precautions=self.precautions)
         return HumanMessage(content=prompt)
 
     async def build_messages_with_history(self) -> list[BaseMessage]:

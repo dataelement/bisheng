@@ -200,6 +200,7 @@ class TaskManage(BaseModel):
             if need_input_task.get(one["step_id"]):
                 one["next_id"] = list(need_input_task[one["step_id"]])
             one['display_target'] = one.get('target')
+            one['sop'] = one.get('workflow', '')
         return original_task
 
     def add_tasks(self, tasks: list[Task | ReactTask]) -> None:
@@ -244,7 +245,7 @@ class TaskManage(BaseModel):
             next_ids = new_next_ids
         return ",".join(list(set(depend_steps)))
 
-    def get_workflow(self):
+    def get_step_list(self):
         res = []
         for task in self.tasks:
             if task.parent_id:
