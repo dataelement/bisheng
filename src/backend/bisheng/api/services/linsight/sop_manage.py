@@ -232,7 +232,7 @@ class SOPManageService:
                 if not name:
                     error_rows.append(f"• 第{i}行: 缺少名称")
                 elif not content:
-                    error_rows.append(f"• 第{i}行: 缺少详细内容内容")
+                    error_rows.append(f"• 第{i}行: 缺少详细内容")
                 elif len(str(name)) >= 500:
                     error_rows.append(f"• 第{i}行: 名称长度超过500字符")
                 elif len(str(content)) >= 50000:
