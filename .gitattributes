@@ -1,0 +1,34 @@
+# 默认：自动识别文本，统一用 LF 存库
+* text=auto eol=lf
+
+# 明确常见文本文件用 LF
+*.py   text eol=lf
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.cfg  text eol=lf
+*.ini  text eol=lf
+
+# Windows 脚本保留 CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# 二进制：禁止任何换行转换和 diff
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.tar  binary
+*.gz   binary
+*.7z   binary
+*.mp4  binary
+*.docx binary
+*.xlsx binary
+*.pptx binary
