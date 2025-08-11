@@ -62,7 +62,7 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 用户最终问题: 
 "{query}"
 
-用户提供的完整SOP: 
+用户提供的完整指导手册(SOP): 
 {sop}
 
 这是任务整体规划：
@@ -76,7 +76,7 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 {target}
 当你完成了当前目标，应该结束执行。
 
-当前应该遵守的SOP：
+当前应该遵守的指导手册(SOP)：
 {single_sop}
 
 已经执行的步骤：
