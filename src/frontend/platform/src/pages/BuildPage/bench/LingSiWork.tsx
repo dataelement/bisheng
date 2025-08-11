@@ -739,28 +739,32 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     status_message: res.status_message
                 });
             }
-            if (res.status_code === 200) {
-                const formData = new FormData();
-                importFilesData.forEach(file => {
-                    formData.append('file', file);
-                });
+            if (res.status_code !== 11010) {
+               
+
+                if (res?.repeat_name) {
+                    console.log(1111);
+ const formData = new FormData();
+
+                formData.append('file', importFiles[0]);
+
                 formData.append('ignore_error', 'false');
                 formData.append('override', 'false');
                 formData.append('save_new', 'false');
                 const res = await sopApi.UploadSopRecord(formData);
-                if (res?.repeat_name) {
+
+                console.log(res, res?.repeat_name);
                     setImportDialogOpen(true)
-                    setDuplicateNames(res.repeat_name);
+                    setDuplicateNames(res?.repeat_name);
                     setDuplicateDialogOpen(true);
                     setImportFormData(formData);
                 } else {
-                    sopApi.getSopList({
-                        page_size: pageSize,
-                        page: 1,
-                        keywords: keywords,
-                    })
                     toast({ variant: 'success', description: '提交成功' });
-
+                    fetchData({
+                        page: page,
+                        pageSize: pageSize,
+                        keyword: keywords
+                    });
                 }
             }
 
@@ -1103,7 +1107,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             {validationDialog.status_message && (
                                 <div className="space-y-2">
                                     <p className="font-medium">
-                                        {validationDialog.status_message.split("：")[0]}
+                                        {validationDialog.status_message.split("：")[0]}：
                                     </p>
                                     {validationDialog.status_message.includes("：") && (
                                         <div className="text-sm text-gray-600">
