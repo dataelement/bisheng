@@ -20,6 +20,7 @@ import FilePreviewDrawer from './FilePreviewDrawer';
 import { SopStatus } from './SOPEditor';
 import FileDrawer from './TaskFiles';
 import ErrorDisplay from './components/ErrorDisplay';
+import { PlaySop } from './components/SopLoading';
 
 const ToolButtonLink = ({ params, setCurrentDirectFile }) => {
     if (!params) return null
@@ -285,7 +286,7 @@ const Task = ({
 
 
 export const TaskFlowContent = ({ linsight, sendInput }) => {
-    const { status, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
+    const { status, sop, title, tasks, taskError, summary, file_list: files, queueCount = 0 } = linsight
     const allFiles = linsight?.output_result?.all_from_session_files || []
 
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -351,8 +352,9 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                 <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
                 正在整理内容...
             </p>}
+            {/* {!tasks?.length && <PlaySop content={sop} />} */}
             {/* 任务 */}
-            {!!tasks?.length && <div className='pl-6'>
+            {!!tasks?.length && status === SopStatus.Running && <div className='pl-6'>
                 <p className='text-sm text-gray-400 mt-6 mb-4'>规划任务执行路径：</p>
                 {tasks.map((task, i) => (
                     <p key={task.id} className='leading-7'>{i + 1}. {task.name}</p>
@@ -458,6 +460,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
                 </p>
             }
+
             {/* 文件列表抽屉 */}
             <FileDrawer
                 title={title}

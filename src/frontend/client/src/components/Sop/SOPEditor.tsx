@@ -5,6 +5,7 @@ import { saveSop, startLinsight } from '~/api/linsight';
 import { useLinsightManager, useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import { Button, Textarea } from '../ui';
 import SopMarkdown from './SopMarkdown';
+import ErrorDisplay from './components/ErrorDisplay';
 
 export const enum SopStatus {
     /* 未开始 */
@@ -159,7 +160,7 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
             <div className='flex items-center justify-between border-b border-b-[#E8E9ED] bg-[#FDFEFF] p-2 px-4 text-[13px] text-[#737780] rounded-t-2xl'>
                 <div className='flex items-center gap-2'>
                     <PencilLineIcon size={14} />
-                    SOP编辑器
+                    指导手册编辑器
                 </div>
                 {/* <CopyButton text={linsight.sop} /> */}
             </div>
@@ -167,7 +168,11 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
             {linsight.status === SopStatus.SopGenerating && !linsight.sop?.trim() && <p className='p-6 text-sm flex gap-2'>
                 <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
             </p>}
-            <p className={linsight.sopError ? 'bg-red-100 p-2 rounded-md text-sm text-red-500 m-2' : 'hidden'}>SOP生成失败：{linsight.sopError}</p>
+            {linsight.sopError &&
+                <div className='p-2 m-2'>
+                    <ErrorDisplay title="SOP生成失败" taskError={linsight.sopError} />
+                </div>
+            }
             <div className={`p-8 linsight-markdown flex-1 min-h-0 ${linsight.sopError && 'hidden'}`}>
                 <SopMarkdown ref={markdownRef} linsight={linsight} edit={showSopEdit} onChange={handleChange} />
             </div>
@@ -183,14 +188,14 @@ export const SOPEditor = ({ versionId, sopError, onRun }) => {
                                 {/* <span className='text-lg'>SOP</span> */}
                                 <p className='mt-0.5 text-sm flex gap-2'>
                                     <img className='size-5' src={__APP_ENV__.BASE_URL + '/assets/load.webp'} alt="" />
-                                    确认是否可以按照 SOP 执⾏任务
+                                    确认是否可以按照指导手册执⾏任务
                                 </p>
                                 <div className='absolute right-4 bottom-3 flex gap-2'>
                                     <Button variant="outline" className="px-3" onClick={() => {
                                         const sop = markdownRef.current.getValue()
                                         sop?.trim() === '' ? handleReExcute('') : setOpenAreaText(true)
                                     }}>
-                                        重新生成 SOP
+                                        重新生成指导手册
                                     </Button>
                                     <Button className="px-6" disabled={sopError || disabled} onClick={handleRun}>
                                         开始执行

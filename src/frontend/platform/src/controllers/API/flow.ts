@@ -164,7 +164,6 @@ export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1
         if (item.flow_type !== 5) return item
         return {
             ...item,
-            description: item.desc,
             version_list: item.version_list || [],
         }
     })
