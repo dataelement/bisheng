@@ -285,6 +285,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
                     removeFocusRings,
                     'transition-[max-height] duration-200',
                     'transition-[height] duration-500',
+                    isLingsi ? 'min-h-32' : 'min-h-24'
                   )}
                 />
               </>

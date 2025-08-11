@@ -138,7 +138,9 @@ const SopMarkdown = forwardRef<MarkdownRef, MarkdownProps>((props, ref) => {
                 getMarkdownPaste(editorElement, (text) => {
                     const value = replaceBracesToMarkers(text, nameToValueRef.current)
                     const name = replaceMarkersToBraces(value, valueToNameRef.current, nameToValueRef.current)
-                    vditor.insertValue(name);
+                    // inset方法可及时渲染；update可覆盖选区； 只有包含变量使用inset，尽量使用update
+                    const regex = /\{\{[@#](.*?)[@#]\}\}/g;
+                    regex.test(name) ? vditor.insertValue(name) : vditor.updateValue(name)
                 })
             },
             input: (val) => onChange(replaceBracesToMarkers(val, nameToValueRef.current)),

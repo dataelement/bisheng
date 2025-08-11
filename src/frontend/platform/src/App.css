@@ -292,8 +292,8 @@
 
 .linsight-vditor .vditor-reset {
 	border-radius: 8px;
-	font-size: 18px;
-	padding: 0 20px 160px 10px !important;
+	font-size: 16px;
+	padding: 0 20px 160px 14px !important;
 	scrollbar-color: transparent transparent;
 }
 
@@ -304,7 +304,22 @@
 .linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
 	opacity: 0.8;
 }
-
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h1:before,
+.vditor-wysiwyg>.vditor-reset>h2:before,
+.vditor-wysiwyg>.vditor-reset>h3:before,
+.vditor-wysiwyg>.vditor-reset>h4:before,
+.vditor-wysiwyg>.vditor-reset>h5:before,
+.vditor-wysiwyg>.vditor-reset>h6:before,
+.vditor-wysiwyg div.vditor-wysiwyg__block:before,
+.vditor-wysiwyg div[data-type="link-ref-defs-block"]:before,
+.vditor-wysiwyg div[data-type="footnotes-block"]:before,
+.vditor-wysiwyg .vditor-toc:before {
+  margin-left: -20px;
+  padding-right: 0;
+  font-size: 12px;
+  position: relative;
+  left: 6px;
+}
 .linsi-span {
 	background: #E9F1FF;
 	color: #2A3F73;

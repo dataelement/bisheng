@@ -2797,7 +2797,7 @@ button.scroll-convo {
 
 .linsight-vditor .vditor-reset {
   font-size: 14px;
-  padding: 0 20px 160px 0 !important;
+  padding: 0 20px 160px 14px !important;
   scrollbar-color: transparent transparent;
 }
 
@@ -2825,6 +2825,23 @@ button.scroll-convo {
 
 .linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
   opacity: 0.9;
+}
+
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h1:before,
+.vditor-wysiwyg>.vditor-reset>h2:before,
+.vditor-wysiwyg>.vditor-reset>h3:before,
+.vditor-wysiwyg>.vditor-reset>h4:before,
+.vditor-wysiwyg>.vditor-reset>h5:before,
+.vditor-wysiwyg>.vditor-reset>h6:before,
+.vditor-wysiwyg div.vditor-wysiwyg__block:before,
+.vditor-wysiwyg div[data-type="link-ref-defs-block"]:before,
+.vditor-wysiwyg div[data-type="footnotes-block"]:before,
+.vditor-wysiwyg .vditor-toc:before {
+  margin-left: -20px;
+  padding-right: 0;
+  font-size: 12px;
+  position: relative;
+  left: 6px;
 }
 
 .linsi-span {

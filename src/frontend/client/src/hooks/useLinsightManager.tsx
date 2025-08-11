@@ -391,6 +391,8 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
 
             updateLinsight(versionId, {
                 status: SopStatus.SopGenerating,
+                taskError: '',
+                sopError: '',
                 sop: ''
             })
             clearLinsightSubmission(versionId)

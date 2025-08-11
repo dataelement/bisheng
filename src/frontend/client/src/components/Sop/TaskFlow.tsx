@@ -118,7 +118,7 @@ export const TaskFlow = ({ versionId, setVersions, setVersionId }) => {
                                 alt="Loading"
                             />
                         </div>
-                        <p className='text-sm text-gray-400 mt-7'>确认SOP规划后，任务开始运行</p>
+                        <p className='text-sm text-gray-400 mt-7'>确认指导手册规划后，任务开始运行</p>
                     </div>
                 )}
                 {

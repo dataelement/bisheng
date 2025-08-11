@@ -173,7 +173,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 // 使用默认模型 清空知识库和工具
                 const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
                 const workflowModelId = workflow.model_id
-                const assistantModelId = assistant.llm_list.find(item => item.default).model_id
+                const assistantModelId = assistant.llm_list.find(item => item.default)?.model_id
                 delete tempDataRef.current.data.source
 
                 tempDataRef.current.data.nodes.forEach(node => {

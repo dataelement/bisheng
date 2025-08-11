@@ -1,3 +1,4 @@
+import { ArrowRight } from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -10,6 +11,7 @@ import { useAddedResponse, useChatHelpers, useSSE } from '~/hooks';
 import { AddedChatContext, ChatContext, ChatFormProvider, useFileMapContext } from '~/Providers';
 import store from '~/store';
 import { buildTree, cn } from '~/utils';
+import { Button } from '../ui';
 import HeaderTitle from './HeaderTitle';
 import ChatForm from './Input/ChatForm';
 import InvitationCodeForm from './InviteCode';
@@ -84,6 +86,8 @@ function ChatView({ index = 0 }: { index?: number }) {
     window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
   }
 
+  const selfHost = location.host.indexOf('bisheng') !== -1;
+
   return (
     <ChatFormProvider {...methods}>
       <ChatContext.Provider value={chatHelpers}>
@@ -120,14 +124,16 @@ function ChatView({ index = 0 }: { index?: number }) {
                   {/* input */}
                   <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} />
                   {/* <Footer /> */}
-                  {isLingsi && <div className='relative mt-20'>
+                  {isLingsi && selfHost && <div className='relative mt-20'>
                     <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
                     <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-8'>
-                      <div className='border rounded-xl p-4 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0001')}>
+                      <div className='relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0001')}>
+                        <Button className='absolute top-3 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
                         <p className='font-bold'>查询近 7 日的销售数据趋势</p>
                         <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
                       </div>
-                      <div className='border rounded-xl p-4 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0002')}>
+                      <div className='relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case_0001')}>
+                        <Button className='absolute top-3 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
                         <p className='font-bold'>查询近 7 日的销售数据趋势</p>
                         <p className='mt-2 text-gray-400'>基于客户数据识别不同群体对智能投资顾问的需求和偏好如高收入、高参与度客户或区域差异。</p>
                       </div>
