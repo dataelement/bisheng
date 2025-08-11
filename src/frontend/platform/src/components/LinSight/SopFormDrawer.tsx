@@ -129,14 +129,14 @@ const SopFormDrawer = ({
         <div className="flex flex-col ">
           <div className="flex items-center justify-between px-4 pt-5 border-gray-200">
             <SheetTitle className="text-lg font-medium text-gray-900">
-              {isEditing ? '编辑SOP' : '新建SOP'}
+              {isEditing ? '编辑指导手册' : '新建指导手册'}
             </SheetTitle>
           </div>
           <div className="flex-1 px-4 pb-4 pt-3">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="sop-name" className="block text-sm font-medium pb-1 text-gray-700">
-                  SOP名称<span className="text-red-500">*</span>
+                  指导手册名称<span className="text-red-500">*</span>
                 </label>
                 < Input
                   type="text"
@@ -147,7 +147,7 @@ const SopFormDrawer = ({
                   value={sopForm.name}
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   className={`mt-1 block w-full border ${errors.name ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]`}
-                  placeholder="请输入SOP名称"
+                  placeholder="请输入指导手册名称"
                 />
                 <div className="flex justify-between">
                   {errors.name && (
@@ -167,7 +167,7 @@ const SopFormDrawer = ({
                   value={sopForm.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
                   className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-[16px]"
-                  placeholder="请输入SOP描述"
+                  placeholder="请输入指导手册描述"
                 />
               </div>
 

@@ -370,8 +370,9 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                                 </Button>
                             }
                         >
+                             {console.log(1111,webSearchData, formData.webSearch.prompt)}
                             <WebSearchConfig
-                              config={webSearchData || formData.webSearch}
+                              config={ formData.webSearch.prompt}
     onChange={handleWebSearchChange}
                             />
                         </ToggleSection>
@@ -426,6 +427,8 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                         <DialogTitle>联网搜索配置</DialogTitle>
                     </DialogHeader>
                     <WebSearchForm
+                           prompt={ formData.webSearch.prompt}     
+                        enabled={formData.webSearch.enabled}
                         formData={formData.webSearch}
                         onSubmit={handleWebSearchSave}
                     />

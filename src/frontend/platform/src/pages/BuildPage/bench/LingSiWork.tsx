@@ -1,7 +1,7 @@
 // src/features/chat-config/ChatConfig.tsx
 import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
-import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
+import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { AlertTriangle } from "lucide-react";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
@@ -27,6 +27,8 @@ import { locationContext } from "@/contexts/locationContext";
 import { UploadIcon } from "@/components/bs-icons";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import sampleData from "@/pages/ModelPage/components/sampleData";
+import { downloadJson } from "@/util/utils";
 
 
 export interface FormErrors {
@@ -709,14 +711,17 @@ const [importFormData, setImportFormData] = useState<FormData | null>(null);
         });
     }, []);
 const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
-    accept: {
-        'application/*': appConfig.enableEtl4lm ?
-            ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
-            : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV']
-    },
-    multiple: true, // 允许选择多个文件
+    multiple: false,
     onDrop: (acceptedFiles) => {
-        setImportFiles(prev => [...prev, ...acceptedFiles]); // 追加新文件
+         if (acceptedFiles.length === 0) return;
+        
+        const file = acceptedFiles[0];
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext !== 'xlsx') {
+            message({ variant: 'warning', description: '请上传xlsx格式的文件' });
+            return;
+        }
+          setImportFiles(acceptedFiles);
     }
 });
 const handleLocalFileImport = async () => {
@@ -749,7 +754,13 @@ const handleLocalFileImport = async () => {
  setDuplicateDialogOpen(true);
   setImportFormData(formData);
         }else{
+                sopApi.getSopList({
+            page_size: pageSize,
+            page: 1,
+            keywords: keywords,
+        })
              toast({ variant: 'success', description: '提交成功' });
+        
         }
         }
         
@@ -779,6 +790,11 @@ const handleValidationDialogConfirm = async () => {
   setImportFormData(formData);
               return
         }else{
+              sopApi.getSopList({
+            page_size: pageSize,
+            page: 1,
+            keywords: keywords,
+        })
              toast({ variant: 'success', description: '提交成功' });
         }
 };
@@ -827,13 +843,13 @@ const handleValidationDialogConfirm = async () => {
                         </div>
 
                         <div className="mb-6">
-                            <p className="text-lg font-bold mb-2">灵思SOP库</p>
+                            <p className="text-lg font-bold mb-2">灵思指导手册库</p>
                             <div className="flex items-center gap-2 mb-2">
                                 <div className="relative flex-1 max-w-xs">
                                     <div className="relative">
                                         <input
                                             type="text"
-                                            placeholder="搜索SOP"
+                                            placeholder="搜索指导手册"
                                             className="w-full pl-10 pr-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                                             value={keywords}
                                             onChange={(e) => {
@@ -883,7 +899,7 @@ const handleValidationDialogConfirm = async () => {
                                             setIsDrawerOpen(true);
                                         }}
                                     >
-                                        新建SOP
+                                        新建指导手册
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -976,7 +992,7 @@ const handleValidationDialogConfirm = async () => {
             <Dialog open={localFileDialogOpen} onOpenChange={setLocalFileDialogOpen}>
     <DialogContent className="sm:max-w-[1200px]">
         <DialogHeader>
-            <DialogTitle>导入SOP</DialogTitle>
+            <DialogTitle>导入指导手册</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
@@ -985,23 +1001,23 @@ const handleValidationDialogConfirm = async () => {
                 <span>请上传文件</span>
                 <button 
                     className="text-blue-600 hover:underline ml-auto"
-                
+                   onClick={() => downloadJson(sampleData)}
                 >
                     <span className="text-black">示例文件：</span>
-                    SOP导入格式示例.xlsx
+                    用户指导手册格式示例.xlsx
                 </button>
             </div>
 
 <div 
     {...getLocalFileRootProps()} 
-    className="group h-48 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
+    className="group h-40 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
 >
     <input {...getLocalFileInputProps()} />
     <UploadIcon className="group-hover:text-primary size-5" />
     <p className="text-sm">{t('code.clickOrDragHere')}</p>
     {importFiles.length > 0 && (
         <div className="w-full max-h-32 overflow-y-auto">
-   {importFiles.slice(0, 1).map((file, index) => ( // 只显示一个文件
+   {importFiles.slice(0, 1).map((file, index) => (
                 <div key={index} className="flex items-center justify-between p-1 bg-gray-200 mt-14">
                     <span className="text-sm text-gray-600 truncate max-w-xs">
                         {file.name}
@@ -1009,7 +1025,7 @@ const handleValidationDialogConfirm = async () => {
                     <button 
                         onClick={(e) => {
                             e.stopPropagation();
-                            setImportFiles([]); // 清空文件列表
+                            setImportFiles([]); 
                         }}
                         className="text-red-500 hover:text-red-700"
                     >
@@ -1035,6 +1051,7 @@ const handleValidationDialogConfirm = async () => {
             <Button 
                 onClick={async () => {
     await handleLocalFileImport(); // 等待导入完成
+    setImportFiles([])
     setLocalFileDialogOpen(false); // 关闭弹窗
   }}
                 disabled={isImporting || importFiles.length === 0}

@@ -247,14 +247,14 @@ const fetchRecords = async (isSearch = false) => {
           {/* 左侧记录列表 */}
           <div className="p-6 w-[50%] min-w-160">
             <SheetHeader>
-              <SheetTitle>从运行记录中导入SOP</SheetTitle>
+              <SheetTitle>从运行记录中导入指导手册</SheetTitle>
             </SheetHeader>
 
             <div className="relative mt-6 mb-6 w-[80%]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="搜索SOP"
+                placeholder="搜索指导手册"
                 className="w-full pl-10 pr-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-primary"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -466,7 +466,7 @@ const fetchRecords = async (isSearch = false) => {
                     }}
                     disabled={!currentRecord || loading}
                   >
-                    {loading ? '导入中...' : '导入当前SOP'}
+                    {loading ? '导入中...' : '导入当前指导手册'}
                   </Button>
                 </div>
               </>
