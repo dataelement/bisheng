@@ -73,7 +73,7 @@ class LinsightAgent(BaseModel):
             yield one
 
         if self.exec_config.debug and one:
-            record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
+            record_llm_prompt(self.llm, sop_prompt, answer, one,
                               time.time() - start_time, self.exec_config.debug_id)
 
     async def generate_sop(self, sop: str, file_list: list[str] = None, knowledge_list: list[str] = None) \
@@ -137,7 +137,7 @@ class LinsightAgent(BaseModel):
         start_time = time.time()
         res = await self.llm.ainvoke(prompt)
         if self.exec_config.debug and res:
-            record_llm_prompt(self.llm, prompt, res.content, res.response_metadata.get('token_usage', None),
+            record_llm_prompt(self.llm, prompt, res.content, res,
                               time.time() - start_time, self.exec_config.debug_id)
 
         # 解析生成的任务json数据

@@ -58,6 +58,7 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
         'openai_api_key': server_config.get('openai_api_key'),
         'openai_api_version': server_config.get('openai_api_version'),
         'azure_deployment': params.pop('model'),
+        'stream_usage': True,
     })
     return params
 
