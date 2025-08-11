@@ -20,6 +20,9 @@ export const WebSearchConfig = ({
     onChange: (field: string, value: any) => void;
     errors?: Record<string, any>;
 }) => {
+    
+    console.log(config,88);
+    
     // Store parameters for all tools separately
     const [toolsParams, setToolsParams] = useState<Record<string, any>>({
         bing: { api_key: '', base_url: '' },
@@ -31,6 +34,7 @@ export const WebSearchConfig = ({
 
     // Initialize toolsParams with existing config
     useEffect(() => {
+        console.log(config,333);
         if (config.tool && config.params) {
             setToolsParams(prev => ({
                 ...prev,
@@ -54,7 +58,7 @@ export const WebSearchConfig = ({
             <Label className="bisheng-label">联网搜索提示词</Label>
             <div className="mt-3">
                 <Textarea
-                    value={config.prompt}
+                    value={config.prompt||config}
                     className="min-h-48"
                     onChange={(e) => onChange('prompt', e.target.value)}
                 />

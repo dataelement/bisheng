@@ -46,7 +46,7 @@ class LinsightAgent(BaseModel):
         knowledge_list_str = ""
         if knowledge_list:
             knowledge_list_str = "\n".join(knowledge_list)
-            knowledge_list_str = f"<知识库列表>\n{knowledge_list_str}\n</<知识库列表>>"
+            knowledge_list_str = f"<知识库列表>\n{knowledge_list_str}\n</知识库列表>"
         return knowledge_list_str
 
     async def _parse_sop_content(self, sop_prompt: str) -> AsyncIterator[ChatGenerationChunk]:

@@ -229,17 +229,22 @@ class SOPManageService:
                 name = sheet.cell(row=i, column=1).value
                 description = sheet.cell(row=i, column=2).value
                 content = sheet.cell(row=i, column=3).value
+                error_msg = []
                 if not name:
-                    error_rows.append(f"• 第{i}行: 缺少名称")
-                elif not content:
-                    error_rows.append(f"• 第{i}行: 缺少详细内容内容")
-                elif len(str(name)) >= 500:
-                    error_rows.append(f"• 第{i}行: 名称长度超过500字符")
-                elif len(str(content)) >= 50000:
-                    error_rows.append(f"• 第{i}行: 详细内容长度超过50000字符")
-                elif description and len(str(description)) >= 1000:
-                    error_rows.append(f"• 第{i}行: 描述长度超过1000字符")
-                elif name and content:
+                    error_msg.append("缺少名称")
+                if not content:
+                    error_msg.append("缺少详细内容")
+                if len(str(name)) >= 500:
+                    error_msg.append("名称长度超过500字符")
+                if len(str(content)) >= 50000:
+                    error_msg.append("详细内容长度超过50000字符")
+                if description and len(str(description)) >= 1000:
+                    error_msg.append("描述长度超过1000字符")
+
+                if error_msg:
+                    error_msg = "、".join(error_msg)
+                    error_rows.extend(f"• 第{i}行: {error_msg}")
+                else:
                     success_rows.append({
                         "name": str(name),
                         "description": str(description) if description is not None else "",

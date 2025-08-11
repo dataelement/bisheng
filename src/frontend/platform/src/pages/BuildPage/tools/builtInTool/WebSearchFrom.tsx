@@ -29,7 +29,7 @@ const defaultToolParams = {
     },
 };
 
-const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
+const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
     const { t } = useTranslation();
     const { config: webSearchData, setConfig } = useWebSearchStore();
     const [loading, setLoading] = useState(true);
@@ -134,9 +134,10 @@ const WebSearchForm = ({ formData, onSubmit, errors = {} }) => {
         }
 
         const newConfig = {
-            enabled: true,
+            enabled,
             type: selectedTool,
-            config: allToolsConfig
+            config: allToolsConfig,
+            prompt
         };
         try {
             setConfig(newConfig);
