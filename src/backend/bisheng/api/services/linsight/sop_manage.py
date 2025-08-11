@@ -216,7 +216,7 @@ class SOPManageService:
         :param file: 文件路径
         """
         if not file.size:
-            raise NotFoundError.http_exception(msg="未找到上传的SOP文件")
+            raise NotFoundError.http_exception(msg="未找到上传的指导手册文件")
         error_rows = []
         success_rows = []
         wb = None
@@ -267,9 +267,9 @@ class SOPManageService:
         if error_rows and not ignore_error:
             error_msg = "\n".join(error_rows)
             raise SopFileError.http_exception(
-                msg=f"共计划导入{len(success_rows) + len(error_rows)}条SOP，格式正确{len(success_rows)}条，错误{len(error_rows)}条：\n {error_msg}")
+                msg=f"共计划导入{len(success_rows) + len(error_rows)}条指导手册，格式正确{len(success_rows)}条，错误{len(error_rows)}条：\n {error_msg}")
         if not success_rows:
-            raise NotFoundError.http_exception(msg="未找到格式正确的SOP数据")
+            raise NotFoundError.http_exception(msg="未找到格式正确的指导手册数据")
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
         return await cls._sync_sop_record(records, override=override, save_new=save_new)
 
@@ -289,7 +289,7 @@ class SOPManageService:
             if not emb_model_id:
                 raise ServerError.http_exception(msg="未配置知识库embedding模型，请从工作台配置中设置")
         except AttributeError:
-            raise ServerError.http_exception(msg="工作台配置中未找到SOP embedding模型，请从工作台配置中设置")
+            raise ServerError.http_exception(msg="工作台配置中未找到指导手册 embedding模型，请从工作台配置中设置")
 
         # 校验embedding模型
         embed_info = LLMDao.get_model_by_id(int(emb_model_id))
@@ -313,7 +313,7 @@ class SOPManageService:
             vector_client.add_texts([sop_obj.content[0:10000]], metadatas=metadatas)
             es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
         except Exception as e:
-            raise ServerError.http_exception(msg=f"添加SOP失败，向向量存储添加数据失败: {str(e)}")
+            raise ServerError.http_exception(msg=f"添加指导手册失败，向向量存储添加数据失败: {str(e)}")
 
         sop_dict = sop_obj.model_dump(exclude_unset=True)
         sop_dict["vector_store_id"] = vector_store_id  # 设置向量存储ID
@@ -322,7 +322,7 @@ class SOPManageService:
         sop_model.user_id = user_id
         sop_model = await LinsightSOPDao.create_sop(sop_model)
         if not sop_model:
-            raise ServerError.http_exception(msg="添加SOP失败")
+            raise ServerError.http_exception(msg="添加指导手册失败")
 
         return resp_200(data=sop_model)
 
@@ -336,7 +336,7 @@ class SOPManageService:
         # 校验SOP是否存在
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_obj.id])
         if not existing_sop:
-            raise NotFoundError.http_exception(msg="SOP不存在")
+            raise NotFoundError.http_exception(msg="指导手册不存在")
 
         if sop_obj.content != existing_sop[0].content:
 
@@ -347,7 +347,7 @@ class SOPManageService:
                 if not emb_model_id:
                     raise ServerError.http_exception(msg="未配置知识库embedding模型，请从工作台配置中设置")
             except AttributeError:
-                raise ServerError.http_exception(msg="工作台配置中未找到SOP embedding模型，请从工作台配置中设置")
+                raise ServerError.http_exception(msg="工作台配置中未找到指导手册 embedding模型，请从工作台配置中设置")
 
             vector_store_id = existing_sop[0].vector_store_id
             embeddings = decide_embeddings(emb_model_id)
@@ -368,7 +368,7 @@ class SOPManageService:
                 es_client.add_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)
 
             except Exception as e:
-                raise ServerError.http_exception(msg=f"更新SOP失败，向向量存储更新数据失败: {str(e)}")
+                raise ServerError.http_exception(msg=f"更新指导手册失败，向向量存储更新数据失败: {str(e)}")
 
         # 更新数据库中的SOP
         sop_model = await LinsightSOPDao.update_sop(sop_obj)
@@ -384,7 +384,7 @@ class SOPManageService:
         :return: 删除结果
         """
         if not sop_ids:
-            raise NotFoundError.http_exception(msg="SOP ID列表不能为空")
+            raise NotFoundError.http_exception(msg="指导手册 ID列表不能为空")
 
         # 校验SOP是否存在
         existing_sops = await LinsightSOPDao.get_sops_by_ids(sop_ids)
@@ -405,7 +405,7 @@ class SOPManageService:
             es_client.delete(vector_store_ids)
 
         except Exception as e:
-            raise ServerError.http_exception(msg=f"删除SOP失败，向向量存储删除数据失败: {str(e)}")
+            raise ServerError.http_exception(msg=f"删除指导手册失败，向向量存储删除数据失败: {str(e)}")
 
         # 删除数据库中的SOP
         await LinsightSOPDao.remove_sop(sop_ids=sop_ids)
@@ -486,7 +486,7 @@ class SOPManageService:
                                                                     text_splitter=text_splitter)
                 retrievers = [baseline_vector_retriever]
             else:
-                error_msg = "SOP检索失败，向量检索与关键词检索均不可用"
+                error_msg = "指导手册检索失败，向量检索与关键词检索均不可用"
                 return [], error_msg
 
             retriever = EnsembleRetriever(retrievers=retrievers, weights=[0.5, 0.5] if len(retrievers) > 1 else [1.0])
@@ -512,8 +512,8 @@ class SOPManageService:
 
             return results, error_msg
         except Exception as e:
-            logger.error(f"搜索SOP失败: {str(e)}")
-            return [], f"SOP检索失败: {str(e)}"
+            logger.error(f"搜索指导手册失败: {str(e)}")
+            return [], f"指导手册检索失败: {str(e)}"
 
     # 重建SOP VectorStore
     @classmethod
