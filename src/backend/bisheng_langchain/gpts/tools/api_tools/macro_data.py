@@ -2,6 +2,7 @@ import json
 import time
 from typing import Any
 
+import httpx
 import pandas as pd
 import requests
 from langchain_core.tools import BaseTool
@@ -25,7 +26,7 @@ class MacroData(BaseModel):
 信托贷款，未贴现银行承兑汇票，企业债券，非金融企业境内股票融资
         """
         url = 'https://data.mofcom.gov.cn/datamofcom/front/gnmy/shrzgmQuery'
-        r = requests.post(url)
+        r = httpx.post(url)
         data_json = r.json()
         temp_df = pd.DataFrame(data_json)
         temp_df.columns = [
@@ -564,10 +565,10 @@ if __name__ == '__main__':
     # start_date = ''
     # end_date = ''
     # print(MacroData.china_ppi(start_date=start_date, end_date=end_date))
-    # print(MacroData.china_shrzgm(start_date=start_date, end_date=end_date))
+    print(MacroData.china_shrzgm(start_date=tmp_start_date, end_date=tmp_end_date))
     # print(MacroData.china_consumer_goods_retail(start_date=start_date, end_date=end_date))
     # print(MacroData.china_cpi(start_date=start_date, end_date=end_date))
     # print(MacroData.china_pmi(start_date=start_date, end_date=end_date))
     # print(MacroData.china_money_supply(start_date=start_date, end_date=end_date))
     # print(MacroData.china_gdp_yearly(start_date=start_date, end_date=end_date))
-    print(MacroData.bond_zh_us_rate(start_date=tmp_start_date, end_date=tmp_end_date))
+    # print(MacroData.bond_zh_us_rate(start_date=tmp_start_date, end_date=tmp_end_date))
