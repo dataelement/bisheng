@@ -673,7 +673,7 @@ async def sync_sop_record(
         raise e
     except Exception as e:
         logger.exception("sync_sop_record error")
-        return resp_500(code=500, message=f"SOP 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
+        return resp_500(code=500, message=f"指导手册 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
 
 
 @router.post("/sop/upload", summary="批量导入SOP入库", response_model=UnifiedResponseModel)
@@ -693,12 +693,12 @@ async def upload_sop_file(
 
         return resp_200(data={
             "repeat_name": repeat_name,
-        }, message="SOP文件上传成功")
+        }, message="指导手册文件上传成功")
     except HTTPException as e:
         raise e
     except Exception as e:
         logger.exception("SOP文件上传失败")
-        return resp_500(code=500, message=f"SOP 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
+        return resp_500(code=500, message=f"指导手册 导入失败：{str(e)[:100]}")  # 限制错误信息长度，避免过长
 
 
 @router.delete("/sop/remove", summary="删除灵思SOP", response_model=UnifiedResponseModel)

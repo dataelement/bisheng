@@ -36,16 +36,17 @@ class LinsightAgent(BaseModel):
         file_list_str = ""
         if file_list:
             file_list_str = "\n".join(file_list[:self.exec_config.max_file_num])
-            file_list_str = f"用户上传文件列表:\n{file_list_str}\n"
             if len(file_list) > self.exec_config.max_file_num:
                 file_list_str += f"用户上传了{len(file_list)}份文件，此处只展示{self.exec_config.max_file_num}份。都储存在./目录下。"
+            file_list_str = f"<用户上传文件列表>\n{file_list_str}\n</用户上传文件列表>"
         return file_list_str
 
     @staticmethod
     async def parse_knowledge_list_str(knowledge_list: list[str]) -> str:
         knowledge_list_str = ""
         if knowledge_list:
-            knowledge_list_str = "知识库列表:\n" + "\n".join(knowledge_list)
+            knowledge_list_str = "\n".join(knowledge_list)
+            knowledge_list_str = f"<知识库列表>\n{knowledge_list_str}\n</<知识库列表>>"
         return knowledge_list_str
 
     async def _parse_sop_content(self, sop_prompt: str) -> AsyncIterator[ChatGenerationChunk]:
@@ -72,7 +73,7 @@ class LinsightAgent(BaseModel):
             yield one
 
         if self.exec_config.debug and one:
-            record_llm_prompt(self.llm, sop_prompt, answer, one.response_metadata.get('token_usage', None),
+            record_llm_prompt(self.llm, sop_prompt, answer, one,
                               time.time() - start_time, self.exec_config.debug_id)
 
     async def generate_sop(self, sop: str, file_list: list[str] = None, knowledge_list: list[str] = None) \
@@ -136,7 +137,7 @@ class LinsightAgent(BaseModel):
         start_time = time.time()
         res = await self.llm.ainvoke(prompt)
         if self.exec_config.debug and res:
-            record_llm_prompt(self.llm, prompt, res.content, res.response_metadata.get('token_usage', None),
+            record_llm_prompt(self.llm, prompt, res.content, res,
                               time.time() - start_time, self.exec_config.debug_id)
 
         # 解析生成的任务json数据

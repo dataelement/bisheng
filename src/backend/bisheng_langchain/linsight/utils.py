@@ -88,11 +88,16 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
     generate_tokens_num = 0
     prompt_tokens_num = 0
     cached_tokens_num = 0
-    if token_usage:
-        generate_tokens_num = token_usage.get('output_tokens', 0) or token_usage.get('completion_tokens', 0)
-        prompt_tokens_num = token_usage.get('input_tokens', 0) or token_usage.get('prompt_tokens', 0)
-        cached_tokens_num = token_usage.get('cached_tokens', 0) or token_usage.get('prompt_tokens_details', {}).get(
-            'cached_tokens', 0)
+    try:
+        token_usage = token_usage.response_metadata.get('token_usage', {}) or token_usage.usage_metadata
+
+        if token_usage:
+            generate_tokens_num = token_usage.get('output_tokens', 0) or token_usage.get('completion_tokens', 0)
+            prompt_tokens_num = token_usage.get('input_tokens', 0) or token_usage.get('prompt_tokens', 0)
+            cached_tokens_num = token_usage.get('cached_tokens', 0) or token_usage.get('prompt_tokens_details', {}).get(
+                'cached_tokens', 0) or token_usage.get('input_tokens_details', {}).get('cache_read', 0)
+    except Exception:
+        pass
     try:
         model_name = getattr(llm, "model")
     except AttributeError:

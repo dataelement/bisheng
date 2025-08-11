@@ -115,7 +115,7 @@ class BaseTask(BaseModel):
                 res = await self.llm.ainvoke(messages, tools=tool_args, **kwargs)
                 if self.exec_config.debug and res:
                     record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                                      res.response_metadata.get('token_usage', None), time.time() - start_time,
+                                      res, time.time() - start_time,
                                       self.exec_config.debug_id)
                 return res
             except Exception as e:
@@ -138,7 +138,7 @@ class BaseTask(BaseModel):
                 res = await self.llm.ainvoke(messages, **kwargs)
                 if self.exec_config.debug and res:
                     record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                                      res.response_metadata.get('token_usage', None), time.time() - start_time,
+                                      res, time.time() - start_time,
                                       self.exec_config.debug_id)
                 return res
             except Exception as e:
