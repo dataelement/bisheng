@@ -243,7 +243,7 @@ class SOPManageService:
 
                 if error_msg:
                     error_msg = "、".join(error_msg)
-                    error_rows.extend(f"• 第{i}行: {error_msg}")
+                    error_rows.append(f"• 第{i}行: {error_msg}")
                 else:
                     success_rows.append({
                         "name": str(name),
