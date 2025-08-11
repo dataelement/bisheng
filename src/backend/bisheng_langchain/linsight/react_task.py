@@ -72,7 +72,7 @@ class ReactTask(BaseTask):
                                                    tools_json=tools_json,
                                                    sop=self.finally_sop,
                                                    query=self.query,
-                                                   workflow=self.task_manager.get_workflow(),
+                                                   step_list=self.task_manager.get_step_list(),
                                                    processed_steps=self.task_manager.get_processed_steps(),
                                                    input_str=await self.get_input_str(),
                                                    step_id=self.step_id,

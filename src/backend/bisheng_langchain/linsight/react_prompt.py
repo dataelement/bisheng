@@ -1,7 +1,7 @@
 # 一级任务的prompt模板
 # variables -> profile: task角色; current_time: 当前时间；file_dir: 用户上传的文件路径；
 # tools_json: 可用的工具列表；sop: 用户SOP；query: 用户最终问题；
-# workflow: 任务整体规划；processed_steps: 已经处理的步骤；input_str: 用户输入信息；step_id: 当前任务id
+# step_list: 任务整体规划；processed_steps: 已经处理的步骤；input_str: 用户输入信息；step_id: 当前任务id
 # target: prompt；single_sop: 当前任务遵循的SOP; history: 已经执行的步骤
 ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下工具来回答用户问题并执行任务。
 请使用ReAct (Reasoning + Acting)方法，思考并使用工具解决问题。
@@ -66,7 +66,7 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 {sop}
 
 这是任务整体规划：
-{workflow}
+{step_list}
 
 {processed_steps}
 
