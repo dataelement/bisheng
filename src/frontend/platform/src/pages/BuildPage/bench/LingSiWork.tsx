@@ -782,7 +782,7 @@ const handleValidationDialogConfirm = async () => {
     
 
 
-        const res = await sopApi.UploadSopRecord(formData);
+        const res = await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(formData));
         if(res?.repeat_name){
             setImportDialogOpen(true)
    setDuplicateNames(res.repeat_name);
@@ -1015,14 +1015,16 @@ const handleValidationDialogConfirm = async () => {
     <input {...getLocalFileInputProps()} />
     <UploadIcon className="group-hover:text-primary size-5" />
     <p className="text-sm">{t('code.clickOrDragHere')}</p>
-    {importFiles.length > 0 && (
-        <div className="w-full max-h-32 overflow-y-auto">
+  
+</div>
+  {importFiles.length > 0 && (
+        <div className="text-sm text-start text-green-500 mt-2">
    {importFiles.slice(0, 1).map((file, index) => (
-                <div key={index} className="flex items-center justify-between p-1 bg-gray-200 mt-14">
-                    <span className="text-sm text-gray-600 truncate max-w-xs">
+                <div key={index}>
+                    <span>
                         {file.name}
                     </span>
-                    <button 
+                    {/* <button 
                         onClick={(e) => {
                             e.stopPropagation();
                             setImportFiles([]); 
@@ -1030,12 +1032,11 @@ const handleValidationDialogConfirm = async () => {
                         className="text-red-500 hover:text-red-700"
                     >
                         ×
-                    </button>
+                    </button> */}
                 </div>
             ))}
         </div>
     )}
-</div>
         </div>
 
         <div className="flex justify-end gap-2">
@@ -1062,39 +1063,64 @@ const handleValidationDialogConfirm = async () => {
     </DialogContent>
 </Dialog>
 <Dialog open={validationDialog.open} onOpenChange={(open) => setValidationDialog(prev => ({...prev, open}))}>
-  <DialogContent className="sm:max-w-[500px]">
-    <DialogHeader>
-      <div className="flex items-center gap-4">
-        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-          <AlertTriangle className="h-4 w-4 text-white" />
+  <DialogContent className="sm:max-w-[500px] max-h-[80vh]" close={false}>
+    {/* 静态蓝色竖条 - 始终显示 */}
+    <div className="absolute left-0 top-0 h-full w-1.5 bg-blue-500"></div>
+    
+    {/* 可滚动区域 - 仅在内容溢出时显示滚动条 */}
+    <div 
+      className="pl-4 overflow-y-auto"
+      style={{
+        maxHeight: 'calc(80vh - 2rem)', // 减去padding等空间
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#3b82f6 transparent' // blue-500
+      }}
+    >
+      {/* 自定义滚动条样式 (Webkit浏览器) */}
+      <style jsx>{`
+        .overflow-y-auto::-webkit-scrollbar {
+          width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+          background: #3b82f6; /* blue-500 */
+          border-radius: 4px;
+        }
+      `}</style>
+      
+      <DialogHeader>
+        <div className="flex items-center gap-4">
+          <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
+            <span className="text-white font-bold text-lg">i</span>
+          </div>
+          <DialogTitle>文件格式不符合要求</DialogTitle>
         </div>
-        <DialogTitle>文件导入结果</DialogTitle>
+      </DialogHeader>
+
+      <div className="py-4">
+        {validationDialog.status_message && (
+          <div className="space-y-2">
+            <p className="font-medium">
+              {validationDialog.status_message.split("：")[0]}
+            </p>
+            {validationDialog.status_message.includes("：") && (
+              <div className="text-sm text-gray-600">
+                {validationDialog.status_message.split("：")[1].split("\n").map((line, index) => (
+                  <p key={index}>{line.trim()}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    </DialogHeader>
 
-    <div className="py-4">
-      {validationDialog.status_message && (
-        <>
-          <p>
-            {validationDialog.status_message.split("：")[0]}
-          </p>
-          {validationDialog.status_message.includes("：") && (
-            <div className="mt-2 text-sm text-gray-600">
-              {validationDialog.status_message.split("：")[1].split("\n").map((line, index) => (
-                <p key={index} className="mb-1">{line.trim()}</p>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-
-    <div className="flex justify-end">
-       <Button 
-        onClick={handleValidationDialogConfirm}
-      >
-        知道了
-      </Button>
+      <div className="flex justify-end">
+        <Button onClick={handleValidationDialogConfirm}>
+          知道了
+        </Button>
+      </div>
     </div>
   </DialogContent>
 </Dialog>
