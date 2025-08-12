@@ -123,7 +123,7 @@ class BaseTask(BaseModel):
                 if i == self.exec_config.retry_num - 1:
                     raise e
                 else:
-                    await asyncio.sleep(self.exec_config.retry_delay)
+                    await asyncio.sleep(self.exec_config.retry_sleep)
                     continue
         raise Exception("Failed to invoke LLM after retries.")
 
@@ -146,7 +146,7 @@ class BaseTask(BaseModel):
                 if i == self.exec_config.retry_num - 1:
                     raise e
                 else:
-                    await asyncio.sleep(self.exec_config.retry_delay)
+                    await asyncio.sleep(self.exec_config.retry_sleep)
                     continue
         raise Exception("Failed to invoke LLM after retries.")
 
