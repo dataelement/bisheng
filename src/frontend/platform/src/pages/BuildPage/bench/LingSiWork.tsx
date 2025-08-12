@@ -740,20 +740,19 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                 });
             }
             if (res.status_code !== 11010) {
-               
+
 
                 if (res?.repeat_name) {
-                    console.log(1111);
- const formData = new FormData();
+                    const formData = new FormData();
 
-                formData.append('file', importFiles[0]);
+                    formData.append('file', importFiles[0]);
 
-                formData.append('ignore_error', 'false');
-                formData.append('override', 'false');
-                formData.append('save_new', 'false');
-                const res = await sopApi.UploadSopRecord(formData);
+                    formData.append('ignore_error', 'false');
+                    formData.append('override', 'false');
+                    formData.append('save_new', 'false');
+                    const res = await sopApi.UploadSopRecord(formData);
 
-                console.log(res, res?.repeat_name);
+                    console.log(res, res?.repeat_name);
                     setImportDialogOpen(true)
                     setDuplicateNames(res?.repeat_name);
                     setDuplicateDialogOpen(true);
@@ -815,7 +814,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         <FormInput
                             label="输入框提示语"
                             value={formData.linsightConfig?.input_placeholder}
-                            placeholder="请输入你的任务目标，然后交给 BISHENG 灵思"
+                            placeholder="灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~"
                             maxLength={100}
                             onChange={(v) => {
                                 setFormData(prev => ({

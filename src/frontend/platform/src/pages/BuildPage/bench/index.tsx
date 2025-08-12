@@ -140,22 +140,22 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     // 非admin角色跳走
     const { user } = useContext(userContext);
     const navigate = useNavigate()
-      const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(false);
     useEffect(() => {
         if (user.user_id && user.role !== 'admin') {
             navigate('/build/apps')
         }
     }, [user])
     useEffect(() => {
-         if (!parentFormData) {
+        if (!parentFormData) {
             console.log("parentFormData is null", parentFormData);
-            
- getWorkstationConfigApi().then(res => {
-            setWebSearchData(res.webSearch)
-            setFormData(res)
-        })
-         }
-       
+
+            getWorkstationConfigApi().then(res => {
+                setWebSearchData(res.webSearch)
+                setFormData(res)
+            })
+        }
+
     }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
@@ -164,19 +164,19 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }));
     };
     const handleWebSearchSave = async (config) => {
-           const res = await getAssistantToolsApi('default');
-    console.log(res, 222);
-    const webSearchTool = res.find(tool => tool.name === "联网搜索");
-    
-    if (!webSearchTool) {
-      console.error("Web search tool not found");
-      return;
-    }
-    const toolId = webSearchTool.id;
-             setWebSearchData(config);
+        const res = await getAssistantToolsApi('default');
+        console.log(res, 222);
+        const webSearchTool = res.find(tool => tool.name === "联网搜索");
+
+        if (!webSearchTool) {
+            console.error("Web search tool not found");
+            return;
+        }
+        const toolId = webSearchTool.id;
+        setWebSearchData(config);
         setFormData(prev => ({ ...prev, webSearch: config }));
         await updateAssistantToolApi(toolId, config);
-          setWebSearchDialogOpen(false)
+        setWebSearchDialogOpen(false)
     }
     const handleModelChange = (index: number, id: string) => {
         const newModels = [...formData.models];
@@ -196,31 +196,31 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '' }]
         }));
     };
-  const handleOpenWebSearchSettings = () => {
+    const handleOpenWebSearchSettings = () => {
         setWebSearchDialogOpen(true);
     };
     // 在父组件中添加这个方法
-const handleWebSearchChange = useCallback((field: string, value: any) => {
-    console.log('更新字段:', field, '新值:', value);
-    
-    // 更新本地状态
-    setFormData(prev => ({
-        ...prev,
-        webSearch: {
-            ...prev.webSearch,
+    const handleWebSearchChange = useCallback((field: string, value: any) => {
+        console.log('更新字段:', field, '新值:', value);
+
+        // 更新本地状态
+        setFormData(prev => ({
+            ...prev,
+            webSearch: {
+                ...prev.webSearch,
+                [field]: value
+            }
+        }));
+
+        // 同时更新全局状态 (zustand)
+        setWebSearchData(prev => ({
+            ...prev,
             [field]: value
-        }
-    }));
-    
-    // 同时更新全局状态 (zustand)
-    setWebSearchData(prev => ({
-        ...prev,
-        [field]: value
-    }));
-}, [setFormData, setWebSearchData]); // 添加依赖项
+        }));
+    }, [setFormData, setWebSearchData]); // 添加依赖项
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
-          <div className="pt-4 relative">
+            <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
                         <ToggleSection
@@ -355,7 +355,7 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                                 </Select>
                             </div>
                         </ToggleSection> */}
-    <ToggleSection
+                        <ToggleSection
                             title="联网搜索"
                             enabled={formData.webSearch.enabled}
                             onToggle={(enabled) => toggleFeature('webSearch', enabled)}
@@ -370,10 +370,10 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                                 </Button>
                             }
                         >
-                             {console.log(1111,webSearchData, formData.webSearch.prompt)}
+                            {console.log(1111, webSearchData, formData.webSearch.prompt)}
                             <WebSearchConfig
-                              config={ formData.webSearch.prompt}
-    onChange={handleWebSearchChange}
+                                config={formData.webSearch.prompt}
+                                onChange={handleWebSearchChange}
                             />
                         </ToggleSection>
                         <ToggleSection
@@ -421,13 +421,13 @@ const handleWebSearchChange = useCallback((field: string, value: any) => {
                     </div>
                 </CardContent>
             </div>
-             <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
+            <Dialog open={webSearchDialogOpen} onOpenChange={setWebSearchDialogOpen}>
                 <DialogContent className="sm:max-w-[625px] bg-background-login">
                     <DialogHeader>
                         <DialogTitle>联网搜索配置</DialogTitle>
                     </DialogHeader>
                     <WebSearchForm
-                           prompt={ formData.webSearch.prompt}     
+                        prompt={formData.webSearch.prompt}
                         enabled={formData.webSearch.enabled}
                         formData={formData.webSearch}
                         onSubmit={handleWebSearchSave}
@@ -451,7 +451,7 @@ interface UseChatConfigProps {
 }
 
 const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
-    const [formData, setFormData] = useState<ChatConfigForm>(  parentFormData ||{
+    const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || {
         menuShow: true,
         systemPrompt: '你是毕昇 AI 助手',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
@@ -496,15 +496,15 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 {question}`,
         },
     });
- useEffect(() => {
-    if (parentFormData) {
-      setFormData(parentFormData);
-    }
-  }, [parentFormData]);
+    useEffect(() => {
+        if (parentFormData) {
+            setFormData(parentFormData);
+        }
+    }, [parentFormData]);
 
-  useEffect(() => {
-    parentSetFormData?.(formData);
-  }, [formData]);
+    useEffect(() => {
+        parentSetFormData?.(formData);
+    }, [formData]);
 
     //         const sidebarSloganRef = useRef<HTMLDivElement>(null);
     // const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -517,16 +517,16 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
     useEffect(() => {
         if (!parentFormData) {
             console.log('parentFormData :>> ', parentFormData);
-            
-  getWorkstationConfigApi().then((res) => {
-            // res.webSearch.params = {
-            //     api_key: '',
-            //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
-            // }
-            res && setFormData(res);
-        })
+
+            getWorkstationConfigApi().then((res) => {
+                // res.webSearch.params = {
+                //     api_key: '',
+                //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
+                // }
+                res && setFormData(res);
+            })
         }
-      
+
     }, [])
 
     const [errors, setErrors] = useState<FormErrors>({
@@ -604,7 +604,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             isValid = false;
         }
 
-        if (formData.systemPrompt.length > 30000) {
+        if (formData.systemPrompt?.length > 30000) {
             newErrors.systemPrompt = '最多30000个字符';
             if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
