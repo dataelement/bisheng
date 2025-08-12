@@ -511,8 +511,6 @@ class LinsightWorkbenchImpl:
         else:
 
             sop_template = session_version.sop if session_version.sop else ""
-            if sop_template:
-                sop_template = f"例子:\n\n{sop_template}"
 
             async for res in agent.feedback_sop(
                     sop=sop_template,
@@ -869,7 +867,7 @@ class LinsightWorkbenchImpl:
             agent = await cls._create_linsight_agent(session_version_model, llm, tools, workbench_conf)
 
             sop_content = ""
-            sop_template = f"例子:\n\n{session_version_model.sop or ''}"
+            sop_template = session_version_model.sop or ''
 
             async for res in agent.feedback_sop(
                     sop=sop_template,

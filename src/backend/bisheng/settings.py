@@ -110,7 +110,7 @@ class CeleryConf(BaseModel):
 
 class LinsightConf(BaseModel):
     debug: bool = Field(default=False, description='是否开启debug模式')
-    tool_buffer: int = Field(default=50000, description='工具执行历史记录的最大token，超过后需要总结下历史记录')
+    tool_buffer: int = Field(default=100000, description='工具执行历史记录的最大token，超过后需要总结下历史记录')
     max_steps: int = Field(default=200, description='单个任务最大执行步骤数，防止死循环')
     retry_num: int = Field(default=3, description='灵思任务执行过程中模型调用重试次数')
     retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')

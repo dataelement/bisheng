@@ -116,8 +116,6 @@ class LinsightAgent(BaseModel):
         else:
             history_summary = ""
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
-        if sop:
-            sop = f"已有SOP：{sop}"
 
         file_list_str = await self.parse_file_list_str(file_list)
         knowledge_list_str = await self.parse_knowledge_list_str(knowledge_list)
