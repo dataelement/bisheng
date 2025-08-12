@@ -274,7 +274,7 @@ class SOPManageService:
             raise SopFileError.http_exception(
                 msg=f"共计划导入{len(success_rows) + len(error_rows)}条指导手册，格式正确{len(success_rows)}条，错误{len(error_rows)}条：\n {error_msg}")
         if not success_rows:
-            return []
+            return None
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
         return await cls._sync_sop_record(records, override=override, save_new=save_new)
 
