@@ -424,7 +424,7 @@ class LinsightWorkbenchImpl:
             raise cls.ToolsInitializationError(f"初始化灵思工作台工具失败: {str(e)}")
 
     @classmethod
-    async def _prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
+    async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
         """准备文件列表"""
         file_list = []
         template_str = """@{filename}的文件储存信息:{{'文件储存在语义检索库中的id':'{file_id}','文件储存地址':'{markdown}'}}@"""
@@ -437,7 +437,7 @@ class LinsightWorkbenchImpl:
         return file_list
 
     @classmethod
-    async def _prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> List[str]:
+    async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> List[str]:
         res = []
         if not knowledge_list:
             return res
@@ -495,8 +495,8 @@ class LinsightWorkbenchImpl:
                                     history_summary: List[str],
                                     knowledge_list: List[KnowledgeRead] = None) -> AsyncGenerator:
         """生成SOP内容"""
-        file_list = await cls._prepare_file_list(session_version)
-        knowledge_list = await cls._prepare_knowledge_list(knowledge_list)
+        file_list = await cls.prepare_file_list(session_version)
+        knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
 
         if feedback_content is None:
             # 检索SOP模板
@@ -861,7 +861,7 @@ class LinsightWorkbenchImpl:
             feedback: 反馈内容
         """
         try:
-            file_list = await cls._prepare_file_list(session_version_model)
+            file_list = await cls.prepare_file_list(session_version_model)
 
             # 创建LLM和工具
             llm, workbench_conf = await cls._get_llm()

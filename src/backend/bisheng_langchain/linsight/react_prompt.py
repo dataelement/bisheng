@@ -2,7 +2,7 @@
 # variables -> profile: task角色; current_time: 当前时间；file_dir: 用户上传的文件路径；
 # tools_json: 可用的工具列表；sop: 用户SOP；query: 用户最终问题；
 # step_list: 任务整体规划；processed_steps: 已经处理的步骤；input_str: 用户输入信息；step_id: 当前任务id
-# target: prompt；single_sop: 当前任务遵循的SOP; history: 已经执行的步骤
+# target: prompt；single_sop: 当前任务遵循的SOP; history: 已经执行的步骤; file_list_str: 用户上传的文件列表
 ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下工具来回答用户问题并执行任务。
 请使用ReAct (Reasoning + Acting)方法，思考并使用工具解决问题。
 每一步都要清晰地思考你需要做什么，然后采取行动。
@@ -11,6 +11,8 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 以下是一些标准信息：
 当前时间：{current_time}
 当前路径：{file_dir}
+
+{file_list_str}
 
 可用工具列表:
 {tools_json}
@@ -87,7 +89,7 @@ ReactSingleAgentPrompt = """你是一个强大的{profile}，可以使用以下�
 # 二级子任务的prompt模板
 # variables -> profile: agent的角色；current_time: 当前时间；file_dir: 用户上传的文件路径；tools_json: 可用的工具列表；
 # original_query: 总体任务目标；original_method: 总体方法；original_done: 已经完成的内容；last_answer: 上步骤的答案
-# single_sop: 当前任务遵循的SOP；step_id: 当前任务id; target: 当前任务目标；history: 历史记录
+# single_sop: 当前任务遵循的SOP；step_id: 当前任务id; target: 当前任务目标；history: 历史记录; file_list_str: 文件列表字符串
 ReactLoopAgentPrompt = """你是一个强大的{profile}，可以使用以下工具来回答用户问题并执行任务。
 请使用ReAct (Reasoning + Acting)方法，思考并使用工具解决问题。
 每一步都要清晰地思考你需要做什么，然后采取行动。
@@ -96,6 +98,8 @@ ReactLoopAgentPrompt = """你是一个强大的{profile}，可以使用以下工
 以下是一些标准信息：
 当前时间：{current_time}
 当前路径：{file_dir}
+
+{file_list_str}
 
 可用工具:
 {tools_json}
