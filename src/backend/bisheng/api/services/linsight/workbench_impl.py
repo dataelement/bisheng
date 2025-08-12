@@ -17,7 +17,8 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+    SubmitFileSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
@@ -144,7 +145,7 @@ class LinsightWorkbenchImpl:
             raise cls.LinsightError(f"提交用户问题失败: {str(e)}")
 
     @classmethod
-    async def _process_submitted_files(cls, files: Optional[List], chat_id: str) -> Optional[List]:
+    async def _process_submitted_files(cls, files: Optional[List[SubmitFileSchema]], chat_id: str) -> Optional[List]:
         """
         处理提交的文件
 
@@ -158,7 +159,13 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
-        file_ids = [file.file_id for file in files]
+        file_ids = []
+
+        for file in files:
+            if file.parsing_status != "completed":
+                raise cls.LinsightError(f"文件 {file.file_name} 解析状态不正确: {file.parsing_status}")
+            file_ids.append(file.file_id)
+
         redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
 
         processed_files = await redis_client.amget(redis_keys)
