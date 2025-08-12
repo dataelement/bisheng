@@ -1,34 +1,32 @@
 // src/features/chat-config/ChatConfig.tsx
-import { Button } from "@/components/bs-ui/button";
-import { Card, CardContent } from "@/components/bs-ui/card";
-import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
-import { AlertTriangle } from "lucide-react";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
 import SopTable from "@/components/LinSight/SopTable";
 import ToolSelectorContainer from "@/components/LinSight/ToolSelectorContainer";
+import { UploadIcon } from "@/components/bs-icons";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Button } from "@/components/bs-ui/button";
+import { Card, CardContent } from "@/components/bs-ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { sopApi } from "@/controllers/API/linsight";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
+import { downloadFile } from "@/util/utils";
 import { cloneDeep } from "lodash-es";
 import { Search } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
-import { useDropzone } from "react-dropzone";
-import { useTranslation } from "react-i18next";
-import { locationContext } from "@/contexts/locationContext";
-import { UploadIcon } from "@/components/bs-icons";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import sampleData from "@/pages/ModelPage/components/sampleData";
-import { downloadJson } from "@/util/utils";
 
 
 export interface FormErrors {
@@ -711,7 +709,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     }, []);
     const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
         multiple: false,
-         accept: {
+        accept: {
             'application/*': ['.xlsx']
         },
         useFsAccessApi: false,
@@ -1015,7 +1013,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             </div>
                             <button
                                 className="flex items-center gap-1"
-                                onClick={() => downloadJson(sampleData)}
+                                onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", '用户指导手册格式示例.xlsx')}
                             >
                                 <span className="text-black">示例文件：</span>
                                 <span className="text-blue-600 hover:underline">用户指导手册格式示例.xlsx</span>
