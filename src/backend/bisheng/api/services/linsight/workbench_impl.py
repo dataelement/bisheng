@@ -926,7 +926,7 @@ class LinsightWorkbenchImpl:
         async def download_file(file_info: BatchDownloadFilesSchema) -> Tuple[str, bytes]:
             """下载单个文件"""
             object_name = file_info.file_url
-            object_name.replace(f"/{minio_client.bucket}/", "")
+            object_name = object_name.replace(f"/{minio_client.bucket}/", "")
             try:
 
                 bytes_io = BytesIO()
