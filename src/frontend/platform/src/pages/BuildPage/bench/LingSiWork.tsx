@@ -45,7 +45,6 @@ export interface FormErrors {
 export interface AssistantState {
     task_model: string;
     summary_model: string;
-    // 其他现有字段...
 }
 export interface ChatConfigForm {
     menuShow: boolean;
@@ -712,17 +711,27 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     }, []);
     const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
         multiple: false,
-        onDrop: (acceptedFiles) => {
-            if (acceptedFiles.length === 0) return;
+        accept: {
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], // 标准 .xlsx MIME 类型
+            'application/vnd.ms-excel': ['.xlsx'], // 兼容旧版 Excel
+        },
+        useFsAccessApi: false,
+        onDrop: (acceptedFiles, rejectedFiles) => {
+            // 1. 如果用户上传了不支持的文件（如 .pdf、.docx）
+            if (rejectedFiles.length > 0) {
+                message({ variant: 'warning', description: '请上传 .xlsx 格式的文件！' });
+                return;
+            }
 
+            // 2. 如果用户上传了 .xlsx 文件，但文件名可能被篡改（如 fake.xlsx.pdf）
             const file = acceptedFiles[0];
             const ext = file.name.split('.').pop().toLowerCase();
             if (ext !== 'xlsx') {
-                message({ variant: 'warning', description: '请上传xlsx格式的文件' });
+                message({ variant: 'warning', description: '文件扩展名必须是 .xlsx！' });
                 return;
             }
             setImportFiles(acceptedFiles);
-        }
+        },
     });
     const handleLocalFileImport = async () => {
         setIsImporting(true);
@@ -743,6 +752,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
 
 
                 if (res?.repeat_name) {
+                    console.log(1111);
                     const formData = new FormData();
 
                     formData.append('file', importFiles[0]);
@@ -793,11 +803,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             setImportFormData(formData);
             return
         } else {
-            sopApi.getSopList({
-                page_size: pageSize,
-                page: 1,
-                keywords: keywords,
-            })
+            fetchData({
+                page: page,
+                pageSize: pageSize,
+                keyword: keywords
+            });
             toast({ variant: 'success', description: '提交成功' });
         }
     };
@@ -999,15 +1009,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     </DialogHeader>
 
                     <div className="grid gap-4 py-4">
-                        <div className="flex items-center gap-2">
-                            <span className="text-red-500">*</span>
-                            <span>请上传文件</span>
+                        <div className="flex justify-between items-center w-full">
+                            <div className="flex items-center gap-2">
+                                <span className="text-red-500">*</span>
+                                <span>请上传文件</span>
+                            </div>
                             <button
-                                className="text-blue-600 hover:underline ml-auto"
+                                className="flex items-center gap-1"
                                 onClick={() => downloadJson(sampleData)}
                             >
                                 <span className="text-black">示例文件：</span>
-                                用户指导手册格式示例.xlsx
+                                <span className="text-blue-600 hover:underline">用户指导手册格式示例.xlsx</span>
                             </button>
                         </div>
 
