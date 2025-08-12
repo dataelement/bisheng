@@ -224,33 +224,27 @@ const useLinsighFiles = (index) => {
         const res = await checkFileParseStatus(filesToCheck);
         const statusMap = new Map(res.data.map(item => [item.file_id, item.parsing_status]));
 
-        // 更新解析完成的文件状态
-        let needsUpdate = false;
-        const updatedFiles = new Map(currentFiles);
-
-        // 遍历 updatedFiles，找到匹配 fileId 的文件
-        updatedFiles.forEach((file, key) => {
-          const fileId = file.file_id; // 假设 file 对象中有 file_id 字段
-          if (statusMap.has(fileId)) {
-            const status = statusMap.get(fileId);
-            if (status === 'completed' && file.parsing_status !== 'completed') {
-              updatedFiles.set(key, {
-                ...file,
-                parsing_status: 'completed',
-                // 可添加其他解析完成后的元数据
-              });
-              needsUpdate = true;
-            } else if (status === 'failed') {
-              updatedFiles.delete(key);
-              showToast({ message: `文件 ${file.filename} 解析失败, 自动移除`, status: 'error' });
-              needsUpdate = true;
+        setLinsightFiles(updatedFiles => {
+          // 遍历 updatedFiles，找到匹配 fileId 的文件
+          updatedFiles.forEach((file, key) => {
+            const fileId = file.file_id; // 假设 file 对象中有 file_id 字段
+            if (statusMap.has(fileId)) {
+              const status = statusMap.get(fileId);
+              if (status === 'completed' && file.parsing_status !== 'completed') {
+                updatedFiles.set(key, {
+                  ...file,
+                  parsing_status: 'completed',
+                  // 可添加其他解析完成后的元数据
+                });
+              } else if (status === 'failed') {
+                updatedFiles.delete(key);
+                showToast({ message: `文件 ${file.filename} 解析失败, 自动移除`, status: 'error' });
+              }
             }
-          }
-        });
+          });
 
-        if (needsUpdate) {
-          setLinsightFiles(updatedFiles);
-        }
+          return updatedFiles
+        })
       } catch (error) {
         console.error('文件解析状态检查失败:', error);
       }

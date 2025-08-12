@@ -710,8 +710,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
         multiple: false,
         accept: {
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-            'application/excel': ['.xlsx'] // 结合扩展名和 MIME 类型双重验证
+            // 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.csv'],
+            // 'application/*': ['.xlsx'] // 结合扩展名和 MIME 类型双重验证
+            "": [".xlsx"],
         },
         useFsAccessApi: false,
         onDrop: (acceptedFiles, rejectedFiles) => {
@@ -1025,7 +1026,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             {...getLocalFileRootProps()}
                             className="group h-40 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
                         >
-                            <input {...getLocalFileInputProps()} />
+                            <input {...getLocalFileInputProps()}/>
                             <UploadIcon className="group-hover:text-primary size-5" />
                             <p className="text-sm">{t('code.clickOrDragHere')}</p>
 

@@ -669,10 +669,15 @@ export const deleteFiles = async (payload: {
   agent_id?: string;
   assistant_id?: string;
   tool_resource?: a.EToolResources;
-}): Promise<f.DeleteFilesResponse> =>
-  request.deleteWithOptions(endpoints.files(), {
-    data: payload,
-  });
+}): Promise<f.DeleteFilesResponse> => new Promise((resolve, reject) => {
+  resolve({
+    message: '',
+    result: {}
+  })
+})
+// request.deleteWithOptions(endpoints.files(), {
+//   data: payload,
+// });
 
 /* Speech */
 
