@@ -711,9 +711,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     }, []);
     const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
         multiple: false,
-        accept: {
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'], // 标准 .xlsx MIME 类型
-            'application/vnd.ms-excel': ['.xlsx'], // 兼容旧版 Excel
+         accept: {
+            'application/*': ['.xlsx']
         },
         useFsAccessApi: false,
         onDrop: (acceptedFiles, rejectedFiles) => {
