@@ -7,6 +7,7 @@ import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
 import KnowledgeModle from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
+import WorkbenchModel from "./tabs/WorkbenchModel";
 
 export default function SystemModelConfig({ data, onBack }) {
     const { t } = useTranslation('model')
@@ -45,13 +46,17 @@ export default function SystemModelConfig({ data, onBack }) {
                 <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4">
-                <Tabs defaultValue="knowledge" className="flex flex-col">
+                <Tabs defaultValue="workbench" className="flex flex-col">
                     <TabsList className="w-[550px] m-auto">
+                        <TabsTrigger value="workbench" className="w-[150px]">工作台模型</TabsTrigger>
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
                         <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
                         <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
                         <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
                     </TabsList>
+                     <TabsContent value="workbench">
+                        <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></WorkbenchModel>
+                    </TabsContent>
                     <TabsContent value="knowledge">
                         <KnowledgeModle llmOptions={llmOptions} embeddings={embeddings} onBack={onBack}></KnowledgeModle>
                     </TabsContent>

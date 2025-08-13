@@ -164,7 +164,6 @@ export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1
         if (item.flow_type !== 5) return item
         return {
             ...item,
-            description: item.desc,
             version_list: item.version_list || [],
         }
     })
@@ -195,7 +194,7 @@ export const createCustomFlowApi = async (params: {
 }, userName: string) => {
     if (params.logo) {
         // logo保存相对路径
-        params.logo = params.logo.match(/(icon.*)\?/)?.[1]
+        params.logo = params.logo.replace('/bisheng', '') 
     }
     const response: FlowType = await axios.post("/api/v1/flows/", {
         ...params,

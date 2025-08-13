@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO
+from typing import Any, Dict, List, Optional, BinaryIO, Union
 
 import requests
 from bisheng_langchain.rag.extract_info import extract_title
@@ -319,7 +319,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 def decide_vectorstores(
         collection_name: str, vector_store: str, embedding: Embeddings
-) -> VectorStore:
+) -> Union[VectorStore, Any]:
     """vector db"""
     param: dict = {"embedding": embedding}
 
@@ -646,8 +646,8 @@ def parse_document_title(title: str) -> str:
 def read_chunk_text(
         input_file,
         file_name,
-        separator: List[str],
-        separator_rule: List[str],
+        separator: Optional[List[str]],
+        separator_rule: Optional[List[str]],
         chunk_size: int,
         chunk_overlap: int,
         knowledge_id: Optional[int] = None,
@@ -656,6 +656,8 @@ def read_chunk_text(
         force_ocr: int = 1,
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
+        no_summary: bool = False,
+
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -664,14 +666,17 @@ def read_chunk_text(
     3: ocr bbox data: maybe None
     """
     # 获取文档总结标题的llm
-    try:
-        llm = decide_knowledge_llm()
-        knowledge_llm = LLMService.get_knowledge_llm()
-    except Exception as e:
-        logger.exception("knowledge_llm_error:")
-        raise Exception(
-            f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
-        )
+    llm = None
+    if not no_summary:
+        try:
+            llm = decide_knowledge_llm()
+            knowledge_llm = LLMService.get_knowledge_llm()
+        except Exception as e:
+            logger.exception("knowledge_llm_error:")
+            raise Exception(
+                f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
+            )
+
     text_splitter = ElemCharacterTextSplitter(
         separators=separator,
         separator_rule=separator_rule,
@@ -751,7 +756,7 @@ def read_chunk_text(
         documents = loader.load()
 
     elif file_extension_name in ["txt", "md"]:
-        loader = filetype_load_map[file_extension_name](file_path=input_file)
+        loader = filetype_load_map[file_extension_name](file_path=input_file, autodetect_encoding=True)
         documents = loader.load()
     else:
         if etl_for_lm_url:

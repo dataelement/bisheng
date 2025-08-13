@@ -2,14 +2,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from bisheng.api import router, router_rpc
-from bisheng.database.init_data import init_default_data
-from bisheng.interface.utils import setup_llm_caching
-from bisheng.services.utils import initialize_services, teardown_services
-from bisheng.settings import settings
-from bisheng.utils.http_middleware import CustomMiddleware
-from bisheng.utils.logger import configure
-from bisheng.utils.threadpool import thread_pool
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +10,16 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from loguru import logger
+
+from bisheng.api import router, router_rpc
+from bisheng.core.app_context import init_app_context
+from bisheng.database.init_data import init_default_data
+from bisheng.interface.utils import setup_llm_caching
+from bisheng.services.utils import initialize_services, teardown_services
+from bisheng.settings import settings
+from bisheng.utils.http_middleware import CustomMiddleware
+from bisheng.utils.logger import configure
+from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
@@ -48,8 +50,9 @@ _EXCEPTION_HANDLERS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_services()
+    await init_app_context()
     setup_llm_caching()
-    init_default_data()
+    await init_default_data()
     # LangfuseInstance.update()
     yield
     teardown_services()

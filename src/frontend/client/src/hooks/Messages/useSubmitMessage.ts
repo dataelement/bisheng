@@ -6,6 +6,8 @@ import { useChatContext, useChatFormContext, useAddedChatContext } from '~/Provi
 import { useAuthContext } from '~/hooks/AuthContext';
 import { replaceSpecialVars } from '~/utils';
 import store from '~/store';
+import { useLinsightSessionManager } from '../useLinsightManager';
+import { useSetFilesToDelete } from '../Files';
 
 const appendIndex = (index: number, value?: string) => {
   if (!value) {
@@ -17,17 +19,42 @@ const appendIndex = (index: number, value?: string) => {
 export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) {
   const { user } = useAuthContext();
   const methods = useChatFormContext();
-  const { ask, index, getMessages, setMessages, latestMessage } = useChatContext();
+  const { files, setFiles, ask, index, getMessages, setMessages, latestMessage } = useChatContext();
   const { addedIndex, ask: askAdditional, conversation: addedConvo } = useAddedChatContext();
 
   const autoSendPrompts = useRecoilValue(store.autoSendPrompts);
   const activeConvos = useRecoilValue(store.allConversationsSelector);
   const setActivePrompt = useSetRecoilState(store.activePromptByIndex(index));
+  const { setLinsightSubmission } = useLinsightSessionManager('new')
+  const setFilesToDelete = useSetFilesToDelete();
 
   const submitMessage = useCallback(
-    (data?: { text: string }) => {
+    (data?: { text: string, linsight?: boolean, tools?: any[] }) => {
       if (!data) {
         return console.warn('No data provided to submitMessage');
+      }
+
+      if (data?.linsight) {
+        setLinsightSubmission('new', {
+          isNew: true,
+          files: Array.from(files.values()).map(item => ({
+            file_id: item.file_id,
+            file_name: item.filename,
+            parsing_status: 'completed'
+          })),
+          question: data?.text,
+          // feedback: '',
+          tools: data.tools,
+          model: 'gpt-4',
+          enableWebSearch: false,
+          useKnowledgeBase: true
+        });
+        // 重置表单和清理草稿
+        methods.reset();
+        setFiles(new Map())
+        setFilesToDelete({});
+        helpers?.clearDraft && helpers.clearDraft();
+        return;
       }
       // 检查最新消息是否在会话中
       const rootMessages = getMessages();

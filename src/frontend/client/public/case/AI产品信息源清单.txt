@@ -1,0 +1,6 @@
+1. Product Hunt（全球新品发布平台）：https://www.producthunt.com/
+2. AIbase（国内外AI产品数据库）：https://top.aibase.com/
+3. GeeksForGeeks AI Tools Directory（全球技术社区AI工具目录）：https://www.geeksforgeeks.org/websites-apps/ai-tools-directory/
+4. AI工具网（每日更新AI工具）：https://www.ai138.com/new
+5. AI Tools Explorer（英文AI工具测评与收录）：https://aitoolsexplorer.net/
+

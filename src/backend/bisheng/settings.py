@@ -108,6 +108,19 @@ class CeleryConf(BaseModel):
         return value
 
 
+class LinsightConf(BaseModel):
+    debug: bool = Field(default=False, description='是否开启debug模式')
+    tool_buffer: int = Field(default=100000, description='工具执行历史记录的最大token，超过后需要总结下历史记录')
+    max_steps: int = Field(default=200, description='单个任务最大执行步骤数，防止死循环')
+    retry_num: int = Field(default=3, description='灵思任务执行过程中模型调用重试次数')
+    retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')
+    max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
+    max_knowledge_num: int = Field(default=20, description='生成SOP时，prompt里放的知识库信息的数量')
+    waiting_list_url: str = Field(default=None, description='waiting list 跳转链接')
+    default_temperature: float = Field(default=0, description='模型请求时的默认温度')
+    retry_temperature: float = Field(default=1, description='react模式json解析失败后重试时模型温度')
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
 
@@ -144,6 +157,7 @@ class Settings(BaseModel):
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}
+    linsight_conf: LinsightConf = LinsightConf()
     logger_conf: LoggerConf = LoggerConf()
     password_conf: PasswordConf = PasswordConf()
     system_login_method: SystemLoginMethod = {}
@@ -257,6 +271,15 @@ class Settings(BaseModel):
         all_config = self.get_all_config()
         return WorkflowConf(**all_config.get('workflow', {}))
 
+    def get_linsight_conf(self) -> LinsightConf:
+        # 获取灵思相关的配置项
+        all_config = self.get_all_config()
+        conf = LinsightConf(debug=self.linsight_conf.debug)
+        linsight_conf = all_config.get('linsight', {})
+        for k, v in linsight_conf.items():
+            setattr(conf, k, v)
+        return conf
+
     def get_from_db(self, key: str):
         # 先获取所有的key
         all_config = self.get_all_config()
@@ -277,6 +300,24 @@ class Settings(BaseModel):
                     select(Config).where(Config.key == 'initdb_config')).first()
                 if initdb_config:
                     redis_client.set(redis_key, initdb_config.value, 100)
+                    return yaml.safe_load(initdb_config.value)
+                else:
+                    raise Exception('initdb_config not found, please check your system config')
+
+    async def aget_all_config(self):
+        from bisheng.database.base import async_session_getter
+        from bisheng.cache.redis import redis_client
+        from bisheng.database.models.config import Config
+
+        redis_key = 'config:initdb_config'
+        cache = await redis_client.aget(redis_key)
+        if cache:
+            return yaml.safe_load(cache)
+        else:
+            async with async_session_getter() as session:
+                initdb_config = (await session.exec(select(Config).where(Config.key == 'initdb_config'))).first()
+                if initdb_config:
+                    await redis_client.aset(redis_key, initdb_config.value, 100)
                     return yaml.safe_load(initdb_config.value)
                 else:
                     raise Exception('initdb_config not found, please check your system config')

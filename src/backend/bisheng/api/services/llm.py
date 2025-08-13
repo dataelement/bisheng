@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional
 
-from fastapi import Request
+from fastapi import Request, BackgroundTasks
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
@@ -10,11 +10,12 @@ from bisheng.api.errcode.base import NotFoundError
 from bisheng.api.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.v1.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
-    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq
+    EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig
 from bisheng.database.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMModelType
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
+from bisheng.utils.embedding import decide_embeddings
 
 
 class LLMService:
@@ -406,3 +407,47 @@ class LLMService:
             ret.append(LLMServerInfo(**one.dict(exclude={'config'}), models=model_dict[one.id]))
 
         return ret
+
+    @classmethod
+    async def update_workbench_llm(cls, config_obj: WorkbenchModelConfig, background_tasks: BackgroundTasks):
+        """
+        更新灵思模型配置
+        :param config_obj:
+        :return:
+        """
+
+        config = await ConfigDao.aget_config(ConfigKeyEnum.LINSIGHT_LLM)
+        if not config:
+            config = Config(key=ConfigKeyEnum.LINSIGHT_LLM.value, value='{}')
+
+        if config_obj.embedding_model:
+            # 判断是否一致
+            config_old_obj = WorkbenchModelConfig(**json.loads(config.value)) if config else WorkbenchModelConfig()
+            if (config_obj.embedding_model.id and config_old_obj.embedding_model is None or
+                    config_obj.embedding_model.id != config_old_obj.embedding_model.id):
+                embeddings = decide_embeddings(config_obj.embedding_model.id)
+                try:
+                    await embeddings.aembed_query("test")
+                except Exception as e:
+                    raise Exception(f"Embedding模型初始化失败: {str(e)}")
+                from bisheng.api.services.linsight.sop_manage import SOPManageService
+
+                background_tasks.add_task(SOPManageService.rebuild_sop_vector_store_task, embeddings)
+
+        config.value = json.dumps(config_obj.model_dump(), ensure_ascii=False)
+
+        await ConfigDao.async_insert_config(config)
+
+        return config_obj
+
+    @classmethod
+    async def get_workbench_llm(cls) -> WorkbenchModelConfig:
+        """
+        获取工作台模型配置
+        :return:
+        """
+        ret = {}
+        config = await ConfigDao.aget_config(ConfigKeyEnum.LINSIGHT_LLM)
+        if config:
+            ret = json.loads(config.value)
+        return WorkbenchModelConfig(**ret)

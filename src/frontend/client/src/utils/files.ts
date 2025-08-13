@@ -205,11 +205,14 @@ export const validateFiles = ({
   fileList,
   setError,
   endpointFileConfig,
+  // 不限制size
+  noLimitSize = false,
 }: {
   fileList: File[];
   files: Map<string, ExtendedFile>;
   setError: (error: string) => void;
   endpointFileConfig: EndpointFileConfig;
+  noLimitSize?: boolean;
 }) => {
   const { fileLimit, fileSizeLimit, totalSizeLimit, supportedMimeTypes } = endpointFileConfig;
   const existingFiles = Array.from(files.values());
@@ -220,7 +223,7 @@ export const validateFiles = ({
   }
   const currentTotalSize = existingFiles.reduce((total, file) => total + file.size, 0);
 
-  if (fileLimit && fileList.length + files.size > fileLimit) {
+  if (!noLimitSize && fileLimit && fileList.length + files.size > fileLimit) {
     setError(`You can only upload up to ${fileLimit} files at a time.`);
     return false;
   }

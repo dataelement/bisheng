@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, text, delete
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.base import SQLModelSerializable
 
@@ -41,6 +41,12 @@ class UserRoleDao(UserRoleBase):
             return session.exec(select(UserRole).where(UserRole.user_id == user_id)).all()
 
     @classmethod
+    async def aget_user_roles(cls, user_id: int) -> List[UserRole]:
+        async with async_session_getter() as session:
+            result = await session.exec(select(UserRole).where(UserRole.user_id == user_id))
+            return result.all()
+
+    @classmethod
     def get_roles_user(cls, role_ids: List[int], page: int = 0, limit: int = 0) -> List[UserRole]:
         """
         获取角色对应的用户
@@ -61,15 +67,15 @@ class UserRoleDao(UserRoleBase):
             return session.exec(statement).all()
 
     @classmethod
-    def set_admin_user(cls, user_id: int) -> UserRole:
+    async def set_admin_user(cls, user_id: int) -> UserRole:
         """
         设置用户为超级管理员
         """
-        with session_getter() as session:
+        async with async_session_getter() as session:
             user_role = UserRole(user_id=user_id, role_id=AdminRole)
             session.add(user_role)
-            session.commit()
-            session.refresh(user_role)
+            await session.commit()
+            await session.refresh(user_role)
             return user_role
 
     @classmethod

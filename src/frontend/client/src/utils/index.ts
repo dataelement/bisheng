@@ -1,27 +1,27 @@
 import React from 'react';
 
-export * from './map';
-export * from './json';
-export * from './files';
-export * from './latex';
-export * from './theme';
-export * from './forms';
+export { default as buildDefaultConvo } from './buildDefaultConvo';
+export { default as buildTree } from './buildTree';
+export { default as cleanupPreset } from './cleanupPreset';
+export { default as cn } from './cn';
 export * from './convos';
+export * from './endpoints';
+export * from './files';
+export * from './forms';
+export { default as getDefaultEndpoint } from './getDefaultEndpoint';
+export { default as getLoginError } from './getLoginError';
+export * from './json';
+export * from './languages';
+export * from './latex';
+export * from './localStorage';
+export { default as logger } from './logger';
+export * from './map';
+export * from './messages';
 export * from './presets';
+export * from './promptGroups';
 export * from './prompts';
 export * from './textarea';
-export * from './messages';
-export * from './languages';
-export * from './endpoints';
-export * from './localStorage';
-export * from './promptGroups';
-export { default as cn } from './cn';
-export { default as logger } from './logger';
-export { default as buildTree } from './buildTree';
-export { default as getLoginError } from './getLoginError';
-export { default as cleanupPreset } from './cleanupPreset';
-export { default as buildDefaultConvo } from './buildDefaultConvo';
-export { default as getDefaultEndpoint } from './getDefaultEndpoint';
+export * from './theme';
 
 export const languages = [
   'java',
@@ -116,3 +116,64 @@ export const normalizeLayout = (layout: number[]) => {
 
   return normalizedLayout;
 };
+
+// ding
+export const playDing = () => {
+  // 1. 创建音频元素
+  const audio = new Audio(__APP_ENV__.BASE_URL + '/assets/ding.wav');
+  audio.volume = 0.5; // 50%音量
+
+  // 2. 播放音频
+  audio.play().catch(error => {
+    console.error('播放失败:', error);
+    audio.remove(); // 如果播放失败也移除元素
+  });
+
+  // 3. 播放结束后销毁
+  audio.addEventListener('ended', () => {
+    console.log('播放结束，销毁音频元素');
+    audio.remove();
+  });
+
+  // 4. 错误处理（网络问题等）
+  audio.addEventListener('error', () => {
+    console.error('音频加载失败');
+    audio.remove();
+  });
+}
+
+
+/**
+ * 切换导航栏的展开/闭合状态
+ * @param {boolean} shouldExpand - true表示展开，false表示关闭
+ */
+export const toggleNav = (shouldExpand) => {
+  return // 去掉自动收起展开
+  // 获取导航栏切换按钮元素
+  const navToggle = document.querySelector('div[id="toggle-left-nav"]');
+
+  if (!navToggle) {
+    console.error('未找到导航栏切换按钮');
+    return;
+  }
+
+  // 获取当前展开状态
+  const isExpanded = navToggle.getAttribute('aria-expanded') === 'true';
+
+  // 判断是否需要操作
+  if ((shouldExpand && !isExpanded) || (!shouldExpand && isExpanded)) {
+    // 触发点击事件来切换状态
+    navToggle.click();
+  }
+}
+
+/**
+ * 时间字符串格式化函数
+ * @param {string} time - 时间字符串，格式为 "YYYY-mm-ddTHH:MM:SS"
+ * @param {boolean} hideTime - 是否隐藏时分秒
+ * @return {string} 格式化后的时间字符串，格式为 "YYYY-mm-dd HH:MM:SS"
+ */
+export const formatTime = (time: string, hideTime: boolean = false) => {
+  const value = time.replace('T', ' ').replaceAll('-', '/');
+  return hideTime ? value.slice(0, -3) : value
+}

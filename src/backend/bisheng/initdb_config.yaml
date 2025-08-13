@@ -57,3 +57,18 @@ workflow:
   max_steps: 50
   # 等待用户输入的超时时间，单位分钟
   timeout: 5
+
+# 灵思模块相关配置
+linsight:
+  # 历史记录中工具消息的最大token，超过后需要总结下历史记录
+  tool_buffer: 100000
+  # 单个任务最大执行步骤数，防止死循环
+  max_steps: 200
+  # 灵思任务执行过程中模型调用重试次数
+  retry_num: 3
+  # 灵思任务执行过程中模型调用重试间隔时间（秒）
+  retry_sleep: 5
+  # 生成SOP时，prompt里放的用户上传文件信息的数量
+  max_file_num: 5
+  # 生成SOP时，prompt里放的组织知识库的最大数量
+  max_knowledge_num: 20

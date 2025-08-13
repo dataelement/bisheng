@@ -63,12 +63,30 @@ def unmerge_and_read_sheet(sheet_obj):
     """
     if sheet_obj.max_row == 0 or sheet_obj.max_column == 0:
         return []
+    max_row = sheet_obj.max_row
+    max_column = sheet_obj.max_column
     data_grid = [
-        [None for _ in range(sheet_obj.max_column)] for _ in range(sheet_obj.max_row)
+        [None for _ in range(max_column)] for _ in range(max_row)
     ]
+
+    # 连续50行空行停止读取内容
+    empty_row_num = 0
+    max_empty_rows = 50
+    empty_row_end = 0
     for r_idx, row in enumerate(sheet_obj.iter_rows()):
+        if empty_row_num > max_empty_rows:
+            break
+        row_empty = True
         for c_idx, cell in enumerate(row):
             data_grid[r_idx][c_idx] = cell.value
+            if cell.value:
+                row_empty = False
+        if row_empty:
+            empty_row_num += 1
+            empty_row_end = r_idx
+        else:
+            empty_row_num = 0
+            empty_row_end = 0
 
     merged_cell_ranges = list(sheet_obj.merged_cells.ranges)
     for merged_range in merged_cell_ranges:
@@ -77,6 +95,8 @@ def unmerge_and_read_sheet(sheet_obj):
         for r in range(min_row, max_row + 1):
             for c in range(min_col, max_col + 1):
                 data_grid[r - 1][c - 1] = top_left_cell_value
+    if empty_row_end and empty_row_end - max_empty_rows > 0:
+        data_grid = data_grid[:empty_row_end - max_empty_rows]
     return data_grid
 
 
@@ -267,6 +287,7 @@ def excel_file_to_markdown(
         logger.debug(f"\n  正在处理Excel工作表：'{sheet_name}'...")
         sheet_obj = workbook[sheet_name]
         unmerged_data_list_of_lists = unmerge_and_read_sheet(sheet_obj)
+        logger.debug(f"\n  <read all data>Excel<UNK>'{sheet_name}'...{len(unmerged_data_list_of_lists)}")
 
         # 使用新的判断函数
         if is_list_of_lists_empty(unmerged_data_list_of_lists):
@@ -414,8 +435,8 @@ def handler(
 
 if __name__ == "__main__":
     # 定义测试参数
-    test_cache_dir = "/Users/tju/Desktop/"
-    test_file_name = "/Users/tju/Downloads/bug1.xlsx"
+    test_cache_dir = "/Users/zhangguoqing/Downloads/tmp"
+    test_file_name = "/Users/zhangguoqing/Downloads/124327.xlsx"
     # 测试 append_header=True 且索引越界的情况
     test_header_rows = [0, 0]  # start_header_index 超出范围
     test_data_rows = 2

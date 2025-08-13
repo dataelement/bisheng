@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "1.3.1"
+version = "2.0.0"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -19,7 +19,6 @@ bisheng = "bisheng.__main__:main"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
-bisheng_langchain = "1.3.1"
 bisheng_pyautogen = "0.3.2"
 langchain = "^0.3.23"
 langchain-community = "^0.3.21"
@@ -40,7 +39,7 @@ pypinyin = "0.50.0"
 celery = { extras = ["redis"], version = "^5.3.6" }
 redis = "^5.0.0"
 jieba = "^0.42.1"
-PyMuPDF = "^1.23.8"
+PyMuPDF = "^1.26.1"
 shapely = "^2.0.1"
 fastapi = "^0.115.0"
 uvicorn = "^0.23.1"
@@ -69,7 +68,7 @@ weaviate-client = "^3.21.0"
 cohere = "^4.11.0"
 python-multipart = "^0.0.6"
 sqlmodel = "^0.0.14"
-pymysql = "^0.10.1"
+pymysql = ">=1.0,<2.0"
 pymilvus = "2.5.10"
 elasticsearch = "^8.9.0"
 orjson = "^3.9.1"
@@ -109,6 +108,14 @@ python-pptx = "^1.0.2"
 python-docx = "^1.1.2"
 markdown = "^3.8"
 tabulate = "^0.9.0"
+zhipuai = "^1.0.7"
+websocket-client = "^1.8.0"
+opencv-python = "4.5.5.64"
+Pillow = "9.5.0"
+filetype = "1.2.0"
+aiomysql = "^0.2.0"
+sse-starlette = "^2.3.6"
+transformers = "^4.53.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
@@ -124,6 +131,7 @@ pandas-stubs = "^2.0.0.230412"
 types-pillow = "^9.5.0.2"
 types-appdirs = "^1.4.3.5"
 types-pyyaml = "^6.0.12.8"
+pytest-asyncio = "*"
 
 [tool.poetry.extras]
 deploy = ["langchain-serve"]

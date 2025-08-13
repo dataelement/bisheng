@@ -150,6 +150,7 @@ export type TUpdateUserKeyRequest = {
 export type TUpdateConversationRequest = {
   conversationId: string;
   title: string;
+  flowType: number
 };
 
 export type TUpdateConversationResponse = TConversation;

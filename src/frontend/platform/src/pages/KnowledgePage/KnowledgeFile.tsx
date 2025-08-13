@@ -125,17 +125,17 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                     <Input name="name" ref={nameRef} placeholder={t('lib.libraryName')} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
-                    <label htmlFor="name" className="bisheng-label">知识库描述</label>
+                    <label htmlFor="name" className="bisheng-label">{t('lib.desc')}</label>
                     <Textarea
                         id="desc"
                         ref={descRef}
-                        placeholder="请输入知识库的描述"
+                        placeholder={t('lib.knowledgeBaseDescription')}
                         rows={8}
                         className={`col-span-3 ${error.desc && 'border-red-400'}`}
                     />
                 </div>
                 <div className="">
-                    <label htmlFor="roleAndTasks" className="bisheng-label">知识库embedding模型选择</label>
+                    <label htmlFor="roleAndTasks" className="bisheng-label">{t('lib.embeddingModelSelection')}</label>
                     {
                         modal && <Cascader
                             defaultValue={modal}
@@ -157,7 +157,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd }) {
                     disabled={isSubmitting}
                 >
                     {isSubmitting && <LoadIcon className="mr-1" />}
-                    完成创建
+                    {t('lib.creationComplete')}
                 </Button>
                 <Button
                     type="submit"
@@ -257,7 +257,7 @@ export default function KnowledgeFile() {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
-                    <SearchInput placeholder="知识库或文件名称" onChange={(e) => search(e.target.value)} />
+                    <SearchInput placeholder={t('lib.searchPlaceholder')} onChange={(e) => search(e.target.value)} />
                     <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                 </div>
                 <Table>

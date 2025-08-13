@@ -173,7 +173,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 // 使用默认模型 清空知识库和工具
                 const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
                 const workflowModelId = workflow.model_id
-                const assistantModelId = assistant.llm_list.find(item => item.default).model_id
+                const assistantModelId = assistant.llm_list.find(item => item.default)?.model_id
                 delete tempDataRef.current.data.source
 
                 tempDataRef.current.data.nodes.forEach(node => {
@@ -272,7 +272,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             id="desc"
                             name="desc"
                             placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
-                            maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
+                            maxLength={appType === AppType.ASSISTANT ? 1000 : 200}
                             className="mt-3 min-h-32 pt-3"
                             value={formData.desc}
                             onChange={handleChange}

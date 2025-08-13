@@ -437,10 +437,9 @@ def comment_resp(*, data: ChatInput):
 
 
 @router.get('/chat/list')
-def get_session_list(*,
-                     page: Optional[int] = 1,
-                     limit: Optional[int] = 10,
-                     flow_type: Optional[int] = None,
+def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
+                     limit: Optional[int] = Query(default=10, ge=1, le=100),
+                     flow_type: Optional[List[int]] = Query(default=None, description='技能类型'),
                      login_user: UserPayload = Depends(get_login_user)):
     res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
                                            flow_type=flow_type,

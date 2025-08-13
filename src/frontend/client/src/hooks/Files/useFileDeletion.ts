@@ -66,11 +66,11 @@ const useFileDeletion = ({
         attached = false,
       } = _file as t.TFile & { attached?: boolean };
 
-      const progress = _file['progress'] ?? 1;
+      // const progress = _file['progress'] ?? 1;
 
-      if (progress < 1) {
-        return;
-      }
+      // if (progress < 1) {
+      //   return;
+      // }
       const file: t.BatchFile = {
         file_id,
         embedded,

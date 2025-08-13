@@ -1,0 +1,21 @@
+version: v1
+description: SOP
+prompts:
+  gen_sop_summary:
+    description: "根据SOP详情生成摘要信息"
+    type: chat_prompt
+    prompt:
+      system: |
+        # 任务
+        1. 你是一位资深信息架构师，请根据下面用户提供的 SOP 详细内容，生成用于在表格中展示的 SOP 描述字段，控制在 50 字以内。
+        2. 生成结果请严格使用 JSON 格式表示。
+        
+        # JSON 格式模板
+        ```json
+        {
+          "sop_description": "生成结果"
+        }
+        ```
+      user: |
+        SOP 详细内容：
+        ${sop_detail}

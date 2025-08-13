@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PYTHONPATH="./"
+
 start_mode=${1:-api}
 
 if [ $start_mode = "api" ]; then
@@ -10,8 +12,10 @@ elif [ $start_mode = "worker" ]; then
     # 处理知识库相关任务的worker
     nohup celery -A bisheng.worker.main worker -l info -c 20 -P threads -Q knowledge_celery -n knowledge@%h &
     # 工作流执行worker
-    celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery -n workflow@%h
+    nohup celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery -n workflow@%h &
+
+    python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5
 else
-    echo "Invalid start mode. Use 'api' or 'celery'."
+    echo "Invalid start mode. Use 'api' or 'worker'."
     exit 1
 fi

@@ -42,7 +42,17 @@
     "create_time": "2024-03-29 14:39:37",
     "update_time": "2024-03-29 14:39:37",
     "id": 3,
-    "api_params": [{"name": "query", "description": "search query to look up", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "search query to look up",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "Dalle3绘画",
@@ -56,7 +66,17 @@
     "create_time": "2024-03-29 14:40:32",
     "update_time": "2024-03-29 14:40:32",
     "id": 4,
-    "api_params": [{"name": "query", "description": "Description about image.", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "Description about image.",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "Bing web搜索",
@@ -70,7 +90,17 @@
     "create_time": "2024-03-29 14:41:16",
     "update_time": "2024-03-29 14:41:16",
     "id": 5,
-    "api_params": [{"name": "query", "description": "query to look up in Bing search", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "query to look up in Bing search",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "代码执行器",
@@ -84,7 +114,17 @@
     "create_time": "2024-03-29 14:42:17",
     "update_time": "2024-03-29 14:42:17",
     "id": 6,
-    "api_params": [{"name": "python_code", "description": "The pure python script to be evaluated. \\nThe contents will be in main.py. \\nIt should not be in markdown format.", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "python_code",
+        "description": "The pure python script to be evaluated. \\nThe contents will be in main.py. \\nIt should not be in markdown format.",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "人员所有公司",
@@ -98,7 +138,26 @@
     "create_time": "2024-03-29 14:44:34",
     "update_time": "2024-03-29 14:44:34",
     "id": 7,
-    "api_params": [{"name": "query", "description": "human who you want to search", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "name", "description": "company name which human worked", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "human who you want to search",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "name",
+        "description": "company name which human worked",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "搜索企业",
@@ -112,7 +171,17 @@
     "create_time": "2024-03-29 14:50:07",
     "update_time": "2024-03-29 14:50:07",
     "id": 9,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业基本信息",
@@ -126,7 +195,17 @@
     "create_time": "2024-03-29 14:51:06",
     "update_time": "2024-03-29 14:51:06",
     "id": 10,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业知识产权信息",
@@ -140,7 +219,17 @@
     "create_time": "2024-03-29 14:51:33",
     "update_time": "2024-03-29 14:51:33",
     "id": 11,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业司法风险",
@@ -154,7 +243,17 @@
     "create_time": "2024-03-29 14:52:13",
     "update_time": "2024-03-29 14:52:13",
     "id": 12,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业法律诉讼",
@@ -168,7 +267,17 @@
     "create_time": "2024-03-29 14:52:36",
     "update_time": "2024-03-29 14:52:36",
     "id": 13,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业工商信息",
@@ -182,7 +291,17 @@
     "create_time": "2024-03-29 14:53:06",
     "update_time": "2024-03-29 14:53:06",
     "id": 14,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业工商信息变更记录",
@@ -196,7 +315,17 @@
     "create_time": "2024-03-29 14:54:02",
     "update_time": "2024-03-29 14:54:02",
     "id": 15,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业股东",
@@ -210,7 +339,17 @@
     "create_time": "2024-03-29 14:54:28",
     "update_time": "2024-03-29 14:54:28",
     "id": 16,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "企业天眼风险",
@@ -224,7 +363,17 @@
     "create_time": "2024-03-29 14:54:57",
     "update_time": "2024-03-29 14:54:57",
     "id": 17,
-    "api_params": [{"name": "query", "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "query",
+        "description": "搜索关键字（公司名称、公司id、注册号或社会统一信用代码）",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "股票实时行情",
@@ -239,7 +388,35 @@
     "create_time": "2024-03-29 14:56:15",
     "update_time": "2024-03-29 14:56:15",
     "id": 18,
-    "api_params": [{"name": "prefix", "description": "前缀。如果是\"stock_symbol\"传入的为股票代码，则需要传入s_;\n如果\"stock_symbol\"传入的为指数代码，则为空。",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "stock_exchange", "description": "交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\"sh\"(上海证券交易所)、\" sz\"( 深圳证券交易所)、\"bj\"( 北京证券交易所)", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "stock_symbol", "description": "6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\"sh000300\"和\"sz399300\"两个代码。", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "prefix",
+        "description": "前缀。如果是\"stock_symbol\"传入的为股票代码，则需要传入s_;\n如果\"stock_symbol\"传入的为指数代码，则为空。",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "stock_exchange",
+        "description": "交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\"sh\"(上海证券交易所)、\" sz\"( 深圳证券交易所)、\"bj\"( 北京证券交易所)",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "stock_symbol",
+        "description": "6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\"sh000300\"和\"sz399300\"两个代码。",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "股票历史行情",
@@ -254,7 +431,35 @@
     "create_time": "2024-03-29 14:56:38",
     "update_time": "2024-03-29 14:56:38",
     "id": 19,
-    "api_params": [{"name": "date", "description": "需要查询的时间，按照”2024-03-26“格式，传入日期",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "stock_exchange", "description": "交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\"sh\"(上海证券交易所)、\" sz\"( 深圳证券交易所)、\"bj\"( 北京证券交易所)", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "stock_symbol", "description": "6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\"sh000300\"和\"sz399300\"两个代码。", "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "date",
+        "description": "需要查询的时间，按照”2024-03-26“格式，传入日期",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "stock_exchange",
+        "description": "交易所简写。股票上市的交易所，或者发布行情指数的交易所。可选项有\"sh\"(上海证券交易所)、\" sz\"( 深圳证券交易所)、\"bj\"( 北京证券交易所)",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "stock_symbol",
+        "description": "6位数字的股票或者指数代码。\\n参考信息：\\n- 如果问题中未给出，可能需要上网查询。\\n- 上交所股票通常以 6 开头，深交所股票通常以 0、3 开头，北交所股票通常以 8 开头。\\n- 上交所行情指数通常以 000 开头，深交所指数通常以 399 开头。同一个指数可能会同时在两个交易所发布，例如沪深 300 有\"sh000300\"和\"sz399300\"两个代码。",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "社会融资规模增量",
@@ -269,7 +474,26 @@
     "create_time": "2024-03-29 14:59:06",
     "update_time": "2024-03-29 14:59:06",
     "id": 20,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "GDP",
@@ -284,7 +508,26 @@
     "create_time": "2024-03-29 14:59:38",
     "update_time": "2024-03-29 14:59:38",
     "id": 21,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "CPI",
@@ -299,7 +542,26 @@
     "create_time": "2024-03-29 15:00:00",
     "update_time": "2024-03-29 15:00:00",
     "id": 22,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "PPI",
@@ -314,7 +576,26 @@
     "create_time": "2024-03-29 15:00:24",
     "update_time": "2024-03-29 15:00:24",
     "id": 23,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "货币供应量",
@@ -329,7 +610,26 @@
     "create_time": "2024-03-29 15:00:54",
     "update_time": "2024-03-29 15:00:54",
     "id": 24,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "社会消费品零售总额",
@@ -344,7 +644,26 @@
     "create_time": "2024-03-29 15:01:47",
     "update_time": "2024-03-29 15:01:47",
     "id": 25,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "PMI",
@@ -359,7 +678,26 @@
     "create_time": "2024-04-15 12:01:11",
     "update_time": "2024-04-15 12:01:11",
     "id": 26,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "中美国债收益率",
@@ -374,13 +712,51 @@
     "create_time": "2024-04-15 12:03:27",
     "update_time": "2024-04-15 12:03:27",
     "id": 27,
-    "api_params": [{"name": "start_date", "description": "开始月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "end_date", "description": "结束月份, 使用YYYY-MM-DD 方式表示",  "in": "query", "required": true, "schema": {"type": "string"}}]
+    "api_params": [
+      {
+        "name": "start_date",
+        "description": "开始月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "end_date",
+        "description": "结束月份, 使用YYYY-MM-DD 方式表示",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
   },
   {
     "name": "发送钉钉群消息",
     "logo": null,
     "desc": "通过钉钉群机器人，快速将消息推送到指定钉钉群组中",
-    "api_params": [{"in": "query", "name": "url", "schema": {"type": "string"}, "required": true, "description": "自定义机器人的Wehhook地址"}, {"in": "query", "name": "message", "schema": {"type": "string"}, "required": true, "description": "发送的文本消息内容"}],
+    "api_params": [
+      {
+        "in": "query",
+        "name": "url",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "自定义机器人的Wehhook地址"
+      },
+      {
+        "in": "query",
+        "name": "message",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "发送的文本消息内容"
+      }
+    ],
     "tool_key": "ding_send_message",
     "type": 9,
     "extra": null,
@@ -395,7 +771,17 @@
     "name": "单页面爬取|对应 Scrape 模式",
     "logo": null,
     "desc": "爬取并返回指定 URL 页面的内容，不会爬取子页面。",
-    "api_params": [{"in": "path", "name": "target_url", "schema": {"type": "string"}, "required": true, "description": "要爬取的网站 url"}],
+    "api_params": [
+      {
+        "in": "path",
+        "name": "target_url",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "要爬取的网站 url"
+      }
+    ],
     "tool_key": "fire_search_scrape",
     "type": 10,
     "extra": null,
@@ -410,7 +796,17 @@
     "name": "获取单网页",
     "logo": null,
     "desc": "爬取指定URL（支持pdf），并将其转换为适合大模型处理的markdown格式",
-    "api_params": [{"in": "path", "name": "target_url", "schema": {"type": "string"}, "required": true, "description": "要获取的目标网页"}],
+    "api_params": [
+      {
+        "in": "path",
+        "name": "target_url",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "要获取的目标网页"
+      }
+    ],
     "tool_key": "jina_get_markdown",
     "type": 11,
     "is_preset": 1,
@@ -424,7 +820,26 @@
     "name": "Stable diffusion",
     "logo": null,
     "desc": "使用Stable Diffusion模型，根据用户提示词生成图像",
-    "api_params": [{"in": "path", "name": "prompt", "schema": {"type": "string"}, "required": true, "description": "提示词生成图片描述词"}, {"in": "path", "name": "negative_prompt", "schema": {"type": "string"}, "required": false, "description": "不希望图片包含的内容"}],
+    "api_params": [
+      {
+        "in": "path",
+        "name": "prompt",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "提示词生成图片描述词"
+      },
+      {
+        "in": "path",
+        "name": "negative_prompt",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "不希望图片包含的内容"
+      }
+    ],
     "tool_key": "silicon_stable_diffusion",
     "type": 12,
     "is_preset": 1,
@@ -438,7 +853,17 @@
     "name": "Flux",
     "logo": null,
     "desc": "使用Flux模型，根据用户提示词生成图像",
-    "api_params": [{"in": "path", "name": "prompt", "schema": {"type": "string"}, "required": true, "description": "提示词生成图片描述词（建议使用英文）"}],
+    "api_params": [
+      {
+        "in": "path",
+        "name": "prompt",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "提示词生成图片描述词（建议使用英文）"
+      }
+    ],
     "tool_key": "silicon_flux",
     "type": 12,
     "is_preset": 1,
@@ -452,7 +877,35 @@
     "name": "向指定用户或者群聊发送消息",
     "logo": null,
     "desc": "向指定用户或者群聊发送消息",
-    "api_params": [{"in": "query", "name": "message", "schema": {"type": "string"}, "required": true, "description": "发送的文本消息内容"}, {"in": "query", "name": "receive_id", "schema": {"type": "string"}, "required": true, "description": "消息接收者的id"}, {"in": "query", "name": "receive_id_type", "schema": {"type": "string"}, "required": true, "description": "用户id类型，可选值：open_id（标识一个用户在某个应用中的身份）；union_id（标识一个用户在某个应用开发商下的身份）；user_id（标识一个用户在某个租户内的身份）；email（以用户的真实邮箱来标识用户）；chat_id（以群 ID 来标识群聊）"}],
+    "api_params": [
+      {
+        "in": "query",
+        "name": "message",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "发送的文本消息内容"
+      },
+      {
+        "in": "query",
+        "name": "receive_id",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "消息接收者的id"
+      },
+      {
+        "in": "query",
+        "name": "receive_id_type",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "用户id类型，可选值：open_id（标识一个用户在某个应用中的身份）；union_id（标识一个用户在某个应用开发商下的身份）；user_id（标识一个用户在某个租户内的身份）；email（以用户的真实邮箱来标识用户）；chat_id（以群 ID 来标识群聊）"
+      }
+    ],
     "tool_key": "feishu_send_message",
     "type": 13,
     "is_preset": 1,
@@ -466,7 +919,26 @@
     "name": "发送企业微信群消息",
     "logo": null,
     "desc": "通过企业微信群机器人，快速将消息推送到指定企业微信群组中",
-    "api_params": [{"in": "query", "name": "url", "schema": {"type": "string"}, "required": true, "description": "微信机器人的webhook地址"}, {"in": "query", "name": "message", "schema": {"type": "string"}, "required": true, "description": "发送的消息内容"}],
+    "api_params": [
+      {
+        "in": "query",
+        "name": "url",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "微信机器人的webhook地址"
+      },
+      {
+        "in": "query",
+        "name": "message",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "发送的消息内容"
+      }
+    ],
     "tool_key": "wechat_send_message",
     "type": 15,
     "extra": "{}",
@@ -481,7 +953,35 @@
     "name": "发送邮件",
     "logo": null,
     "desc": "给单个或多个邮箱发送邮件（多个邮箱账号使用\",\"分隔）",
-    "api_params": [{"in": "query", "name": "receiver", "schema": {"type": "string"}, "required": true, "description": "接受邮件的邮箱地址，确定邮件发送对象"}, {"in": "query", "name": "subject", "schema": {"type": "string"}, "required": false, "description": "邮件主题"}, {"in": "query", "name": "content", "schema": {"type": "string"}, "required": true, "description": "邮件的正文内容"}],
+    "api_params": [
+      {
+        "in": "query",
+        "name": "receiver",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "接受邮件的邮箱地址，确定邮件发送对象"
+      },
+      {
+        "in": "query",
+        "name": "subject",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "邮件主题"
+      },
+      {
+        "in": "query",
+        "name": "content",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "邮件的正文内容"
+      }
+    ],
     "tool_key": "email_send_email",
     "type": 14,
     "is_preset": 1,
@@ -495,7 +995,17 @@
     "name": "深度爬取|对应 Crawl 模式",
     "logo": null,
     "desc": "爬取并返回指定 URL 以及所有可访问子页面的内容。",
-    "api_params": [{"in": "path", "name": "target_url", "schema": {"type": "string"}, "required": true, "description": "要爬取网站的起始 url。"}],
+    "api_params": [
+      {
+        "in": "path",
+        "name": "target_url",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "要爬取网站的起始 url。"
+      }
+    ],
     "tool_key": "fire_search_crawl",
     "type": 10,
     "is_preset": 1,
@@ -509,7 +1019,71 @@
     "name": "获取指定单聊、群聊的历史消息",
     "logo": null,
     "desc": "支持在单聊或群聊中快速获取相关内容",
-    "api_params": [{"in": "query", "name": "container_id", "schema": {"type": "string"}, "required": true, "description": "单聊或群聊的id，或话题 id"}, {"in": "query", "name": "container_id_type", "schema": {"type": "string"}, "required": true, "description": "容器类型。 可选值有： chat：包含单聊（p2p）和群聊（group）； thread：话题 。"}, {"in": "query", "name": "start_time", "schema": {"type": "string"}, "required": false, "description": "待查询历史信息的起始时间，秒级时间戳。 注意：thread 容器类型暂不支持获取指定时间范围内的消息。"}, {"in": "query", "name": "end_time", "schema": {"type": "string"}, "required": false, "description": "待查询历史信息的结束时间，秒级时间戳。注意：thread 容器类型暂不支持获取指定时间范围内的消息。"}, {"in": "query", "name": "page_size", "schema": {"type": "string"}, "required": false, "description": "分页大小，单次请求所返回的数据条目数，默认值20，取值范围1~50。"}, {"in": "query", "name": "sort_type", "schema": {"type": "string"}, "required": false, "description": "可选值有：ByCreateTimeAsc（按消息创建时间升序排列）；ByCreateTimeDesc（按消息创建时间降序排列）"}, {"in": "query", "name": "page_token", "schema": {"type": "string"}, "required": false, "description": "分页标记，第一次请求不填，表示从头开始遍历；分页查询结果还有更多项时会同时返回新的 page_token，下次遍历可采用该 page_token 获取查询结果"}],
+    "api_params": [
+      {
+        "in": "query",
+        "name": "container_id",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "单聊或群聊的id，或话题 id"
+      },
+      {
+        "in": "query",
+        "name": "container_id_type",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "容器类型。 可选值有： chat：包含单聊（p2p）和群聊（group）； thread：话题 。"
+      },
+      {
+        "in": "query",
+        "name": "start_time",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "待查询历史信息的起始时间，秒级时间戳。 注意：thread 容器类型暂不支持获取指定时间范围内的消息。"
+      },
+      {
+        "in": "query",
+        "name": "end_time",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "待查询历史信息的结束时间，秒级时间戳。注意：thread 容器类型暂不支持获取指定时间范围内的消息。"
+      },
+      {
+        "in": "query",
+        "name": "page_size",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "分页大小，单次请求所返回的数据条目数，默认值20，取值范围1~50。"
+      },
+      {
+        "in": "query",
+        "name": "sort_type",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "可选值有：ByCreateTimeAsc（按消息创建时间升序排列）；ByCreateTimeDesc（按消息创建时间降序排列）"
+      },
+      {
+        "in": "query",
+        "name": "page_token",
+        "schema": {
+          "type": "string"
+        },
+        "required": false,
+        "description": "分页标记，第一次请求不填，表示从头开始遍历；分页查询结果还有更多项时会同时返回新的 page_token，下次遍历可采用该 page_token 获取查询结果"
+      }
+    ],
     "tool_key": "feishu_get_chat_messages",
     "type": 13,
     "is_preset": 1,
@@ -518,5 +1092,27 @@
     "create_time": "2024-05-08 14:36:50",
     "update_time": "2025-02-24 14:35:04",
     "id": 37
+  },
+  {
+    "name": "联网搜索",
+    "logo": null,
+    "desc": "使用 query 进行联网检索并返回结果。",
+    "api_params": [
+      {
+        "name": "query",
+        "description": "Search query",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "tool_key": "web_search",
+    "type": 16,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": 1,
+    "id": 38
   }
 ]

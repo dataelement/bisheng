@@ -27,6 +27,7 @@
     "user": "用户",
     "bookopen": "帮助文档",
     "github": "GitHub",
+    "workspace": "工作台",
     "app": "会  话",
     "skills": "构  建",
     "knowledge": "知  识",
@@ -333,7 +334,12 @@
     "details": "详情",
     "confirmDeleteLibrary": "确认删除该知识库?",
     "copy": "复制",
-    "copying": "复制中"
+    "copying": "复制中",
+    "searchPlaceholder": "知识库或文件名称",
+    "desc": "知识库描述",
+    "knowledgeBaseDescription": "请入输入知识库描述",
+    "creationComplete": "完成创建",
+    "embeddingModelSelection": "知识库embedding模型选择"
   },
   "evaluation": {
     "id": "任务ID",

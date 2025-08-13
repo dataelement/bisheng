@@ -87,7 +87,7 @@ const MenuPanel = ({ items, activeKey, onChange }: {
     activeKey: string;
     onChange: (key: string) => void
 }) => (
-    <aside className="w-52 text-white flex-shrink-0">
+    <aside className="w-52 flex-shrink-0">
         <nav className="p-2">
             <ul className="space-y-4">
                 {items.map((item) => (

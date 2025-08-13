@@ -1,0 +1,6 @@
+{
+  "projectMode": "single_file",
+  "numberOfFloors": 3,
+  "monsterTypes": ["史莱姆", "蝙蝠", "骷髅"],
+  "itemTypes": ["黄钥匙", "血瓶", "攻击宝石"]
+}

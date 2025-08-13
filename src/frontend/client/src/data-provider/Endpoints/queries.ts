@@ -59,7 +59,7 @@ export const useGetBsConfig = (
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-      refetchOnMount: false,
+      refetchOnMount: 'always',  
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,
     },

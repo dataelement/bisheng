@@ -46,12 +46,72 @@ export const saveWorkflow = async (versionId: number, data: WorkFlow): Promise<a
     return await axios.put(`/api/v1/workflow/versions/${versionId}`, data);
 }
 
+
+
+/**
+ * 删除版本.
+ *
+ * @param {string} versionId - 要删除的版本ID.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function deleteVersion(versionId: string) {
+    return await axios.delete(`/api/v1/workflow/versions/${versionId}`);
+}
+
+/**
+ * 创建新的工作流版本.
+ *
+ * @param {object} versionData - 新版本的数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function createWorkFlowVersion(flow_id, versionData: { name: string, description: string, original_version_id: number, data: any }) {
+    return await axios.post(`/api/v1/workflow/versions?flow_id=${flow_id}`, versionData);
+}
+
+/**
+ * 获取单个版本的信息.
+ *
+ * @param {string} versionId - 版本的ID.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function getVersionDetails(versionId: string) {
+    return await axios.get(`/api/v1/workflow/versions/${versionId}`);
+}
+
+/**
+ * 更新版本信息.
+ *
+ * @param {string} versionId - 要更新的版本ID.
+ * @param {object} versionData - 更新的版本数据.
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function updateVersion(versionId: string, versionData: { name: string, description: string, data: any }) {
+    return await axios.put(`/api/v1/workflow/versions/${versionId}`, versionData);
+}
+
+/**
+ * 获取工作流对应的版本列表.
+ *
+ * @returns {Promise<any>}.
+ * @throws .
+ */
+export async function getWorkFlowVersions(flow_id): Promise<{ data: any[], total: number }> {
+    return await axios.get(`/api/v1/workflow/versions`, {
+        params: { flow_id }
+    });
+}
+
+
 /** 上线工作流 & 修改信息 
  * status: 2 上线 1 下线
 */
 export const onlineWorkflow = async (flow, status = ''): Promise<any> => {
     const { name, description, logo } = flow
-    const data = { name, description, logo: logo && logo.match(/(icon.*)\?/)?.[1] }
+    const data = { name, description, logo: logo && logo.replace('/bisheng', '') }
     if (status) {
         data['status'] = status
     }

@@ -43,7 +43,7 @@ export function CodeBlock({ language, value }) {
   };
   return (
     <div className="codeblock font-sans text-[16px]">
-      <div className="code-block-modal">
+      <div className="code-block-modal bg-gray-50">
         <span className="code-block-modal-span">{language}</span>
 
         <div className="flex items-center">

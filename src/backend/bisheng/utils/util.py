@@ -1,15 +1,22 @@
+import asyncio
+import functools
+import hashlib
 import importlib
 import inspect
+import io
+import logging
 import re
+import time
+import zipfile
 from functools import wraps
-from typing import Dict, Optional
+from typing import Dict, Optional, Union, List, Tuple
 from urllib.parse import urlparse
-
-from pydantic import BaseModel
 
 from bisheng.template.frontend_node.constants import FORCE_SHOW_FIELDS
 from bisheng.utils import constants
 from docstring_parser import parse  # type: ignore
+
+logger = logging.getLogger(__name__)
 
 
 def build_template_from_function(name: str, type_to_loader_dict: Dict, add_function: bool = False):
@@ -94,10 +101,10 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
                     if name == 'self':
                         continue
                     variables[name] = {}
-                    variables[name]['default'] = get_default_factory(module=_class.__base__.__module__, function=str(param.annotation))
+                    variables[name]['default'] = get_default_factory(module=_class.__base__.__module__,
+                                                                     function=str(param.annotation))
                     variables[name]['annotation'] = str(param.annotation)
                     variables[name]['required'] = False
-
 
             base_classes = get_base_classes(_class)
             # Adding function to base classes to allow
@@ -113,10 +120,10 @@ def build_template_from_class(name: str, type_to_cls_dict: Dict, add_function: b
 
 
 def build_template_from_method(
-    class_name: str,
-    method_name: str,
-    type_to_cls_dict: Dict,
-    add_function: bool = False,
+        class_name: str,
+        method_name: str,
+        type_to_cls_dict: Dict,
+        add_function: bool = False,
 ):
     classes = [item.__name__ for item in type_to_cls_dict.values()]
 
@@ -348,6 +355,25 @@ def sync_to_async(func):
     return async_wrapper
 
 
+def run_async(coro, loop=None):
+    """
+    运行异步函数
+    :param coro:
+    :param loop:
+    :return:
+    """
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+            return loop.run_until_complete(coro)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(coro)
+
+    return loop.run_until_complete(coro)
+
+
 def get_cache_key(flow_id: str, chat_id: str, vertex_id: str = None):
     return f'{flow_id}_{chat_id}_{vertex_id}'
 
@@ -356,3 +382,176 @@ def _is_valid_url(url: str) -> bool:
     """Check if the url is valid."""
     parsed = urlparse(url)
     return bool(parsed.netloc) and bool(parsed.scheme)
+
+
+# 重试装饰器 异步
+def retry_async(num_retries=3, delay=0.5, return_exceptions=False):
+    def wrapper(func):
+        async def wrapped(*args, **kwargs):
+            for i in range(num_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    logger.info(
+                        f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
+                    if i == num_retries - 1:
+                        if return_exceptions:
+                            # 返回异常的参数 将e.args拆分成元组
+                            return e.args if len(e.args) > 1 else e.args[0]
+                        logger.error(f"Failed to execute {func.__name__} after {num_retries} retries")
+                        raise e
+                    await asyncio.sleep(delay)
+            return None
+
+        return wrapped
+
+    return wrapper
+
+
+# 重试装饰器
+def retry_sync(num_retries=3, delay=0.5, return_exceptions=False):
+    def wrapper(func):
+        def wrapped(*args, **kwargs):
+            for i in range(num_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    logger.info(
+                        f"Retrying {func.__name__} in {delay} seconds... Attempt {i + 1} of {num_retries}... error: {e}")
+                    if i == num_retries - 1:
+                        if return_exceptions:
+                            # 返回异常的参数 将e.args拆分成元组
+                            return e.args if len(e.args) > 1 else e.args[0]
+                        logger.error(f"Failed to execute {func.__name__} after {num_retries} retries")
+                        raise e
+                    time.sleep(delay)
+            return None
+
+        return wrapped
+
+    return wrapper
+
+
+def calculate_md5(file: Union[str, bytes]):
+    """计算文档的 MD5 值。
+    Returns:
+        str: 文档的 MD5 值。
+    """
+    md5_hash = hashlib.md5()
+
+    if isinstance(file, bytes):
+        md5_hash.update(file)
+        return md5_hash.hexdigest()
+
+    else:
+        # 以二进制形式读取文件
+        with open(file, "rb") as f:
+            # 按块读取文件，避免大文件占用过多内存
+            for chunk in iter(lambda: f.read(4096), b""):
+                md5_hash.update(chunk)
+
+        return md5_hash.hexdigest()
+
+
+async def async_calculate_md5(file: Union[str, bytes]):
+    """异步计算文档的 MD5 值。
+    Returns:
+        str: 文档的 MD5 值。
+    """
+    import aiofiles
+
+    md5_hash = hashlib.md5()
+
+    if isinstance(file, bytes):
+        md5_hash.update(file)
+        return md5_hash.hexdigest()
+
+    else:
+        # 以二进制形式异步读取文件
+        async with aiofiles.open(file, "rb") as f:
+            # 按块异步读取文件，避免大文件占用过多内存
+            while True:
+                chunk = await f.read(4096)
+                if not chunk:
+                    break
+                md5_hash.update(chunk)
+
+        return md5_hash.hexdigest()
+
+
+# 读取目录下的所有文件
+def read_files_in_directory(path: str):
+    """
+    读取目录下的所有文件，并返回文件名列表。
+    Args:
+        path (str): 目录路径。
+    Returns:
+        list: 文件名列表。
+    """
+    import os
+
+    if not os.path.exists(path):
+        logger.error(f"Path {path} does not exist.")
+        return []
+
+    files = []
+    for root, _, filenames in os.walk(path):
+        for filename in filenames:
+            files.append(os.path.join(root, filename))
+    return files
+
+
+def sync_func_to_async(func, executor=None):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        loop = asyncio.get_running_loop()
+        bound_func = functools.partial(func, *args, **kwargs)
+        return await loop.run_in_executor(executor, bound_func)
+
+    return wrapper
+
+
+def bytes_to_zip(
+        files: List[Tuple[str, bytes]],
+        compress_level: int = 6
+) -> bytes:
+    """
+    将字节流数据打包成ZIP文件，返回ZIP文件的字节流
+
+    参数:
+        files: 包含(文件名, 字节流)元组的列表
+        compress_level: 压缩级别(0-9)，0表示不压缩，9表示最高压缩率
+
+    返回:
+        生成的ZIP文件字节流
+    """
+    try:
+        # 验证压缩级别
+        if not 0 <= compress_level <= 9:
+            raise ValueError("压缩级别必须在0到9之间")
+
+        # 创建内存中的字节流用于存储ZIP数据
+        zip_buffer = io.BytesIO()
+
+        # 创建ZIP文件并添加字节流数据
+        with zipfile.ZipFile(
+                zip_buffer,
+                'w',
+                zipfile.ZIP_DEFLATED,
+                compresslevel=compress_level
+        ) as zipf:
+            for filename, data in files:
+                # 向ZIP文件中添加字节流数据
+                zipf.writestr(filename, data)
+                print(f"已添加: {filename} (大小: {len(data) / 1024:.2f} KB)")
+
+        # 将ZIP数据定位到起始位置并返回字节流
+        zip_buffer.seek(0)
+        zip_data = zip_buffer.getvalue()
+
+        logger.debug(f"\nZIP文件创建成功，总大小: {len(zip_data) / 1024:.2f} KB")
+        return zip_data
+
+    except Exception as e:
+        logger.error(f"打包过程出错: {str(e)}")
+        raise e

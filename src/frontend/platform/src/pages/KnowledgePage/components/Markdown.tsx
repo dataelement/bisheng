@@ -14,7 +14,7 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
     useEffect(() => {
         // console.log('markdown :>> ', markdown);
         const processedMarkdown = markdown.replace(/^( {4,})/gm, '   ')
-        .replaceAll('(bisheng/', '(/bisheng/')
+            .replaceAll('(bisheng/', '(/bisheng/')
 
         if (!hidden && vditorRef.current && readyRef.current) {
             vditorRef.current.setValue(processedMarkdown);
@@ -31,7 +31,7 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
 
     useEffect(() => {
         vditorRef.current = new Vditor('vditor', {
-            cdn: location.origin + '/vditor',
+            cdn: location.origin + __APP_ENV__.BASE_URL + '/vditor',
             height: '100%',
             toolbarConfig: {
                 hide: true,
@@ -42,10 +42,16 @@ const VditorEditor = forwardRef(({ edit, markdown, hidden }, ref) => {
                 markdown: {
                     toc: true,
                     mark: true,
+                    autoSpace: true
                 },
                 math: {
-                    "inlineDigit": true
-                }
+                    engine: 'MathJax',
+                    inlineDigit: true,
+                    macros: { // 自定义命令避免未定义错误
+                        '\\lambda': '\\mathit{\\lambda}',
+                        '\\mathcal{A}': '\\mathscr{A}'
+                    }
+                },
             },
             cache: {
                 enable: false,

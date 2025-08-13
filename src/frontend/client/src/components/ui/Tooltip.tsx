@@ -66,7 +66,7 @@ export const TooltipAnchor = forwardRef<HTMLDivElement, TooltipAnchorProps>(func
             }
           >
             <Ariakit.TooltipArrow />
-            {description}
+            <span className='text-sm'>{description}</span>
           </Ariakit.Tooltip>
         )}
       </AnimatePresence>

@@ -22,6 +22,7 @@ CACHE: Dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir('bisheng', 'bisheng')
 
+
 def create_cache_folder(func):
     def wrapper(*args, **kwargs):
         # Get the destination folder
@@ -31,6 +32,18 @@ def create_cache_folder(func):
         os.makedirs(cache_path, exist_ok=True)
 
         return func(*args, **kwargs)
+
+    return wrapper
+
+def create_cache_folder_async(func):
+    async def wrapper(*args, **kwargs):
+        # Get the destination folder
+        cache_path = Path(CACHE_DIR) / PREFIX
+
+        # Create the destination folder if it doesn't exist
+        os.makedirs(cache_path, exist_ok=True)
+
+        return await func(*args, **kwargs)
 
     return wrapper
 
@@ -176,6 +189,29 @@ def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str = tmp_b
     minio_client.upload_minio_file(object_name, file.file, bucket_name, file.size)
     return minio_client.get_share_link(object_name, bucket_name)
 
+
+@create_cache_folder_async
+async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str) -> str:
+    """
+    保存上传的文件到folder_name文件夹
+    :param file:
+    :param folder_name:
+    :param file_name:
+    :return:
+    """
+    cache_path = Path(CACHE_DIR)
+    folder_path = cache_path / folder_name
+
+    # Create the folder if it doesn't exist
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Save the file to the specified folder
+    file_path = folder_path / file_name
+    with open(file_path, 'wb') as f:
+        content = await file.read()
+        f.write(content)
+
+    return str(file_path)
 
 @create_cache_folder
 def save_uploaded_file(file, folder_name, file_name, bucket_name: str = tmp_bucket):

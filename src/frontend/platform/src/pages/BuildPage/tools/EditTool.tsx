@@ -80,16 +80,16 @@ export const TestDialog = forwardRef<{
         setLoading(true)
 
         const { server_host, children, auth_method, parameter_name } = toolRef.current
-        const { apiKey, apiLocation, authType, parameter } = formRef.current.state
+        const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
 
         await captureAndAlertRequestErrorHoc(testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
-            auth_method,
+            auth_method: authMethod === 'apikey' ? 1 : 0,
             auth_type: authType,
             api_key: apiKey,
             request_params: formRef.current.values,
-            api_location: apiLocation,
+            api_location: apiLocation || 'query',
             parameter_name: parameter || parameter_name
         }).then(setResult))
         setLoading(false)
@@ -549,7 +549,10 @@ const EditTool = forwardRef((props: any, ref) => {
                                                     size="sm"
                                                     variant="outline"
                                                     className="dark:bg-[#666]"
-                                                    onClick={() => testDialogRef.current.open(item, fromDataRef.current, formState)}
+                                                    onClick={() => {
+                                                        testDialogRef.current.open(item, fromDataRef.current, formState)
+                                                    }
+                                                    }
                                                 >{t('test.test')}</Button>
                                             </TableCell>
                                         </TableRow>

@@ -6,7 +6,9 @@ from bisheng.api.v1.endpoints import router as endpoints_router
 from bisheng.api.v1.evaluation import router as evaluation_router
 from bisheng.api.v1.finetune import router as finetune_router
 from bisheng.api.v1.flows import router as flows_router
+from bisheng.api.v1.invite_code import router as invite_code_router
 from bisheng.api.v1.knowledge import router as knowledge_router
+from bisheng.api.v1.linsight import router as linsight_router
 from bisheng.api.v1.llm import router as llm_router
 from bisheng.api.v1.mark_task import router as mark_router
 from bisheng.api.v1.qa import router as qa_router
@@ -14,6 +16,7 @@ from bisheng.api.v1.report import router as report_router
 from bisheng.api.v1.server import router as server_router
 from bisheng.api.v1.skillcenter import router as skillcenter_router
 from bisheng.api.v1.tag import router as tag_router
+from bisheng.api.v1.tool import router as tool_router
 from bisheng.api.v1.user import router as user_router
 from bisheng.api.v1.usergroup import router as group_router
 from bisheng.api.v1.validate import router as validate_router
@@ -44,4 +47,7 @@ __all__ = [
     'workflow_router',
     'mark_router',
     'workstation_router',
+    "linsight_router",
+    "tool_router",
+    "invite_code_router",
 ]

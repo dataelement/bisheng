@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useKnowledgeStore from "../useKnowledgeStore";
 import DocxPreview from "./DocxFileViewer";
+import { convertJsonData } from "./ParagraphEdit";
 import { Partition } from "./PreviewResult";
 import TxtFileViewer from "./TxtFileViewer";
 
@@ -27,7 +28,6 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
     //     '1-140-140-400-180': { text: '2222', type: 'Title', part_id: '1' },
     //     '1-240-240-400-330': { text: '3333', type: 'Title', part_id: '2' }
     // }
-
     const [postion, setPostion] = useState([1, 0])
     const [labelsMap, setLabelsMap] = useState(new Map()) // {p-bbox: label}
     const labelsMapRef = useRef(new Map())
@@ -53,6 +53,31 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
             return
         }
 
+        const allLabels = convertJsonData(partitions)
+        const activeIds = new Set()
+        chunks.forEach(chunk => {
+            if (chunk.chunkIndex === selectedChunkIndex) {
+                const bboxes = (chunk.bbox && JSON.parse(chunk.bbox).chunk_bboxes) || [];
+                bboxes.forEach(label => {
+                    const id = [label.page, ...label.bbox].join('-');
+                    activeIds.add(id)
+                    // 初始定位到第一个激活的标签
+                    if (!setPostioned) {
+                        setPostion([label.page, label.bbox[1]]) // 增量
+                        setPostioned = true;
+                    }
+                })
+
+            }
+        })
+
+        allLabels.forEach((label) => {
+            labelsMap.set(label.id, {
+                ...label,
+                active: activeIds.has(label.id)
+            });
+        })
+
         // 合并覆盖的activeLabels
         // const activeLabels = chunks.reduce((res, chunk) => {
         //     res = {...res, ...chunk.activeLabels}
@@ -60,44 +85,44 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
         // }, {})
         // if (chunks[0]) chunks[0].bbox = [{ page: 1, bbox: [40, 40, 400, 80] }, { page: 1, bbox: [140, 140, 400, 180] }]
         // if (chunks[1]) chunks[1].bbox = [{ page: 1, bbox: [240, 240, 400, 330] }]
-        chunks.forEach(chunk => {
-            const bboxes = (chunk.bbox && JSON.parse(chunk.bbox).chunk_bboxes) || [];
-            const isActive = chunk.chunkIndex === selectedChunkIndex;
+        // chunks.forEach(chunk => {
+        //     const bboxes = (chunk.bbox && JSON.parse(chunk.bbox).chunk_bboxes) || [];
+        //     const isActive = chunk.chunkIndex === selectedChunkIndex;
 
-            bboxes.forEach(label => {
-                const id = [label.page, ...label.bbox].join('-');
-                const existing = labelsMap.get(id);
+        //     bboxes.forEach(label => {
+        //         const id = [label.page, ...label.bbox].join('-');
+        //         const existing = labelsMap.get(id);
 
-                // const activeded = chunk.activeLabels?.[id];
-                // if (activeded !== undefined) {
-                //     labelsMap.set(id, {
-                //         id,
-                //         page: label.page,
-                //         label: label.bbox,
-                //         active: activeded,
-                //         txt: chunk.text
-                //     });
-                // } else
-                if (isActive || !existing) {
-                    // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
-                    labelsMap.set(id, {
-                        id,
-                        page: label.page,
-                        label: label.bbox,
-                        // active: obj?.active !== false && isActive,
-                        active: isActive,
-                        txt: chunk.text
-                    });
-                }
+        //         // const activeded = chunk.activeLabels?.[id];
+        //         // if (activeded !== undefined) {
+        //         //     labelsMap.set(id, {
+        //         //         id,
+        //         //         page: label.page,
+        //         //         label: label.bbox,
+        //         //         active: activeded,
+        //         //         txt: chunk.text
+        //         //     });
+        //         // } else
+        //         if (isActive || !existing) {
+        //             // 处理标签优先级：当前标签激活时强制覆盖，非激活时保留已有（可能包含激活状态）
+        //             labelsMap.set(id, {
+        //                 id,
+        //                 page: label.page,
+        //                 label: label.bbox,
+        //                 // active: obj?.active !== false && isActive,
+        //                 active: isActive,
+        //                 txt: chunk.text
+        //             });
+        //         }
 
 
-                // 初始定位到第一个激活的标签
-                if (isActive && !setPostioned) {
-                    setPostion([label.page, label.bbox[1]]) // 增量
-                    setPostioned = true;
-                }
-            });
-        });
+        //         // 初始定位到第一个激活的标签
+        //         if (isActive && !setPostioned) {
+        //             setPostion([label.page, label.bbox[1]]) // 增量
+        //             setPostioned = true;
+        //         }
+        //     });
+        // });
         labelsMap.size && setLabelsMap(labelsMap)
         labelsMapRef.current = labelsMap
     }, [file.suffix, chunks, selectedChunkIndex]);
@@ -108,7 +133,9 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
 
     // 点击定位
     useEffect(() => {
-        setPostion((p) => [p[0], p[1] + selectedChunkDistanceFactor])
+        setPostion((p) => {
+            return [p[0], p[1] + selectedChunkDistanceFactor]
+        })
     }, [selectedChunkDistanceFactor])
 
     const pageLabels = useMemo(() => {
@@ -124,29 +151,29 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
         if (selectedChunkIndex === -1) return
 
         const distinct = {}
-        const activeLabels = lbs.reduce((label, { id, active }) => {
+        const newActiveLabelMap = lbs.reduce((_labelMap, { id, active }) => {
             const partId = partitions[id].part_id
-            if (distinct[partId]) return label // same partId
+            if (distinct[partId]) return _labelMap // same partId
             distinct[partId] = true
             // 相同的partId同时被选中
             Object.keys(partitions).forEach((key) => {
                 if (partitions[key].part_id === partId) {
-                    label.push({ id: key, active })
+                    _labelMap.set(key, active)
                 }
             })
-            return label
-        }, [])
+            return _labelMap
+        }, new Map())
 
         // 高亮(active)标注
         const newMap = new Map(labelsMap); // 浅拷贝原 Map
         const bbox = []
-        activeLabels.forEach((item) => {
-            // 记录当前chunk选中的bbox
-
-            const label = newMap.get(item.id);
-            if (label) {
-                newMap.set(item.id, { ...label, active: item.active });
-                bbox.push({ page: label.page, bbox: label.label })
+        Array.from(labelsMap.values()).forEach((item) => {
+            const value = newActiveLabelMap.get(item.id)
+            if (value !== undefined) {
+                newMap.set(item.id, { ...item, active: value })
+                value && bbox.push({ page: item.page, bbox: item.label })
+            } else {
+                item.active && bbox.push({ page: item.page, bbox: item.label })
             }
         });
         // 记录当前chunk选中的bbox
@@ -168,7 +195,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
             case 'pdf':
                 return <FileView
                     startIndex={0}
-                    select={false} // selectedChunkIndex !== -1}
+                    select={selectedChunkIndex !== -1}
                     fileUrl={url}
                     labels={pageLabels}
                     scrollTo={postion}

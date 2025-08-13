@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING
 
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from bisheng.services.base import Service
 from loguru import logger
 from sqlalchemy.exc import OperationalError
@@ -19,15 +21,33 @@ class DatabaseService(Service):
         # langflow_dir = Path(__file__).parent.parent.parent
         # self.script_location = langflow_dir / "alembic"
         # self.alembic_cfg_path = langflow_dir / "alembic.ini"
-        self.engine = self._create_engine()
 
-    def _create_engine(self) -> 'Engine':
-        """Create the engine for the database."""
-        if self.database_url and self.database_url.startswith('sqlite'):
-            connect_args = {'check_same_thread': False}
-        else:
-            connect_args = {}
-        return create_engine(self.database_url, connect_args=connect_args, pool_size=100, max_overflow=20, pool_timeout=3, pool_pre_ping=True)
+        self.async_database_url = database_url.replace("pymysql", "aiomysql")
+
+        self.engine = self._create_engine()
+        self.async_engine = self._create_async_engine()
+
+    def _create_engine(self):
+        connect_args = {'check_same_thread': False} if self.database_url.startswith("sqlite") else {}
+        return create_engine(
+            self.database_url,
+            connect_args=connect_args,
+            pool_size=100,
+            max_overflow=20,
+            pool_timeout=3,
+            pool_pre_ping=True
+        )
+
+    def _create_async_engine(self):
+        connect_args = {'check_same_thread': False} if self.async_database_url.startswith("sqlite") else {}
+        return create_async_engine(
+            self.async_database_url,
+            connect_args=connect_args,
+            pool_size=100,
+            max_overflow=20,
+            pool_timeout=3,
+            pool_pre_ping=True
+        )
 
     def __enter__(self):
         self._session = Session(self.engine)
@@ -45,35 +65,48 @@ class DatabaseService(Service):
         with Session(self.engine) as session:
             yield session
 
-    def create_db_and_tables(self):
-        # from sqlalchemy import inspect
+    async def create_db_and_tables(self):
+        logger.debug("Creating database and tables (async)")
 
-        # inspector = inspect(self.engine)
-        # table_names = inspector.get_table_names()
-        # current_tables = ["flow", "user", "apikey"]
-
-        # if table_names and all(table in table_names for table in current_tables):
-        #     logger.debug("Database and tables already exist")
-        #     return
-
-        logger.debug('Creating database and tables')
-
-        for table in SQLModel.metadata.sorted_tables:
+        async with self.async_engine.begin() as conn:
             try:
-                table.create(self.engine, checkfirst=True)
+                await conn.run_sync(SQLModel.metadata.create_all)
+                logger.debug("Tables created successfully")
             except OperationalError as oe:
-                logger.warning(f'Table {table} already exists, skipping. Exception: {oe}')
+                logger.warning(f"Table creation skipped due to OperationalError: {oe}")
             except Exception as exc:
-                logger.error(f'Error creating table {table}: {exc}')
-                raise RuntimeError(f'Error creating table {table}') from exc
-
-        # Now check if the required tables exist, if not, something went wrong.
-        # inspector = inspect(self.engine)
-        # table_names = inspector.get_table_names()
-        # for table in current_tables:
-        #     if table not in table_names:
-        #         logger.error("Something went wrong creating the database and tables.")
-        #         logger.error("Please check your database settings.")
-        #         raise RuntimeError("Something went wrong creating the database and tables.")
+                logger.error(f"Error creating tables: {exc}")
+                raise RuntimeError("Error creating tables") from exc
 
         logger.debug('Database and tables created successfully')
+
+    # def create_db_and_tables(self):
+    #     # from sqlalchemy import inspect
+    #
+    #     # inspector = inspect(self.engine)
+    #     # table_names = inspector.get_table_names()
+    #     # current_tables = ["flow", "user", "apikey"]
+    #
+    #     # if table_names and all(table in table_names for table in current_tables):
+    #     #     logger.debug("Database and tables already exist")
+    #     #     return
+    #
+    #     logger.debug('Creating database and tables')
+    #
+    #     for table in SQLModel.metadata.sorted_tables:
+    #         try:
+    #             table.create(self.engine, checkfirst=True)
+    #         except OperationalError as oe:
+    #             logger.warning(f'Table {table} already exists, skipping. Exception: {oe}')
+    #         except Exception as exc:
+    #             logger.error(f'Error creating table {table}: {exc}')
+    #             raise RuntimeError(f'Error creating table {table}') from exc
+
+    # Now check if the required tables exist, if not, something went wrong.
+    # inspector = inspect(self.engine)
+    # table_names = inspector.get_table_names()
+    # for table in current_tables:
+    #     if table not in table_names:
+    #         logger.error("Something went wrong creating the database and tables.")
+    #         logger.error("Please check your database settings.")
+    #         raise RuntimeError("Something went wrong creating the database and tables.")

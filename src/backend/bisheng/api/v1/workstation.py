@@ -11,19 +11,22 @@ from langchain_core.runnables import RunnableConfig
 from loguru import logger
 
 from bisheng.api.services import knowledge_imp
+from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
-                                              WorkstationMessage, WorkStationService, SearchTool)
+                                              WorkstationMessage, WorkStationService)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
+from bisheng.settings import settings as bisheng_settings
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -102,17 +105,27 @@ def final_message(conversation: MessageSession, title: str, requestMessage: Chat
     return f'event: message\ndata: {msg}\n\n'
 
 
-@router.get('/config')
+@router.get('/config', summary='获取工作台配置', response_model=UnifiedResponseModel)
 def get_config(
         request: Request,
-        login_user: UserPayload = Depends(get_login_user),
-):
+        login_user: UserPayload = Depends(get_login_user)):
     """ 获取评价相关的模型配置 """
     ret = WorkStationService.get_config()
+
+    etl4lm_settings = bisheng_settings.get_knowledge().get("etl4lm", {})
+    etl_for_lm_url = etl4lm_settings.get("url", None)
+    ret = ret.model_dump()
+    ret['enable_etl4lm'] = etl_for_lm_url is not None
+
+    linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
+    ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
+    ret['linsight_cache_dir'] = "./"
+    ret['waiting_list_url'] = bisheng_settings.get_linsight_conf().waiting_list_url
+
     return resp_200(data=ret)
 
 
-@router.post('/config')
+@router.post('/config', summary='更新工作台配置', response_model=UnifiedResponseModel)
 def update_config(
         request: Request,
         login_user: UserPayload = Depends(get_admin_user),
@@ -238,13 +251,13 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     联网搜索
     """
-    if web_search_config.params:
-        tool = SearchTool.init_search_tool(web_search_config.tool, **web_search_config.params)
-    else:
-        # 兼容旧版的配置
-        tool = SearchTool.init_search_tool('bing', api_key=web_search_config.bingKey,
-                                           base_url=web_search_config.bingUrl)
-    return tool.invoke(query)
+    web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
+    if not web_search_info:
+        raise Exception(f"No web_search tool found in database")
+    web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
+    if not web_search_tool:
+        raise Exception(f"No web_search tool found in gpts tools")
+    return web_search_tool[0].invoke(input={"query": query})
 
 
 def getFileContent(filepath):
@@ -372,7 +385,7 @@ async def chat_completions(
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
         except Exception as e:
-            logger.error(f'Error in processing the prompt: {e}')
+            logger.exception(f'Error in processing the prompt')
             error = True
             final_res = 'Error in processing the prompt'
 

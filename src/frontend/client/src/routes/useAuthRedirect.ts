@@ -9,7 +9,7 @@ export default function useAuthRedirect() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (!isAuthenticated) {
-        navigate('/login', { replace: true });
+        navigate(`/${__APP_ENV__.BISHENG_HOST}/login`, { replace: true });
       }
     }, 300);
 
