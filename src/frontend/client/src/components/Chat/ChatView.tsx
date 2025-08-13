@@ -81,7 +81,7 @@ function ChatView({ index = 0 }: { index?: number }) {
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }
 
-  const selfHost = true //location.host.indexOf('bisheng') !== -1;
+  const selfHost = location.host.indexOf('bisheng') !== -1;
 
   return (
     <ChatFormProvider {...methods}>
