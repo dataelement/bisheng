@@ -73,7 +73,7 @@ export const useLinsightManager = () => {
     }, [setActiveSessionId]);
 
     // 切换会话，更新会话信息
-    const switchAndUpdateLinsight = useCallback((versionId: string, update: any) => {
+    const switchAndUpdateLinsight = useCallback((versionId: string, update: any, customTask?: boolean) => {
         const linsight = getLinsight(versionId)
         if (linsight) return updateLinsight(versionId, { inputSop: false }); // 恢复用户未输入状态
 
@@ -105,7 +105,7 @@ export const useLinsightManager = () => {
             summary: output_result?.answer,
             status: newStatus,
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
-            tasks: buildTaskTree(tasks),
+            tasks: customTask ? tasks : buildTaskTree(tasks),
             taskError: 'failed' === status ? output_result?.error_message : '',
             file_list: output_result?.final_files || [],
             sop: 'sop_generation_failed' === status ? '' : sop,
@@ -212,13 +212,12 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
         });
 
         let content = ''
-
         sse.addEventListener('generate_sop_content', (e: MessageEvent) => {
             const data = JSON.parse(e.data);
             content += data.content
             updateLinsight(_versionId, {
                 sopError: '',
-                sop: content.replace('```markdown\n', '```'),
+                sop: content.replace(/^---/, '').replace('```markdown\n', '```'),
                 inputSop: false
             })
         })

@@ -50,7 +50,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
     const { data: PersonalTool } = useGetPersonalToolList();
     const { data: orgTools } = useGetOrgToolList();
 
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
 
     // 状态管理
     const [versions, setVersions] = useState<{ id: string, name: string }[]>([]);
@@ -64,7 +64,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
             const firstVersion = cloneDeep(SopCase[_conversationId])
             setVersions([{ id: firstVersion.id, name: formatTime(firstVersion.version, true) }]);
             setVersionId(firstVersion.id);
-            return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion });
+            return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion }, true);
         }
 
         setLoading(true);

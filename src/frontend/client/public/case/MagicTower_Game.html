@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>魔塔网页游戏</title>
+  <style>
+    body { font-family: '微软雅黑', Arial, sans-serif; background: #222; color: #eee; margin: 0; }
+    .container { display: flex; flex-direction: row; max-width: 900px; margin: 30px auto; background: #333; border-radius: 8px; box-shadow: 0 0 16px #111; }
+    .map-area { display: grid; grid-template-columns: repeat(11, 32px); grid-template-rows: repeat(11, 32px); gap: 1px; background: #222; margin: 20px; border: 2px solid #444; }
+    .cell { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 18px; border-radius: 3px; }
+    .side-bar { width: 220px; background: #222; padding: 18px 12px; border-left: 2px solid #444; display: flex; flex-direction: column; }
+    .attr-panel { margin-bottom: 18px; }
+    .attr-panel h3 { margin: 0 0 8px 0; font-size: 18px; }
+    .attr-list { font-size: 15px; line-height: 1.7; }
+    .log-panel { flex: 1; background: #181818; margin-bottom: 12px; padding: 8px; border-radius: 4px; font-size: 13px; overflow-y: auto; max-height: 180px; }
+    .ctrl-panel { display: flex; flex-direction: column; align-items: center; }
+    .ctrl-row { display: flex; flex-direction: row; margin: 2px 0; }
+    .ctrl-btn { width: 38px; height: 38px; margin: 0 2px; background: #444; color: #fff; border: none; border-radius: 5px; font-size: 20px; cursor: pointer; transition: background 0.2s; }
+    .ctrl-btn:hover { background: #666; }
+    .floor-info { margin: 8px 0 12px 0; font-size: 16px; text-align: center; }
+    .game-title { text-align: center; font-size: 28px; margin: 18px 0 0 0; letter-spacing: 2px; color: #ffeb3b; text-shadow: 1px 2px 6px #000; }
+    .desc { font-size: 13px; color: #bbb; margin-top: 8px; text-align: center; }
+    .modal { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 99; }
+    .modal-content { background: #222; padding: 32px 40px; border-radius: 10px; text-align: center; color: #fff; font-size: 20px; box-shadow: 0 0 24px #000; }
+    .modal-btn { margin-top: 18px; padding: 8px 24px; font-size: 16px; background: #ffeb3b; color: #222; border: none; border-radius: 5px; cursor: pointer; }
+    .modal-btn:hover { background: #ffe066; }
+  </style>
+</head>
+<body>
+  <div class="game-title">魔塔网页游戏</div>
+  <div class="container">
+    <div class="map-area" id="mapArea"></div>
+    <div class="side-bar">
+      <div class="floor-info" id="floorInfo"></div>
+      <div class="attr-panel">
+        <h3>角色属性</h3>
+        <div class="attr-list" id="attrList"></div>
+      </div>
+      <div class="log-panel" id="logPanel"></div>
+      <div class="ctrl-panel">
+        <div class="ctrl-row">
+          <button class="ctrl-btn" id="btnUp">↑</button>
+        </div>
+        <div class="ctrl-row">
+          <button class="ctrl-btn" id="btnLeft">←</button>
+          <button class="ctrl-btn" id="btnDown">↓</button>
+          <button class="ctrl-btn" id="btnRight">→</button>
+        </div>
+        <div class="ctrl-row">
+          <button class="ctrl-btn" id="btnRestart" title="重开">⟳</button>
+        </div>
+      </div>
+      <div class="desc">方向键或按钮控制移动，收集道具，挑战怪物，登顶魔塔！</div>
+    </div>
+  </div>
+  <div id="modal" class="modal" style="display:none;">
+    <div class="modal-content" id="modalContent"></div>
+  </div>
+<script>
+// ====== 游戏数据定义（根据配置自动生成） ======
+const GAME_CONFIG = {
+  numberOfFloors: 3,
+  monsterTypes: [
+    { name: '史莱姆', hp: 50, atk: 10, def: 5, gold: 1, exp: 1, icon: '🟢' },
+    { name: '蝙蝠', hp: 80, atk: 18, def: 8, gold: 2, exp: 2, icon: '🦇' },
+    { name: '骷髅', hp: 120, atk: 25, def: 12, gold: 3, exp: 3, icon: '💀' }
+  ],
+  itemTypes: [
+    { name: '黄钥匙', type: 'key', color: 'yellow', icon: '🔑' },
+    { name: '血瓶', type: 'hp', value: 50, icon: '🧪' },
+    { name: '攻击宝石', type: 'atk', value: 5, icon: '💎' }
+  ]
+};
+// 地图符号定义
+const SYMBOLS = {
+  wall: '⬛',
+  floor: '⬜',
+  player: '🧑',
+  upStair: '🔼',
+  downStair: '🔽',
+  slime: '🟢',
+  bat: '🦇',
+  skeleton: '💀',
+  yellowKey: '🔑',
+  hpBottle: '🧪',
+  atkGem: '💎'
+};
+// 生成3层地图（11x11），每层有怪物、道具、楼梯
+function genMapData() {
+  const floors = [];
+  for(let f=0; f<GAME_CONFIG.numberOfFloors; f++) {
+    // 基础全墙
+    let map = Array.from({length:11},()=>Array(11).fill('wall'));
+    // 开放区域
+    for(let y=1; y<10; y++) for(let x=1; x<10; x++) map[y][x]='floor';
+    // 上下楼梯
+    if(f===0) map[1][1]='upStair';
+    else if(f===GAME_CONFIG.numberOfFloors-1) map[9][9]='downStair';
+    else { map[1][1]='upStair'; map[9][9]='downStair'; }
+    // 怪物
+    let monsters = ['slime','bat','skeleton'];
+    for(let i=0;i<2+f;i++) {
+      let m = monsters[Math.floor(Math.random()*monsters.length)];
+      let px = 2+Math.floor(Math.random()*7), py = 2+Math.floor(Math.random()*7);
+      if(map[py][px]==='floor') map[py][px]=m;
+    }
+    // 道具
+    let items = ['yellowKey','hpBottle','atkGem'];
+    for(let i=0;i<2;i++) {
+      let it = items[Math.floor(Math.random()*items.length)];
+      let px = 2+Math.floor(Math.random()*7), py = 2+Math.floor(Math.random()*7);
+      if(map[py][px]==='floor') map[py][px]=it;
+    }
+    floors.push(map);
+  }
+  return floors;
+}
+const MAPS = genMapData();
+// ====== 角色与状态 ======
+const INIT_PLAYER = {
+  x: 5, y: 9, floor: 0,
+  hp: 200, atk: 20, def: 10,
+  yellowKey: 0, gold: 0, exp: 0
+};
+let player = {};
+let gameState = { status: 'playing', log: [] };
+// ====== 怪物/道具属性查找 ======
+function getMonster(type) {
+  return GAME_CONFIG.monsterTypes.find(m=>{
+    if(type==='slime') return m.name==='史莱姆';
+    if(type==='bat') return m.name==='蝙蝠';
+    if(type==='skeleton') return m.name==='骷髅';
+    return false;
+  });
+}
+function getItem(type) {
+  if(type==='yellowKey') return GAME_CONFIG.itemTypes[0];
+  if(type==='hpBottle') return GAME_CONFIG.itemTypes[1];
+  if(type==='atkGem') return GAME_CONFIG.itemTypes[2];
+  return null;
+}
+// ====== UI渲染 ======
+function renderMap() {
+  const area = document.getElementById('mapArea');
+  area.innerHTML = '';
+  let map = MAPS[player.floor];
+  for(let y=0;y<11;y++) for(let x=0;x<11;x++) {
+    let cell = document.createElement('div');
+    cell.className = 'cell';
+    let v = (x===player.x && y===player.y)?'player':map[y][x];
+    cell.textContent = SYMBOLS[v]||SYMBOLS.floor;
+    area.appendChild(cell);
+  }
+}
+function renderAttr() {
+  const attr = document.getElementById('attrList');
+  attr.innerHTML = `生命: ${player.hp}<br>攻击: ${player.atk}<br>防御: ${player.def}<br>黄钥匙: ${player.yellowKey}<br>金币: ${player.gold}<br>经验: ${player.exp}`;
+}
+function renderFloor() {
+  document.getElementById('floorInfo').textContent = `第${player.floor+1}层 / 共${GAME_CONFIG.numberOfFloors}层`;
+}
+function renderLog() {
+  const log = document.getElementById('logPanel');
+  log.innerHTML = gameState.log.slice(-10).map(l=>`<div>${l}</div>`).join('');
+  log.scrollTop = log.scrollHeight;
+}
+function showModal(msg, restart=false) {
+  const modal = document.getElementById('modal');
+  const content = document.getElementById('modalContent');
+  content.innerHTML = msg + (restart?'<br><button class="modal-btn" onclick="restartGame()">重新开始</button>':'');
+  modal.style.display = 'flex';
+}
+function hideModal() {
+  document.getElementById('modal').style.display = 'none';
+}
+// ====== 游戏主逻辑 ======
+function canMove(nx,ny) {
+  if(nx<0||nx>10||ny<0||ny>10) return false;
+  let v = MAPS[player.floor][ny][nx];
+  if(v==='wall') return false;
+  return true;
+}
+function move(dx,dy) {
+  if(gameState.status!=='playing') return;
+  let nx=player.x+dx, ny=player.y+dy;
+  if(!canMove(nx,ny)) {
+    gameState.log.push('撞墙了！');
+    renderLog();
+    return;
+  }
+  let cell = MAPS[player.floor][ny][nx];
+  // 怪物
+  if(['slime','bat','skeleton'].includes(cell)) {
+    let m = getMonster(cell);
+    let dmg = Math.max(0, m.atk-player.def);
+    let rounds = Math.ceil(m.hp/Math.max(1,player.atk-m.def));
+    let totalDmg = dmg*rounds;
+    if(player.hp>totalDmg) {
+      player.hp -= totalDmg;
+      player.gold += m.gold;
+      player.exp += m.exp;
+      gameState.log.push(`击败${m.name}，损失${totalDmg}生命，获得${m.gold}金币、${m.exp}经验。`);
+      MAPS[player.floor][ny][nx]='floor';
+    } else {
+      gameState.log.push(`与${m.name}战斗失败！`);
+      renderLog();
+      gameOver(false);
+      return;
+    }
+  }
+  // 道具
+  if(['yellowKey','hpBottle','atkGem'].includes(cell)) {
+    let it = getItem(cell);
+    if(it.type==='key') { player.yellowKey++; gameState.log.push('获得黄钥匙！'); }
+    if(it.type==='hp') { player.hp+=it.value; gameState.log.push(`获得血瓶，生命+${it.value}`); }
+    if(it.type==='atk') { player.atk+=it.value; gameState.log.push(`获得攻击宝石，攻击+${it.value}`); }
+    MAPS[player.floor][ny][nx]='floor';
+  }
+  // 楼梯
+  if(cell==='upStair') {
+    if(player.floor<GAME_CONFIG.numberOfFloors-1) {
+      player.floor++;
+      gameState.log.push('你登上了更高一层！');
+      // 传送到起点
+      player.x=5; player.y=9;
+      renderAll();
+      return;
+    }
+  }
+  if(cell==='downStair') {
+    if(player.floor>0) {
+      player.floor--;
+      gameState.log.push('你回到了下层。');
+      player.x=5; player.y=9;
+      renderAll();
+      return;
+    }
+  }
+  // 普通移动
+  player.x=nx; player.y=ny;
+  renderAll();
+}
+function gameOver(win) {
+  gameState.status = 'over';
+  if(win) showModal('恭喜你，成功登顶魔塔！',true);
+  else showModal('你失败了，勇士！',true);
+}
+function checkWin() {
+  // 终点：最后一层右下角
+  if(player.floor===GAME_CONFIG.numberOfFloors-1 && player.x===9 && player.y===9) {
+    gameOver(true);
+  }
+}
+function restartGame() {
+  hideModal();
+  Object.assign(player, INIT_PLAYER);
+  gameState.status = 'playing';
+  gameState.log = ['游戏重新开始！'];
+  renderAll();
+}
+function renderAll() {
+  renderMap();
+  renderAttr();
+  renderFloor();
+  renderLog();
+  checkWin();
+}
+// ====== 事件绑定 ======
+document.addEventListener('keydown', e=>{
+  if(gameState.status!=='playing') return;
+  if(e.key==='ArrowUp') move(0,-1);
+  if(e.key==='ArrowDown') move(0,1);
+  if(e.key==='ArrowLeft') move(-1,0);
+  if(e.key==='ArrowRight') move(1,0);
+});
+document.getElementById('btnUp').onclick = ()=>move(0,-1);
+document.getElementById('btnDown').onclick = ()=>move(0,1);
+document.getElementById('btnLeft').onclick = ()=>move(-1,0);
+document.getElementById('btnRight').onclick = ()=>move(1,0);
+document.getElementById('btnRestart').onclick = ()=>restartGame();
+document.getElementById('modal').onclick = function(e){ if(e.target===this) hideModal(); };
+// ====== 初始化 ======
+window.onload = function() {
+  Object.assign(player, INIT_PLAYER);
+  gameState.log = ['游戏开始！'];
+  renderAll();
+};
+</script>
+</body>
+</html>
