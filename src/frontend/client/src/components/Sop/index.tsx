@@ -5,7 +5,6 @@ import { checkSopQueueStatus, getLinsightSessionVersionList, getLinsightTaskList
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
-import { SopCase } from './case';
 import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
 import { SOPEditor, SopStatus } from './SOPEditor';
@@ -61,7 +60,7 @@ export const useLinsightData = (conversationId: string | undefined) => {
 
     const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
         if (_conversationId.startsWith('case')) {
-            const firstVersion = cloneDeep(SopCase[_conversationId])
+            const firstVersion = cloneDeep(window.SopCase[_conversationId])
             setVersions([{ id: firstVersion.id, name: formatTime(firstVersion.version, true) }]);
             setVersionId(firstVersion.id);
             return switchAndUpdateLinsight(firstVersion.id, { ...firstVersion }, true);
