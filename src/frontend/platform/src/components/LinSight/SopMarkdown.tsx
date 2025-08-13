@@ -537,7 +537,7 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
             return `{{@${id}@}}`;
         }
         console.warn('转换ui时未找到对应的ID  :>> ', valueToNameMap, id);
-        return `{{@${id}@}}`; // 未找到时标记红色
+        return `{{@${id}@}}`;
     });
 }
 
@@ -548,7 +548,7 @@ function replaceMarkersToBraces(inputStr, valueToNameMap, nameToValueMap) {
  * @returns {string} - 替换后的字符串
  */
 function replaceBracesToMarkers(inputStr, nameToValueMap) {
-    const regex = /\{\{[@#]([^{}]+)[@#]\}\}/g;
+    const regex = /\{\{[@#](.*?)[@#]\}\}/g;
     return inputStr.replace(regex, (match, value) => {
         // 检查映射中是否存在该值
         if (Object.prototype.hasOwnProperty.call(nameToValueMap, value)) {
