@@ -51,7 +51,7 @@ SopPrompt = """<背景>
 </用户需求>
 
 输出应当是Markdown格式，便于阅读和理解。请确保指导手册是实用的，可以帮助用户解决类似问题。
-你需要先一步一步的思考，然后再输出指导手册。思考和需要被包含在<Thought_START>和<Thought_END>
+你需要先一步一步的思考，然后再输出指导手册。思考需要被包含在<Thought_START>和<Thought_END>
 思考过程："""
 
 # 调整sop时的反馈prompt模板, variables -> query: 用户问题；sop：参考sop；feedback：用户反馈; history_summary: 历史执行过程
@@ -108,7 +108,7 @@ FeedBackSopPrompt = """基于以下信息创建一个指导手册(SOP):
 </指导手册格式要求>
 
 输出应当是Markdown格式，便于阅读和理解。请确保指导手册是实用的，可以帮助用户解决类似问题。
-你需要先一步一步的思考，然后再输出指导手册。思考和需要被包含在<Thought_START>和<Thought_END>
+你需要先一步一步的思考，然后再输出指导手册。思考需要被包含在<Thought_START>和<Thought_END>
 思考过程："""
 
 # 生成一级子任务的prompt模板, variables -> current_time: 当前时间；file_dir: 用户上传的文件路径；sop: 用户SOP；query: 用户问题
