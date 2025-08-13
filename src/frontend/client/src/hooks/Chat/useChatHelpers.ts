@@ -224,7 +224,8 @@ const useLinsighFiles = (index) => {
         const res = await checkFileParseStatus(filesToCheck);
         const statusMap = new Map(res.data.map(item => [item.file_id, item.parsing_status]));
 
-        setLinsightFiles(updatedFiles => {
+        setLinsightFiles(_updatedFiles => {
+          const updatedFiles = new Map(_updatedFiles);
           // 遍历 updatedFiles，找到匹配 fileId 的文件
           updatedFiles.forEach((file, key) => {
             const fileId = file.file_id; // 假设 file 对象中有 file_id 字段
