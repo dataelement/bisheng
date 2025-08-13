@@ -121,6 +121,7 @@ export const normalizeLayout = (layout: number[]) => {
 export const playDing = () => {
   // 1. 创建音频元素
   const audio = new Audio(__APP_ENV__.BASE_URL + '/assets/ding.wav');
+  audio.volume = 0.5; // 50%音量
 
   // 2. 播放音频
   audio.play().catch(error => {

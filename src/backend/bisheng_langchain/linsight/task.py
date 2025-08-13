@@ -38,6 +38,7 @@ class BaseTask(BaseModel):
     task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
     user_input: Optional[str] = Field(default=None, description='用户输入的内容')
     exec_config: ExecConfig = Field(default_factory=ExecConfig, description='执行过程中的配置')
+    file_list_str: Optional[str] = Field(default='', description='用户上传的文件列表字符串')
 
     # llm generate task field
     step_id: str = Field(default='', description='Step ID')
@@ -122,7 +123,7 @@ class BaseTask(BaseModel):
                 if i == self.exec_config.retry_num - 1:
                     raise e
                 else:
-                    await asyncio.sleep(self.exec_config.retry_delay)
+                    await asyncio.sleep(self.exec_config.retry_sleep)
                     continue
         raise Exception("Failed to invoke LLM after retries.")
 
@@ -145,7 +146,7 @@ class BaseTask(BaseModel):
                 if i == self.exec_config.retry_num - 1:
                     raise e
                 else:
-                    await asyncio.sleep(self.exec_config.retry_delay)
+                    await asyncio.sleep(self.exec_config.retry_sleep)
                     continue
         raise Exception("Failed to invoke LLM after retries.")
 

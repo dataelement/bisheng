@@ -42,7 +42,7 @@ class TaskManage(BaseModel):
         return self
 
     def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str,
-                      exec_config: ExecConfig) -> None:
+                      exec_config: ExecConfig, file_list_str: str = '') -> None:
         res = []
         child_map = {}  # task_id: [child_task]
         for task in self.tasks:
@@ -55,7 +55,8 @@ class TaskManage(BaseModel):
                                      llm=llm,
                                      file_dir=file_dir,
                                      finally_sop=sop,
-                                     exec_config=exec_config)
+                                     exec_config=exec_config,
+                                     file_list_str=file_list_str)
             else:
                 task_instance = ReactTask(**task,
                                           query=query,
@@ -63,7 +64,8 @@ class TaskManage(BaseModel):
                                           llm=llm,
                                           file_dir=file_dir,
                                           finally_sop=sop,
-                                          exec_config=exec_config)
+                                          exec_config=exec_config,
+                                          file_list_str=file_list_str)
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue

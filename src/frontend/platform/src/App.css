@@ -305,11 +305,11 @@
 	opacity: 0.8;
 }
 .linsight-vditor .vditor-wysiwyg>.vditor-reset>h1:before,
-.vditor-wysiwyg>.vditor-reset>h2:before,
-.vditor-wysiwyg>.vditor-reset>h3:before,
-.vditor-wysiwyg>.vditor-reset>h4:before,
-.vditor-wysiwyg>.vditor-reset>h5:before,
-.vditor-wysiwyg>.vditor-reset>h6:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h2:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h3:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h4:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h5:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h6:before,
 .vditor-wysiwyg div.vditor-wysiwyg__block:before,
 .vditor-wysiwyg div[data-type="link-ref-defs-block"]:before,
 .vditor-wysiwyg div[data-type="footnotes-block"]:before,

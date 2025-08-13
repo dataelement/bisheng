@@ -1,34 +1,32 @@
 // src/features/chat-config/ChatConfig.tsx
-import { Button } from "@/components/bs-ui/button";
-import { Card, CardContent } from "@/components/bs-ui/card";
-import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
-import { AlertTriangle } from "lucide-react";
 import SopFormDrawer from "@/components/LinSight/SopFormDrawer";
 import ImportFromRecordsDialog from "@/components/LinSight/SopFromRecord";
 import SopTable from "@/components/LinSight/SopTable";
 import ToolSelectorContainer from "@/components/LinSight/ToolSelectorContainer";
+import { UploadIcon } from "@/components/bs-icons";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Button } from "@/components/bs-ui/button";
+import { Card, CardContent } from "@/components/bs-ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
 import { getAssistantToolsApi } from "@/controllers/API/assistant";
 import { sopApi } from "@/controllers/API/linsight";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
+import { downloadFile } from "@/util/utils";
 import { cloneDeep } from "lodash-es";
 import { Search } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
-import { useDropzone } from "react-dropzone";
-import { useTranslation } from "react-i18next";
-import { locationContext } from "@/contexts/locationContext";
-import { UploadIcon } from "@/components/bs-icons";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import sampleData from "@/pages/ModelPage/components/sampleData";
-import { downloadJson } from "@/util/utils";
 
 
 export interface FormErrors {
@@ -45,7 +43,6 @@ export interface FormErrors {
 export interface AssistantState {
     task_model: string;
     summary_model: string;
-    // 其他现有字段...
 }
 export interface ChatConfigForm {
     menuShow: boolean;
@@ -712,17 +709,28 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     }, []);
     const { getRootProps: getLocalFileRootProps, getInputProps: getLocalFileInputProps } = useDropzone({
         multiple: false,
-        onDrop: (acceptedFiles) => {
-            if (acceptedFiles.length === 0) return;
+        accept: {
+            // 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.csv'],
+            // 'application/*': ['.xlsx'] // 结合扩展名和 MIME 类型双重验证
+            "": [".xlsx"],
+        },
+        useFsAccessApi: false,
+        onDrop: (acceptedFiles, rejectedFiles) => {
+            // 1. 如果用户上传了不支持的文件（如 .pdf、.docx）
+            if (rejectedFiles.length > 0) {
+                message({ variant: 'warning', description: '请上传 .xlsx 格式的文件！' });
+                return;
+            }
 
+            // 2. 如果用户上传了 .xlsx 文件，但文件名可能被篡改（如 fake.xlsx.pdf）
             const file = acceptedFiles[0];
             const ext = file.name.split('.').pop().toLowerCase();
             if (ext !== 'xlsx') {
-                message({ variant: 'warning', description: '请上传xlsx格式的文件' });
+                message({ variant: 'warning', description: '文件扩展名必须是 .xlsx！' });
                 return;
             }
             setImportFiles(acceptedFiles);
-        }
+        },
     });
     const handleLocalFileImport = async () => {
         setIsImporting(true);
@@ -739,28 +747,32 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     status_message: res.status_message
                 });
             }
-            if (res.status_code === 200) {
-                const formData = new FormData();
-                importFilesData.forEach(file => {
-                    formData.append('file', file);
-                });
-                formData.append('ignore_error', 'false');
-                formData.append('override', 'false');
-                formData.append('save_new', 'false');
-                const res = await sopApi.UploadSopRecord(formData);
+            if (res.status_code !== 11010) {
+
+
                 if (res?.repeat_name) {
+                    console.log(1111);
+                    const formData = new FormData();
+
+                    formData.append('file', importFiles[0]);
+
+                    formData.append('ignore_error', 'false');
+                    formData.append('override', 'false');
+                    formData.append('save_new', 'false');
+                    const res = await sopApi.UploadSopRecord(formData);
+
+                    console.log(res, res?.repeat_name);
                     setImportDialogOpen(true)
-                    setDuplicateNames(res.repeat_name);
+                    setDuplicateNames(res?.repeat_name);
                     setDuplicateDialogOpen(true);
                     setImportFormData(formData);
                 } else {
-                    sopApi.getSopList({
-                        page_size: pageSize,
-                        page: 1,
-                        keywords: keywords,
-                    })
                     toast({ variant: 'success', description: '提交成功' });
-
+                    fetchData({
+                        page: page,
+                        pageSize: pageSize,
+                        keyword: keywords
+                    });
                 }
             }
 
@@ -790,11 +802,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             setImportFormData(formData);
             return
         } else {
-            sopApi.getSopList({
-                page_size: pageSize,
-                page: 1,
-                keywords: keywords,
-            })
+            fetchData({
+                page: page,
+                pageSize: pageSize,
+                keyword: keywords
+            });
             toast({ variant: 'success', description: '提交成功' });
         }
     };
@@ -811,7 +823,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                         <FormInput
                             label="输入框提示语"
                             value={formData.linsightConfig?.input_placeholder}
-                            placeholder="请输入你的任务目标，然后交给 BISHENG 灵思"
+                            placeholder="灵思是一位擅长完成复杂任务的Agent助理，除了描述任务目标外，您还可以用通俗的语言描述希望如何实现，这将有助于得到符合您预期的结果~"
                             maxLength={100}
                             onChange={(v) => {
                                 setFormData(prev => ({
@@ -996,15 +1008,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     </DialogHeader>
 
                     <div className="grid gap-4 py-4">
-                        <div className="flex items-center gap-2">
-                            <span className="text-red-500">*</span>
-                            <span>请上传文件</span>
+                        <div className="flex justify-between items-center w-full">
+                            <div className="flex items-center gap-2">
+                                <span className="text-red-500">*</span>
+                                <span>请上传文件</span>
+                            </div>
                             <button
-                                className="text-blue-600 hover:underline ml-auto"
-                                onClick={() => downloadJson(sampleData)}
+                                className="flex items-center gap-1"
+                                onClick={() => downloadFile(__APP_ENV__.BASE_URL + "/sopexample.xlsx", '用户指导手册格式示例.xlsx')}
                             >
                                 <span className="text-black">示例文件：</span>
-                                用户指导手册格式示例.xlsx
+                                <span className="text-blue-600 hover:underline">用户指导手册格式示例.xlsx</span>
                             </button>
                         </div>
 
@@ -1012,7 +1026,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             {...getLocalFileRootProps()}
                             className="group h-40 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
                         >
-                            <input {...getLocalFileInputProps()} />
+                            <input {...getLocalFileInputProps()}/>
                             <UploadIcon className="group-hover:text-primary size-5" />
                             <p className="text-sm">{t('code.clickOrDragHere')}</p>
 
@@ -1103,7 +1117,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             {validationDialog.status_message && (
                                 <div className="space-y-2">
                                     <p className="font-medium">
-                                        {validationDialog.status_message.split("：")[0]}
+                                        {validationDialog.status_message.split("：")[0]}：
                                     </p>
                                     {validationDialog.status_message.includes("：") && (
                                         <div className="text-sm text-gray-600">

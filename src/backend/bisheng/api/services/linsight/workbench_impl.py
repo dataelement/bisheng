@@ -17,7 +17,8 @@ from bisheng.api.services.llm import LLMService
 from bisheng.api.services.tool import ToolServices
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema
+from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, BatchDownloadFilesSchema, \
+    SubmitFileSchema
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
@@ -144,7 +145,7 @@ class LinsightWorkbenchImpl:
             raise cls.LinsightError(f"提交用户问题失败: {str(e)}")
 
     @classmethod
-    async def _process_submitted_files(cls, files: Optional[List], chat_id: str) -> Optional[List]:
+    async def _process_submitted_files(cls, files: Optional[List[SubmitFileSchema]], chat_id: str) -> Optional[List]:
         """
         处理提交的文件
 
@@ -158,7 +159,13 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
-        file_ids = [file.file_id for file in files]
+        file_ids = []
+
+        for file in files:
+            if file.parsing_status != "completed":
+                raise cls.LinsightError(f"文件 {file.file_name} 解析状态不正确: {file.parsing_status}")
+            file_ids.append(file.file_id)
+
         redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
 
         processed_files = await redis_client.amget(redis_keys)
@@ -417,7 +424,7 @@ class LinsightWorkbenchImpl:
             raise cls.ToolsInitializationError(f"初始化灵思工作台工具失败: {str(e)}")
 
     @classmethod
-    async def _prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
+    async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
         """准备文件列表"""
         file_list = []
         template_str = """@{filename}的文件储存信息:{{'文件储存在语义检索库中的id':'{file_id}','文件储存地址':'{markdown}'}}@"""
@@ -430,7 +437,7 @@ class LinsightWorkbenchImpl:
         return file_list
 
     @classmethod
-    async def _prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> List[str]:
+    async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> List[str]:
         res = []
         if not knowledge_list:
             return res
@@ -488,8 +495,8 @@ class LinsightWorkbenchImpl:
                                     history_summary: List[str],
                                     knowledge_list: List[KnowledgeRead] = None) -> AsyncGenerator:
         """生成SOP内容"""
-        file_list = await cls._prepare_file_list(session_version)
-        knowledge_list = await cls._prepare_knowledge_list(knowledge_list)
+        file_list = await cls.prepare_file_list(session_version)
+        knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
 
         if feedback_content is None:
             # 检索SOP模板
@@ -511,8 +518,6 @@ class LinsightWorkbenchImpl:
         else:
 
             sop_template = session_version.sop if session_version.sop else ""
-            if sop_template:
-                sop_template = f"例子:\n\n{sop_template}"
 
             async for res in agent.feedback_sop(
                     sop=sop_template,
@@ -856,7 +861,7 @@ class LinsightWorkbenchImpl:
             feedback: 反馈内容
         """
         try:
-            file_list = await cls._prepare_file_list(session_version_model)
+            file_list = await cls.prepare_file_list(session_version_model)
 
             # 创建LLM和工具
             llm, workbench_conf = await cls._get_llm()
@@ -869,7 +874,7 @@ class LinsightWorkbenchImpl:
             agent = await cls._create_linsight_agent(session_version_model, llm, tools, workbench_conf)
 
             sop_content = ""
-            sop_template = f"例子:\n\n{session_version_model.sop or ''}"
+            sop_template = session_version_model.sop or ''
 
             async for res in agent.feedback_sop(
                     sop=sop_template,
@@ -921,6 +926,7 @@ class LinsightWorkbenchImpl:
         async def download_file(file_info: BatchDownloadFilesSchema) -> Tuple[str, bytes]:
             """下载单个文件"""
             object_name = file_info.file_url
+            object_name = object_name.replace(f"/{minio_client.bucket}/", "")
             try:
 
                 bytes_io = BytesIO()

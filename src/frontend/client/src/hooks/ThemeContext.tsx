@@ -32,7 +32,7 @@ export const ThemeProvider = ({ initialTheme, children }) => {
 
   const rawSetTheme = (rawTheme: string) => {
     const root = window.document.documentElement;
-    const darkMode = isDark(rawTheme);
+    const darkMode = false // isDark(rawTheme);
 
     root.classList.remove(darkMode ? 'light' : 'dark');
     root.classList.add(darkMode ? 'dark' : 'light');

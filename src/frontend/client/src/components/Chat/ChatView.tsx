@@ -86,7 +86,7 @@ function ChatView({ index = 0 }: { index?: number }) {
     window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
   }
 
-  const selfHost = location.host.indexOf('bisheng') !== -1;
+  const selfHost = false; // location.host.indexOf('bisheng') !== -1;
 
   return (
     <ChatFormProvider {...methods}>

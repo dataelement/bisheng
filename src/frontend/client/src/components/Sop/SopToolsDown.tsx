@@ -208,7 +208,7 @@ export default function SopToolsDown({
                                                 <div className="truncate">{child.label}</div>
                                             </TooltipTrigger>
                                             <TooltipContent>
-                                                <p>{child.desc}</p>
+                                                <p className="break-all max-w-96">{child.desc}</p>
                                             </TooltipContent>
                                         </Tooltip>
                                     ) : (

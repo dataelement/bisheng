@@ -354,7 +354,7 @@ export const TaskFlowContent = ({ linsight, sendInput }) => {
             </p>}
             {/* {!tasks?.length && <PlaySop content={sop} />} */}
             {/* 任务 */}
-            {!!tasks?.length && status === SopStatus.Running && <div className='pl-6'>
+            {!!tasks?.length && <div className='pl-6'>
                 <p className='text-sm text-gray-400 mt-6 mb-4'>规划任务执行路径：</p>
                 {tasks.map((task, i) => (
                     <p key={task.id} className='leading-7'>{i + 1}. {task.name}</p>

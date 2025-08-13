@@ -173,7 +173,7 @@ class SOPManageService:
                     override_name_dict[one.name] = True
             # 再新增剩下的sop记录
             for one in records_name_dict.values():
-                if one.name not in override_name_dict:
+                if one.name in override_name_dict:
                     continue
                 await SOPManageService.add_sop(SOPManagementSchema(
                     name=one.name,
@@ -269,12 +269,12 @@ class SOPManageService:
         :return: 上传结果
         """
         success_rows, error_rows = await cls.parse_sop_file(file)
-        if error_rows and not ignore_error:
-            error_msg = "\n".join(error_rows)
+        error_msg = "\n".join(error_rows)
+        if (error_rows or len(success_rows) == 0) and not ignore_error:
             raise SopFileError.http_exception(
                 msg=f"共计划导入{len(success_rows) + len(error_rows)}条指导手册，格式正确{len(success_rows)}条，错误{len(error_rows)}条：\n {error_msg}")
         if not success_rows:
-            raise NotFoundError.http_exception(msg="未找到格式正确的指导手册数据")
+            return None
         records = [LinsightSOPRecord(**one, user_id=login_user.user_id) for one in success_rows]
         return await cls._sync_sop_record(records, override=override, save_new=save_new)
 

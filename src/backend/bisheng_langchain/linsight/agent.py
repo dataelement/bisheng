@@ -37,7 +37,7 @@ class LinsightAgent(BaseModel):
         if file_list:
             file_list_str = "\n".join(file_list[:self.exec_config.max_file_num])
             if len(file_list) > self.exec_config.max_file_num:
-                file_list_str += f"用户上传了{len(file_list)}份文件，此处只展示{self.exec_config.max_file_num}份。都储存在./目录下。"
+                file_list_str += f"\n用户上传了{len(file_list)}份文件，此处只展示{self.exec_config.max_file_num}份。都储存在./目录下。"
             file_list_str = f"<用户上传文件列表>\n{file_list_str}\n</用户上传文件列表>"
         return file_list_str
 
@@ -116,8 +116,6 @@ class LinsightAgent(BaseModel):
         else:
             history_summary = ""
         tools_str = json.dumps([convert_to_openai_tool(one) for one in self.tools], ensure_ascii=False, indent=2)
-        if sop:
-            sop = f"已有SOP：{sop}"
 
         file_list_str = await self.parse_file_list_str(file_list)
         knowledge_list_str = await self.parse_knowledge_list_str(knowledge_list)
@@ -146,17 +144,19 @@ class LinsightAgent(BaseModel):
 
         return TaskManage.completion_task_tree_info(tasks)
 
-    async def ainvoke(self, tasks: list[dict], sop: str) -> AsyncIterator[BaseEvent]:
+    async def ainvoke(self, tasks: list[dict], sop: str, file_list: list[str] = None) -> AsyncIterator[BaseEvent]:
         """
         Run the agent's main functionality.
         :param tasks: List of tasks to be processed by the agent.
         :param sop: Final SOP to be used in the agent's processing.
+        :param file_list: Optional list of files uploaded by the user.
         """
+        file_list_str = await self.parse_file_list_str(file_list)
         # Add main functionality logic here
         if not self.task_manager:
             self.task_manager = TaskManage(tasks=tasks, tools=self.tools, task_mode=self.task_mode)
             self.task_manager.rebuild_tasks(query=self.query, llm=self.llm, file_dir=self.file_dir, sop=sop,
-                                            exec_config=self.exec_config)
+                                            exec_config=self.exec_config, file_list_str=file_list_str)
 
         async for one in self.task_manager.ainvoke_task():
             yield one

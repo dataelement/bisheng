@@ -64,7 +64,8 @@ class ReactTask(BaseTask):
                                                  single_sop=self.sop,
                                                  step_id=self.step_id,
                                                  target=self.target,
-                                                 history=history_str)
+                                                 history=history_str,
+                                                 file_list_str=self.file_list_str)
         else:
             prompt = ReactSingleAgentPrompt.format(profile=self.profile,
                                                    current_time=current_time,
@@ -78,7 +79,8 @@ class ReactTask(BaseTask):
                                                    step_id=self.step_id,
                                                    target=self.target,
                                                    single_sop=self.sop,
-                                                   history=history_str)
+                                                   history=history_str,
+                                                   file_list_str=self.file_list_str)
         return [HumanMessage(content=prompt)]
 
     async def parse_react_result(self, content: str) -> (BaseMessage, bool):

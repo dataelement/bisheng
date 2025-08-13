@@ -303,7 +303,8 @@ class LinsightWorkflowTask:
 
         async def agent_execution():
             """智能体执行任务"""
-            async for event in agent.ainvoke(task_info, session_model.sop):
+            file_list = await LinsightWorkbenchImpl.prepare_file_list(session_model)
+            async for event in agent.ainvoke(task_info, session_model.sop, file_list=file_list):
                 await self._handle_event(agent, event, session_model)
             return True
 
@@ -315,6 +316,7 @@ class LinsightWorkflowTask:
 
         try:
             # 创建两个并发任务
+            # 准备用户上传的文件
             agent_task = asyncio.create_task(agent_execution())
             monitor_task = asyncio.create_task(termination_monitor())
 

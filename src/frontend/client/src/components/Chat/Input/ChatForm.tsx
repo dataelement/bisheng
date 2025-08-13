@@ -339,7 +339,7 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
             isLingsi ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
           )}>
             <span className="font-semibold text-[#4A5AA1] mr-2"><Spline size={14} /></span>
-            大模型结合业务 SOP 自主规划并完成复杂任务
+            大模型结合业务指导手册自主规划并完成复杂任务
           </p>
           {bsConfig?.linsight_invitation_code &&
             <div className='flex gap-4 items-center pr-6'>
