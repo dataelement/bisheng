@@ -84,6 +84,8 @@ class BaseTask(BaseModel):
             values["description"] = str(values["description"])
         if values.get("profile"):
             values["profile"] = str(values["profile"])
+        if values.get("workflow"):
+            values["workflow"] = str(values["workflow"])
         return values
 
     def get_task_info(self) -> dict:
