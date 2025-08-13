@@ -81,12 +81,7 @@ function ChatView({ index = 0 }: { index?: number }) {
     content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
   }
 
-
-  const handleCardClick = (caseId: string) => {
-    window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
-  }
-
-  const selfHost = location.host.indexOf('bisheng') !== -1;
+  const selfHost = true //location.host.indexOf('bisheng') !== -1;
 
   return (
     <ChatFormProvider {...methods}>
@@ -123,41 +118,11 @@ function ChatView({ index = 0 }: { index?: number }) {
                 <div className="w-full border-t-0 pl-0 pt-2 dark:border-white/20 md:w-[calc(100%-.5rem)] md:border-t-0 md:border-transparent md:pl-0 md:pt-0 md:dark:border-transparent">
                   {/* input */}
                   <ChatForm isLingsi={isLingsi} setShowCode={setShowCode} index={index} />
-                  {/* <Footer /> */}
-                  {isLingsi && selfHost && <div className='relative mt-20'>
-                    <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
-                    <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-2'>
-                      <div className='w-72 relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case1')}>
-                        <Button className='absolute bottom-4 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
-                        <p className='font-bold pb-2'>超详细日本7日旅游攻略</p>
-                      </div>
-                      <div className='w-72 relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case2')}>
-                        <Button className='absolute bottom-4 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
-                        <p className='font-bold pb-2'>招股书说明书和君七步法阅读报告</p>
-                      </div>
-                      <div className='w-72 relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case3')}>
-                        <Button className='absolute bottom-4 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
-                        <p className='font-bold pb-2'>招标需求响应</p>
-                      </div>
-                    </div>
-                    <div className='flex pt-4 justify-center md:max-w-2xl xl:max-w-3xl mx-auto gap-2'>
-                      <div className='w-72 relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case4')}>
-                        <Button className='absolute bottom-4 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
-                        <p className='font-bold pb-2'>近6个月AI新产品盘点（广度搜索）</p>
-                      </div>
-                      <div className='w-72 relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case5')}>
-                        <Button className='absolute bottom-4 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
-                        <p className='font-bold pb-2'>制作一个航空航天科普网站</p>
-                      </div>
-                      <div className='w-72 relative border rounded-xl py-8 p-5 text-sm hover:shadow-xl cursor-pointer' onClick={() => handleCardClick('case6')}>
-                        <Button className='absolute bottom-4 right-3 p-0 h-8 w-8 shadow-md border-none' variant="outline" size="icon"><ArrowRight /></Button>
-                        <p className='font-bold pb-2'>魔塔网页小游戏</p>
-                      </div>
-                    </div>
-                  </div>}
                   <div className="h-[2vh]"></div>
                 </div>
               </div>
+              {/* <Footer /> */}
+              {isLingsi && selfHost && <Cases />}
               {/*   邀请码 */}
               <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
             </div>
@@ -169,3 +134,44 @@ function ChatView({ index = 0 }: { index?: number }) {
 }
 
 export default memo(ChatView);
+
+
+const Cases = () => {
+
+  const casesData = [
+    { id: 'case1', title: '超详细日本7日旅游攻略' },
+    { id: 'case2', title: '招股书说明书和君七步法阅读报告' },
+    { id: 'case3', title: '招标需求响应' },
+    { id: 'case4', title: '近6个月AI新产品盘点（广度搜索）' },
+    { id: 'case5', title: '制作一个航空航天科普网站' },
+    { id: 'case6', title: '魔塔网页小游戏' }
+  ];
+
+  const handleCardClick = (caseId: string) => {
+    window.open(`${__APP_ENV__.BASE_URL}/linsight/${caseId}`)
+  }
+
+  return (
+    <div className='absolute bottom-8 w-full mt-20'>
+      <p className='text-sm text-center text-gray-400'>灵思精选案例</p>
+      <div className='flex pt-4 justify-center mx-auto gap-2 px-12'>
+        {casesData.map((caseItem) => (
+          <div
+            key={caseItem.id}
+            className='w-72 relative border border-gray-100 rounded-xl py-4 p-5 text-sm hover:shadow-xl cursor-pointer bg-white/40'
+            onClick={() => handleCardClick(caseItem.id)}
+          >
+            <Button
+              className='absolute bottom-3 right-3 p-0 h-6 w-6 shadow-md border-none'
+              variant="outline"
+              size="icon"
+            >
+              <ArrowRight size="14" />
+            </Button>
+            <p>{caseItem.title}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
