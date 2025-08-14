@@ -149,7 +149,7 @@ class BishengEmbedding(BaseModel, Embeddings):
             LLMServerType.VLLM.value
         ]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
-            params['batch_size'] = params.pop('batch_size', 1)
+            params['chunk_size'] = params.pop('chunk_size', 1)
         return params
 
     @wrapper_bisheng_model_limit_check
