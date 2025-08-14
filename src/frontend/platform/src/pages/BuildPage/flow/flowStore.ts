@@ -1,6 +1,6 @@
 import { copyReportTemplate } from '@/controllers/API/workflow';
 import { WorkFlow } from '@/types/flow';
-import create from 'zustand';
+import {create} from 'zustand';
 
 type State = {
     flow: WorkFlow

@@ -26,7 +26,7 @@ export const getAssistantsApi = async (page, limit, name, tag_id): Promise<Assis
 export const createAssistantsApi = async (name, prompt, url) => {
     if (url) {
         // logo保存相对路径
-        url = url.match(/(icon.*)\?/)?.[1]
+        url = url.replace('/bisheng', '')
     }
     return await axios.post(`/api/v1/assistant`, { name, prompt, logo: url })
 };
@@ -52,7 +52,7 @@ export const saveAssistanttApi = async (
 ): Promise<any> => {
     if (data.logo) {
         // logo保存相对路径
-        data.logo = data.logo.match(/(icon.*)\?/)?.[1]
+        data.logo = data.logo.replace('/bisheng', '')
     }
     return await axios.put(`/api/v1/assistant`, data)
 };

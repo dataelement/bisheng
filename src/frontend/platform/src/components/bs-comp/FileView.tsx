@@ -294,7 +294,7 @@ export default function FileView({
     }, [fileUrl])
 
     const scrollToFunc = (() => {
-        const pageY = (scrollTo[0] - 1) * (boxSize.width / pageScale)
+        const pageY = (scrollTo[0] - startIndex) * (boxSize.width / pageScale)
         const offsetY = scrollTo[1] * (boxSize.width / fileWidthRef.current) - 100
         listRef.current.scrollTo(pageY + offsetY);
     })

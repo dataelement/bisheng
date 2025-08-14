@@ -1,8 +1,8 @@
 import re
 from typing import List, Optional, Dict
 
-from pydantic import ConfigDict, BaseModel, Field
 from loguru import logger
+from pydantic import ConfigDict, BaseModel, Field
 
 from bisheng.workflow.nodes.base import BaseNode
 
@@ -37,9 +37,9 @@ class ConditionOne(BaseModel):
         elif self.comparison_operation == 'not_contains':
             return left_value.find(right_value) == -1
         elif self.comparison_operation == 'is_empty':
-            return left_value == ''
+            return left_value == '' or left_value is None
         elif self.comparison_operation == 'is_not_empty':
-            return left_value != ''
+            return left_value != '' and left_value is not None
         elif self.comparison_operation == 'starts_with':
             return left_value.startswith(right_value)
         elif self.comparison_operation == 'ends_with':

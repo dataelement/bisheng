@@ -1,13 +1,14 @@
 from typing import List, Optional, Dict
 
 import numpy as np
+from langchain.embeddings.base import Embeddings
+from loguru import logger
+from pydantic import ConfigDict, Field, BaseModel
+
 from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, LLMServer,
                                                 LLMServerType)
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
-from langchain.embeddings.base import Embeddings
-from loguru import logger
-from pydantic import ConfigDict, Field, BaseModel
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -144,10 +145,11 @@ class BishengEmbedding(BaseModel, Embeddings):
                 'model': params.get('model'),
             }
         elif server_info.type in [
-                LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
-                LLMServerType.VLLM.value
+            LLMServerType.XINFERENCE.value, LLMServerType.LLAMACPP.value,
+            LLMServerType.VLLM.value
         ]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
+            params['batch_size'] = params.pop('batch_size', 1)
         return params
 
     @wrapper_bisheng_model_limit_check
@@ -187,7 +189,7 @@ class BishengEmbedding(BaseModel, Embeddings):
         """更新模型状态"""
         # todo 接入到异步任务模块 累计5分钟更新一次
         if self.model_info.status != status:
-            self.model_info.status =  status
+            self.model_info.status = status
             LLMDao.update_model_status(self.model_id, status, remark)
 
 

@@ -197,6 +197,7 @@ export const resendVerificationEmail = (
 };
 
 export const getAvailablePlugins = (): Promise<s.TPlugin[]> => {
+  return Promise.resolve([])
   return request.get(endpoints.plugins());
 };
 
@@ -465,14 +466,24 @@ export const uploadImage = (
 ): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
   return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
-    // res.data.temp_file_id = data.get('file_id')
+    if (!res.data.temp_file_id) {
+      res.data.temp_file_id = data.get('file_id')
+      res.data.type = res.data.type || "image"
+      res.data.filename = decodeURIComponent(res.data.file_name)
+    }
     return res.data
   });
 };
 
 export const uploadFile = (data: FormData, signal?: AbortSignal | null): Promise<f.TFileUpload> => {
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => res.data);
+  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
+    if (!res.data.temp_file_id) {
+      res.data.temp_file_id = data.get('file_id')
+      res.data.filename = decodeURIComponent(res.data.file_name)
+    }
+    return res.data
+  });
 };
 
 /* actions */
@@ -658,10 +669,15 @@ export const deleteFiles = async (payload: {
   agent_id?: string;
   assistant_id?: string;
   tool_resource?: a.EToolResources;
-}): Promise<f.DeleteFilesResponse> =>
-  request.deleteWithOptions(endpoints.files(), {
-    data: payload,
-  });
+}): Promise<f.DeleteFilesResponse> => new Promise((resolve, reject) => {
+  resolve({
+    message: '',
+    result: {}
+  })
+})
+// request.deleteWithOptions(endpoints.files(), {
+//   data: payload,
+// });
 
 /* Speech */
 
@@ -729,6 +745,7 @@ export const listConversations = (
         "user": conv.user_id,
         "__v": 0,
         "_id": conv.chat_id,
+        "flowType": conv.flow_type
       })),
       pageNumber: pageNumber,
       pageSize: 40,
@@ -770,6 +787,7 @@ export function updateConversation(
 ): Promise<t.TUpdateConversationResponse> {
   return request.post(endpoints.updateConversation(), {
     conversationId: payload.conversationId,
+    flow_type: payload.flowType,
     name: payload.title
   });
 }

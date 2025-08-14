@@ -1,17 +1,15 @@
-import { useRecoilState } from 'recoil';
 import * as Select from '@ariakit/react/select';
-import { Fragment, useState, memo } from 'react';
-import { FileText, LogOut } from 'lucide-react';
-import { LinkIcon, GearIcon, DropdownMenuSeparator } from '~/components';
-import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
-import FilesView from '~/components/Chat/Input/Files/FilesView';
+import { FileText, GanttChartIcon, LogOut } from 'lucide-react';
+import { memo, useState } from 'react';
+import { useRecoilState } from 'recoil';
 import MyKnowledgeView from '~/components/Chat/Input/Files/MyKnowledgeView';
+import { UserIcon } from '~/components/svg';
+import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
+import { useLocalize } from '~/hooks';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useAvatar from '~/hooks/Messages/useAvatar';
-import { UserIcon } from '~/components/svg';
-import { useLocalize } from '~/hooks';
-import Settings from './Settings';
 import store from '~/store';
+import Settings from './Settings';
 
 function AccountSettings() {
   const localize = useLocalize();
@@ -35,17 +33,19 @@ function AccountSettings() {
       >
         <div>12</div>
       </Select.Select> */}
+      <div className='h-4'></div>
       <div
-        className="border flex gap-2 text-sm px-3 py-2 mb-2 items-center rounded-xl border-[#4d6bfe] cursor-pointer hover:bg-[#eff6ff] dark:text-gray-50 dark:hover:bg-[#1e293b]"
+        className="flex gap-2 text-sm px-3 py-2 mb-2 items-center rounded-xl cursor-pointer hover:bg-[#EBEFF8]"
         onClick={() => setShowKnowledge(true)}
       >
         <FileText className="icon-md" />
         <div>个人知识库</div>
       </div>
+      <div className='h-[1px] bg-gray-200'></div>
       <Select.Select
         aria-label={localize('com_nav_account_settings')}
         data-testid="nav-user"
-        className="mt-text-sm flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-accent"
+        className="mt-text-sm mt-2 flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-[#EBEFF8]"
       >
         <div className="-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0">
           <div className="relative flex">
@@ -127,6 +127,15 @@ function AccountSettings() {
           {localize('com_nav_settings')}
         </Select.SelectItem> */}
         {/* <DropdownMenuSeparator /> */}
+        <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
+          <Select.SelectItem
+            aria-selected={true}
+            className="select-item text-sm"
+          >
+            <GanttChartIcon className="icon-md" />
+            管理后台
+          </Select.SelectItem>
+        </a>
         <Select.SelectItem
           aria-selected={true}
           onClick={() => logout()}

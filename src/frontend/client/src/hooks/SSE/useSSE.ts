@@ -81,7 +81,7 @@ export default function useSSE(
 
   useEffect(() => {
     if (submission == null || Object.keys(submission).length === 0) {
-      return;
+      return setIsSubmitting(false);
     }
 
     let { userMessage } = submission;

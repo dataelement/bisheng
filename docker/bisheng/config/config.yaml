@@ -23,9 +23,7 @@ redis_url: "redis://redis:6379/1"
 # celery的broken地址
 celery_redis_url: "redis://redis:6379/2"
 celery_task:
-  # 文件解析处理的速率 每秒允许多少的文件在处理中。不能高于celery的worker并发数
-  knowledge_file_time_limit: null  # 每秒处理多少个文件  null: 表示无限制
-    # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务，注意工作流的执行只能在一个进程内
+  # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行只能在一个进程内！！！
   task_routers:
     bisheng.worker.knowledge.*: # 知识库文件处理相关任务
       queue: knowledge_celery
@@ -50,7 +48,7 @@ object_storage:
     schema: !env ${BS_MINIO_SCHEMA}
     cert_check: !env ${BS_MINIO_CERT_CHECK}
     endpoint: !env ${BS_MINIO_ENDPOINT}
-    sharepoint: !env ${BS_MINIO_SHAREPOIN}
+    sharepoint: !env ${BS_MINIO_SHAREPOINT}
     access_key: !env ${BS_MINIO_ACCESS_KEY}
     secret_key: !env ${BS_MINIO_SECRET_KEY}
     public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问

@@ -46,10 +46,10 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.post('/preview')
-async def preview_file_chunk(*,
-                             request: Request,
-                             login_user: UserPayload = Depends(get_login_user),
-                             req_data: KnowledgeFileProcess):
+def preview_file_chunk(*,
+                       request: Request,
+                       login_user: UserPayload = Depends(get_login_user),
+                       req_data: KnowledgeFileProcess):
     """ 获取某个文件的分块预览内容 """
     try:
         parse_type, file_share_url, res, partitions = KnowledgeService.get_preview_file_chunk(
@@ -121,7 +121,7 @@ async def copy_knowledge(*,
     """ 复制知识库. """
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
 
-    if not login_user.is_admin and knowledge.user_id != login_user.id:
+    if not login_user.is_admin and knowledge.user_id != login_user.user_id:
         return UnAuthorizedError.return_resp()
 
     knowledge_count = KnowledgeFileDao.count_file_by_filters(
@@ -135,18 +135,18 @@ async def copy_knowledge(*,
 
 
 @router.get('', status_code=200)
-def get_knowledge(*,
-                  request: Request,
-                  login_user: UserPayload = Depends(get_login_user),
-                  name: str = None,
-                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
-                                              alias='type'),
-                  page_size: Optional[int] = 10,
-                  page_num: Optional[int] = 1):
+async def get_knowledge(*,
+                        request: Request,
+                        login_user: UserPayload = Depends(get_login_user),
+                        name: str = None,
+                        knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
+                                                    alias='type'),
+                        page_size: Optional[int] = 10,
+                        page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
-                                                page_num, page_size)
+    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
+                                                      page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -178,6 +178,17 @@ def delete_knowledge(*,
 
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
     return resp_200(message='删除成功')
+
+
+# 个人知识库信息获取
+@router.get('/personal_knowledge_info', status_code=200)
+def get_personal_knowledge_info(
+        login_user: UserPayload = Depends(get_login_user)):
+    """ 获取个人知识库信息. """
+    knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
+                                                KnowledgeTypeEnum.PRIVATE)
+
+    return resp_200(data=knowledge)
 
 
 @router.get('/file_list/{knowledge_id}', status_code=200)

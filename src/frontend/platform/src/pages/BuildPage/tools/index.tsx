@@ -1,4 +1,5 @@
 import { LoadIcon } from "@/components/bs-icons";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -18,7 +19,7 @@ import ToolSet from "./ToolSet";
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
-    '发送邮件', '飞书消息'
+    '发送邮件', '飞书消息', '联网搜索'
 ];
 
 interface TabToolsProps {
@@ -38,22 +39,29 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const mcpDialogRef = useRef(null);
 
     useToolType(setType)
+    const [loading, setLoading] = useState(false)
 
-    const loadData = (_type = "custom") => {
-        getAssistantToolsApi(_type).then((res) => {
+    const loadData = async (_type = "custom") => {
+        await getAssistantToolsApi(_type).then((res) => {
             setAllData(res);
-            setKeyword("");
+            // setKeyword("");
         });
+        setLoading(false)
     };
-    const loadMcpData = () => {
-        getAssistantMcpApi().then((res) => {
+    const loadMcpData = async () => {
+        await getAssistantMcpApi().then((res) => {
             setAllData(res);
-            setKeyword("");
+            // setKeyword("");
         });
+        setLoading(false)
     }
     useEffect(() => {
-        if (type === 'mcp') return loadMcpData()
-        loadData(type === "" ? "default" : "custom");
+        setLoading(true)
+        if (type === 'mcp') {
+            loadMcpData()
+        } else {
+            loadData(type === "" ? "default" : "custom");
+        }
     }, [type]);
 
     const options = useMemo(() => {
@@ -74,7 +82,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     }
 
     const toolsetRef = useRef(null)
-    const { loading, refresh } = useMcpRefrensh()
+    const { loading: btnLoading, refresh } = useMcpRefrensh()
 
     return (
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
@@ -119,6 +127,11 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                     </div>
                 </div>
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
+                    {
+                        loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
+                            <LoadingIcon className="size-24" />
+                        </div>
+                    }
                     <div className="mb-4">
                         {type === 'edit' && <Button
                             id="create-apitool"
@@ -136,14 +149,14 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         </Button>}
                         {type === 'mcp' && <Button
                             variant="outline"
-                            disabled={loading}
+                            disabled={btnLoading}
                             className="mt-4 ml-4"
                             onClick={async () => {
                                 await refresh()
                                 loadMcpData()
                             }}
                         >
-                            {loading && <LoadIcon className="text-gray-800" />}
+                            {btnLoading && <LoadIcon className="text-gray-800" />}
                             刷新
                         </Button>}
                     </div>
@@ -205,13 +218,11 @@ export const useMcpRefrensh = () => {
             setLoading(true);
             // api
             const res = await captureAndAlertRequestErrorHoc(refreshAssistantMcpApi())
-            // console.log('刷新 :>> ', res);
-            if (res) {
-                message({
-                    variant: "success",
-                    description: "刷新成功"
-                })
-            }
+            console.log('刷新 :>> ', res);
+            message({
+                variant: "success",
+                description: "刷新成功"
+            })
             setLoading(false);
         }
     }

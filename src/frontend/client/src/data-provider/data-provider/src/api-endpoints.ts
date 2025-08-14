@@ -43,7 +43,7 @@ export const abortRequest = (endpoint: string) => `/api/ask/${endpoint}/abort`;
 export const conversationsRoot = '/api/convos';
 
 export const conversations = (pageNumber: string, isArchived?: boolean, tags?: string[]) =>
-  `/api/v1/chat/list?flow_type=15&page=${pageNumber}&limit=40${tags?.map((tag) => `&tags=${tag}`).join('')}`;
+  `/api/v1/chat/list?flow_type=15&flow_type=20&page=${pageNumber}&limit=40${tags?.map((tag) => `&tags=${tag}`).join('')}`;
 
 export const conversationById = (id: string) => `${conversationsRoot}/${id}`;
 
@@ -155,7 +155,7 @@ export const agents = ({ path = '', options }: { path?: string; options?: object
 
 export const files = () => '/api/files';
 
-export const images = () => `/api/v1/workstation/files`;
+export const images = () => window.isLinsight ? '/api/v1/linsight/workbench/upload-file' : `/api/v1/workstation/files`;
 
 export const avatar = () => `${images()}/avatar`;
 

@@ -3,7 +3,7 @@ import { TipIcon } from "@/components/bs-icons/tip"
 import i18next from "i18next"
 import { X } from "lucide-react"
 import { useRef, useState } from "react"
-import ReactDOM from "react-dom"
+import { createRoot } from "react-dom/client"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
 interface ConfirmParams {
@@ -68,15 +68,21 @@ function ConfirmWrapper() {
     )
 }
 
+let confirmRoot: ReturnType<typeof createRoot> | null = null;
+
 (function () {
     // 挂载组件
-    let el = document.getElementById('#confirm-wrap');
+    let el = document.getElementById('confirm-wrap');
     if (!el) {
-        el = document.createElement('div')
-        el.id = 'confirm-wrap'
-        document.body.append(el)
+        el = document.createElement('div');
+        el.id = 'confirm-wrap';
+        document.body.append(el);
     }
-    ReactDOM.render(<ConfirmWrapper />, el);
+    // 统一使用 createRoot (React 18+)
+    if (!confirmRoot) {
+        confirmRoot = createRoot(el);
+    }
+    confirmRoot.render(<ConfirmWrapper />);
 })();
 
 

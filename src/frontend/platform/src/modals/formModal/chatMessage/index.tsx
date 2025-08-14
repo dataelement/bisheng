@@ -1,10 +1,7 @@
+import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import Convert from "ansi-to-html";
 import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeMathjax from "rehype-mathjax";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 import MaleTechnology from "../../../assets/male-technologist.png";
 import Robot from "../../../assets/robot.png";
 import SanitizedHTMLWrapper from "../../../components/SanitizedHTMLWrapper";
@@ -12,7 +9,6 @@ import { THOUGHTS_ICON } from "../../../constants";
 import { ChatMessageType } from "../../../types/chat";
 import { classNames } from "../../../utils";
 import FileCard from "../fileComponent";
-import { CodeBlock } from "./codeBlock";
 export default function ChatMessage({
   chat,
   lockChat,
@@ -78,55 +74,7 @@ export default function ChatMessage({
                 <div className="w-full">
                   {useMemo(
                     () => (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeMathjax]}
-                        className="markdown prose inline-block break-words text-primary
-                     dark:prose-invert sm:w-[30vw] sm:max-w-[30vw] lg:w-[40vw] lg:max-w-[40vw]"
-                        components={{
-                          code: ({
-                            node,
-                            inline,
-                            className,
-                            children,
-                            ...props
-                          }) => {
-                            if (children.length) {
-                              if (children[0] === "▍") {
-                                return (
-                                  <span className="form-modal-markdown-span">
-                                    ▍
-                                  </span>
-                                );
-                              }
-
-                              children[0] = (children[0] as string).replace(
-                                "`▍`",
-                                "▍"
-                              );
-                            }
-
-                            const match = /language-(\w+)/.exec(
-                              className || ""
-                            );
-
-                            return !inline ? (
-                              <CodeBlock
-                                key={Math.random()}
-                                language={(match && match[1]) || ""}
-                                value={String(children).replace(/\n$/, "")}
-                                {...props}
-                              />
-                            ) : (
-                              <code className={className} {...props}>
-                                {children}
-                              </code>
-                            );
-                          },
-                        }}
-                      >
-                        {chat.message.toString()}
-                      </ReactMarkdown>
+                      <MessageMarkDown message={chat.message.toString()} />
                     ),
                     [chat.message, chat.message.toString()]
                   )}

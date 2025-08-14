@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union, Literal
 
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -14,6 +14,7 @@ from bisheng.database.models.knowledge import KnowledgeRead
 from bisheng.database.models.llm_server import LLMModelBase, LLMServerBase
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
+from bisheng_langchain.linsight.const import TaskMode
 
 
 class CaptchaInput(BaseModel):
@@ -451,6 +452,26 @@ class WSPrompt(BaseModel):
     bingUrl: Optional[str] = None
 
 
+class LinsightConfig(BaseModel):
+    """
+    灵思管理配置
+    """
+    input_placeholder: str = Field(..., description='输入框提示语')
+    tools: Optional[List[Dict]] = Field(None, description='灵思可选工具列表')
+
+
+class WorkbenchModelConfig(BaseModel):
+    """
+    灵思模型配置
+    """
+    # 任务执行模型
+    task_model: Optional[WSModel] = Field(None, description='任务执行模型')
+    # 检索embedding模型
+    embedding_model: Optional[WSModel] = Field(None, description='embedding模型')
+    # 灵思执行模式
+    linsight_executor_mode: Optional[TaskMode] = Field(None, description='灵思执行模式')
+
+
 class WorkstationConfig(BaseModel):
     menuShow: bool = Field(default=True, description='是否显示左侧菜单栏')
     maxTokens: Optional[int] = Field(default=1500, description='最大token数')
@@ -470,6 +491,7 @@ class WorkstationConfig(BaseModel):
                                                          description='应用中心欢迎消息')
     applicationCenterDescription: Optional[str] = Field(default='', max_length=1000, pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                          description='应用中心描述')
+    linsightConfig: Optional[LinsightConfig] = Field(default=None, description='灵思配置')
 
 
 class ExcelRule(BaseModel):

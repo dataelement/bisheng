@@ -6,10 +6,12 @@ import { cn } from '~/utils';
 
 const AttachFile = ({
   isRTL,
+  accept = '',
   disabled,
   handleFileChange,
 }: {
   isRTL: boolean;
+  accept?: string;
   disabled?: boolean | null;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) => {
@@ -18,7 +20,7 @@ const AttachFile = ({
   const isUploadDisabled = disabled ?? false;
 
   return (
-    <FileUpload ref={inputRef} handleFileChange={handleFileChange}>
+    <FileUpload ref={inputRef} accept={accept} handleFileChange={handleFileChange}>
       <TooltipAnchor
         role="button"
         id="attach-file"

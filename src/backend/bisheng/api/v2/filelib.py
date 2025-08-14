@@ -2,26 +2,26 @@ import json
 import os
 from typing import Dict, List, Optional
 
+from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
+                     UploadFile)
+from starlette.responses import FileResponse
+
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
-                                    UnifiedResponseModel, resp_200, resp_500, ExcelRule)
+                                    resp_200, resp_500, ExcelRule)
 from bisheng.api.v2.schema.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.cache.utils import file_download, save_download_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                KnowledgeUpdate)
-from bisheng.database.models.knowledge_file import (KnowledgeFileRead, QAKnoweldgeDao, QAKnowledge,
-                                                    QAKnowledgeUpsert)
+from bisheng.database.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.settings import settings
 from bisheng.utils.logger import logger
-from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
-                     UploadFile)
-from starlette.responses import FileResponse
 
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
@@ -44,18 +44,18 @@ def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
 
 
 @router.get('/', status_code=200)
-def get_knowledge(*,
-                  request: Request,
-                  knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
-                                              alias='type'),
-                  name: str = None,
-                  page_size: Optional[int] = 10,
-                  page_num: Optional[int] = 1):
+async def get_knowledge(*,
+                        request: Request,
+                        knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value,
+                                                    alias='type'),
+                        name: str = None,
+                        page_size: Optional[int] = 10,
+                        page_num: Optional[int] = 1):
     """ 读取所有知识库信息. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     login_user = get_default_operator()
-    res, total = KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
-                                                page_num, page_size)
+    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
+                                                      page_num, page_size)
     return resp_200(data={'data': res, 'total': total})
 
 
@@ -81,12 +81,12 @@ async def upload_file(
         request: Request,
         knowledge_id: int,
         separator: Optional[List[str]] = Form(default=None,
-                                            description='切分文本规则, 不传则为默认'),
+                                              description='切分文本规则, 不传则为默认'),
         separator_rule: Optional[List[str]] = Form(
-          default=None, description='切分规则前还是后进行切分；before/after'),
+            default=None, description='切分规则前还是后进行切分；before/after'),
         chunk_size: Optional[int] = Form(default=None, description='切分文本长度，不传则为默认'),
         chunk_overlap: Optional[int] = Form(default=None,
-                                          description='切分文本重叠长度，不传则为默认'),
+                                            description='切分文本重叠长度，不传则为默认'),
         callback_url: Optional[str] = Form(default=None, description='回调地址'),
         file_url: Optional[str] = Form(default=None, description='文件地址'),
         file: Optional[UploadFile] = File(default=None, description='上传文件'),

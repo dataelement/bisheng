@@ -19,7 +19,6 @@ from bisheng.utils import generate_uuid
 # if TYPE_CHECKING:
 
 
-
 class FlowStatus(Enum):
     OFFLINE = 1
     ONLINE = 2
@@ -30,6 +29,7 @@ class FlowType(Enum):
     ASSISTANT = 5
     WORKFLOW = 10
     WORKSTATION = 15
+    LINSIGHT = 20 # 灵思模式
 
 
 class AppEnum(Enum):

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Dict, Optional
 
@@ -38,6 +39,12 @@ class WorkflowClient(BaseClient):
         if self.workflow:
             if force_stop or not self.chat_id:
                 self.workflow.set_workflow_stop()
+                workflow_over = await self._workflow_run()
+                while not workflow_over:
+                    if self.ws_closed:
+                        break
+                    workflow_over = await self._workflow_run()
+                    await asyncio.sleep(0.5)
         else:
             await self.send_response('processing', 'close', '')
 

@@ -32,7 +32,7 @@ export const ThemeProvider = ({ initialTheme, children }) => {
 
   const rawSetTheme = (rawTheme: string) => {
     const root = window.document.documentElement;
-    const darkMode = isDark(rawTheme);
+    const darkMode = false // isDark(rawTheme);
 
     root.classList.remove(darkMode ? 'light' : 'dark');
     root.classList.add(darkMode ? 'dark' : 'light');
@@ -43,7 +43,8 @@ export const ThemeProvider = ({ initialTheme, children }) => {
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const changeThemeOnSystemChange = () => {
-      rawSetTheme(mediaQuery.matches ? 'dark' : 'light');
+      // rawSetTheme(mediaQuery.matches ? 'dark' : 'light');
+      rawSetTheme('light');
     };
 
     mediaQuery.addEventListener('change', changeThemeOnSystemChange);

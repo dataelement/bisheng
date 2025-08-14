@@ -1,5 +1,0 @@
-gradio
-colorlog
-flask
-pydantic==1.10.13
-bisheng-langchain==0.3.0

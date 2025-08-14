@@ -25,7 +25,8 @@
 
 /* 滚动条滑块 */
 ::-webkit-scrollbar-thumb {
-	background-color: hsl(var(--border));;
+	background-color: hsl(var(--border));
+	;
 	border-radius: 4px;
 }
 
@@ -34,6 +35,7 @@
 	background: hsl(var(--background));
 	border-radius: 8px;
 }
+
 .dark ::-webkit-scrollbar-track {
 	background: #111;
 }
@@ -154,7 +156,8 @@
 .textLayer br::selection {
 	background: transparent;
 }
-.highlightArea{
+
+.highlightArea {
 	position: absolute;
 }
 
@@ -234,31 +237,103 @@
 	background: #111;
 }
 
-.bs-table-td { background-color: #FBFBFB; }
-.dark .bs-table-td { background-color: #171717; }
-.bs-table-row:nth-child(odd) .bs-table-td { background-color: #f4f5f8;}
-.dark .bs-table-row:nth-child(odd) .bs-table-td { background-color: #111;}
-.bs-table-row:hover .bs-table-td { background-color: #ebf0ff;}
-.dark .bs-table-row:hover .bs-table-td { background-color: #2a2b2e;}
+.bs-table-td {
+	background-color: #FBFBFB;
+}
+
+.dark .bs-table-td {
+	background-color: #171717;
+}
+
+.bs-table-row:nth-child(odd) .bs-table-td {
+	background-color: #f4f5f8;
+}
+
+.dark .bs-table-row:nth-child(odd) .bs-table-td {
+	background-color: #111;
+}
+
+.bs-table-row:hover .bs-table-td {
+	background-color: #ebf0ff;
+}
+
+.dark .bs-table-row:hover .bs-table-td {
+	background-color: #2a2b2e;
+}
 
 /* vditor编辑器 */
 .vditor-toolbar.vditor-toolbar--hide {
 	display: none !important;
 }
-.vditor-reset table td, .vditor-reset table th{
+
+.vditor-reset table td,
+.vditor-reset table th {
 	word-wrap: break-word !important;
-    white-space: normal !important;
+	white-space: normal !important;
 	font-size: 12px;
 	padding: 2px 4px !important;
 	word-break: break-all !important;
 }
-.file-vditor .vditor-reset{
+
+.file-vditor .vditor-reset {
 	font-size: 14px;
 	color: #6b7280;
 	padding: 0 !important;
 }
-.file-vditor .vditor-content{
+
+.file-vditor .vditor-content {
 	min-height: 20px;
+}
+
+/* 隐藏公式解析红字 */
+.vditor-reset--error {
+	opacity: 0;
+}
+
+.linsight-vditor .vditor-reset {
+	border-radius: 8px;
+	font-size: 16px;
+	padding: 0 20px 160px 14px !important;
+	scrollbar-color: transparent transparent;
+}
+
+.linsight-vditor .vditor-toolbar {
+	display: none;
+}
+
+.linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
+	opacity: 0.8;
+}
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h1:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h2:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h3:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h4:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h5:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h6:before,
+.vditor-wysiwyg div.vditor-wysiwyg__block:before,
+.vditor-wysiwyg div[data-type="link-ref-defs-block"]:before,
+.vditor-wysiwyg div[data-type="footnotes-block"]:before,
+.vditor-wysiwyg .vditor-toc:before {
+  margin-left: -20px;
+  padding-right: 0;
+  font-size: 12px;
+  position: relative;
+  left: 6px;
+}
+.linsi-span {
+	background: #E9F1FF;
+	color: #2A3F73;
+	font-size: 14px;
+	padding: 1px 8px;
+	border-radius: 4px;
+}
+
+.linsi-error {
+	background: #ffece9;
+	color: #a13434;
+	font-size: 14px;
+	padding: 1px 8px;
+	border-radius: 4px;
 }
 
 /* .react-flow.theme-attribution {
@@ -274,20 +349,22 @@
 	}
   }
  */
-  .react-flow__panel.react-flow__attribution{
+.react-flow__panel.react-flow__attribution {
 	display: none !important;
-  }
-.vditor-content ol>li[data-marker]:before {
-    content: attr(data-marker); 
-    margin-right: 5px;
-    font-weight: bold;
 }
 
-.hover-reveal .hover-reveal-child{
+.vditor-content ol>li[data-marker]:before {
+	content: attr(data-marker);
+	margin-right: 5px;
+	font-weight: bold;
+}
+
+.hover-reveal .hover-reveal-child {
 	opacity: 0;
 	transition: opacity .2s ease-in-out;
 }
-.hover-reveal:hover .hover-reveal-child{
+
+.hover-reveal:hover .hover-reveal-child {
 	opacity: 100;
 }
 
@@ -295,7 +372,8 @@
 .flow-bg-logo {
 	position: relative;
 	width: 100%;
-	height: 100px; /* 根据需要调整高度 */
+	height: 100px;
+	/* 根据需要调整高度 */
 	display: flex;
 	justify-content: center;
 	align-items: center;
@@ -303,12 +381,13 @@
 }
 
 .flow-bg-logo::before {
-	content: "BISHENG"; /* 设置文字内容 */
+	content: "BISHENG";
+	/* 设置文字内容 */
 	font-size: 180px;
 	font-weight: bold;
-	color: rgba(232, 235 ,242,0.7);
+	color: rgba(232, 235, 242, 0.7);
 	/* color: rgba(0,102,204,0.7); */
-		text-shadow:1px 3px 6px #fff,0 0 0 #000,1px 3px 6px #fff;
+	text-shadow: 1px 3px 6px #fff, 0 0 0 #000, 1px 3px 6px #fff;
 	display: block;
 	text-align: center;
 	opacity: 0.2;
@@ -322,7 +401,8 @@
 	width: 100%;
 }
 
-.react-markdown th, .react-markdown td {
+.react-markdown th,
+.react-markdown td {
 	border: 1px solid #dfe2e5;
 	padding: 2px 4px;
 }
@@ -331,9 +411,11 @@
 	background-color: #fafbfc;
 	text-align: left;
 }
+
 .react-markdown tr:nth-child(even) {
 	background-color: #f9f9f9;
 }
+
 .react-markdown tr:hover {
 	background-color: #f1f1f1;
-  }
+}

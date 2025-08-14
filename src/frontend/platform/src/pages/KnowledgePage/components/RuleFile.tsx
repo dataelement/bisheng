@@ -41,19 +41,22 @@ export default function RuleFile({
                             <Label htmlFor="splitLength" className="whitespace-nowrap text-sm min-w-[100px]">
                                 {t('splitLength')}
                             </Label>
-                            <Input
-                                id="splitLength"
-                                type="number"
-                                step="100"
-                                min={0}
-                                value={rules.chunkSize}
-                                onChange={(e) => handleSettingChange('chunkSize', e.target.value)}
-                                placeholder={t('splitSizePlaceholder')}
-                                className="flex-1 min-w-[150px]"
-                                onBlur={(e) => {
-                                    !e.target.value && handleSettingChange('chunkSize', '1000');
-                                }}
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="splitLength"
+                                    type="number"
+                                    step="100"
+                                    min={0}
+                                    value={rules.chunkSize}
+                                    onChange={(e) => handleSettingChange('chunkSize', e.target.value)}
+                                    placeholder={t('splitSizePlaceholder')}
+                                    className="flex-1 min-w-[150px]"
+                                    onBlur={(e) => {
+                                        !e.target.value && handleSettingChange('chunkSize', '1000');
+                                    }}
+                                />
+                                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">字符</span>
+                            </div>
                         </div>
 
                         {/* 第二个输入项 */}
@@ -61,19 +64,22 @@ export default function RuleFile({
                             <Label htmlFor="chunkOverlap" className="whitespace-nowrap text-sm min-w-[100px]">
                                 {t('chunkOverlap')}
                             </Label>
-                            <Input
-                                id="chunkOverlap"
-                                type="number"
-                                step="10"
-                                min={0}
-                                value={rules.chunkOverlap}
-                                onChange={(e) => handleSettingChange('chunkOverlap', e.target.value)}
-                                placeholder={t('chunkOverlapPlaceholder')}
-                                className="flex-1 min-w-[150px]"
-                                onBlur={(e) => {
-                                    !e.target.value && handleSettingChange('chunkOverlap', '100');
-                                }}
-                            />
+                            <div className="relative">
+                                <Input
+                                    id="chunkOverlap"
+                                    type="number"
+                                    step="10"
+                                    min={0}
+                                    value={rules.chunkOverlap}
+                                    onChange={(e) => handleSettingChange('chunkOverlap', e.target.value)}
+                                    placeholder={t('chunkOverlapPlaceholder')}
+                                    className="flex-1 min-w-[150px]"
+                                    onBlur={(e) => {
+                                        !e.target.value && handleSettingChange('chunkOverlap', '0');
+                                    }}
+                                />
+                                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400">字符</span>
+                            </div>
                         </div>
                     </div>
                     {/* 新增的勾选框字段 - 左下方 */}

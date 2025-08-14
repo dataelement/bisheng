@@ -10,6 +10,8 @@ import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
+import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import Loading from "@/components/ui/loading";
 
 export interface FileItem {
     id: string;
@@ -21,6 +23,7 @@ export interface FileItem {
 interface IProps {
     step: number
     resultFiles: FileItem[]
+    isSubmitting: boolean
     onNext: (step: number, config?: any) => void
     onPrev: () => void
 }
@@ -31,11 +34,11 @@ const enum DisplayModeType {
 }
 
 const initialStrategies = [
-    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分,用于分隔段落' },
+    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分，用于分隔段落' },
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: IProps) {
+export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNext, onPrev }: IProps) {
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
@@ -66,8 +69,8 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
     // 起始行不能大于结束行校验
     const vildateCell = () => {
         if (applyEachCell
-            ? rules.fileList.some(file => file.excelRule.header_start_row > file.excelRule.header_end_row)
-            : cellGeneralConfig.header_start_row > cellGeneralConfig.header_end_row) {
+            ? rules.fileList.some(file => file.excelRule.append_header && Number(file.excelRule.header_start_row) > Number(file.excelRule.header_end_row))
+            : cellGeneralConfig.append_header && Number(cellGeneralConfig.header_start_row) > Number(cellGeneralConfig.header_end_row)) {
             return toast({
                 variant: 'warning',
                 description: '最小行不能大于最大行'
@@ -193,7 +196,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                 )
             }
         </div >
-        <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm">
+        <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
             <Button
                 className="h-8"
                 variant="outline"
@@ -209,6 +212,7 @@ export default function FileUploadStep2({ step, resultFiles, onNext, onPrev }: I
                 disabled={strategies.length === 0}
                 onClick={() => handleNext()}
             >
+                {isSubmitting && <LoadIcon className="mr-1" />}
                 {t('nextStep')}
             </Button>
         </div>
@@ -221,7 +225,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
     const [rules, setRules] = useState(null);
     const [applyEachCell, setApplyEachCell] = useState(false); // 为每个表格单独设置
     const [cellGeneralConfig, setCellGeneralConfig] = useState({
-        slice_length: 15,
+        slice_length: 10,
         append_header: true,
         header_start_row: 1,
         header_end_row: 1
@@ -259,7 +263,7 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
             separator: ['\\n\\n', '\\n'],
             separatorRule: ['after', 'after'],
             chunkSize: "1000",
-            chunkOverlap: "100",
+            chunkOverlap: "0",
             retainImages: true,
             enableFormula: true,
             forceOcr: true,

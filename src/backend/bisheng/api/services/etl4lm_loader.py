@@ -82,7 +82,7 @@ def extract_pdf_images(file_name, page_dict, doc_id, knowledge_id):
                 pdf_image_file_name, item, cropped_image_base_dir
             )
             result[item["element_id"]] = (
-                f"{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
+                f"/{minio_client.bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{cropped_image_file}"
             )
     put_images_to_minio(cropped_image_base_dir, knowledge_id, doc_id)
     return result
@@ -203,10 +203,18 @@ class Etl4lmLoader(BasePDFLoader):
             ocr_sdk_url=self.ocr_sdk_url,
             parameters=parameters,
         )
-
-        resp = requests.post(
-            self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
-        )
+        try:
+            resp = requests.post(
+                self.unstructured_api_url, headers=self.headers, json=payload, timeout=self.timemout
+            )
+        except requests.Timeout as e:
+            logger.error(f"Request to etl4lm API timed out: {e}")
+            raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+        except Exception as e:
+            if str(e).find("Timeout") != -1:
+                logger.error(f"Request to etl4lm API timed out: {e}")
+                raise Exception("etl4lm服务繁忙，请升级etl4lm服务的算力")
+            raise e
         if resp.status_code != 200:
             raise Exception(
                 f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}"

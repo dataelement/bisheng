@@ -23,10 +23,11 @@
     "otherMethods": "Other login methods"
   },
   "menu": {
-    "app": "Chat",
     "user": "User",
     "github": "GitHub",
     "bookopen": "Document",
+    "workspace": "Workspace",
+    "app": "Chat",
     "skills": "Build",
     "knowledge": "Knowledge",
     "evaluation": "Evaluation",
@@ -336,7 +337,12 @@
     "details": "Details",
     "confirmDeleteLibrary": "Confirm deletion of this Knowledge Base?",
     "copy": "Copy",
-    "copying": "Copying"
+    "copying": "Copying",
+    "searchPlaceholder": "Search Knowledge",
+    "desc": "Description",
+    "knowledgeBaseDescription": "Please enter knowledge base description",
+    "creationComplete": "Creation complete",
+    "embeddingModelSelection": "Knowledge base embedding model selection"
   },
   "evaluation": {
     "id": "Task ID",

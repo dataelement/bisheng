@@ -225,13 +225,15 @@ export default function EvaluatingCreate() {
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectViewport>
-                        <Input
-                          value={query}
-                          onChange={handleInputChange}
-                          className="my-2 mx-auto"
-                          placeholder={t("evaluation.selectInputPlaceholder")}
-                        />
+                      <Input
+                        value={query}
+                        onChange={handleInputChange}
+                        autoFocus
+                        className="my-2 mx-auto"
+                        placeholder={t("evaluation.selectInputPlaceholder")}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                      <SelectViewport className="h-80">
                         <SelectGroup>
                           {dataSource.map((item) => {
                             return (

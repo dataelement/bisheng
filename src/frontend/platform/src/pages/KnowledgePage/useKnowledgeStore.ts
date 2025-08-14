@@ -1,5 +1,5 @@
 // useKnowledgeStore.ts
-import create from 'zustand';
+import {create} from 'zustand';
 
 // 定义知识库可编辑状态的 store 类型
 interface KnowledgeStore {

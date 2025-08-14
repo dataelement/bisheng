@@ -43,7 +43,7 @@ const AuthContextProvider = ({
     enabled: !!(isAuthenticated && user?.role === SystemRoles.ADMIN),
   });
   useEffect(() => {
-    setUserContext({ token, isAuthenticated: !!user, user, redirect: '/c/new' });
+    setUserContext({ token, isAuthenticated: !!user, user });
   }, [user])
 
   const navigate = useNavigate();
@@ -82,7 +82,7 @@ const AuthContextProvider = ({
         return;
       }
       setError(undefined);
-      setUserContext({ token, isAuthenticated: true, user, redirect: '/c/new' });
+      setUserContext({ token, isAuthenticated: true, user });
     },
     onError: (error: TResError | unknown) => {
       const resError = error as TResError;
@@ -95,8 +95,8 @@ const AuthContextProvider = ({
       setUserContext({
         token: undefined,
         isAuthenticated: false,
-        user: undefined,
-        redirect: location.origin + '?from=workspace'// data.redirect ?? bsConfig?.host,
+        // user: undefined,
+        redirect: `${location.origin}/${__APP_ENV__.BISHENG_HOST}?from=workspace` // data.redirect ?? bsConfig?.host,
       });
     },
     onError: (error) => {
@@ -152,7 +152,7 @@ const AuthContextProvider = ({
       setUser(userQuery.data);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
-      navigate('/login', { replace: true });
+      navigate(`/${__APP_ENV__.BISHENG_HOST}/login`, { replace: true });
     }
     if (error != null && error && isAuthenticated) {
       doSetError(undefined);

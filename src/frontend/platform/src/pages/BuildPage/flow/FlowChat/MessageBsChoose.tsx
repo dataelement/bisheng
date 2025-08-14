@@ -3,16 +3,12 @@ import { WordIcon } from "@/components/bs-icons";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
-import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
 import { downloadFile } from "@/util/utils";
 import { CheckCircle } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import ReactMarkdown from "react-markdown";
-import rehypeMathjax from "rehype-mathjax";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import MessageMarkDown from "./MessageMarkDown";
 // 颜色列表
 const colorList = [
     "#111",
@@ -74,52 +70,12 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
         document.dispatchEvent(myEvent);
     }
 
-    const mkdown = useMemo(
-        () => (
-            <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeMathjax]}
-                linkTarget="_blank"
-                className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer "
-                components={{
-                    code: ({ node, inline, className, children, ...props }) => {
-                        if (children.length) {
-                            if (children[0] === "▍") {
-                                return (<span className="form-modal-markdown-span"> ▍ </span>);
-                            }
-
-                            if (typeof children[0] === "string") {
-                                children[0] = children[0].replace("▍", "▍");
-                            }
-                        }
-
-                        const match = /language-(\w+)/.exec(className || "");
-
-                        return !inline ? (
-                            <CodeBlock
-                                key={Math.random()}
-                                language={(match && match[1]) || ""}
-                                value={String(children).replace(/\n$/, "")}
-                                {...props}
-                            />
-                        ) : (
-                            <code className={className} {...props}> {children} </code>
-                        );
-                    },
-                }}
-            >
-                {data.message.msg}
-            </ReactMarkdown>
-        ),
-        [data.message]
-    )
-
     const files = useMemo(() => {
         return typeof data.files === 'string' ? [] : data.files
     }, [data.files])
 
     // hack
-    if (typeof data.files === 'string') return null 
+    if (typeof data.files === 'string') return null
 
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
@@ -139,7 +95,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                         </div>}
                     <div className="text-sm max-w-[calc(100%-24px)]">
                         {/* message */}
-                        <div>{mkdown}</div>
+                        <div>{<MessageMarkDown message={data.message.msg} />}</div>
                         {/* files */}
                         <div>
                             {files.map((file) => <div

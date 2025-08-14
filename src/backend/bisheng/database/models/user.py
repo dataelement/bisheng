@@ -5,7 +5,7 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, func, text
 from sqlmodel import Field, select
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.user_group import UserGroup
@@ -100,24 +100,46 @@ class UserDao(UserBase):
             return user
 
     @classmethod
+    def _filter_users_statement(cls,
+                                statement,
+                                user_ids: List[int],
+                                keyword: str = None):
+        if user_ids:
+            statement = statement.where(User.user_id.in_(user_ids))
+        if keyword:
+            statement = statement.where(User.user_name.like(f'%{keyword}%'))
+        return statement.order_by(User.user_id.desc())
+
+    @classmethod
     def filter_users(cls,
                      user_ids: List[int],
                      keyword: str = None,
                      page: int = 0,
                      limit: int = 0) -> (List[User], int):
         statement = select(User)
+        statement = cls._filter_users_statement(statement, user_ids, keyword)
         count_statement = select(func.count(User.user_id))
-        if user_ids:
-            statement = statement.where(User.user_id.in_(user_ids))
-            count_statement = count_statement.where(User.user_id.in_(user_ids))
-        if keyword:
-            statement = statement.where(User.user_name.like(f'%{keyword}%'))
-            count_statement = count_statement.where(User.user_name.like(f'%{keyword}%'))
+        count_statement = cls._filter_users_statement(count_statement, user_ids, keyword)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())
         with session_getter() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
+
+    @classmethod
+    async def afilter_users(cls,
+                            user_ids: List[int],
+                            keyword: str = None,
+                            page: int = 0,
+                            limit: int = 0) -> List[User]:
+        statement = select(User)
+        statement = cls._filter_users_statement(statement, user_ids, keyword)
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(User.user_id.desc())
+        async with async_session_getter() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_unique_user_by_name(cls, user_name: str) -> User | None:

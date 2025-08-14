@@ -16,30 +16,41 @@ export const FormInput = ({
     label: ReactNode;
     value: string;
     error: string;
-    maxLength: number;
+    maxLength?: number;
     onChange: (value: string) => void;
     type?: string;
     placeholder?: string;
     isTextarea?: boolean;
-}) => (
-    <div className={`mb-6 ${isTextarea ? '' : 'pr-96'}`}>
-        {typeof label === 'string' ? <p className="text-lg font-bold mb-2">{label}</p> : label}
-        {isTextarea ? (
-            <Textarea
-                value={value}
-                placeholder={placeholder}
-                onChange={(e) => onChange(e.target.value)}
-                className="mt-3 min-h-48"
-            />
-        ) : (
-            <Input
-                value={value}
-                type={type}
-                placeholder={placeholder}
-                onChange={(e) => onChange(e.target.value)}
-                className="mt-3"
-            />
-        )}
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-    </div>
-);
+}) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const newValue = e.target.value;
+        if (!maxLength || newValue.length <= maxLength) {
+            onChange(newValue);
+        }
+    };
+
+    return (
+        <div className={`mb-6 ${isTextarea ? '' : 'pr-96'}`}>
+            {typeof label === 'string' ? <p className="text-lg font-bold mb-2">{label}</p> : label}
+            {isTextarea ? (
+                <Textarea
+                    value={value}
+                    placeholder={placeholder}
+                    onChange={handleChange}
+                    className="mt-3 min-h-48"
+                    maxLength={maxLength}
+                />
+            ) : (
+                <Input
+                    value={value}
+                    type={type}
+                    placeholder={placeholder}
+                    onChange={handleChange}
+                    className="mt-3"
+                    maxLength={maxLength}
+                />
+            )}
+            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+        </div>
+    );
+};

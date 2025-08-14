@@ -230,5 +230,19 @@
     "create_time": "2024-04-30 10:26:40",
     "update_time": "2025-01-10 21:22:37",
     "openapi_schema": null
+  },
+  {
+    "id": 16,
+    "name": "联网搜索",
+    "logo": "",
+    "description": "搜索互联网信息，可配置使用不同的搜索引擎，目前支持 Bing、博查、Jina 深度搜索、SerpApi、Tavily。",
+    "server_host": "",
+    "auth_method": 0,
+    "api_key": "",
+    "auth_type": "basic",
+    "is_preset": 1,
+    "user_id": null,
+    "is_delete": 0,
+    "openapi_schema": null
   }
- ]
+]

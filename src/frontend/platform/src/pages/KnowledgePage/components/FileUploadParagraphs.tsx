@@ -1,14 +1,9 @@
-import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
-import SelectSearch from "@/components/bs-ui/select/select";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { delChunkInPreviewApi, previewFileSplitApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Info } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
-import ParagraphEdit from "./ParagraphEdit";
-import { ParagraphsItem } from "./Paragraphs";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChange }: any, ref) {
     const { id } = useParams()

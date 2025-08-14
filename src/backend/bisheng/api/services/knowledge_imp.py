@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO
+from typing import Any, Dict, List, Optional, BinaryIO, Union
 
 import requests
 from bisheng_langchain.rag.extract_info import extract_title
@@ -32,6 +32,7 @@ from bisheng.api.services.libreoffice_converter import (
     convert_ppt_to_pdf,
 )
 from bisheng.api.services.llm import LLMService
+from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
@@ -258,29 +259,12 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     """ 删除知识文件的向量数据和es数据 """
     if not file_ids:
         return True
+    logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     embeddings = FakeEmbedding()
     vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-    try:
-        if isinstance(vector_client.col, Collection):
-            pk = vector_client.col.query(
-                expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-            )
-        else:
-            pk = []
-    except Exception:
-        # 重试一次
-        logger.error("timeout_except")
-        vector_client.close_connection(vector_client.alias)
-        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", embeddings)
-        pk = vector_client.col.query(
-            expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-        )
-
-    logger.info("query_milvus pk={}", pk)
-    if pk:
-        res = vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
-        logger.info(f"act=delete_vector file_id={file_ids} res={res}")
+    vector_client.col.delete(expr=f"file_id in {file_ids}", timeout=10)
     vector_client.close_connection(vector_client.alias)
+    logger.info(f"delete_milvus file_ids={file_ids}")
 
     es_client = decide_vectorstores(
         knowledge.index_name, "ElasticKeywordsSearch", embeddings
@@ -335,7 +319,7 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
 
 def decide_vectorstores(
         collection_name: str, vector_store: str, embedding: Embeddings
-) -> VectorStore:
+) -> Union[VectorStore, Any]:
     """vector db"""
     param: dict = {"embedding": embedding}
 
@@ -579,7 +563,7 @@ def add_file_embedding(
         logger.info(
             f"upload_preview_file_to_minio file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
         )
-        if minio_client.object_exists(minio_client.tmp_bucket, preview_object_name):
+        if minio_client.object_exists(minio_client.tmp_bucket, tmp_preview_file):
             minio_client.copy_object(
                 tmp_preview_file,
                 preview_object_name,
@@ -662,8 +646,8 @@ def parse_document_title(title: str) -> str:
 def read_chunk_text(
         input_file,
         file_name,
-        separator: List[str],
-        separator_rule: List[str],
+        separator: Optional[List[str]],
+        separator_rule: Optional[List[str]],
         chunk_size: int,
         chunk_overlap: int,
         knowledge_id: Optional[int] = None,
@@ -672,6 +656,8 @@ def read_chunk_text(
         force_ocr: int = 1,
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
+        no_summary: bool = False,
+
 ) -> (List[str], List[dict], str, Any):  # type: ignore
     """
     0：chunks text
@@ -680,14 +666,17 @@ def read_chunk_text(
     3: ocr bbox data: maybe None
     """
     # 获取文档总结标题的llm
-    try:
-        llm = decide_knowledge_llm()
-        knowledge_llm = LLMService.get_knowledge_llm()
-    except Exception as e:
-        logger.exception("knowledge_llm_error:")
-        raise Exception(
-            f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
-        )
+    llm = None
+    if not no_summary:
+        try:
+            llm = decide_knowledge_llm()
+            knowledge_llm = LLMService.get_knowledge_llm()
+        except Exception as e:
+            logger.exception("knowledge_llm_error:")
+            raise Exception(
+                f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
+            )
+
     text_splitter = ElemCharacterTextSplitter(
         separators=separator,
         separator_rule=separator_rule,
@@ -767,10 +756,14 @@ def read_chunk_text(
         documents = loader.load()
 
     elif file_extension_name in ["txt", "md"]:
-        loader = filetype_load_map[file_extension_name](file_path=input_file)
+        loader = filetype_load_map[file_extension_name](file_path=input_file, autodetect_encoding=True)
         documents = loader.load()
     else:
         if etl_for_lm_url:
+            if file_extension_name in ["pdf"]:
+                # 判断文件是否损坏
+                if is_pdf_damaged(input_file):
+                    raise Exception('The file is damaged.')
             etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
             loader = Etl4lmLoader(
                 file_name,
@@ -788,11 +781,30 @@ def read_chunk_text(
             partitions = loader.partitions
             partitions = parse_partitions(partitions)
         else:
-            # 在没有部署ETL4LM的情况下，处理IMAGE与PDF
-            if file_extension_name not in filetype_load_map:
-                raise Exception("类型不支持")
-            loader = filetype_load_map[file_extension_name](file_path=input_file)
-            documents = loader.load()
+            if file_extension_name in ['pdf']:
+                md_file_name, local_image_dir, doc_id = convert_file_to_md(
+                    file_name=file_name,
+                    input_file_name=input_file,
+                    knowledge_id=knowledge_id,
+                    retain_images=bool(retain_images),
+                )
+                if not md_file_name: raise Exception(f"failed to parse {file_name}, please check backend log")
+
+                # save images to minio
+                if local_image_dir and retain_images == 1:
+                    put_images_to_minio(
+                        local_image_dir=local_image_dir,
+                        knowledge_id=knowledge_id,
+                        doc_id=doc_id,
+                    )
+                    # 沿用原来的方法处理md文件
+                loader = filetype_load_map["md"](file_path=md_file_name)
+                documents = loader.load()
+            else:
+                if file_extension_name not in filetype_load_map:
+                    raise Exception("类型不支持")
+                loader = filetype_load_map[file_extension_name](file_path=input_file)
+                documents = loader.load()
 
     logger.info(f"start_extract_title file_name={file_name}")
     if llm:

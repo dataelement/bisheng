@@ -8,6 +8,7 @@ from sqlmodel import Field, or_, select, Text, update
 from bisheng.database.base import session_getter
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
+from bisheng.utils import md5_hash, generate_uuid
 
 
 class AuthMethod(Enum):
@@ -43,9 +44,9 @@ class GptsToolsBase(SQLModelSerializable):
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None, index=True, primary_key=True)
-    name: str = Field(default='', sa_column=Column(String(length=1024), index=True), description="工具类别名字")
+    name: str = Field(default='', sa_column=Column(String(length=1024)), description="工具类别名字")
     logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
-    extra: Optional[str] = Field(default='', sa_column=Column(String(length=2048)),
+    extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
                                  description="工具类别的配置信息，用来存储工具类别所需的配置信息")
     description: str = Field(default='', description="工具类别的描述")
     server_host: Optional[str] = Field(default='', description="自定义工具的访问根地址，必须以http或者https开头")
@@ -68,7 +69,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
-    extra: Optional[str] = Field(default=None, sa_column=Column(String(length=2048), index=False),
+    extra: Optional[str] = Field(default=None, sa_column=Column(Text, index=False),
                                  description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
                                              '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -143,8 +144,8 @@ class GptsToolsDao(GptsToolsBase):
 
     @classmethod
     def get_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
+        statement = select(GptsTools).where(GptsTools.id.in_(tool_ids)).where(GptsTools.is_delete == 0)
         with session_getter() as session:
-            statement = select(GptsTools).where(GptsTools.id.in_(tool_ids))
             return session.exec(statement).all()
 
     @classmethod
@@ -217,7 +218,7 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
         statement = statement.order_by(func.field(GptsToolsType.is_preset,
-                                                  ToolPresetType.PRESET.value).desc() ,GptsToolsType.update_time.desc())
+                                                  ToolPresetType.PRESET.value).desc(), GptsToolsType.update_time.desc())
         with session_getter() as session:
             return session.exec(statement).all()
 
@@ -292,7 +293,7 @@ class GptsToolsDao(GptsToolsBase):
                 # 插入工具列表
                 for one in children:
                     one.type = gpts_tool_type.id
-                    one.tool_key = cls.get_tool_key(gpts_tool_type.id, one.tool_key)
+                    one.tool_key = cls.get_tool_key(gpts_tool_type.id, one)
                 session.add_all(children)
                 session.commit()
         res = GptsToolsTypeRead(**gpts_tool_type.model_dump(), children=children)
@@ -321,7 +322,7 @@ class GptsToolsDao(GptsToolsBase):
             # 新增工具列表
             for one in add_tool_list:
                 one.type = data.id
-                one.tool_key = cls.get_tool_key(data.id, one.tool_key)
+                one.tool_key = cls.get_tool_key(data.id, one)
                 session.add(one)
                 finally_children.append(one)
             # 更新工具列表
@@ -352,11 +353,13 @@ class GptsToolsDao(GptsToolsBase):
             session.commit()
 
     @classmethod
-    def get_tool_key(cls, tool_type_id: int, tool_key: str) -> str:
+    def get_tool_key(cls, tool_type_id: int, gpt_tool: GptsTools) -> str:
         """
         拼接自定义工具的tool_key
         """
-        return f"tool_type_{tool_type_id}_{tool_key}"
+        if gpt_tool.is_preset == ToolPresetType.MCP.value:
+            return f"{gpt_tool.name}_{generate_uuid()[:8]}"
+        return f"tool_type_{tool_type_id}_{md5_hash(gpt_tool.name)}"
 
     @classmethod
     def update_tools_extra(cls, tool_type_id: int, extra: str) -> bool:
