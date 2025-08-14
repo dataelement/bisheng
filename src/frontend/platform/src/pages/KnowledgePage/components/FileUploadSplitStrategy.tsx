@@ -132,7 +132,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
         <RadioGroup value={position} onValueChange={setPosition} className="flex items-center text-sm">
           <RadioGroupItem className="" value="before" />{t('before')}
           <RadioGroupItem className="" value="after" />{t('after')}
-          <span>✂️</span>
+          <span>切分</span>
         </RadioGroup>
         <div className="flex justify-end absolute right-0 bottom-0">
           <Button onClick={handleAddCustomStrategy} className="h-6">

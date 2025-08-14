@@ -44,7 +44,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
                                       index=False,
                                       description='采用什么模式解析的文件')
-    split_rule: Optional[str] = Field(default=None, index=False, description='采用什么模式解析的文件')
+    split_rule: Optional[str] = Field(default=None, sa_column=Column(Text), description='采用什么模式解析的文件')
     bbox_object_name: Optional[str] = Field(default='', description='bbox文件在minio存储的对象名称')
     status: Optional[int] = Field(default=KnowledgeFileStatus.PROCESSING.value,
                                   index=False,
@@ -160,8 +160,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_file
 
     @classmethod
-    def update_file_status(cls, file_id: int, status: KnowledgeFileStatus, reason: str = None):
-        statement = update(KnowledgeFile).where(KnowledgeFile.id == file_id).values(status=status.value, remark=reason)
+    def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
+        """ 批量更新文件状态 """
+        statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
+                                                                                       remark=reason)
         with session_getter() as session:
             session.exec(statement)
             session.commit()

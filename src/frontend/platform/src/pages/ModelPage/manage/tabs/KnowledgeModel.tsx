@@ -13,7 +13,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Settings } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-
+import { defalutPrompt } from "./WorkbenchModel";
 
 export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange }) => {
 
@@ -99,7 +99,7 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, children }) => {
                 <Button variant="outline" className="px-11" type="button" onClick={handleCancel}>取消</Button>
                 <Button disabled={false} type="submit" className="px-11" onClick={() => {
                     modifyNotSavedRef.current = false
-                    onSave()
+                    onSave(textValue)
                     setOpen(false)
                     onChange(textValue)
                 }}>
@@ -168,10 +168,10 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         setSaveLoad(false)
     };
 
-    const handleSavePrompt = () => {
+    const handleSavePrompt = (prompt) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig({
             ...lastSaveFormDataRef.current,
-            abstract_prompt: form.abstractPrompt
+            abstract_prompt: prompt ?? form.abstractPrompt
         }).then(res => {
             message({ variant: 'success', description: '提示词已保存' })
         }))
@@ -241,25 +241,3 @@ export default function KnowledgeModel({ llmOptions, embeddings, onBack }) {
         </div>
     );
 }
-
-
-const defalutPrompt = `你是一名资深的“文档摘要专家”，能针对不同类型的文档（如报告、规章制度、合同、会议纪要、产品说明等）灵活调整摘要风格。
-接下来你会收到一篇文档的主要内容，请按以下流程进行处理，并以 JSON 输出，方便后续程序化使用：
-1. 总体概述（Summary）  
-   – 判断并简要说明这是哪种类型的文档，用 2～3 句话概括文档的核心内容和结论（例如“这是产品功能说明，用于向用户介绍 X 功能……”）。
-
-2. 关键信息（KeyInfo）  
-   – 列出 3 条最重要的信息或论点，每条 10～20 字。
-
-请严格按下面 JSON 模板输出（字段顺序和名称请保持一致）：
-
-\`\`\`json
-{{
-  "Summary": "2～3句的总体概述……",
-  "KeyInfo": [
-    "要点1",
-    "要点2",
-    "要点3"
-  ]
-}}
-\`\`\``

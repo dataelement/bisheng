@@ -49,7 +49,6 @@ const BingToolForm = ({ formData, onSubmit }) => {
                 type="password"
                 id="bing_subscription_key"
                 name="bing_subscription_key"
-                placeholder={t('build.enterSubscriptionKey')}
                 value={localFormData.bing_subscription_key}
                 onChange={handleChange}
                 error={errors.bing_subscription_key}
@@ -59,7 +58,6 @@ const BingToolForm = ({ formData, onSubmit }) => {
                 label="Bing Search URL"
                 id="bing_search_url"
                 name="bing_search_url"
-                placeholder={t('build.enterSearchUrl')}
                 value={localFormData.bing_search_url}
                 onChange={handleChange}
                 error={errors.bing_search_url}

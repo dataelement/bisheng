@@ -21,7 +21,6 @@ export const LoginPage = () => {
     const { message, toast } = useToast()
     const navigate = useNavigate()
     const { appConfig } = useContext(locationContext)
-
     const isLoading = false
 
     const mailRef = useRef(null)
@@ -68,8 +67,8 @@ export const LoginPage = () => {
             ).then((res: any) => {
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
-                const path = location.href.indexOf('from=workspace') === -1 ? '' : '/workspace/'
-                location.href = path ? location.origin + path : location.href
+                // const path = location.href.indexOf('from=workspace') === -1 ? '' : '/workspace'
+                location.href = location.pathname === '/' ? location.origin + '/workspace/' : location.href
                 // location.href = __APP_ENV__.BASE_URL + '/'
 
             }), (error) => {

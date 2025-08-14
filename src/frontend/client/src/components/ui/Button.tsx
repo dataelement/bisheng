@@ -20,10 +20,10 @@ const buttonVariants = cva(
         submit: 'bg-surface-submit text-white hover:bg-surface-submit-hover',
       },
       size: {
-        default: 'h-10 px-4 py-2',
+        default: 'h-9 px-4 py-2',
         sm: 'h-9 rounded-lg px-3',
         lg: 'h-11 rounded-lg px-8',
-        icon: 'size-10',
+        icon: 'size-9',
       },
     },
     defaultVariants: {

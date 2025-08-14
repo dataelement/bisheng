@@ -173,19 +173,21 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 // 使用默认模型 清空知识库和工具
                 const [workflow, assistant] = await Promise.all([getLlmDefaultModel(), getAssistantModelConfig()])
                 const workflowModelId = workflow.model_id
-                const assistantModelId = assistant.llm_list.find(item => item.default).model_id
+                const assistantModelId = assistant.llm_list.find(item => item.default)?.model_id
                 delete tempDataRef.current.data.source
 
                 tempDataRef.current.data.nodes.forEach(node => {
-                    if (['rag', 'llm', 'agent'].includes(node.data.type)) {
+                    if (['rag', 'llm', 'agent', 'qa_retriever'].includes(node.data.type)) {
                         node.data.group_params.forEach(group =>
                             group.params.forEach(param => {
                                 if (param.type === 'bisheng_model') {
                                     param.value = workflowModelId
                                 } else if (param.type === 'agent_model') {
                                     param.value = assistantModelId
-                                } else if (param.type === 'knowledge_select_multi') {
+                                } else if (param.type === 'knowledge_select_multi' && param.value.type !== 'tmp') {
                                     param.value.value = []
+                                } else if (param.type === 'qa_select_multi') {
+                                    param.value = []
                                 } else if (param.type === 'add_tool') {
                                     param.value = []
                                 }
@@ -226,7 +228,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
     // 上传头像逻辑
     const uploadAvator = (file: File) => {
         uploadFileWithProgress(file, (progress) => { }, 'icon').then(res => {
-            setFormData(prev => ({ ...prev, url: res.file_path }));
+            setFormData(prev => ({ ...prev, url: '/bisheng/' + res.relative_path }));
         });
     };
 
@@ -270,7 +272,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             id="desc"
                             name="desc"
                             placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
-                            maxLength={appType === AppType.ASSISTANT ? 1000 : undefined}
+                            maxLength={appType === AppType.ASSISTANT ? 1000 : 200}
                             className="mt-3 min-h-32 pt-3"
                             value={formData.desc}
                             onChange={handleChange}
@@ -279,9 +281,11 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                     </div>
                 </div>
                 {/* 工作流安全审查 */}
-                {appConfig.isPro && <Accordion type="multiple" className="w-full">
-                    <AssistantSetting ref={securityRef} id={appId} type={5} />
-                </Accordion>}
+                <div className={isEditMode ? '' : 'hidden'}>
+                    {appConfig.isPro && <Accordion type="multiple" className="w-full">
+                        <AssistantSetting ref={securityRef} id={appId} type={5} />
+                    </Accordion>}
+                </div>
                 <DialogFooter>
                     <DialogClose>
                         <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })}>

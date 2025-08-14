@@ -4,17 +4,13 @@ import { ToastIcon } from "@/components/bs-icons";
 import { AvatarIcon } from "@/components/bs-icons/avatar";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { cname } from "@/components/bs-ui/utils";
-import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
 import { WorkflowMessage } from "@/types/flow";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
 import { ChevronDown } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeMathjax from "rehype-mathjax";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
 import ChatFile from "./ChatFileFile";
+import MessageMarkDown from "./MessageMarkDown";
 import { useMessageStore } from "./messageStore";
 
 // 颜色列表
@@ -61,58 +57,15 @@ const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
+
 export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }:
     { debug?: boolean, ogo: string, data: WorkflowMessage, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
     const message = useMemo(() => {
-        const msg = typeof data.message === 'string' ? data.message : data.message.msg
-
-        return msg
-            .replaceAll('$$', '$') // latex
-            .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
-            .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符
+        return typeof data.message === 'string' ? data.message : data.message.msg
     }, [data.message])
-
-    const mkdown = useMemo(
-        () => (
-            <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeMathjax]}
-                linkTarget="_blank"
-                className="bs-mkdown inline-block break-all max-w-full text-sm text-text-answer "
-                components={{
-                    code: ({ node, inline, className, children, ...props }) => {
-                        if (children.length) {
-                            if (children[0] === "▍") {
-                                return (<span className="form-modal-markdown-span"> ▍ </span>);
-                            }
-                            if (typeof children[0] === "string") {
-                                children[0] = children[0].replace("▍", "▍");
-                            }
-                        }
-                        // className 区分代码语言 python json js 
-                        const match = /language-(\w+)/.exec(className || "");
-
-                        return !inline ? (
-                            <CodeBlock
-                                key={Math.random()}
-                                language={(match && match[1]) || ""}
-                                value={String(children).replace(/\n$/, "")}
-                                {...props}
-                            />
-                        ) : (
-                            <code className={className} {...props}> {children} </code>
-                        );
-                    },
-                }}
-            >
-                {message}
-            </ReactMarkdown>
-        ),
-        [message]
-    )
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
@@ -140,7 +93,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                             </div>}
                         {message || data.files.length ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {message && mkdown}
+                                {message && <MessageMarkDown message={message} />}
                                 {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}

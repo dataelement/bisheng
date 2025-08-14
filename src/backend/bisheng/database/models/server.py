@@ -9,7 +9,7 @@ from bisheng.database.models.base import SQLModelSerializable
 
 
 class ServerBase(SQLModelSerializable):
-    endpoint: str = Field(index=False, unique=True)
+    endpoint: str = Field(index=False)
     sft_endpoint: str = Field(default='', index=False, description='Finetune服务地址')
     server: str = Field(index=True)
     remark: Optional[str] = Field(default=None, index=False)

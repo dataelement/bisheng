@@ -1,17 +1,15 @@
-import { MessageSquare, MessagesSquareIcon, Search } from 'lucide-react';
-import { useRecoilValue } from 'recoil';
-import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys, Constants } from '~/data-provider/data-provider/src';
-import type { TConversation, TMessage } from '~/data-provider/data-provider/src';
-import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
+import { Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetBsConfig, useGetEndpointsQuery } from '~/data-provider';
+import type { TConversation, TMessage } from '~/data-provider/data-provider/src';
+import { Constants, QueryKeys } from '~/data-provider/data-provider/src';
 import { useLocalize, useNewConvo } from '~/hooks';
-import { NewChatIcon } from '~/components/svg';
-import { cn } from '~/utils';
 import store from '~/store';
+import { getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
 
 const NewChatButtonIcon = ({ conversation }: { conversation: TConversation | null }) => {
   const searchQuery = useRecoilValue(store.searchQuery);
@@ -96,7 +94,7 @@ export default function NewChat({
   };
 
   return (
-    <div className="sticky left-0 right-0 top-0 z-50 bg-surface-primary-alt">
+    <div className="sticky left-0 right-0 top-0 z-50 bg-[#F9FBFF]">
       <div className="pb-0.5 last:pb-0" style={{ transform: 'none' }}>
         <div className="mb-3 flex justify-between gap-3 px-3 py-2">
           <div className="flex items-center gap-2">
@@ -109,12 +107,12 @@ export default function NewChat({
         </div>
         {/* 新建btn */}
         <button
-          className="text-blue-main flex items-center justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-2 font-medium hover:bg-blue-200"
+          className="flex items-center w-full shadow-sm bg-white mx-auto border px-4 py-3 rounded-xl "
           onClick={clickHandler}
           aria-label={localize('com_ui_new_chat')}
         >
-          <img className='size-6' src={__APP_ENV__.BASE_URL + '/assets/chat.png'} alt="" />
-          <span className="text-sm">{localize('com_ui_new_chat')}</span>
+          <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
+          <span className="text-sm pl-2.5">{localize('com_ui_new_chat')}</span>
         </button>
       </div>
       {subHeaders != null ? subHeaders : null}

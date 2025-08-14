@@ -45,7 +45,7 @@ services:
       - "8701:80"
     environment:
       TZ: Asia/Shanghai
-      JWT_ENABLED: false
+      JWT_ENABLED: "false"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
     command: bash -c "supervisorctl restart all"
@@ -53,7 +53,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v1.3.0
+    image: dataelement/bisheng-backend:v2.0.0
     ports:
       - "7860:7860"
     environment:
@@ -66,7 +66,7 @@ services:
       BS_MINIO_SCHEMA: 'false'
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOIN: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
@@ -93,7 +93,7 @@ services:
   
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v1.3.0
+    image: dataelement/bisheng-backend:v2.0.0
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
@@ -104,7 +104,7 @@ services:
       BS_MINIO_SCHEMA: 'false'
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
-      BS_MINIO_SHAREPOIN: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
@@ -115,12 +115,6 @@ services:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
     restart: on-failure
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
-      start_period: 30s
-      interval: 90s
-      timeout: 30s
-      retries: 3
     depends_on:
       mysql:
         condition: service_healthy
@@ -131,7 +125,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v1.3.0
+    image: dataelement/bisheng-frontend:v2.0.0
     ports:
       - "3001:3001"
     environment:
@@ -157,7 +151,7 @@ services:
     restart: on-failure
 
   etcd:
-    container_name: milvus-etcd
+    container_name: bisheng-milvus-etcd
     image: quay.io/coreos/etcd:v3.5.5
     environment:
       ETCD_AUTO_COMPACTION_MODE: revision
@@ -176,7 +170,7 @@ services:
       retries: 3
 
   minio:
-    container_name: milvus-minio
+    container_name: bisheng-milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
@@ -196,7 +190,7 @@ services:
       retries: 3
 
   milvus:
-    container_name: milvus-standalone
+    container_name: bisheng-milvus-standalone
     image: milvusdb/milvus:v2.5.10
     command: ["milvus", "run", "standalone"]
     security_opt:

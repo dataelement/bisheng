@@ -19,29 +19,6 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     - git clone https://github.com/dataelement/bisheng.git .
     - git checkout $DRONE_COMMIT
 
-  - name: package # 流水线名称
-    pull: if-not-exists
-    image: python:3.10-slim # 定义创建容器的Docker镜像
-    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
-      - name: bisheng-cache
-        path: /app/build # 将应用打包好的Jar和执行脚本挂载出来
-    environment:
-      RELEASE_VERSION: 99.99.99
-      NEXUS_USER:
-        from_secret: NEXUS_USER
-      NEXUS_PASSWORD:
-        from_secret: NEXUS_PASSWORD
-      REPO:
-        from_secret: PY_NEXUS
-    commands: # 定义在Docker容器中执行的shell命令
-      - pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-      - pip install Cython
-      - pip install wheel
-      - pip install twine
-      - cd ./src/bisheng-langchain
-      - python setup.py bdist_wheel
-      - twine upload --verbose -u $NEXUS_USER  -p $NEXUS_PASSWORD --repository-url $REPO  dist/*.whl
-  
   - name: set poetry
     pull: if-not-exists
     image: golang
@@ -60,11 +37,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /app/build/
     commands:
     - cd ./src/backend
-    - cp -r /app/build/nltk_data ./
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
     - sed  '/apt-get/ s|$| '"$PROXY"'|' Dockerfile
-    - sed -i 's/^bisheng_langchain.*/bisheng_langchain = "'$RELEASE_VERSION'"/g' pyproject.toml
     - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
     - sed -i '7i\RUN poetry source add --priority=supplemental foo http://'$NEXUS_PUBLIC':'$NEXUS_PUBLIC_PASSWORD'@'$REPO2'simple' Dockerfile
     - sed -i '8i\RUN poetry source add --priority=primary qh https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
@@ -218,34 +193,10 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     - git clone https://github.com/dataelement/bisheng.git .
     - git checkout $DRONE_COMMIT
 
-  - name: package # 流水线名称
-    pull: if-not-exists
-    image: python:3.10-slim # 定义创建容器的Docker镜像
-    volumes: # 将容器内目录挂载到宿主机，仓库需要开启Trusted设置
-      - name: bisheng-cache
-        path: /app/build # 将应用打包好的Jar和执行脚本挂载出来
-    environment:
-      RELEASE_VERSION: 99.99.90
-      NEXUS_USER:
-        from_secret: NEXUS_USER
-      NEXUS_PASSWORD:
-        from_secret: NEXUS_PASSWORD
-      REPO:
-        from_secret: PY_NEXUS
-    commands: # 定义在Docker容器中执行的shell命令
-      - pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-      - pip install Cython
-      - pip install wheel
-      - pip install twine
-      - cd ./src/bisheng-langchain
-      - python setup.py bdist_wheel
-      - twine upload --verbose -u $NEXUS_USER  -p $NEXUS_PASSWORD --repository-url $REPO  dist/*.whl
-
   - name: set poetry
     pull: if-not-exists
     image: golang
     environment:
-      RELEASE_VERSION: 99.99.90
       NEXUS_PUBLIC:
         from_secret: NEXUS_PUBLIC
       NEXUS_PUBLIC_PASSWORD:
@@ -259,11 +210,9 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /app/build/
     commands:
     - cd ./src/backend
-    - cp -r /app/build/nltk_data ./
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
     - sed  '/apt-get/ s|$| '"$PROXY"'|' Dockerfile
-    - sed -i 's/^bisheng_langchain.*/bisheng_langchain = "'$RELEASE_VERSION'"/g' pyproject.toml
     - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
     - sed -i '7i\RUN poetry source add --priority=supplemental foo http://'$NEXUS_PUBLIC':'$NEXUS_PUBLIC_PASSWORD'@'$REPO2'simple' Dockerfile
     - sed -i '8i\RUN poetry source add --priority=primary qh https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile

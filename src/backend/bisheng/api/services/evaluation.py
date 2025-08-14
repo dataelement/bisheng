@@ -1,37 +1,36 @@
 import asyncio
-import os
 import io
 import json
-from typing import List
-
-from bisheng.api.services.llm import LLMService
-from bisheng.utils import generate_uuid
-from fastapi import UploadFile, HTTPException
-import pandas as pd
+import os
 from collections import defaultdict
 from copy import deepcopy
+from typing import List
 
-from bisheng.api.services.user_service import UserPayload
-from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200, StreamData, BuildStatus)
-from bisheng.cache import InMemoryCache
-from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.flow_version import FlowVersionDao
-from bisheng.database.models.assistant import AssistantDao
-from bisheng.api.services.flow import FlowService
-from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
-from bisheng.database.models.user import UserDao
-from bisheng.utils.minio_client import MinioClient
-from fastapi.encoders import jsonable_encoder
-from bisheng.utils.logger import logger
-from bisheng.api.services.assistant_agent import AssistantAgent
+import pandas as pd
 from bisheng_ragas import evaluate
 from bisheng_ragas.llms.langchain import LangchainLLM
 from bisheng_ragas.metrics import AnswerCorrectnessBisheng
 from datasets import Dataset
-from bisheng_langchain.gpts.utils import import_by_type
-from bisheng.cache.redis import redis_client
+from fastapi import UploadFile, HTTPException
+from fastapi.encoders import jsonable_encoder
+
+from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.api.services.flow import FlowService
+from bisheng.api.services.llm import LLMService
+from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
+from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
+from bisheng.cache import InMemoryCache
+from bisheng.cache.redis import redis_client
+from bisheng.database.models.assistant import AssistantDao
+from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
+from bisheng.utils import generate_uuid
+from bisheng.utils.logger import logger
+from bisheng.utils.minio_client import MinioClient
 
 flow_data_store = redis_client
 
@@ -280,7 +279,7 @@ def add_evaluation_task(evaluation_id: int):
             for index, one in enumerate(csv_data):
                 messages = asyncio.run(gpts_agent.run(one.get('question')))
                 if len(messages):
-                    one["answer"] = messages[0].content
+                    one["answer"] = messages[-1].content
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
 

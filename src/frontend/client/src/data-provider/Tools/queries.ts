@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Constants, QueryKeys, dataService } from '~/data-provider/data-provider/src';
 import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
 import type t from '~/data-provider/data-provider/src';
+import { getKnowledgeInfo, getLinsightTools, getPersonalKnowledgeInfo } from '~/api/linsight';
 
 export const useVerifyAgentToolAuth = (
   params: t.VerifyToolAuthParams,
@@ -24,10 +25,10 @@ export const useGetToolCalls = <TData = t.ToolCallResults>(
   config?: UseQueryOptions<t.ToolCallResults, unknown, TData>,
 ): QueryObserverResult<TData, unknown> => {
   const { conversationId = '' } = params;
-  return useQuery<t.ToolCallResults, unknown, TData>(
-    [QueryKeys.toolCalls, conversationId],
-    () => dataService.getToolCalls(params),
-    {
+  return useQuery<t.ToolCallResults, unknown, TData>({
+    queryKey: [QueryKeys.toolCalls, conversationId],
+    queryFn: () => dataService.getToolCalls(params),
+    ...{
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchOnMount: false,
@@ -37,5 +38,46 @@ export const useGetToolCalls = <TData = t.ToolCallResults>(
         conversationId !== Constants.SEARCH,
       ...config,
     },
-  );
+  });
 };
+
+
+// 灵思内置工具列表
+export const useGetLinsightToolList = () => {
+  return useQuery({
+    queryKey: ['LinsightTools'],
+    queryFn: getLinsightTools,
+    select(data) {
+      return data?.data;
+    },
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+  });
+}
+
+// 获取个人知识库工具
+export const useGetPersonalToolList = () => {
+  return useQuery({
+    queryKey: ['PersonalTools'],
+    queryFn: () => getPersonalKnowledgeInfo(),
+    select(data) {
+      return data?.data;
+    },
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+// 获取组织知识库
+export const useGetOrgToolList = () => {
+  return useQuery({
+    queryKey: ['OrgTools'],
+    queryFn: () => getKnowledgeInfo(),
+    select(data) {
+      return data?.data.data;
+    },
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}

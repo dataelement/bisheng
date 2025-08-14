@@ -27,7 +27,8 @@ export default function FilesUpload() {
     const [currentStep, setCurrentStep] = useState(1)
     // 文件列表
     const [resultFiles, setResultFiles] = useState([])
-
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    
     const _tempConfigRef = useRef({})
     // 保存知识库
     const submittingRef = useRef(false);
@@ -36,7 +37,7 @@ export default function FilesUpload() {
         if (submittingRef.current) { return; }
         // 加锁
         submittingRef.current = true;
-
+        setIsSubmitting(true);
         captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
             const _repeatFiles = res.filter(e => e.status === 3)
 
@@ -71,6 +72,7 @@ export default function FilesUpload() {
         }).finally(() => {
             // 无论成功失败都要解锁
             submittingRef.current = false;
+            setIsSubmitting(false);
         }))
 
         _tempConfigRef.current = _config
@@ -155,6 +157,7 @@ export default function FilesUpload() {
                     <FileUploadStep2
                         step={currentStep}
                         resultFiles={resultFiles}
+                        isSubmitting={isSubmitting}
                         onNext={(step, _config) => {
                             step === 3 ? setCurrentStep(step) : handleSave(_config)
                         }}

@@ -54,7 +54,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         }
         return _currentFile
     }, [selectId, rules])
-    const [fileViewUrl, setFileViewUrl] = useState('') // 当前选择文件预览url
+    const [fileViewUrl, setFileViewUrl] = useState({ load: true, url: '' }) // 当前选择文件预览url
 
     const [loading, setLoading] = useState(false)
     const prevPreviewCountMapRef = useRef({})
@@ -63,7 +63,7 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
         setTimeout(() => {
             setLoading(true)
         }, 0);
-        setFileViewUrl('')
+        setFileViewUrl({ load: true, url: '' })
         setChunks([])
         // 合并配置
         const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId
@@ -89,19 +89,27 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             force_ocr: forceOcr,
             fileter_page_header_footer: pageHeaderFooter
 
-        })).then(res => {
-            if (!res) return setLoading(false)
+        }), err => {
+            // 解析失败时,使用支持的原文件预览
+            ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
+                && setFileViewUrl({ load: false, url: currentFile.filePath })
+        }).then(res => {
+            if (!res) {
+                setFileViewUrl({ load: false, url: '' })
+                return setLoading(false)
+            }
             if (res === 'canceled') return
             console.log("previewFileSplitApi:", res)
             res && setChunks(res.chunks.map(chunk => ({
                 bbox: chunk.metadata.bbox,
+                activeLabels: {},
                 chunkIndex: chunk.metadata.chunk_index,
                 page: chunk.metadata.page,
                 text: chunk.text
             })))
             setSelectIdSyncChunks(selectId)
 
-            setFileViewUrl(res.file_url)
+            setFileViewUrl({ load: false, url: res.file_url })
             setPartitions(res.partitions)
             setLoading(false)
         })
@@ -132,9 +140,10 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
 
     return (<div className={cn("h-full flex gap-2 justify-center", step === 2 ? 'w-1/2' : 'w-full')}>
         {step === 3 && currentFile && <PreviewFile
-            url={fileViewUrl}
+            urlState={fileViewUrl}
             file={currentFile}
             chunks={chunks}
+            setChunks={setChunks}
             partitions={partitions}
         />}
         <div className={cn('relative', step === 2 ? 'w-full' : 'w-1/2')}>

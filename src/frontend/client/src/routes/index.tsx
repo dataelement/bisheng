@@ -17,6 +17,8 @@ import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Search from './Search';
 import Root from './Root';
+import Sop from '~/components/Sop';
+import WebView from '~/components/WebView';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -65,7 +67,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
     children: [
       {
-        path: '/',
+        path: '/' + __APP_ENV__.BISHENG_HOST,
         element: <LoginLayout />,
         children: [
           {
@@ -92,6 +94,10 @@ export const router = createBrowserRouter([
             path: 'c/:conversationId?',
             element: <ChatRoute />,
           },
+          {
+            path: 'linsight/:conversationId?',
+            element: <Sop />,
+          },
           // {
           //   path: 'search',
           //   element: <Search />,
@@ -99,5 +105,9 @@ export const router = createBrowserRouter([
         ],
       },
     ],
+  },
+  {
+    path: '/html',
+    element: <WebView />,
   },
 ], baseConfig);

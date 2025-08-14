@@ -5,8 +5,8 @@ from typing import Optional
 from sqlalchemy import Column, DateTime, text, Text
 from sqlmodel import Field, select
 
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
-from bisheng.database.base import session_getter
 
 
 class ConfigKeyEnum(Enum):
@@ -18,6 +18,7 @@ class ConfigKeyEnum(Enum):
     EVALUATION_LLM = 'evaluation_llm'  # 评测默认模型配置
     WORKFLOW_LLM = 'workflow_llm'  # 工作流默认模型配置
     WORKSTATION = 'workstation'  # 工作台默认模型配置
+    LINSIGHT_LLM = 'linsight_llm'  # 灵思默认模型配置
 
 
 class ConfigBase(SQLModelSerializable):
@@ -54,7 +55,16 @@ class ConfigDao(ConfigBase):
     def get_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
         with session_getter() as session:
             statement = select(Config).where(Config.key == key.value)
-            return session.exec(statement).first()
+            config = session.exec(statement).first()
+            return config
+
+    @classmethod
+    async def aget_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
+        async with async_session_getter() as session:
+            statement = select(Config).where(Config.key == key.value)
+            config = await session.exec(statement)
+            config = config.first()
+            return config
 
     @classmethod
     def insert_config(cls, config: Config) -> Config:
@@ -62,4 +72,12 @@ class ConfigDao(ConfigBase):
             session.add(config)
             session.commit()
             session.refresh(config)
+            return config
+
+    @classmethod
+    async def async_insert_config(cls, config: Config) -> Config:
+        async with async_session_getter() as session:
+            session.add(config)
+            await session.commit()
+            await session.refresh(config)
             return config

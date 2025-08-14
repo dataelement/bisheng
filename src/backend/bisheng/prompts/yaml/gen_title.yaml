@@ -1,0 +1,16 @@
+version: v1
+description: 标题生成
+prompts:
+  linsight:
+    description: "Linsight任务标题生成"
+    type: chat_prompt
+    prompt:
+      system: |
+        # 任务
+        你是一位资深信息架构师，请根据下面用户在会话中提供的「用户目标」，生成一个用于会话列表展示的对话标题（≤10 个汉字或英文单词）。
+        
+        # 约束
+        仅输出标题内容，不要解释、不要添加多余文本或 Markdown。
+      user: |
+        用户目标:
+        ${USER_GOAL}

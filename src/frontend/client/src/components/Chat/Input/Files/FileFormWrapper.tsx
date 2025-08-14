@@ -17,6 +17,8 @@ import store from '~/store';
 
 function FileFormWrapper({
   children,
+  accept = '',
+  fileTip = false,
   disableInputs,
   disabledSearch,
   noUpload = false
@@ -24,6 +26,8 @@ function FileFormWrapper({
   disableInputs: boolean;
   children?: React.ReactNode;
   disabledSearch: boolean;
+  fileTip?: boolean;
+  accept?: string;
   noUpload: boolean;
 }) {
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
@@ -32,7 +36,9 @@ function FileFormWrapper({
   const { endpoint: _endpoint, endpointType } = conversation ?? { endpoint: null };
   const isAgents = useMemo(() => isAgentsEndpoint(_endpoint), [_endpoint]);
 
-  const { handleFileChange, abortUpload } = useFileHandling();
+  const { handleFileChange, abortUpload } = useFileHandling({
+    isLinsight: !fileTip
+  });
 
   const { data: fileConfig = defaultFileConfig } = useGetFileConfig({
     select: (data) => mergeFileConfig(data),
@@ -58,9 +64,11 @@ function FileFormWrapper({
       );
     }
     if (endpointSupportsFiles && !isUploadDisabled) {
+      // this
       return (
         <AttachFile
           isRTL={isRTL}
+          accept={accept}
           disabled={disableInputs || disabledSearch}
           handleFileChange={handleFileChange}
         />
@@ -81,7 +89,7 @@ function FileFormWrapper({
 
   return (
     <>
-      {files.size > 0 && <span className="pl-6 pt-2 text-sm">仅识别附件中的文字</span>}
+      {fileTip && files.size > 0 && <span className="pl-6 pt-2 text-sm">仅识别附件中的文字</span>}
       {fileTotalTokens > 0 && <span className="pl-6 pt-2 text-sm">文件内容超出3万token</span>}
       <FileRow
         files={files}
@@ -89,9 +97,10 @@ function FileFormWrapper({
         abortUpload={abortUpload}
         setFilesLoading={setFilesLoading}
         isRTL={isRTL}
-        Wrapper={({ children }) => <div className="mx-2 mt-2 flex flex-wrap gap-2">{children}</div>}
+        Wrapper={({ children }) => <div className="mx-2 mt-2 flex flex-wrap gap-2 max-h-96 overflow-auto">{children}</div>}
       />
       {children}
+      {/* 上传按钮 */}
       {renderAttachFile()}
     </>
   );

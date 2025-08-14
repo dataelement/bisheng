@@ -85,14 +85,23 @@ class InputNode(BaseNode):
             return res
 
         ret = {}
+        human_input = ""
         # 表单形式的需要去处理对应的文件上传
         for key, value in self.node_params.items():
             ret[key] = value
             key_info = self._node_params_map[key]
+            label, _ = self.parse_msg_with_variables(key_info.get('value')) if key_info.get('value') else key
             if key_info['type'] == 'file':
                 new_params = self.parse_upload_file(key, key_info, value)
                 ret.update(new_params)
-
+                if new_params[key_info['key']]:
+                    content = ""
+                    for one in new_params[key_info['key']]:
+                        content += f"{one.get('source')},"
+                    human_input += f"{label}: {content.rstrip(',')}\n"
+            else:
+                human_input += f"{label}: {value}\n"
+        self.graph_state.save_context(content=f'{human_input}', msg_sender='human')
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:

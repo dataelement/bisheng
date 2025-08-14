@@ -32,8 +32,8 @@ const ParagraphEdit = ({
     const [data, setData] = useState([]);
     const prevOvergapData = useRef(null);
     const { t } = useTranslation('knowledge')
+    const labelTextRef = useRef<any>(partitions);
 
-    const labelTextRef = useLabelTexts(fileId, partitions)
     const [previewFileUrl, setFileUrl] = useState('')
     useEffect(() => {
         chunks ? setFileUrl(filePath) : getFilePathApi(fileId).then(setFileUrl)
@@ -44,57 +44,39 @@ const ParagraphEdit = ({
         return fileName.split('.').pop().toLowerCase()
     }, [fileName])
 
-    const initData = (res) => {
-        let labelsData = []
+    const initData = async (res) => {
+
+        if (!partitions) {
+            await getFileBboxApi(fileId).then(res => {
+                labelTextRef.current = res
+            })
+        }
+
         let value = ''
-        const arrData = [...res.data]
-        // 优先遍历prioritizedItem（放数组前面）
-        // const prioritizedItem = arrData.find(item => item.metadata.chunk_index === chunkId);
-        // if (prioritizedItem) {
-        //     arrData.splice(arrData.indexOf(prioritizedItem), 1);
-        //     arrData.unshift(prioritizedItem);
-        // }
-        // 当前chunk优先排前面
-        // const newArrData = arrData.slice();
-        // const [element] = newArrData.splice(newArrData.findIndex(item => item.metadata.chunk_index === chunkId), 1);
-        // newArrData.unshift(element);
+        const allLabels = convertJsonData(labelTextRef.current)
 
-        const seenIds = new Set()
-        arrData.forEach(chunk => {
+        const activeIds = new Set()
+        res.data.forEach(chunk => {
             const { bbox, chunk_index } = chunk.metadata
-            const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
+            if (chunk_index === chunkId) {
+                const labels = bbox && JSON.parse(bbox).chunk_bboxes || []
+                labels.forEach(label => {
+                    const id = [label.page, ...label.bbox].join('-');
+                    activeIds.add(id)
+                })
 
-            const active = chunk_index === chunkId
-            const resData = labels.reduce((acc, label) => {
-                const id = [label.page, ...label.bbox].join('-');
-                if (seenIds.has(id) && active) {
-                    // 优先使用高亮的label
-                    labelsData[labelsData.findIndex(item => item.id === id)] = {
-                        id: id,
-                        page: label.page,
-                        label: label.bbox,
-                        active: active,
-                        txt: chunk.text
-                    }
-                } else if (!seenIds.has(id)) {
-                    seenIds.add(id);
-                    acc.push({
-                        id: id,
-                        page: label.page,
-                        label: label.bbox,
-                        active: active,
-                        txt: chunk.text
-                    });
-                }
-                return acc;
-            }, []);
-
-            labelsData = [...labelsData, ...resData]
-
-            if (active) {
                 value = chunk.text
             }
         })
+
+        const labelsData = allLabels.map((label) => {
+            return {
+                ...label,
+                active: activeIds.has(label.id)
+            }
+        })
+
+
         setFileName(res.data[0].metadata.source)
         setData(labelsData)
         prevOvergapData.current = labelsData
@@ -248,6 +230,7 @@ const ParagraphEdit = ({
             case 'pdf':
                 return previewFileUrl && <FileView
                     select
+                    startIndex={0}
                     fileUrl={previewFileUrl}
                     labels={labels}
                     scrollTo={postion}
@@ -257,6 +240,7 @@ const ParagraphEdit = ({
             case 'txt': return <TxtFileViewer filePath={previewFileUrl} />
             case 'md': return <TxtFileViewer markdown filePath={previewFileUrl} />
             case 'html': return <TxtFileViewer html filePath={previewFileUrl} />
+            case 'doc':
             case 'docx': return <DocxPreview filePath={previewFileUrl} />
             case 'png':
             case 'jpg':
@@ -270,7 +254,7 @@ const ParagraphEdit = ({
                         <img
                             className="size-52 block"
                             src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-                        <p>预览失败</p>
+                        <p>此文件类型不支持预览</p>
                     </div>
                 </div>
         }
@@ -296,7 +280,7 @@ const ParagraphEdit = ({
                     ></div>
                 </div>
                 {/* right */}
-                <div className="flex-1">
+                <div className="flex-1 min-w-0 w-0">
                     {/* head */}
                     <div className="flex justify-between items-center relative h-10 mb-2 text-sm">
                         <span>{fileName}</span>
@@ -314,7 +298,11 @@ const ParagraphEdit = ({
                     {/* file view */}
                     <div className="bg-gray-100 relative">
                         {showPos && value && Object.keys(labels).length !== 0 && <Button className="absolute top-2 right-2 z-10 bg-background" variant="outline" onClick={() => setRandom(Math.random() / 10000)}><Crosshair className="mr-1" size={16} />{t('backToPosition')}</Button>}
-                        <div className="h-[calc(100vh-104px)]">
+                        <div className="h-[calc(100vh-104px)] overflow-auto"
+                            style={{
+                                width: 'calc(100vh - 104px)',
+                                minWidth: '100%',
+                            }}>
                             {
                                 fileView()
                             }
@@ -370,20 +358,38 @@ const useDragSize = (full) => {
     return { leftPanelWidth, handleMouseDown };
 }
 
-// 标注文本数据
-const useLabelTexts = (fileId: string, partitions: any) => {
-    const labelTextRef = useRef<any>({});
-    useEffect(() => {
-        if (partitions) {
-            labelTextRef.current = partitions
-        } else {
-            getFileBboxApi(fileId).then(res => {
-                labelTextRef.current = res
+// JSON数据转换函数
+export const convertJsonData = (inputObj: Record<string, any>) => {
+    try {
+        const result = []
+
+        // 遍历输入对象的每个键值对
+        for (const [key, value] of Object.entries(inputObj)) {
+            // 解析 key 获取 page 和 label
+            const keyParts = key.split('-')
+            const page = parseInt(keyParts[0])
+            const label = keyParts.slice(1).map(num => parseInt(num))
+
+            result.push({
+                id: key,
+                label: label,
+                page: page,
+                txt: value.text,
+                part_id: value.part_id // 保留用于排序
             })
         }
-    }, [])
 
-    return labelTextRef;
+        // 按 part_id 从小到大排序
+        result.sort((a, b) => a.part_id - b.part_id)
+
+        // 移除临时的 part_id 字段
+        const finalResult = result.map(({ part_id, ...rest }) => rest)
+
+        return finalResult
+    } catch (error) {
+        console.error('数据转换错误:', error)
+        return []
+    }
 }
 
 export default ParagraphEdit;

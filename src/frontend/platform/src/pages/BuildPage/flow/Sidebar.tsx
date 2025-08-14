@@ -22,7 +22,9 @@ const ToolItem = ({ temp, index, dropdown, onDragStart, onClick }) => {
     }, [temp.children]);
 
     return <AccordionItem key={temp.name} value={temp.name + index} className="border-none">
-        <AccordionTrigger className="py-2 bisheng-label">{temp.name}</AccordionTrigger>
+        <AccordionTrigger className="py-2 bisheng-label">
+            <span className="break-all">{temp.name}</span>
+        </AccordionTrigger>
         <AccordionContent className="pb-2">
             {
                 sortData.map(el =>

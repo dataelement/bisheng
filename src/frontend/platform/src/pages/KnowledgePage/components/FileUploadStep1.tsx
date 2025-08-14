@@ -38,7 +38,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
                     "append_header": true,
                     "header_end_row": 1,
                     "header_start_row": 1,
-                    "slice_length": 15
+                    "slice_length": 10
                 }
             })),
             separator: ["\n\n", "\n"],

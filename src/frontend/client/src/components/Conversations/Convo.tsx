@@ -1,19 +1,17 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useRecoilValue } from 'recoil';
 import { Check, X } from 'lucide-react';
-import { useParams } from 'react-router-dom';
-import { Constants } from '~/data-provider/data-provider/src';
-import type { MouseEvent, FocusEvent, KeyboardEvent } from 'react';
-import type { TConversation } from '~/data-provider/data-provider/src';
-import { useNavigateToConvo, useMediaQuery, useLocalize } from '~/hooks';
-import { useUpdateConversationMutation } from '~/data-provider';
-import EndpointIcon from '~/components/Endpoints/EndpointIcon';
-import { useGetEndpointsQuery } from '~/data-provider';
+import type { FocusEvent, KeyboardEvent, MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useRecoilValue } from 'recoil';
 import { NotificationSeverity } from '~/common';
+import { useGetEndpointsQuery, useUpdateConversationMutation } from '~/data-provider';
+import type { TConversation } from '~/data-provider/data-provider/src';
+import { Constants } from '~/data-provider/data-provider/src';
+import { useLocalize, useMediaQuery, useNavigateToConvo } from '~/hooks';
 import { useToastContext } from '~/Providers';
-import { ConvoOptions } from './ConvoOptions';
-import { cn } from '~/utils';
 import store from '~/store';
+import { cn } from '~/utils';
+import { ConvoOptions } from './ConvoOptions';
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
 
@@ -44,6 +42,7 @@ export default function Conversation({
   const [isPopoverActive, setIsPopoverActive] = useState(false);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const localize = useLocalize();
+  const navigate = useNavigate();
 
   const clickHandler = async (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button === 0 && (event.ctrlKey || event.metaKey)) {
@@ -63,11 +62,18 @@ export default function Conversation({
     if (typeof title === 'string' && title.length > 0) {
       // document.title = title;
     }
+
     /* Note: Latest Message should not be reset if existing convo */
-    navigateWithLastTools(
-      conversation,
-      !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
-    );
+    if (conversation.flowType === 20) {
+      // 灵思
+      navigate(`/linsight/${conversationId}`);
+    } else {
+      // 会话
+      navigateWithLastTools(
+        conversation,
+        !(conversationId ?? '') || conversationId === Constants.NEW_CONVO,
+      );
+    }
   };
 
   const renameHandler = useCallback(() => {
@@ -94,7 +100,7 @@ export default function Conversation({
       }
 
       updateConvoMutation.mutate(
-        { conversationId, title: titleInput ?? '' },
+        { conversationId, title: titleInput ?? '', flowType: conversation.flowType },
         {
           onError: () => {
             setTitleInput(title);
@@ -107,7 +113,7 @@ export default function Conversation({
         },
       );
     },
-    [title, titleInput, conversationId, showToast, updateConvoMutation],
+    [title, titleInput, conversationId, showToast, conversation, updateConvoMutation],
   );
 
   const handleKeyDown = useCallback(
@@ -144,13 +150,13 @@ export default function Conversation({
   return (
     <div
       className={cn(
-        'group relative mt-2 flex h-9 w-full items-center rounded-lg hover:bg-surface-active-alt',
-        isActiveConvo ? 'bg-surface-active-alt' : '',
+        'group relative mt-2 flex h-10 w-full items-center rounded-lg hover:bg-[#EBEFF8]',
+        isActiveConvo ? 'bg-[#EBEFF8]' : '',
         isSmallScreen ? 'h-12' : '',
       )}
     >
       {renaming ? (
-        <div className="absolute inset-0 z-20 flex w-full items-center rounded-lg bg-surface-active-alt p-1.5">
+        <div className="absolute inset-0 z-20 flex w-full items-center rounded-lg bg-[#EBEFF8] p-1.5">
           <input
             ref={inputRef}
             type="text"
@@ -184,21 +190,21 @@ export default function Conversation({
       ) : (
         <a
           // 切换会话
-          href={`/c/${conversationId}`}
+          // href={`/c/${conversationId}`}
           data-testid="convo-item"
           onClick={clickHandler}
           className={cn(
             'flex grow cursor-pointer items-center gap-2 overflow-hidden whitespace-nowrap break-all rounded-lg px-2 py-2',
-            isActiveConvo ? 'bg-surface-active-alt' : '',
+            isActiveConvo ? 'bg-[#EBEFF8]' : '',
           )}
           title={title ?? ''}
         >
-          <EndpointIcon
+          {/* <EndpointIcon
             conversation={conversation}
             endpointsConfig={endpointsConfig}
             size={20}
             context="menu-item"
-          />
+          /> */}
           <div
             className="relative line-clamp-1 flex-1 grow overflow-hidden"
             onDoubleClick={(e) => {
@@ -208,12 +214,13 @@ export default function Conversation({
               setRenaming(true);
             }}
           >
+            <img src={__APP_ENV__.BASE_URL + (conversation?.flowType === 20 ? "/assets/linsi.png" : "/assets/talk.png")} className='size-6 inline-block mr-2.5' alt="" />
             {title}
           </div>
           {isActiveConvo ? (
             <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l" />
           ) : (
-            <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l from-surface-primary-alt from-0% to-transparent group-hover:from-surface-active-alt group-hover:from-40%" />
+            <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l " />
           )}
         </a>
       )}

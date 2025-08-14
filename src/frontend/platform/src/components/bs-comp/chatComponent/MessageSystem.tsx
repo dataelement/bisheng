@@ -1,10 +1,9 @@
 import { useToast } from "@/components/bs-ui/toast/use-toast"
+import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown"
 import { copyText } from "@/utils"
 import { Copy } from "lucide-react"
 import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 
 export default function MessageSystem({ data }) {
     const { message } = useToast()
@@ -23,13 +22,7 @@ export default function MessageSystem({ data }) {
     // 日志markdown
     const logMkdown = useMemo(
         () => (
-            data.thought && <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                linkTarget="_blank"
-                className="bs-mkdown text-gray-600 dark:text-[white] inline-block break-all max-w-full text-sm [&>pre]:text-wrap"
-            >
-                {data.thought.toString()}
-            </ReactMarkdown>
+            data.thought && <MessageMarkDown message={data.thought.toString()} />
         ),
         [data.thought]
     )

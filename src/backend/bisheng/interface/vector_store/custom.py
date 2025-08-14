@@ -1,10 +1,8 @@
-from ast import literal_eval
 from abc import ABC
+from ast import literal_eval
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import jieba
-from bisheng_langchain.vectorstores.elastic_keywords_search import DEFAULT_PROMPT
-from bisheng_langchain.vectorstores.milvus import DEFAULT_MILVUS_CONNECTION
 from langchain.chains.llm import LLMChain
 from langchain.docstore.document import Document
 from langchain.embeddings.base import Embeddings
@@ -14,6 +12,9 @@ from langchain_community.vectorstores.milvus import Milvus as MilvusLangchain
 from langchain_core.language_models import BaseLLM
 from langchain_core.prompts import PromptTemplate
 from loguru import logger
+
+from bisheng_langchain.vectorstores.elastic_keywords_search import DEFAULT_PROMPT
+from bisheng_langchain.vectorstores.milvus import DEFAULT_MILVUS_CONNECTION
 
 if TYPE_CHECKING:
     from elasticsearch import Elasticsearch  # noqa: F401
@@ -167,12 +168,12 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         connections.remove_connection(using)
 
     def _init(
-        self,
-        embeddings: Optional[list] = None,
-        metadatas: Optional[list[dict]] = None,
-        partition_names: Optional[list] = None,
-        replica_number: int = 1,
-        timeout: Optional[float] = None,
+            self,
+            embeddings: Optional[list] = None,
+            metadatas: Optional[list[dict]] = None,
+            partition_names: Optional[list] = None,
+            replica_number: int = 1,
+            timeout: Optional[float] = None,
     ) -> None:
         self._extract_fields(col_index=0)
         self._create_search_params()
@@ -227,18 +228,18 @@ class MilvusWithPermissionCheck(MilvusLangchain):
 
     @classmethod
     def from_texts(
-        cls,
-        texts: List[str],
-        embedding: Embeddings,
-        metadatas: Optional[List[dict]] = None,
-        collection_name: list[str] = None,
-        connection_args: dict[str, Any] = DEFAULT_MILVUS_CONNECTION,
-        consistency_level: str = 'Session',
-        index_params: Optional[dict] = None,
-        search_params: Optional[dict] = None,
-        drop_old: bool = False,
-        no_embedding: bool = False,
-        **kwargs: Any,
+            cls,
+            texts: List[str],
+            embedding: Embeddings,
+            metadatas: Optional[List[dict]] = None,
+            collection_name: list[str] = None,
+            connection_args: dict[str, Any] = DEFAULT_MILVUS_CONNECTION,
+            consistency_level: str = 'Session',
+            index_params: Optional[dict] = None,
+            search_params: Optional[dict] = None,
+            drop_old: bool = False,
+            no_embedding: bool = False,
+            **kwargs: Any,
     ):
         """
         no insert data into milvus, only search from milvus
@@ -256,13 +257,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return vector_db
 
     def similarity_search(
-        self,
-        query: str,
-        k: int = 4,
-        param: Optional[dict] = None,
-        expr: Optional[str] = None,
-        timeout: Optional[int] = None,
-        **kwargs: Any,
+            self,
+            query: str,
+            k: int = 4,
+            param: Optional[dict] = None,
+            expr: Optional[str] = None,
+            timeout: Optional[int] = None,
+            **kwargs: Any,
     ) -> List[Document]:
         """Perform a similarity search against the query string.
 
@@ -288,13 +289,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return [doc for doc, _ in res]
 
     def similarity_search_by_vector(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        param: Optional[dict] = None,
-        expr: Optional[str] = None,
-        timeout: Optional[int] = None,
-        **kwargs: Any,
+            self,
+            embedding: List[float],
+            k: int = 4,
+            param: Optional[dict] = None,
+            expr: Optional[str] = None,
+            timeout: Optional[int] = None,
+            **kwargs: Any,
     ) -> List[Document]:
         """Perform a similarity search against the query string.
 
@@ -320,13 +321,13 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return [doc for doc, _ in res]
 
     def similarity_search_with_score(
-        self,
-        query: str,
-        k: int = 4,
-        param: Optional[dict] = None,
-        expr: Optional[str] = None,
-        timeout: Optional[int] = None,
-        **kwargs: Any,
+            self,
+            query: str,
+            k: int = 4,
+            param: Optional[dict] = None,
+            expr: Optional[str] = None,
+            timeout: Optional[int] = None,
+            **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Perform a search on a query string and return results with score.
 
@@ -367,14 +368,14 @@ class MilvusWithPermissionCheck(MilvusLangchain):
         return res
 
     def similarity_search_with_score_by_vector(
-        self,
-        embedding: List[float],
-        k: int = 4,
-        param: Optional[dict] = None,
-        query: Optional[str] = None,
-        expr: Optional[str] = None,
-        timeout: Optional[int] = None,
-        **kwargs: Any,
+            self,
+            embedding: List[float],
+            k: int = 4,
+            param: Optional[dict] = None,
+            query: Optional[str] = None,
+            expr: Optional[str] = None,
+            timeout: Optional[int] = None,
+            **kwargs: Any,
     ) -> List[Tuple[Document, float]]:
         """Perform a search on a query string and return results with score.
 
@@ -452,8 +453,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
     @staticmethod
     def _relevance_score_fn(distance: float) -> float:
         """Normalize the distance to a score on a scale [0, 1]."""
-        # Todo: normalize the es score on a scale [0, 1]
-        return 1 - distance
+        return 1 - distance / 2
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         return self._relevance_score_fn
@@ -465,13 +465,13 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
     """
 
     def __init__(
-        self,
-        elasticsearch_url: str,
-        index_name: List[str],
-        drop_old: Optional[bool] = False,
-        *,
-        ssl_verify: Optional[Dict[str, Any]] = None,
-        llm_chain: Optional[LLMChain] = None,
+            self,
+            elasticsearch_url: str,
+            index_name: List[str],
+            drop_old: Optional[bool] = False,
+            *,
+            ssl_verify: Optional[Dict[str, Any]] = None,
+            llm_chain: Optional[LLMChain] = None,
     ):
         """Initialize with necessary components."""
         try:
@@ -572,17 +572,17 @@ class ElasticsearchWithPermissionCheck(VectorStore, ABC):
 
     @classmethod
     def from_texts(
-        cls,
-        texts: List[str],
-        embedding: Embeddings,
-        metadatas: Optional[List[dict]] = None,
-        ids: Optional[List[str]] = None,
-        index_name: Optional[List[str]] = None,
-        refresh_indices: bool = True,
-        llm: Optional[BaseLLM] = None,
-        prompt: Optional[PromptTemplate] = DEFAULT_PROMPT,
-        drop_old: Optional[bool] = False,
-        **kwargs: Any,
+            cls,
+            texts: List[str],
+            embedding: Embeddings,
+            metadatas: Optional[List[dict]] = None,
+            ids: Optional[List[str]] = None,
+            index_name: Optional[List[str]] = None,
+            refresh_indices: bool = True,
+            llm: Optional[BaseLLM] = None,
+            prompt: Optional[PromptTemplate] = DEFAULT_PROMPT,
+            drop_old: Optional[bool] = False,
+            **kwargs: Any,
     ):
         """Construct ElasticKeywordsSearch wrapper from raw documents.
 

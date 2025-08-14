@@ -12,23 +12,50 @@ export interface InputProps
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
     ({ className, boxClassName, type, maxLength, showCount, value, defaultValue, onChange, ...props }, ref) => {
-        // 用于存储当前的输入值
-        const [currentValue, setCurrentValue] = useState(value || defaultValue || '');
+        const [currentValue, setCurrentValue] = useState(value ?? defaultValue ?? '');
 
-        // 处理 onChange 事件，更新 currentValue
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            setCurrentValue(e.target.value);
+            const { value } = e.target;
+            if (type === "number") {
+                // 使用正则表达式精确阻止负数（包括粘贴操作）
+                if (/-/.test(value)) return;
+
+                // 阻止单独的0
+                if (props.min > 0 && value === "0") return;
+
+                // 最大长度限制
+                if (maxLength && value.length > maxLength) return;
+                // 最大值限制
+                if (props.max && value > props.max) return
+            }
+
+            setCurrentValue(value);
             if (onChange) {
-                onChange(e); // 如果外部有 onChange，依然需要调用它
+                onChange(e);
             }
         };
 
-        // 当 value 或 defaultValue 改变时更新 currentValue
+        // 处理粘贴事件
+        const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+            if (type === "number") {
+                const pasteData = e.clipboardData.getData('text/plain');
+                // 阻止包含负数的粘贴
+                if (/-/.test(pasteData)) {
+                    e.preventDefault();
+                }
+            }
+        };
+
         React.useEffect(() => {
             if (value !== undefined) {
-                setCurrentValue(value);
+                // 处理外部传入值为0的情况
+                if (type === "number" && (value === 0 || value === "0")) {
+                    // setCurrentValue('');
+                } else {
+                    setCurrentValue(value);
+                }
             }
-        }, [value]);
+        }, [value, type]);
 
         const noEmptyProps =
             value === undefined ? {} : { value: currentValue }
@@ -39,10 +66,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                     type={type}
                     className={cname(
                         "flex h-9 w-full rounded-md border border-input bg-search-input px-3 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                        type === 'number' ? 'number-input-arrows' : '',
                         className
                     )}
                     defaultValue={defaultValue}
                     onChange={handleChange}
+                    onPaste={handlePaste} // 添加粘贴事件处理
                     maxLength={maxLength}
                     ref={ref}
                     {...noEmptyProps}
@@ -53,6 +82,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                         {currentValue.length}/{maxLength}
                     </div>
                 )}
+
+                <style jsx>{`
+                    .number-input-arrows::-webkit-inner-spin-button,
+                    .number-input-arrows::-webkit-outer-spin-button {
+                        opacity: 1;
+                    }
+                `}</style>
             </div>
         );
     }
@@ -207,18 +243,18 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
                             className={cname('pr-8', inputClassName)}
                             placeholder={props.placeholder || ''}
                             onChange={(e) => handleChange(e.target.value, item.key, index)}
-                            onInput={(e) => {
-                                rules.some(rule => {
-                                    if (rule.maxLength && e.target.value.length > rule.maxLength) {
-                                        e.target.nextSibling.textContent = rule.message;
-                                        e.target.nextSibling.style.display = '';
-                                        return true;
-                                    }
-                                    if (e.target.nextSibling) {
-                                        e.target.nextSibling.style.display = 'none';
-                                    }
-                                })
-                            }}
+                            // onInput={(e) => {
+                            //     rules.some(rule => {
+                            //         if (rule.maxLength && e.target.value.length > rule.maxLength) {
+                            //             e.target.parentNode.nextSibling.textContent = rule.message;
+                            //             e.target.parentNode.nextSibling.style.display = '';
+                            //             return true;
+                            //         }
+                            //         if (e.target.nextSibling) {
+                            //             e.target.parentNode.nextSibling.style.display = 'none';
+                            //         }
+                            //     })
+                            // }}
                         // onFocus={(e) => {
                         //     if (e.target.value && index === inputs.length - 1) {
                         //         setInputs([...inputs, { id: generateUUID(8), value: '' }]);

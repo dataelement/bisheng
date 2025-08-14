@@ -2,67 +2,26 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { CodeBlock } from "@/modals/formModal/chatMessage/codeBlock";
+import { locationContext } from "@/contexts/locationContext";
+import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { cn } from "@/util/utils";
 import { debounce } from "lodash-es";
 import { CircleX, FileCode, LocateFixed } from "lucide-react";
-import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import AceEditor from "react-ace";
-import ReactMarkdown from "react-markdown";
-import rehypeMathjax from "rehype-mathjax";
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import Vditor from 'vditor';
 import 'vditor/dist/index.css';
 import useKnowledgeStore from "../useKnowledgeStore";
-import { locationContext } from "@/contexts/locationContext";
 
 export const MarkdownView = ({ noHead = false, data }) => {
-    const text = useMemo(() =>
-        data.text.replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
-            .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n')
-            .replaceAll('(bisheng/tmp/images', '(/bisheng/tmp/images')
-        , [data.text])
 
     return <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
         {!noHead && <p className="text-sm text-gray-500 flex gap-2 mb-1">
-            <span>切片{data.chunkIndex + 1}</span>
+            <span>分段{data.chunkIndex + 1}</span>
             <span>-</span>
             <span>{data.text.length} 字符</span>
         </p>}
-        <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeMathjax]}
-            linkTarget="_blank"
-            className="react-markdown inline-block break-all max-w-full text-sm text-gray-500"
-            components={{
-                code: ({ node, inline, className, children, ...props }) => {
-                    if (children.length) {
-                        if (children[0] === "▍") {
-                            return (<span className="form-modal-markdown-span"> ▍ </span>);
-                        }
-                        if (typeof children[0] === "string") {
-                            children[0] = children[0].replace("▍", "▍");
-                        }
-                    }
-                    // className 区分代码语言 python json js 
-                    const match = /language-(\w+)/.exec(className || "");
-
-                    return !inline ? (
-                        <CodeBlock
-                            key={Math.random()}
-                            language={(match && match[1]) || ""}
-                            value={String(children).replace(/\n$/, "")}
-                            {...props}
-                        />
-                    ) : (
-                        <code className={className} {...props}> {children} </code>
-                    );
-                },
-            }}
-        >
-            {text}
-        </ReactMarkdown>
+        <MessageMarkDown message={data.text} />
     </div>
 }
 
@@ -92,7 +51,7 @@ const AceEditorCom = ({ markdown, hidden, onChange, onBlur }) => {
 // 预览编辑
 const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref) => {
     const vditorRef = useRef(null);
-    const readyRef = useRef(false);
+    const readyRef = useRef(false); // 保证vditor初始化完成后,再调用实例方法,否则报错 Cannot read properties of undefined (reading 'currentMode')
     const valurCacheRef = useRef('');
     const domRef = useRef(null);
 
@@ -104,7 +63,6 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
         // console.log('markdown :>> ', markdown);
         const processedMarkdown = defalutValue
             .replace(/^( {4,})/gm, '   ')
-            .replaceAll('(bisheng/tmp/images', '(/bisheng/tmp/images')
         if (!hidden && vditorRef.current && readyRef.current) {
             vditorRef.current.setValue(processedMarkdown);
         } else {
@@ -115,13 +73,17 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
     useImperativeHandle(ref, () => ({
         setValue(val) {
             const processedMarkdown = val.replace(/^( {4,})/gm, '   ')
-            vditorRef.current.setValue(processedMarkdown)
+            if (readyRef.current) {
+                vditorRef.current?.setValue(processedMarkdown)
+            } else {
+                valurCacheRef.current = processedMarkdown;
+            }
         }
     }))
 
     useEffect(() => {
         vditorRef.current = new Vditor(domRef.current, {
-            cdn: location.origin + '/vditor',
+            cdn: location.origin + __APP_ENV__.BASE_URL + '/vditor',
             height: '100%',
             toolbarConfig: {
                 hide: true,
@@ -148,19 +110,19 @@ const VditorEditor = forwardRef(({ defalutValue, hidden, onBlur, onChange }, ref
                 readyRef.current = true;
 
                 if (valurCacheRef.current) {
-                    vditorRef.current.setValue(valurCacheRef.current);
+                    vditorRef.current?.setValue(valurCacheRef.current);
                 }
                 // vditorRef.current.disabled();
             },
             // input: onChange, // 有延时
             blur: () => {
-                const value = vditorRef.current.getValue()
+                const value = vditorRef.current?.getValue()
                 blurRef.current(
                     value,
                     () => {
                         // 还原
                         const processedMarkdown = defalutValue.replace(/^( {4,})/gm, '   ')
-                        vditorRef.current.setValue(processedMarkdown);
+                        vditorRef.current?.setValue(processedMarkdown);
                     }
                 );
                 onChange(value);

@@ -22,11 +22,11 @@ export const useDelayedUploadToast = () => {
 
     const timer = setTimeout(() => {
       const message = localize('com_ui_upload_delay', { 0: fileName });
-      showToast({
-        message,
-        status: 'warning',
-        duration: 10000,
-      });
+      // showToast({
+      //   message,
+      //   status: 'warning',
+      //   duration: 10000,
+      // });
     }, delay);
 
     setUploadTimers((prev) => ({ ...prev, [fileId]: timer }));

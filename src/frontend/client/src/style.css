@@ -87,8 +87,8 @@ html {
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 3.9%;
-  --primary: 0 0% 9%;
-  --primary-foreground: 0 0% 98%;
+  --primary: 219 98% 46%;
+  --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 96.1%;
   --secondary-foreground: 0 0% 9%;
   --muted: 0 0% 96.1%;
@@ -1350,21 +1350,21 @@ button {
 }
 
 .btn-primary:focus {
-  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  /* --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
   --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
-  --tw-ring-offset-width: 2px;
+  --tw-ring-offset-width: 0;
   box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), 0 0 transparent;
-  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 transparent);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 transparent); */
 }
 
 .btn-primary.focus-visible {
-  --tw-ring-opacity: 1;
-  --tw-ring-color: rgba(25, 195, 125, var(--tw-ring-opacity));
+  /* --tw-ring-opacity: 1;
+  --tw-ring-color: rgba(25, 195, 125, var(--tw-ring-opacity)); */
 }
 
 .btn-primary:focus-visible {
-  --tw-ring-opacity: 1;
-  --tw-ring-color: rgba(25, 195, 125, var(--tw-ring-opacity));
+  /* --tw-ring-opacity: 1;
+  --tw-ring-color: rgba(25, 195, 125, var(--tw-ring-opacity)); */
 }
 
 .btn-primary:disabled:hover {
@@ -1750,6 +1750,19 @@ html {
 body,
 html {
   height: 100%;
+  font-family:
+    "PingFang SC",
+    /* 苹果设备优先使用苹方 */
+    "Hiragino Sans GB",
+    /* 旧版 macOS 备选 */
+    "Microsoft YaHei",
+    /* Windows 备选（微软雅黑） */
+    "Helvetica Neue",
+    /* 通用西文字体 */
+    Arial,
+    /* 最终回退字体 */
+    sans-serif;
+  /* 无衬线字体族兜底 */
 }
 
 .dark body,
@@ -2567,14 +2580,14 @@ button.scroll-convo {
   z-index: 50;
   cursor: pointer;
   border-radius: 0.275rem;
-  background-color: var(--surface-primary);
+  background-color: rgba(0, 0, 0, 0.8);
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
   padding-left: 0.5rem;
   padding-right: 0.5rem;
   font-size: 1rem;
   line-height: 1.5rem;
-  color: black;
+  color: white;
   box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.25);
 }
 
@@ -2706,4 +2719,199 @@ button.scroll-convo {
 
 .scale-98 {
   transform: scale(0.98);
+}
+
+.linsight-card {
+  border: 0.5px solid #b3b7c438;
+  background: #FFFFFF;
+  box-shadow: 0px 12px 24px 0px #001E5A1A;
+  border-radius: 24px;
+  padding: 20px 24px;
+}
+
+.lingsi-text {
+  background: linear-gradient(90deg, #143BFF 0%, #58A6FF 50.48%, #143BFF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+
+.lingsi-border-box {
+  position: relative;
+  width: 200px;
+  height: 108px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  /* 防止内容溢出被裁剪 */
+  overflow: hidden;
+}
+
+.lingsi-border-box::before {
+  content: '';
+  position: absolute;
+  top: -65px;
+  /* 控制边框厚度 */
+  left: -15px;
+  right: -15px;
+  bottom: -65px;
+  background: conic-gradient(from 0deg at 50% 50%,
+      #0066FF,
+      #ffffff);
+  border-radius: 10px;
+  /* 比内容层稍大 */
+  z-index: -1;
+  animation: rotate-border 3s linear infinite;
+}
+
+.linsight-vditor .vditor-toolbar {
+  display: none;
+}
+
+.linsight-vditor table td,
+.vditor-reset table th {
+  word-wrap: break-word !important;
+  white-space: normal !important;
+  font-size: 12px;
+  padding: 2px 4px !important;
+  word-break: break-all !important;
+}
+
+.linsight-vditor .vditor-reset h1,
+.linsight-vditor .vditor-reset h2 {
+  margin-top: 8px;
+  border: none;
+}
+
+.vditor-reset li,
+.vditor-reset li+li {
+  margin-top: 0.5em;
+}
+
+.vditor-reset hr {
+  border-width: 1px;
+}
+
+.linsight-vditor .vditor-reset {
+  font-size: 14px;
+  padding: 0 20px 160px 14px !important;
+  scrollbar-color: transparent transparent;
+}
+
+.linsight-vditor .vditor-reset:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+}
+
+.linsight-vditor .vditor-reset .vditor-wysiwyg__preview code.hljs {
+  /* display: none; */
+  color: #333;
+}
+
+.linsight-vditor .vditor-content {
+  min-height: 20px;
+}
+
+.linsight-vditor .vditor-content p {
+  margin-bottom: 6px;
+  color: #343538;
+}
+
+.linsight-vditor pre.vditor-reset:focus {
+  background-color: transparent !important;
+}
+
+.linsight-vditor .vditor-wysiwyg pre.vditor-reset[contenteditable="false"] {
+  opacity: 0.9;
+}
+
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h1:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h2:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h3:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h4:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h5:before,
+.linsight-vditor .vditor-wysiwyg>.vditor-reset>h6:before,
+.vditor-wysiwyg div.vditor-wysiwyg__block:before,
+.vditor-wysiwyg div[data-type="link-ref-defs-block"]:before,
+.vditor-wysiwyg div[data-type="footnotes-block"]:before,
+.vditor-wysiwyg .vditor-toc:before {
+  margin-left: -20px;
+  padding-right: 0;
+  font-size: 12px;
+  position: relative;
+  left: 6px;
+}
+
+.linsi-span {
+  background: #E9F1FF;
+  color: #2A3F73;
+  font-size: 14px;
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
+.linsi-error {
+  background: #ffece9;
+  color: #a13434;
+  font-size: 14px;
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
+/* hover展示滚动条 */
+.scroll-hover {
+  overflow: auto;
+  scrollbar-width: thin;
+  /* Firefox */
+  scrollbar-color: transparent transparent;
+  /* 滚动条滑块和轨道都透明 */
+}
+
+/* Webkit浏览器样式 */
+.scroll-hover::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: transparent;
+}
+
+.scroll-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+/* 悬停时显示滚动条 */
+.scroll-hover:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.scroll-hover:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+  /* Firefox悬停样式 */
+}
+
+@keyframes rotate-border {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes loadingDots {
+
+  0%,
+  80%,
+  100% {
+    opacity: 1;
+    background-color: rgb(0, 0, 0);
+  }
+
+  40% {
+    opacity: 0.3;
+    background-color: rgb(156, 163, 175);
+  }
 }

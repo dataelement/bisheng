@@ -27,8 +27,6 @@ from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient, bucket
 
-ETL_4_LM_URL_NAME = "unstructured_api_url"
-
 try:
     from bisheng.worker import process_graph_cached_task
 except ImportError:
@@ -73,6 +71,7 @@ def get_env():
     env['pro'] = settings.settings.get_system_login_method().bisheng_pro
     env['version'] = __version__
     env['enable_etl4lm'] = etl_for_lm_url is not None
+
     return resp_200(env)
 
 
@@ -89,7 +88,14 @@ def save_config(data: dict, admin_user: UserPayload = Depends(get_admin_user)):
         raise HTTPException(status_code=500, detail='配置不能为空')
     try:
         # 校验是否符合yaml格式
-        _ = yaml.safe_load(data.get('data'))
+        config = yaml.safe_load(data.get('data'))
+
+        # 判断 linsight_invitation_code 是不是boolean
+        if isinstance(config, dict) and 'linsight_invitation_code' in config.keys():
+            if config['linsight_invitation_code'] is not None and bool(config['linsight_invitation_code']) not in [True,
+                                                                                                                   False]:
+                raise ValueError('linsight_invitation_code must be a boolean value')
+
         db_config = ConfigDao.get_config(ConfigKeyEnum.INIT_DB)
         db_config.value = data.get('data')
         ConfigDao.insert_config(db_config)

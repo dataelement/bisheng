@@ -55,6 +55,7 @@ export default function FileRow({
 
   useEffect(() => {
     if (files.length === 0) {
+      setFilesLoading(false);
       return;
     }
 
@@ -78,14 +79,14 @@ export default function FileRow({
         display: 'flex',
         flexDirection: 'row-reverse',
         flexWrap: 'wrap',
-        gap: '4px',
+        gap: '6px',
         width: '100%',
         maxWidth: '100%',
       }
       : {
         display: 'flex',
         flexWrap: 'wrap',
-        gap: '4px',
+        gap: '6px',
         width: '100%',
         maxWidth: '100%',
       };

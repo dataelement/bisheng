@@ -12,8 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
-import { createFlowVersion, deleteVersion, getFlowVersions, getVersionDetails, updateVersion } from "@/controllers/API/flow";
-import { copyReportTemplate, onlineWorkflow, onlineWorkflowApi, saveWorkflow } from "@/controllers/API/workflow";
+import { copyReportTemplate, createWorkFlowVersion, deleteVersion, getVersionDetails, getWorkFlowVersions, onlineWorkflow, onlineWorkflowApi, saveWorkflow, updateVersion } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
@@ -218,7 +217,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             await copyReportTemplate(node.data)
         }
         const res = await captureAndAlertRequestErrorHoc(
-            createFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: { nodes, edges, viewport }, original_version_id: version.id })
+            createWorkFlowVersion(flow.id, { name: `v${maxNo}`, description: '', data: { nodes, edges, viewport }, original_version_id: version.id })
         )
         message({
             variant: "success",
@@ -576,7 +575,7 @@ const useNodeEvent = (flow) => {
             ([inputNodeLs, outputNodeLs, branchNodeLs], line) => {
                 line.nodeIds.forEach(node => {
                     if (node.nodeId.startsWith('input')) {
-                        const inputNode = flow.nodes.find(_node => _node.id === node.nodeId && _node.data.tab.value === 'input');
+                        const inputNode = flow.nodes.find(_node => _node.id === node.nodeId && _node.data.tab.value === 'dialog_input');
                         // It is an input & ouput node and is different from the branch path in ids;
                         if (inputNode && !inputNodeLs.some(el => el.branch === inputNode.branch)) {
                             !nodeLMap[node.branch] && inputNodeLs.push(node);
@@ -654,7 +653,7 @@ const useVersion = (flow) => {
     const lastVersionIndexRef = useRef(0)
 
     const refrenshVersions = () => {
-        return getFlowVersions(flow.id).then(({ data, total }) => {
+        return getWorkFlowVersions(flow.id).then(({ data, total }) => {
             setVersions(data)
             lastVersionIndexRef.current = total - 1
             const currentvId = window.flow_version

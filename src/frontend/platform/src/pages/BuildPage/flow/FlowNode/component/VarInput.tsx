@@ -141,7 +141,7 @@ export default function VarInput({
 
         // 文本框内容
         const key = `${item.id}.${_var.value}`;
-        const label = `${item.name}/${_var.label}`;
+        const label = `${item.name.trim()}/${_var.label}`;
 
         if (flowNode.varZh) {
             const existingProp = Object.keys(flowNode.varZh).find(prop => flowNode.varZh[prop] === label);

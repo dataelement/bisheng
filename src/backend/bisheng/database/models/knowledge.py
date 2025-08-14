@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import Column, DateTime, Field, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.database.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -17,7 +17,7 @@ from bisheng.database.models.user_role import UserRoleDao
 class KnowledgeTypeEnum(Enum):
     QA = 1
     NORMAL = 0
-    PRIVATE = 2
+    PRIVATE = 2  # 工作台的个人知识库
 
 
 class KnowledgeState(Enum):
@@ -161,6 +161,25 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_user_knowledge(cls,
+                                  user_id: int,
+                                  knowledge_id_extra: List[int] = None,
+                                  knowledge_type: KnowledgeTypeEnum = None,
+                                  name: str = None,
+                                  page: int = 0,
+                                  limit: int = 10,
+                                  filter_knowledge: List[int] = None) -> List[Knowledge]:
+        statement = select(Knowledge).where(Knowledge.state > 0)
+
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name, page, limit,
+                                                filter_knowledge)
+
+        statement = statement.order_by(Knowledge.update_time.desc())
+        async with async_session_getter() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def count_user_knowledge(cls,
                              user_id: int,
                              knowledge_id_extra: List[int] = None,
@@ -171,6 +190,18 @@ class KnowledgeDao(KnowledgeBase):
                                                 knowledge_type, name)
         with session_getter() as session:
             return session.scalar(statement)
+
+    @classmethod
+    async def acount_user_knowledge(cls,
+                                    user_id: int,
+                                    knowledge_id_extra: List[int] = None,
+                                    knowledge_type: KnowledgeTypeEnum = None,
+                                    name: str = None) -> int:
+        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
+                                                knowledge_type, name)
+        async with async_session_getter() as session:
+            return await session.scalar(statement)
 
     @classmethod
     def count_by_filter(cls, filters: List[Any]) -> int:
@@ -286,6 +317,23 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_all_knowledge(cls,
+                                 name: str = None,
+                                 knowledge_type: KnowledgeTypeEnum = None,
+                                 page: int = 0,
+                                 limit: int = 0) -> List[Knowledge]:
+        statement = select(Knowledge).where(Knowledge.state > 0)
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
+
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(Knowledge.update_time.desc())
+        async with async_session_getter() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def count_all_knowledge(cls,
                             name: str = None,
                             knowledge_type: KnowledgeTypeEnum = None) -> int:
@@ -295,6 +343,17 @@ class KnowledgeDao(KnowledgeBase):
                                                       knowledge_type=knowledge_type)
         with session_getter() as session:
             return session.scalar(statement)
+
+    @classmethod
+    async def acount_all_knowledge(cls,
+                                   name: str = None,
+                                   knowledge_type: KnowledgeTypeEnum = None) -> int:
+        statement = select(func.count(Knowledge.id)).where(Knowledge.state > 0)
+        statement = cls.generate_all_knowledge_filter(statement,
+                                                      name=name,
+                                                      knowledge_type=knowledge_type)
+        async with async_session_getter() as session:
+            return await session.scalar(statement)
 
     @classmethod
     def update_knowledge_list(cls, knowledge_list: List[Knowledge]):

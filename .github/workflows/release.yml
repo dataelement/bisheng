@@ -43,6 +43,12 @@ jobs:
 
           docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-amd64
           docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-backend:latest
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }} ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+
+          docker manifest create ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-amd64
+          docker manifest push ${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
   
   sync_dataelem_repos:
     runs-on: ubuntu-latest
@@ -85,12 +91,55 @@ jobs:
           docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
           echo "--- sync over ---"
 
+  test_pull_images:
+    needs:
+      - combine_publish_images
+      - sync_dataelem_repos
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Get version
+        id: get_version
+        run: |
+          echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      - name: Echo version
+        id: echo_version
+        run: |
+          echo "this release is link version: ${{ steps.get_version.outputs.VERSION }}"
+      # 登录 cr docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          registry: https://cr.dataelem.com/
+          username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+      # 登录 docker hub
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          # GitHub Repo => Settings => Secrets 增加 docker hub 登录密钥信息
+          # DOCKERHUB_USERNAME 是 docker hub 账号名.
+          # DOCKERHUB_TOKEN: docker hub => Account Setting => Security 创建.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Test pull images
+        run: |
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+          docker pull cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}
+          
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+          docker pull cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
+
+
   notify_feishu:
       needs:
-        - combine_publish_images
-        - sync_dataelem_repos
+        - test_pull_images
       runs-on: ubuntu-latest
       steps:
+        - name: Get version
+          id: get_version
+          run: |
+            echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        
         - name: Process git message
           id: process_message
           run: |

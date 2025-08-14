@@ -6,7 +6,10 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
-const app_env = { BASE_URL: '/workspace' }
+const app_env = {
+  BASE_URL: '/workspace',
+  BISHENG_HOST: ''
+}
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -20,7 +23,7 @@ export default defineConfig({
       //   changeOrigin: true,
       // },
       '/workspace/bisheng': {
-        target: "http://192.168.106.116:9000",
+        target: "http://192.168.106.20:3001",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -28,24 +31,25 @@ export default defineConfig({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.20:3001',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => {
-          return path.replace(/^\/workspace\/api/, '/api');
-        },
+        ws: true,
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
             console.log('Proxying request to:', proxyReq.path);
           });
-        }
+        },
+        rewrite: (path) => {
+          return path.replace(/^\/workspace/, '');
+        },
       },
       '/workspace/tmp-dir': {
         target: 'http://192.168.106.116:9000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
-          return path.replace(/^\/workspace\/tmp-dir/, '/tmp-dir');
+          return path.replace(/^\/workspace/, '');
         },
       }
     },
@@ -70,8 +74,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*'],
         globIgnores: ['images/**/*'],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        navigateFallbackDenylist: [/^\/oauth/],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        navigateFallbackDenylist: [/^\/oauth/]
       },
       includeAssets: ['**/*'],
       manifest: {
@@ -192,7 +196,7 @@ export default defineConfig({
       '~': path.join(__dirname, 'src/'),
       $fonts: resolve('public/fonts'),
     },
-  },
+  }
 });
 
 interface SourcemapExclude {
