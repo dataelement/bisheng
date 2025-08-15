@@ -68,6 +68,9 @@ filetype_load_map = {
     "md": TextLoader,
     "docx": UnstructuredWordDocumentLoader,
     "pptx": UnstructuredPowerPointLoader,
+    "png": TextLoader,  # 图片格式使用TextLoader作为默认处理
+    "jpg": TextLoader,
+    "jpeg": TextLoader,
 }
 
 split_handles = [
@@ -679,10 +682,11 @@ def read_chunk_text(
     logger.info(f"ETL4LM settings: url={etl_for_lm_url}, provider={provider}")
     
     # 根据文件类型选择加载器
-    if file_extension_name in ["pdf", "doc", "docx", "ppt", "pptx"]:
-        if provider == "mineru":
-            # 通过 MinerU FastAPI 服务解析
-            logger.info(f"Using MinerU loader with knowledge_id={knowledge_id}")
+    if file_extension_name in ["pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg"]:
+        # mineru只支持PDF和图片格式，其他格式使用原有解析方案
+        if provider == "mineru" and file_extension_name in ["pdf", "png", "jpg", "jpeg"]:
+            # 通过 MinerU FastAPI 服务解析PDF和图片
+            logger.info(f"Using MinerU loader for {file_extension_name} with knowledge_id={knowledge_id}")
             loader = MineruLoader(
                 file_name,
                 input_file,
@@ -702,8 +706,8 @@ def read_chunk_text(
             parse_type = ParseType.ETL4LM.value
             partitions = getattr(loader, "partitions", None) or []
         else:
-            # 默认沿用 etl4lm 解析
-            logger.info(f"Using ETL4LM loader with knowledge_id={knowledge_id}")
+            # 其他格式使用原有解析方案
+            logger.info(f"Using ETL4LM loader for {file_extension_name} with knowledge_id={knowledge_id}")
             loader = Etl4lmLoader(
                 file_name,
                 input_file,
@@ -794,8 +798,8 @@ def read_chunk_text(
             etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
             provider = etl4lm_settings.get("provider", "etl4lm").lower()
 
-            if provider == "mineru":
-                # 通过 MinerU FastAPI 服务解析
+            if provider == "mineru" and file_extension_name in ["pdf", "png", "jpg", "jpeg"]:
+                # 通过 MinerU FastAPI 服务解析PDF和图片
                 loader = MineruLoader(
                     file_name,
                     input_file,
