@@ -26,6 +26,7 @@ from sqlmodel import select
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
 from bisheng.api.services.mineru_loader import MineruLoader
+from bisheng.api.services.mineru_text_splitter import MinerUTextSplitter
 from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
 from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
 from bisheng.api.services.libreoffice_converter import (
@@ -684,6 +685,10 @@ def read_chunk_text(
     # 根据文件类型选择加载器
     if file_extension_name in ["pdf", "doc", "docx", "ppt", "pptx", "png", "jpg", "jpeg"]:
         # mineru只支持PDF和图片格式，其他格式使用原有解析方案
+        logger.info(f"DEBUG: Checking provider={provider}, file_extension_name={file_extension_name}")
+        logger.info(f"DEBUG: provider == 'mineru' = {provider == 'mineru'}")
+        logger.info(f"DEBUG: file_extension_name in ['pdf', 'png', 'jpg', 'jpeg'] = {file_extension_name in ['pdf', 'png', 'jpg', 'jpeg']}")
+        
         if provider == "mineru" and file_extension_name in ["pdf", "png", "jpg", "jpeg"]:
             # 通过 MinerU FastAPI 服务解析PDF和图片
             logger.info(f"Using MinerU loader for {file_extension_name} with knowledge_id={knowledge_id}")
@@ -705,6 +710,33 @@ def read_chunk_text(
             documents = loader.load()
             parse_type = ParseType.ETL4LM.value
             partitions = getattr(loader, "partitions", None) or []
+            
+            # 使用MinerU专用切分器
+            logger.info(f"Using MinerU text splitter for {file_extension_name}")
+            mineru_splitter = MinerUTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                preserve_headers=True,
+                preserve_tables=True,
+                preserve_formulas=True,
+                min_chunk_size=100,
+                max_chunk_size=2000
+            )
+            
+            # 直接返回切分结果，跳过后续的通用切分
+            split_documents, metadatas = mineru_splitter.split_mineru_documents(
+                documents, knowledge_id
+            )
+            
+            # 提取文本内容
+            raw_texts = [doc.page_content for doc in split_documents]
+            
+            # 设置parse_type和partitions
+            parse_type = ParseType.ETL4LM.value
+            partitions = parse_partitions(partitions)
+            
+            logger.info(f"MinerU processing completed. Generated {len(raw_texts)} chunks")
+            return raw_texts, metadatas, parse_type, partitions
         else:
             # 其他格式使用原有解析方案
             logger.info(f"Using ETL4LM loader for {file_extension_name} with knowledge_id={knowledge_id}")
@@ -797,6 +829,10 @@ def read_chunk_text(
                     raise Exception('The file is damaged.')
             etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
             provider = etl4lm_settings.get("provider", "etl4lm").lower()
+            
+            logger.info(f"DEBUG: Second check - provider={provider}, file_extension_name={file_extension_name}")
+            logger.info(f"DEBUG: Second check - provider == 'mineru' = {provider == 'mineru'}")
+            logger.info(f"DEBUG: Second check - file_extension_name in ['pdf', 'png', 'jpg', 'jpeg'] = {file_extension_name in ['pdf', 'png', 'jpg', 'jpeg']}")
 
             if provider == "mineru" and file_extension_name in ["pdf", "png", "jpg", "jpeg"]:
                 # 通过 MinerU FastAPI 服务解析PDF和图片
@@ -818,6 +854,33 @@ def read_chunk_text(
                 documents = loader.load()
                 parse_type = ParseType.ETL4LM.value
                 partitions = getattr(loader, "partitions", None) or []
+                
+                # 使用MinerU专用切分器
+                logger.info(f"Using MinerU text splitter for {file_extension_name}")
+                mineru_splitter = MinerUTextSplitter(
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    preserve_headers=True,
+                    preserve_tables=True,
+                    preserve_formulas=True,
+                    min_chunk_size=100,
+                    max_chunk_size=2000
+                )
+                
+                # 直接返回切分结果，跳过后续的通用切分
+                split_documents, metadatas = mineru_splitter.split_mineru_documents(
+                    documents, knowledge_id
+                )
+                
+                # 提取文本内容
+                raw_texts = [doc.page_content for doc in split_documents]
+                
+                # 设置parse_type和partitions
+                parse_type = ParseType.ETL4LM.value
+                partitions = parse_partitions(partitions)
+                
+                logger.info(f"MinerU processing completed. Generated {len(raw_texts)} chunks")
+                return raw_texts, metadatas, parse_type, partitions
             else:
                 # 默认沿用 etl4lm 解析
                 loader = Etl4lmLoader(
