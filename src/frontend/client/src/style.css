@@ -2891,6 +2891,12 @@ button.scroll-convo {
   /* Firefox悬停样式 */
 }
 
+.scrollbar-hide{
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+
 @keyframes rotate-border {
   from {
     transform: rotate(0deg);

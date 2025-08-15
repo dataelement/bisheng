@@ -19,6 +19,7 @@ import Search from './Search';
 import Root from './Root';
 import Sop from '~/components/Sop';
 import WebView from '~/components/WebView';
+import AgentCenter from '~/pages/Apps';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -84,7 +85,7 @@ export const router = createBrowserRouter([
       // dashboardRoutes,
       {
         path: '/',
-        element: <Root />,
+        element: <Root />, // 包含会话列表
         children: [
           {
             index: true,
@@ -98,6 +99,10 @@ export const router = createBrowserRouter([
             path: 'linsight/:conversationId?',
             element: <Sop />,
           },
+          {
+            path: 'apps',
+            element: <AgentCenter />,
+          }
           // {
           //   path: 'search',
           //   element: <Search />,
