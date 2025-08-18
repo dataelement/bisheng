@@ -2,7 +2,7 @@ import argparse
 import asyncio
 import logging
 
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, set_start_method
 from multiprocessing.managers import ValueProxy
 from typing import Optional, Union
 from bisheng.cache.redis import RedisClient, redis_client
@@ -163,6 +163,8 @@ def start_schedule_center_process(worker_num: int = 4, max_concurrency: ValuePro
 
 
 if __name__ == '__main__':
+
+    set_start_method("spawn", force=True)  # 确保使用 spawn 方法启动新进程
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--worker_num', type=int, default=4, help='进程数量，默认为4')

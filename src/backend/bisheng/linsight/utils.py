@@ -304,7 +304,7 @@ async def check_and_terminate_incomplete_tasks():
         # 批量更新会话状态为已终止
         await LinsightSessionVersionDao.batch_update_session_versions_status(
             session_version_ids=session_version_ids,
-            status=SessionVersionStatusEnum.TERMINATED,
+            status=SessionVersionStatusEnum.FAILED,
             output_result={
                 "error_message":"后端服务重启"
             }
@@ -313,7 +313,7 @@ async def check_and_terminate_incomplete_tasks():
         # 批量更新执行任务状态为已终止
         await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
             session_version_ids=session_version_ids,
-            status=ExecuteTaskStatusEnum.TERMINATED,
+            status=ExecuteTaskStatusEnum.FAILED,
             where=(
                 LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
                 LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED
