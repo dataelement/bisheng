@@ -173,6 +173,11 @@ if __name__ == '__main__':
 
     max_concurrency = Manager().Value('i', args.max_concurrency)
 
+    # 检查是否有未完成的任务并终止
+    from bisheng.linsight.utils import check_and_terminate_incomplete_tasks
+
+    asyncio.run(check_and_terminate_incomplete_tasks())
+
     try:
         processes = start_schedule_center_process(worker_num=args.worker_num,
                                                   max_concurrency=max_concurrency)
