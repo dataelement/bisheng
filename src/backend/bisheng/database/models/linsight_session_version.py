@@ -159,7 +159,6 @@ class LinsightSessionVersionDao(object):
             result = await session.exec(statement)
             return result.first()
 
-
     # 根据任务状态获取灵思会话版本列表
     @staticmethod
     async def get_session_versions_by_status(status: SessionVersionStatusEnum) -> List[LinsightSessionVersion]:
@@ -175,10 +174,10 @@ class LinsightSessionVersionDao(object):
             result = await session.exec(statement)
             return result.all()
 
-
     # 批量更新灵思会话版本状态
     @staticmethod
-    async def batch_update_session_versions_status(session_version_ids: List[str], status: SessionVersionStatusEnum):
+    async def batch_update_session_versions_status(session_version_ids: List[str], status: SessionVersionStatusEnum,
+                                                   **kwargs) -> None:
         """
         批量更新灵思会话版本状态
         :param session_version_ids: 会话版本ID列表
@@ -188,7 +187,7 @@ class LinsightSessionVersionDao(object):
             stmt = (
                 update(LinsightSessionVersion)
                 .where(col(LinsightSessionVersion.id).in_(session_version_ids))
-                .values(status=status)
+                .values(status=status, **kwargs)  # 支持额外的字段更新
             )
             await session.exec(stmt)
             await session.commit()
