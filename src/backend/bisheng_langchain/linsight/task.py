@@ -2,10 +2,12 @@ import asyncio
 import copy
 import datetime
 import json
+import os
 import time
 from abc import abstractmethod
 from typing import List, Optional, Any
 
+import aiofiles
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage
 from langchain_openai.chat_models.base import _convert_message_to_dict
@@ -23,8 +25,9 @@ class BaseTask(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str = Field(..., description='Unique ID')
-    parent_id: Optional[str] = Field(default=None, description='父任务id')
-    next_id: Optional[list[str]] = Field(default=None, description='下一批任务的id列表')
+    parent_id: Optional[str] = Field(default=None, description='父任务id，有则说明是二级任务')
+    next_id: Optional[list[str]] = Field(default=None, description='依赖当前任务的任务id列表')
+    first_task: bool = Field(default=False, description='是否是第一个任务，有些逻辑需要知道是否是首个任务')
 
     query: str = Field(..., description='用户问题')
     file_dir: str = Field(default="", description='存储文件的目录')
@@ -38,6 +41,7 @@ class BaseTask(BaseModel):
     task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
     user_input: Optional[str] = Field(default=None, description='用户输入的内容')
     exec_config: ExecConfig = Field(default_factory=ExecConfig, description='执行过程中的配置')
+    file_list: Optional[list[str]] = Field(default_factory=list, description='用户上传的所有文件列表')
     file_list_str: Optional[str] = Field(default='', description='用户上传的文件列表字符串')
 
     # llm generate task field
@@ -162,6 +166,59 @@ class BaseTask(BaseModel):
             kwargs["response_format"] = SplitEvent
         return await self._base_invoke_llm(self.llm, None, messages, **kwargs)
 
+    async def _get_all_files(self, dir_path: str) -> List[str]:
+        """
+        获取指定目录下的所有文件路径
+        Get all file paths in the specified directory.
+        :param dir_path: The directory path to search for files.
+        :return: A list of file paths.
+        """
+        file_paths = []
+        if not os.path.exists(dir_path):
+            return file_paths
+        for entry in os.scandir(dir_path):
+            if entry.is_file():
+                file_paths.append(entry.path)
+            elif entry.is_dir():
+                # 如果是目录，则递归获取子目录的文件
+                sub_files = await self._get_all_files(entry.path)
+                file_paths.extend(sub_files)
+            else:
+                raise FileNotFoundError
+        return file_paths
+
+    async def _get_file_content(self) -> str:
+        """
+        切分任务时获取文件内容
+        Get the content of the files uploaded by the user.
+        :return: A string containing the content of the files.
+        """
+        file_content = ""
+        ignore_files = ""
+        # 如果是第一个任务则获取用户上传的文件内容
+        if self.first_task:
+            if not self.file_list:
+                return file_content
+        else:
+            # 否则获取中间过程产生的文件内容, 不包含用户上传的文件
+            ignore_files = ";".join(self.file_list)
+
+        all_files = await self._get_all_files(self.file_dir)
+        for one_file in all_files:
+            one_file_name = os.path.basename(one_file)
+            if one_file_name in ignore_files:
+                continue
+            one_file_content = ""
+            async with aiofiles.open(one_file, mode="r", encoding="utf-8") as f:
+                async for line in f:
+                    one_file_content += line
+                    if len(one_file_content) > self.exec_config.file_content_length:
+                        one_file_content = one_file_content[:self.exec_config.file_content_length]
+                        break
+            if one_file_content:
+                file_content += f"{one_file_name}文件内容:\n{one_file_content}\n\n"
+        return file_content
+
     async def handle_user_input(self, user_input: str) -> None:
         """
         Handle user input for the task.
@@ -232,6 +289,7 @@ class BaseTask(BaseModel):
                                              step_list=self.task_manager.get_step_list(),
                                              processed_steps=self.task_manager.get_processed_steps(),
                                              input_str=await self.get_input_str(),
+                                             file_content=await self._get_file_content(),
                                              prompt=self.target,
                                              precautions=self.precautions)
         messages = [HumanMessage(content=prompt)]
