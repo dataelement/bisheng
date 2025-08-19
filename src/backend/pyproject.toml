@@ -116,6 +116,10 @@ filetype = "1.2.0"
 aiomysql = "^0.2.0"
 sse-starlette = "^2.3.6"
 transformers = "^4.53.0"
+ibm-db = "^3.2.6"
+ibm-db-sa = "^0.4.2"
+opengauss-sqlalchemy = "^2.4.0"
+oracledb = "^3.3.0"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"
