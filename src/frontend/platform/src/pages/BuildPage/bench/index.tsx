@@ -151,8 +151,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             console.log("parentFormData is null", parentFormData);
 
             getWorkstationConfigApi().then(res => {
-                setWebSearchData(res.webSearch)
-                setFormData(res)
+                res.webSearch && setWebSearchData(res.webSearch)
+                setFormData((prev) => {
+                    return 'menuShow' in res ? res : { ...prev, ...res }
+                })
             })
         }
 
@@ -523,7 +525,9 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
                 //     api_key: '',
                 //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
                 // }
-                res && setFormData(res);
+                setFormData((prev) => {
+                    return 'menuShow' in res ? res : { ...prev, ...res }
+                })
             })
         }
 
