@@ -110,8 +110,6 @@ class BishengEmbedding(BaseModel, Embeddings):
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
         try:
-            if server_info.type == LLMServerType.OLLAMA.value:
-                params['query_instruction'] = 'passage: '
             self.embeddings = instantiate_embedding(class_object, params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
@@ -149,7 +147,11 @@ class BishengEmbedding(BaseModel, Embeddings):
             LLMServerType.VLLM.value
         ]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
-            params['batch_size'] = params.pop('batch_size', 1)
+            params['chunk_size'] = params.pop('chunk_size', 1)
+        elif server_info.type == LLMServerType.OPENAI.value:
+            params['chunk_size'] = params.pop('chunk_size', 1)
+        elif server_info.type == LLMServerType.OLLAMA.value:
+            params['query_instruction'] = 'passage: '
         return params
 
     @wrapper_bisheng_model_limit_check

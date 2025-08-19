@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Dict, Optional
 
+from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, text, String
 from sqlmodel import Field
 
@@ -43,3 +44,10 @@ class TemplateUpdate(SQLModelSerializable):
     data: Optional[Dict] = None
     order_num: Optional[int] = None
     guide_word: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def convert_field(cls, values: dict) -> dict:
+        if values.get("order_num", None):
+            values['order_num'] = int(float(values['order_num']))
+        return values

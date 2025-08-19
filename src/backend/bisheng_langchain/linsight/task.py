@@ -9,7 +9,7 @@ from typing import List, Optional, Any
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage
 from langchain_openai.chat_models.base import _convert_message_to_dict
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from bisheng_langchain.linsight.const import TaskStatus, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
@@ -62,16 +62,10 @@ class BaseTask(BaseModel):
     original_done: Optional[str] = Field(default='', description='已完成的内容')
     last_answer: Optional[str] = Field(default='', description='上一步骤的答案，暂无用处')
 
-    @field_validator("display_target", mode="before")
-    @classmethod
-    def auto_set_display_target(cls, v, values):
-        if v is None or v == "":
-            return values.data.get("target", "")
-        return v
-
     @model_validator(mode="before")
     @classmethod
     def validate_task(cls, values: dict) -> dict:
+        # Convert all string fields to str type, because llm may generate them as int or other types
         if values.get("target"):
             values["target"] = str(values["target"])
         if values.get("prompt"):
@@ -86,6 +80,18 @@ class BaseTask(BaseModel):
             values["profile"] = str(values["profile"])
         if values.get("workflow"):
             values["workflow"] = str(values["workflow"])
+        if values.get("precautions"):
+            values["precautions"] = str(values["precautions"])
+        if not values.get("display_target"):
+            values["display_target"] = values.get("target", "")
+        else:
+            values["display_target"] = str(values["display_target"])
+        if values.get("original_query"):
+            values["original_query"] = str(values["original_query"])
+        if values.get("original_method"):
+            values["original_method"] = str(values["original_method"])
+        if values.get("original_done"):
+            values["original_done"] = str(values["original_done"])
         return values
 
     def get_task_info(self) -> dict:
