@@ -109,7 +109,7 @@ class BaseTask(BaseModel):
             if key == "query":
                 continue
             step_answer = await self.task_manager.get_step_answer(key)
-            input_str += f"{key}: \"{step_answer}\"\n"
+            input_str += f"<{key}的输出>\n{step_answer}\n</{key}的输出>\n"
         if input_str:
             input_str = f"输入：\n{input_str}"
         return input_str
