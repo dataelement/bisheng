@@ -14,9 +14,9 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from bisheng_langchain.linsight.const import TaskStatus, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
-    LoopAgentPrompt, SummarizeAnswerPrompt
+    LoopAgentPrompt, SummarizeAnswerPrompt, SplitEvent
 from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
-    record_llm_prompt, extract_json_from_markdown
+    record_llm_prompt, extract_json_from_markdown, get_model_name_from_llm
 
 
 class BaseTask(BaseModel):
@@ -110,20 +110,18 @@ class BaseTask(BaseModel):
             input_str = f"输入：\n{input_str}"
         return input_str
 
-    async def _ainvoke_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
-        """
-        Invoke the language model with the provided messages.
-        :param messages: List of messages to be sent to the language model.
-        :return: The response from the language model.
-        """
+    async def _base_invoke_llm(self, llm: BaseLanguageModel, tools: Optional[list[dict]], messages: list[BaseMessage],
+                               **kwargs) -> BaseMessage:
         for i in range(max(self.exec_config.retry_num, 1)):
             try:
                 # get tool schema
-                tool_args = self.task_manager.get_all_tool_schema
                 start_time = time.time()
-                res = await self.llm.ainvoke(messages, tools=tool_args, **kwargs)
+                if tools:
+                    res = await llm.ainvoke(messages, tools=tools, **kwargs)
+                else:
+                    res = await llm.ainvoke(messages, **kwargs)
                 if self.exec_config.debug and res:
-                    record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
+                    record_llm_prompt(llm, "\n".join([one.text() for one in messages]), res.text(),
                                       res, time.time() - start_time,
                                       self.exec_config.debug_id)
                 return res
@@ -135,28 +133,34 @@ class BaseTask(BaseModel):
                     continue
         raise Exception("Failed to invoke LLM after retries.")
 
+    async def _ainvoke_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
+        """
+        Invoke the language model with the provided messages.
+        :param messages: List of messages to be sent to the language model.
+        :return: The response from the language model.
+        """
+        tools = self.task_manager.get_all_tool_schema
+        return await self._base_invoke_llm(self.llm, tools, messages, **kwargs)
+
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
         Invoke the language model without tools.
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
-        for i in range(max(self.exec_config.retry_num, 1)):
-            try:
-                start_time = time.time()
-                res = await self.llm.ainvoke(messages, **kwargs)
-                if self.exec_config.debug and res:
-                    record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                                      res, time.time() - start_time,
-                                      self.exec_config.debug_id)
-                return res
-            except Exception as e:
-                if i == self.exec_config.retry_num - 1:
-                    raise e
-                else:
-                    await asyncio.sleep(self.exec_config.retry_sleep)
-                    continue
-        raise Exception("Failed to invoke LLM after retries.")
+        return await self._base_invoke_llm(self.llm, None, messages, **kwargs)
+
+    async def _split_task_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
+        """
+        Invoke the language model to split the task into subtasks.
+        :param messages: List of messages to be sent to the language model.
+        :return: The response from the language model containing the split tasks.
+        """
+        model_name = get_model_name_from_llm(llm=self.llm)
+        # 目前只支持openai模型的json模式输出
+        if model_name.startswith("gpt"):
+            kwargs["response_format"] = SplitEvent
+        return await self._base_invoke_llm(self.llm, None, messages, **kwargs)
 
     async def handle_user_input(self, user_input: str) -> None:
         """
@@ -234,9 +238,9 @@ class BaseTask(BaseModel):
         sub_task = None
         for i in range(self.exec_config.retry_num):
             if i > 0:
-                res = await self._ainvoke_llm_without_tools(messages, temperature=self.exec_config.retry_temperature)
+                res = await self._split_task_llm(messages, temperature=self.exec_config.retry_temperature)
             else:
-                res = await self._ainvoke_llm_without_tools(messages)
+                res = await self._split_task_llm(messages)
             try:
                 # 解析生成的任务json数据
                 sub_task = extract_json_from_markdown(res.content)

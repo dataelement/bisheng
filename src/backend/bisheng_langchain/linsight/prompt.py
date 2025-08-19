@@ -1,3 +1,5 @@
+from pydantic import BaseModel
+
 # 生成sop的prompt模板, variables -> query: 用户问题；sop：参考sop; tools_str: 已有工具字符串；file_list_str: 用户上传的文件名列表
 # knowledge_list_str: 用户有权限的知识库列表
 SopPrompt = """<背景>
@@ -207,6 +209,25 @@ SingleAgentPrompt = """你是一个强大的{profile}，可以使用提供的工
 {precautions}
 
 请根据阶段目标，使用适当的工具来完成任务，如果是最后一步，回答需要明确当前任务的产出内容是什么。"""
+
+
+class TaskItem(BaseModel):
+    思考: str
+    标题层级类型: str
+    标题层级: str
+    当前目标: str
+    当前方法: str
+    输出方法: str
+
+
+class SplitEvent(BaseModel):
+    总体思考: str
+    总体任务目标: str
+    总体方法: str
+    已经完成的内容: str
+    可用资源: str
+    任务列表: list[TaskItem]
+
 
 # 并发agent拆分子任务的prompt模板
 # variables -> query: 用户问题；sop: 用户SOP；step_list: 任务整体规划；
