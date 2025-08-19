@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
+from typing import Optional
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -14,10 +15,12 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.user_service import UserPayload, get_admin_user, get_login_user
+from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
 from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
+from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, resp_500, WSPrompt, ExcelRule, UnifiedResponseModel
 from bisheng.cache.redis import redis_client
 from bisheng.cache.utils import file_download, save_download_file, save_uploaded_file
@@ -27,9 +30,6 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.llms.custom import BishengLLM
 from bisheng.settings import settings as bisheng_settings
-from bisheng.api.v1.schemas import FrequentlyUsedChat
-from bisheng.api.services.workflow import WorkFlowService
-from typing import Optional
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -396,7 +396,8 @@ async def chat_completions(
             messages = WorkStationService.get_chat_history(conversationId, 8)[:-1]
             inputs = [*messages, HumanMessage(content=prompt)]
             if wsConfig.systemPrompt:
-                inputs.insert(0, SystemMessage(content=wsConfig.systemPrompt))
+                system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %%H:%M:%S'))
+                inputs.insert(0, SystemMessage(content=system_content))
             task = asyncio.create_task(
                 bishengllm.ainvoke(
                     inputs,
@@ -471,10 +472,10 @@ async def chat_completions(
 
 @router.get('/app/frequently_used')
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
-                            user_link_type: Optional[str] = 'app',
-                            page: Optional[int] = 1,
-                            limit: Optional[int] = 8
-                            ):
+                         user_link_type: Optional[str] = 'app',
+                         page: Optional[int] = 1,
+                         limit: Optional[int] = 8
+                         ):
     data, _ = WorkFlowService.get_frequently_used_flows(login_user, user_link_type, page, limit)
 
     return resp_200(data=data)
@@ -482,10 +483,11 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 
 @router.post('/app/frequently_used')
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
-                        data:FrequentlyUsedChat=Body(..., description='添加常用应用')
+                         data: FrequentlyUsedChat = Body(..., description='添加常用应用')
                          ):
     WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
     return resp_200(message='添加成功')
+
 
 @router.delete('/app/frequently_used')
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
@@ -495,10 +497,10 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
     WorkFlowService.delete_frequently_used_flows(login_user, user_link_type, type_detail)
     return resp_200(message='删除成功')
 
+
 @router.get('/app/uncategorized')
 def get_uncategorized_chat(login_user: UserPayload = Depends(get_login_user),
-                            page: Optional[int] = 1,
-                            limit: Optional[int] = 8):
+                           page: Optional[int] = 1,
+                           limit: Optional[int] = 8):
     data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit)
     return resp_200(data=data)
-
