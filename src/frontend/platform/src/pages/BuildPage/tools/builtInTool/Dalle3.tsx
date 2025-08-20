@@ -113,6 +113,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                         value={localFormData.openai_api_key}
                         onChange={handleChange}
                         error={errors.openai_api_key}
+                          autoComplete="off" 
                     />
                     <InputField
                         label="OpenAI Base URL"
