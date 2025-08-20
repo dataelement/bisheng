@@ -7,7 +7,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogT
 import { Switch } from "@/components/bs-ui/switch";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { downloadFile, formatDate } from "@/util/utils";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Ban, CheckCircle, Square, SquareCheckBig, SquareX, Trash2 } from "lucide-react";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -33,6 +33,7 @@ const defaultQa = {
     similarQuestions: [''],
     answer: ''
 }
+
 // 添加&编辑qa
 const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
     const { t } = useTranslation('knowledge');
@@ -218,17 +219,17 @@ const EditQa = forwardRef(function ({ knowlageId, onChange }, ref) {
 });
 
 
-
 export default function QasPage() {
     const { t } = useTranslation('knowledge')
 
     const { id } = useParams()
     const [title, setTitle] = useState('')
-    const [selectedItems, setSelectedItems] = useState([]); // 存储选中的项
-    const [selectAll, setSelectAll] = useState(false); // 全选状态
+    const [selectedItems, setSelectedItems] = useState([]);
+    const [selectAll, setSelectAll] = useState(false);
     const editRef = useRef(null)
     const importRef = useRef(null)
     const [hasPermission, setHasPermission] = useState(false)
+    const { toast } = useToast();
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, refreshData } = useTable({}, (param) =>
         getQaList(id, param).then(res => {
@@ -258,7 +259,46 @@ export default function QasPage() {
         }
         setTitle(window.libname || localStorage.getItem('libname'))
     }, [])
+const handleEnableSelected = async () => {
+    if (!selectedItems.length) return;
 
+    try {
+        // 先更新本地 UI 状态为"处理中"
+        refreshData(item => selectedItems.includes(item.id), { status: 2 });
+        
+        // 调用批量启用 API
+        await Promise.all(selectedItems.map(id => 
+            updateQaStatus(id, 1) // 1 表示启用
+        ));
+        
+        // 刷新数据
+        reload();
+    } catch (error) {
+        toast({
+            variant: 'error',
+            description: '批量启用失败'
+        });
+    }
+};
+
+// 批量禁用勾选的 QA 项
+const handleDisableSelected = async () => {
+    if (!selectedItems.length) return;
+
+    try {
+        await Promise.all(selectedItems.map(id => 
+            updateQaStatus(id, 0) 
+        ));
+        
+        // 刷新数据
+        reload();
+    } catch (error) {
+        toast({
+            variant: 'error',
+            description: '批量禁用失败'
+        });
+    }
+};
     const handleCheckboxChange = (id) => {
         setSelectedItems((prevSelectedItems) => {
             if (prevSelectedItems.includes(id)) {
@@ -307,9 +347,6 @@ export default function QasPage() {
         });
     };
 
-    const { toast } = useToast()
-
-
     const handleStatusClick = async (id: number, checked: boolean) => {
         const targetStatus = checked ? 1 : 0;
         const isOpening = checked;
@@ -329,116 +366,164 @@ export default function QasPage() {
             });
         }
     };
-    return <div className="relative px-2 pt-4 size-full">
-        {/* {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
-        </div>} */}
-        <div className="h-full bg-background-login">
-            <div className="flex justify-between">
-                <div className="flex justify-between items-center mb-4">
-                    <div className="flex items-center">
-                        <ShadTooltip content={t('back')} side="top">
-                            <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
-                                <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
-                            </button>
-                        </ShadTooltip>
-                        <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{title}</span>
+
+    return (
+        <div className="relative px-2 pt-4 size-full">
+            <div className="h-full bg-background-login">
+                <div className="flex justify-between">
+                    <div className="flex justify-between items-center mb-4">
+                        <div className="flex items-center">
+                            <ShadTooltip content={t('back')} side="top">
+                                <button className="extra-side-bar-buttons w-[36px]" onClick={() => { }} >
+                                    <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
+                                </button>
+                            </ShadTooltip>
+                            <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{title}</span>
+                        </div>
+                    </div>
+                     <div className={selectedItems.length ? 'visible' : 'invisible'}>
+                            <Button variant="outline" className=" ml-2" onClick={handleDeleteSelected}>
+                               <Trash2 className="mr-2 h-4 w-4" ></Trash2>  {t('delete')}
+                               </Button>
+                            <Button variant="outline" className="ml-2" onClick={handleDisableSelected}>
+                                <SquareX className="mr-2 h-4 w-4" /> 禁用
+                            </Button>
+                            <Button variant="outline" className="ml-2" onClick={handleEnableSelected}>
+                                <SquareCheckBig className="mr-2 h-4 w-4" /> 启用
+                            </Button>
+                          
+                        </div>
+                    <div className="flex justify-between items-center mb-4">
+                       
+                        <div className="flex gap-4 items-center">
+                            <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
+                            <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>导入</Button>
+                            <Button variant="outline" className="px-8" onClick={() => {
+                                getQaFile(id).then(res => {
+                                    const fileUrl = res.file_list[0];
+                                    downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
+                                })
+                            }}>导出</Button>
+                            <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>
+                        </div>
                     </div>
                 </div>
-                <div className="flex justify-between items-center mb-4">
-                    <div className={(selectedItems.length ? 'visible' : 'invisible') + ' mr-2'}>
-                        <span className="pl-1 text-sm">{t('selectedItems')}: {selectedItems.length}</span>
-                        {hasPermission && <Button variant="link" className="text-red-500 ml-2" onClick={handleDeleteSelected}>{t('batchDelete')}</Button>}
-                    </div>
-                    <div className="flex gap-4 items-center">
-                        <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                        <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>导入</Button>
-                        <Button variant="outline" className="px-8" onClick={() => {
-                            getQaFile(id).then(res => {
-                                const fileUrl = res.file_list[0];
-                                downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
-                            })
-                        }}>导出</Button>
-                        {hasPermission && <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
-                    </div>
-                </div>
-            </div>
-            <div className="overflow-y-auto h-[calc(100vh-132px)] pb-20">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-8">
-                                <Checkbox checked={selectAll} onCheckedChange={handleSelectAll} />
-                            </TableHead>
-                            <TableHead className="w-[340px]">{t('question')}</TableHead>
-                            <TableHead className="w-[340px]">{t('answer')}</TableHead>
-                            <TableHead className="w-[130px] flex items-center gap-4">{t('type')}</TableHead>
-                            <TableHead>{t('creationTime')}</TableHead>
-                            <TableHead>{t('updateTime')}</TableHead>
-                            <TableHead className="w-20">{t('creator')}</TableHead>
-                            <TableHead className="w-[140px]">{t('status')}</TableHead>
-                            <TableHead className="text-right pr-6">{t('operations')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {datalist.map(el => (
-                            <TableRow key={el.id}>
-                                <TableCell className="font-medium">
-                                    <Checkbox checked={selectedItems.includes(el.id)} onCheckedChange={() => handleCheckboxChange(el.id)} />
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                    <div className="max-h-48 overflow-y-auto scrollbar-hide">
-                                        {el.questions}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                    <div className="max-h-48 overflow-y-auto scrollbar-hide">
-                                        {el.answers}
-                                    </div>
-                                </TableCell>
-                                <TableCell>{['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]}</TableCell>
-                                <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                                <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
-                                <TableCell>{el.user_name}</TableCell>
-                                <TableCell>
-                                    <div className="flex items-center">
-                                        {el.status !== 2 && <Switch
-                                            checked={el.status === 1}
-                                            disabled={!hasPermission}
-                                            onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
-                                        />}
-                                        {el.status === 2 && (
-                                            <span className="ml-2 text-sm">处理中</span>
-                                        )}
-                                        {el.status === 3 && (
-                                            <span className="ml-2 text-sm">未启用，请重试</span>
-                                        )}
-                                    </div>
-                                </TableCell>
-                                {hasPermission ? <TableCell className="text-right">
-                                    <Button variant="link" onClick={() => editRef.current.edit(el)} className="ml-4">{t('update')}</Button>
-                                    <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-4 text-red-500">{t('delete')}</Button>
-                                </TableCell> : <TableCell className="text-right">
-                                    <Button variant="link" disabled className="ml-4">{t('update')}</Button>
-                                    <Button variant="link" disabled className="ml-4 text-red-500">{t('delete')}</Button>
-                                </TableCell>}
+                <div className="overflow-y-auto h-[calc(100vh-132px)] pb-20">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-8">
+                                    <Checkbox checked={selectAll} onCheckedChange={handleSelectAll} />
+                                </TableHead>
+                                <TableHead className="w-[340px]">{t('question')}</TableHead>
+                                <TableHead className="w-[340px]">{t('answer')}</TableHead>
+                                <TableHead>{t('type')}</TableHead>
+                                {/* <TableHead>{t('creationTime')}</TableHead> */}
+                                <TableHead>{t('updateTime')}</TableHead>
+                                <TableHead>{t('创建用户')}</TableHead>
+                                <TableHead className="text-right pr-6">{t('operations')}</TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {datalist.map(el => (
+                                <TableRow key={el.id} className={hasPermission ? "hover:bg-gray-100" : ""}>
+                                    {/* 勾选框单元格 - 阻止事件冒泡 */}
+                                    <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                                        <Checkbox
+                                            checked={selectedItems.includes(el.id)}
+                                            onCheckedChange={() => handleCheckboxChange(el.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    </TableCell>
+
+                                    {/* 问题单元格 - 可点击编辑 */}
+                                    <TableCell
+                                        className="font-medium cursor-pointer"
+                                        onClick={() => hasPermission && editRef.current.edit(el)}
+                                    >
+                                        <div className="max-h-48 overflow-y-auto scrollbar-hide">
+                                            {el.questions}
+                                        </div>
+                                    </TableCell>
+
+                                    {/* 答案单元格 - 可点击编辑 */}
+                                    <TableCell
+                                        className="font-medium cursor-pointer"
+                                        onClick={() => hasPermission && editRef.current.edit(el)}
+                                    >
+                                        <div className="max-h-48 overflow-y-auto scrollbar-hide">
+                                            {el.answers}
+                                        </div>
+                                    </TableCell>
+
+                                    {/* 其他内容单元格 - 可点击编辑 */}
+                                    <TableCell
+                                        className="cursor-pointer"
+                                        onClick={() => hasPermission && editRef.current.edit(el)}
+                                    >
+                                        {['未知', '手动创建', '标注导入', 'api导入', '批量导入'][el.source]}
+                                    </TableCell>
+                                    {/* <TableCell>{el.create_time.replace('T', ' ')}</TableCell> */}
+                                    <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
+                                    <TableCell>{el.user_name}</TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            <div className="flex items-center">
+                                                {el.status !== 2 && (
+                                                    <Switch
+                                                        checked={el.status === 1}
+                                                        onCheckedChange={(bln) => handleStatusClick(el.id, bln)}
+                                                    />
+                                                )}
+                                                {el.status === 2 && (
+                                                    <span className="text-sm">处理中</span>
+                                                )}
+                                                {el.status === 3 && (
+                                                    <span className="text-sm">未启用，请重试</span>
+                                                )}
+                                            </div>
+                                            {hasPermission ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDelete(el.id);
+                                                    }}
+                                                    className=""
+                                                >
+                                                    <Trash2 size={16} />
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-gray-400 cursor-not-allowed"
+                                                    disabled
+                                                >
+                                                    <Trash2 size={16} />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
-        </div>
-        <div className="bisheng-table-footer px-6 justify-end">
-            <div>
-                <AutoPagination
-                    page={page}
-                    pageSize={pageSize}
-                    total={total}
-                    onChange={(newPage) => setPage(newPage)}
-                />
+            <div className="bisheng-table-footer px-6 justify-end">
+                <div>
+                    <AutoPagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={total}
+                        onChange={(newPage) => setPage(newPage)}
+                    />
+                </div>
             </div>
+            <EditQa ref={editRef} knowlageId={id} onChange={reload} />
+            <ImportQa ref={importRef} knowlageId={id} onChange={reload} />
         </div>
-        <EditQa ref={editRef} knowlageId={id} onChange={reload} />
-        <ImportQa ref={importRef} knowlageId={id} onChange={reload} />
-    </div >
-};
+    );
+}

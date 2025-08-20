@@ -1,3 +1,4 @@
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import { AssistantIcon } from "@/components/bs-icons";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { Accordion } from "@/components/bs-ui/accordion";
@@ -22,11 +23,14 @@ import { useNavigate } from "react-router-dom";
 
 type ModalProps = {};
 type ModalRef = {
-    open: (type: string, id?: number) => void;
+    open: (type: string, tempId?: number, data?: { id?: string, logo?: string, type?: AppType }) => void;
     edit: (type: string, appId: string) => void;
 };
 
-const CreateApp = forwardRef<ModalRef, ModalProps>(({ onSave }, ref) => {
+const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
+  ({ onSave, loca }, ref) => {
+    console.log(loca,12312);
+    
     const [open, setOpen] = useState(false);
     const [formData, setFormData] = useState({
         url: '',
@@ -244,7 +248,13 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             {appType === AppType.ASSISTANT ? t('assistantAvatar') : t('workflowAvatar')}
                         </label>
                         <Avator value={formData.url} className="mt-3" onChange={uploadAvator}>
-                            <AssistantIcon className="bg-primary w-8 h-8 rounded-sm" />
+                            {/* <AssistantIcon className="bg-primary w-8 h-8 rounded-sm" /> */}
+                        <TitleLogo
+  className=" w-6 h-6 rounded-sm" 
+  url={loca?.logo} 
+  id={loca?.id}
+  type={loca?.flow_type}
+></TitleLogo>
                         </Avator>
                     </div>
                     <div className="mb-6">

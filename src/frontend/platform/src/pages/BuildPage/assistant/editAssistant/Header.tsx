@@ -10,8 +10,9 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import EditAssistantDialog from "./EditAssistantDialog";
 
-export default function Header({ onSave, onLine, onTabChange }) {
+export default function Header({ loca,onSave, onLine, onTabChange }) {
     const { t } = useTranslation()
+console.log(loca);
 
     const navigate = useNavigate()
 
@@ -38,8 +39,9 @@ export default function Header({ onSave, onLine, onTabChange }) {
         <div className="flex items-center gap-2 py-4">
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
             <TitleLogo
-                url={assistantState.logo}
-                id={assistantState.id}
+                 url={loca.logo} 
+  id={loca.id}
+  type={loca.flow_type}
                 className="ml-4"
             ><AssistantIcon /></TitleLogo>
             <span className="bisheng-title">{assistantState.name}</span>
@@ -53,7 +55,9 @@ export default function Header({ onSave, onLine, onTabChange }) {
                         logo={assistantState.logo || ''}
                         name={assistantState.name}
                         desc={assistantState.desc}
-                        onSave={handleEditSave}></EditAssistantDialog>
+                        onSave={handleEditSave}
+                        loca={loca}
+                        ></EditAssistantDialog>
                 }
             </Dialog>
         </div>

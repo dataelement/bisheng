@@ -9,7 +9,7 @@ import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { unstable_useBlocker as useBlocker, useNavigate } from "react-router-dom";
 import Header from "./Header";
 import Prompt from "./Prompt";
@@ -20,6 +20,10 @@ export default function editAssistant() {
     const { t } = useTranslation()
     const { id: assisId } = useParams()
     const navigate = useNavigate()
+     const { state } = useLocation();
+        const loca = state?.flow; // 获取传递的 flow 数据
+        console.log(loca,1111);
+        
     // assistant data
     const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
@@ -138,7 +142,7 @@ export default function editAssistant() {
     }
 
     return <div className="bg-background-main">
-        <Header onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
+        <Header loca={loca} onSave={() => handleSave(true)} onLine={handleOnline} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>
         <div className="h-[calc(100vh-70px)]">
             <div className={`flex h-full ${showApiPage ? 'hidden' : ''}`}>
                 <div className="w-[60%]">

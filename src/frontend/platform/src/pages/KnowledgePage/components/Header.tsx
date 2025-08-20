@@ -51,18 +51,18 @@ export default function Header() {
         </ShadTooltip>
         <div>
             <div className="group flex items-center">
-                <span className=" text-foreground text-sm font-black pl-4">{libInfo.name}</span>
+                {/* <span className=" text-foreground text-sm font-black pl-4">{libInfo.name}</span> */}
                 {/* edit dialog */}
                 <Dialog open={open} onOpenChange={setOpen} >
                     <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="group-hover:visible invisible"><SquarePen className="w-4 h-4" /></Button>
+                        {/* <Button variant="ghost" size="icon" className="group-hover:visible invisible"><SquarePen className="w-4 h-4" /></Button> */}
                     </DialogTrigger>
                     {
                         open && <KnowledgeBaseSettingsDialog initialName={libInfo.name} initialDesc={libInfo.desc} onSave={handleSave}></KnowledgeBaseSettingsDialog>
                     }
                 </Dialog>
             </div>
-            <p className="max-w-96 pl-4 text-muted-foreground text-sm truncate">{libInfo.desc}</p>
+            {/* <p className="max-w-96 pl-4 text-muted-foreground text-sm truncate">{libInfo.desc}</p> */}
         </div>
     </div>
 };

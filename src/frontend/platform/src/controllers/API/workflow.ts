@@ -193,6 +193,13 @@ const workflowTemplate = [
                 "name": "全局变量",
                 "params": [
                     {
+                        "key": "user_info",
+                        "global": "key",
+                        "label": "用户信息",
+                        "type": "var",
+                        "value": "",
+                    },
+                    {
                         "key": "current_time",
                         "global": "key",
                         "label": "当前时间",
@@ -295,7 +302,7 @@ const workflowTemplate = [
     {
         "id": "output_xxx",
         "name": "输出",
-        "description": "可向用户发送消息，并且支持进行更丰富的交互，例如请求用户批准进行某项敏感操作、允许用户在模型输出内容的基础上直接修改并提交。",
+        "description": "可向用户发送文本和文件，并且支持进行更丰富的交互，例如请求用户批准进行某项敏感操作、允许用户在模型输出内容的基础上直接修改并提交。",
         "type": "output",
         "v": "2",
         "group_params": [
@@ -640,7 +647,7 @@ const workflowTemplate = [
                         "key": "score",
                         "label": "相似度阈值",
                         "type": "slide",
-                        "value": 0.6,
+                        "value": 0.8,
                         "scope": [
                             0.01,
                             0.99
@@ -927,6 +934,13 @@ const workflowTemplateEN = [
             {
                 "name": "Global Variables",
                 "params": [
+                       {
+                        "key": "user_info",
+                        "global": "key",
+                        "label": "User Information",
+                        "type": "var",
+                        "value": "",
+                    },
                     {
                         "key": "current_time",
                         "global": "key",
