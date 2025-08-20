@@ -563,3 +563,69 @@ class AuditLogService:
             chat.messages = [message for message in chat_messages
                              if message.category != WorkflowEventType.UserInput.value]
         return chat_list
+
+    @staticmethod
+    def create_api_key(user: UserPayload, ip: str, api_key):
+        """记录创建API Key的审计日志"""
+        logger.info(f"act=create_api_key user={user.user_name} ip={ip} key_name={api_key.key_name}")
+        
+        # 获取用户所属的分组
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.SYSTEM.value,
+            event_type=EventType.CREATE_API_KEY.value,
+            object_type=ObjectType.API_KEY_CONF.value,
+            object_id=str(api_key.id),
+            object_name=api_key.key_name,
+            ip_address=ip,
+        )
+        AuditLogDao.insert_audit_logs([audit_log])
+    
+    @staticmethod
+    def update_api_key(user: UserPayload, ip: str, api_key):
+        """记录更新API Key的审计日志"""
+        logger.info(f"act=update_api_key user={user.user_name} ip={ip} key_name={api_key.key_name}")
+        
+        # 获取用户所属的分组
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.SYSTEM.value,
+            event_type=EventType.UPDATE_API_KEY.value,
+            object_type=ObjectType.API_KEY_CONF.value,
+            object_id=str(api_key.id),
+            object_name=api_key.key_name,
+            ip_address=ip,
+        )
+        AuditLogDao.insert_audit_logs([audit_log])
+    
+    @staticmethod
+    def delete_api_key(user: UserPayload, ip: str, api_key):
+        """记录删除API Key的审计日志"""
+        logger.info(f"act=delete_api_key user={user.user_name} ip={ip} key_name={api_key.key_name}")
+        
+        # 获取用户所属的分组
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
+        
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.SYSTEM.value,
+            event_type=EventType.DELETE_API_KEY.value,
+            object_type=ObjectType.API_KEY_CONF.value,
+            object_id=str(api_key.id),
+            object_name=api_key.key_name,
+            ip_address=ip,
+        )
+        AuditLogDao.insert_audit_logs([audit_log])

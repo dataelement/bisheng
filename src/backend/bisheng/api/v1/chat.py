@@ -501,7 +501,7 @@ async def chat(
             Authorize._token = t
         else:
             Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        login_user = await get_login_user(Authorize)
+        login_user = await get_login_user(websocket, Authorize)
         user_id = login_user.user_id
         if chat_id:
             with session_getter() as session:

@@ -43,6 +43,10 @@ class EventType(Enum):
 
     USER_LOGIN = "user_login"  # 用户登录
 
+    CREATE_API_KEY = "create_api_key"  # 创建API Key
+    UPDATE_API_KEY = "update_api_key"  # 更新API Key
+    DELETE_API_KEY = "delete_api_key"  # 删除API Key
+
 
 # 操作对象类型枚举
 class ObjectType(Enum):
@@ -55,6 +59,7 @@ class ObjectType(Enum):
     USER_CONF = "user_conf"  # 用户配置
     USER_GROUP_CONF = "user_group_conf"  # 用户组配置
     ROLE_CONF = "role_conf"  # 角色配置
+    API_KEY_CONF = "api_key_conf"  # API Key配置
 
 
 class AuditLogBase(SQLModelSerializable):

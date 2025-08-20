@@ -17,7 +17,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SelectHover, SelectHoverItem } from "@/components/bs-ui/select/hover";
 import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
-import { ChevronDown, Globe, Lock, MoonStar, Sun } from "lucide-react";
+import { ChevronDown, Globe, Lock, MoonStar, Sun, Key } from "lucide-react";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useTranslation } from "react-i18next";
@@ -59,6 +59,11 @@ export default function MainLayout() {
     const JumpResetPage = () => {
         localStorage.setItem('account', user.user_name)
         navigator('/reset')
+    }
+
+    // 跳转到API Key管理页面
+    const JumpApiKeyPage = () => {
+        navigator('/apikey')
     }
 
     // 系统管理员(超管、组超管)
@@ -123,6 +128,7 @@ export default function MainLayout() {
                                 </span>
                             }>
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
+                            <SelectHoverItem onClick={JumpApiKeyPage}><Key className="w-4 h-4 mr-1" /><span>{t('menu.apiKeyManagement')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>
                     </div>
