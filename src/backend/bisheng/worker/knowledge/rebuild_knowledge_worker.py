@@ -15,7 +15,11 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 
+<<<<<<< HEAD
 
+=======
+@bisheng_celery.task
+>>>>>>> fix: fix circular dependencies
 def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
     """
     重建知识库的异步任务
@@ -169,7 +173,7 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
                             "metadata.file_id": file.id
                         }
                     },
-                    "size": 10000  # 假设单个文件不会超过10000个chunk
+                    "size": 10000 
                 }
 
                 logger.debug(f"ES search query: {search_query}")

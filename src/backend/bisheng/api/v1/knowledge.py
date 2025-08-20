@@ -25,7 +25,6 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
-from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.llm_server import LLMDao, LLMModelType
 
@@ -649,8 +648,13 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
             message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
         )
     if private_knowledge.state == KnowledgeState.FAILED.value:
-
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
         rebuild_knowledge_celery.delay(private_knowledge.id, str(private_knowledge.model))
+        # 返回502状态码和相应提示信息
+        return resp_502(
+            message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
+        )
 
     # 知识库状态正常，返回200
     return resp_200({"status": "success"})
@@ -679,41 +683,22 @@ def update_embedding_model(*,
         if model_type != LLMModelType.EMBEDDING.value:
             return resp_501(message="不是embedding模型")
         
-        if req_data.knowledge_id is None:
-            
-            # 2. 更新所有type为2(私有知识库)的knowledge状态和模型
-            private_knowledges = KnowledgeDao.get_all_knowledge(
-                knowledge_type=KnowledgeTypeEnum.PRIVATE
-            )
-            
-            updated_count = 0
-            for knowledge in private_knowledges:
-                # 更新状态为重建中，模型为新的model_id
-                knowledge.state = KnowledgeState.REBUILDING.value
-                knowledge.model = str(req_data.model_id)
-                KnowledgeDao.update_one(knowledge)
-                updated_count += 1
-                
-                # 3. 为每个knowledge发起异步任务
-                rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
-                logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
+
+        # 处理指定的知识库
+        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if not knowledge:
+            return resp_501(message="指定的知识库不存在")
         
-            logger.info(f"Updated {updated_count} private knowledge bases to use new embedding model {req_data.model_id}")
+        # 更新知识库状态和模型
+        knowledge.state = KnowledgeState.REBUILDING.value
+        knowledge.model = str(req_data.model_id)
+        KnowledgeDao.update_one(knowledge)
         
-        else:
-            # 处理指定的知识库
-            knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-            if not knowledge:
-                return resp_501(message="指定的知识库不存在")
-            
-            # 更新知识库状态和模型
-            knowledge.state = KnowledgeState.REBUILDING.value
-            knowledge.model = str(req_data.model_id)
-            KnowledgeDao.update_one(knowledge)
-            
-            # 发起异步任务
-            rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
-            logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
+        # 发起异步任务
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+        rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+        logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
 
         return resp_200(
             message="已开始重建知识库"
