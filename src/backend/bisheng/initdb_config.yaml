@@ -1,9 +1,19 @@
 knowledges: # 知识库相关配置
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
-    url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
+    # 当 provider=etl4lm 时：url 建议配置为 etl4lm 的 partition 接口地址
+    # 当 provider=mineru 时：url 配置为 MinerU FastAPI 的基础地址（不带 /file_parse），例如 http://172.19.0.3:8009
+    url: "http://172.19.0.3:8009" # http://192.168.106.12:8180/v1/etl4llm/predict
     timeout: 600
-    # OCR SDK服务地址，默认为空则使用ETL4LM自带的轻量OCR模型（速度快，对于困难场景效果一般），若填写OCR SDK服务地址则使用高精度的OCR模型。
+    # 解析后端提供方：etl4lm 或 mineru
+    provider: "mineru"
+    # 以下参数主要用于 provider=mineru 且 backend=pipeline 的场景
+    backend: "pipeline"          # pipeline 或 vlm-sglang-client
+    parse_method: "auto"         # auto/ocr/txt 等（pipeline 后端）
+    lang: "ch"
+    formula_enable: true
+    table_enable: true
+    # OCR SDK服务地址，仅 provider=etl4lm 时生效；为空则使用内置OCR
     ocr_sdk_url: ""
 
 llm_request:
@@ -69,6 +79,6 @@ linsight:
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
   # 生成SOP时，prompt里放的用户上传文件信息的数量
-  max_file_num: 5
+  max_file_num: 50
   # 生成SOP时，prompt里放的组织知识库的最大数量
-  max_knowledge_num: 20
+  max_knowledge_num: 200
