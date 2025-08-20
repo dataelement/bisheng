@@ -168,6 +168,16 @@ const modelProviders = {
             key: "openai_api_key",
         },
     ],
+    MindIE: [
+        {
+            label: "Base URL",
+            type: "text",
+            placeholder: "格式示例：http://ip:port/v1",
+            default: "",
+            required: true,
+            key: "base_url",
+        },
+    ],
     spark: [
         // {
         //     label: "App ID",

@@ -152,6 +152,7 @@ export const modelProvider = [
     { "name": "百度千帆", "value": "qianfan" },
     { "name": "Minimax", "value": "minimax" },
     { "name": "Anthropic", "value": "anthropic" },
+    { "name": "MindIE", "value": "MindIE" },
 ]
 const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
 

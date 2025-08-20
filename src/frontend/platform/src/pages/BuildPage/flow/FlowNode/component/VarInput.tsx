@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 import SelectVar from "./SelectVar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 
 function encodeHTMLEntities(text) {
     const textarea = document.createElement("textarea");
@@ -209,9 +210,22 @@ export default function VarInput({
                             <span className="text-muted-foreground hover:text-gray-800 text-xs"  >{"{x}"}</span>
                         </SelectVar>
                         {onUpload && (
-                            <Button variant="ghost" className="p-0 h-4 text-muted-foreground" onClick={onUpload}>
-                                <UploadCloud size={16} />
-                            </Button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            className="p-0 h-4 text-muted-foreground"
+                                            onClick={onUpload}
+                                        >
+                                            <UploadCloud size={16} />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>上传文件</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
                         {!full && <Dialog >
                             <DialogTrigger asChild>

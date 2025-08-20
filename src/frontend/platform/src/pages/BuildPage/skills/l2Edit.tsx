@@ -19,6 +19,7 @@ import FormSet from "./FormSet";
 import Avator from "@/components/bs-ui/input/avator";
 import { SkillIcon } from "@/components/bs-icons";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 
 export default function l2Edit() {
     const { t } = useTranslation()
@@ -174,7 +175,8 @@ export default function l2Edit() {
                     <div className="w-full overflow-hidden transition-all px-1">
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.avatar')}</Label>
-                            <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                            {/* <Avator value={logo} className="mt-2" onChange={uploadAvator}><SkillIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator> */}
+                            <TitleLogo url={''} className="" type={1}></TitleLogo>
                         </div>
                         <div className="mt-4">
                             <Label htmlFor="name">{t('skills.skillName')}</Label>

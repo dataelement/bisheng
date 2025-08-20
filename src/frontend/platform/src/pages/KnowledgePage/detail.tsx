@@ -21,14 +21,14 @@ export default function FilesPage() {
             <div className="flex justify-between w-1/2">
                 {/* title */}
                 <Header />
-                <TabsList>
+                {/* <TabsList>
                     <TabsTrigger value="file">
                         {t('fileManagement')}
                     </TabsTrigger>
                     <TabsTrigger value="chunk">
                         {t('chunkManagement')}
                     </TabsTrigger>
-                </TabsList>
+                </TabsList> */}
             </div>
             <TabsContent value="file">
                 <Files onPreview={onPreview} />

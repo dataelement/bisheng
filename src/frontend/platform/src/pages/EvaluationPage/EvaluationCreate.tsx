@@ -1,7 +1,7 @@
 import { QuestionMarkIcon } from "@/components/bs-icons/questionMark";
 import { UploadIcon } from "@/components/bs-icons/upload";
 import { Input } from "@/components/bs-ui/input";
-import { AssistantItemDB, getAssistantsApi } from "@/controllers/API/assistant";
+import { getAppsApi } from "@/controllers/API/flow";
 import { createEvaluationApi } from "@/controllers/API/evaluate";
 import { TypeModal } from "@/utils";
 import { SelectViewport } from "@radix-ui/react-select";
@@ -31,7 +31,6 @@ import {
 } from "@/components/bs-ui/tooltip";
 import { alertContext } from "@/contexts/alertContext";
 import { TabsContext } from "@/contexts/tabsContext";
-import { readFlowsFromDatabase } from "@/controllers/API/flow";
 import PromptAreaComponent from "./PromptCom";
 import defaultPrompt from "./defaultPrompt";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -45,9 +44,7 @@ export default function EvaluatingCreate() {
   const flow = useMemo(() => {
     return id ? nextFlow : null;
   }, [nextFlow]);
-  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "">(
-    ""
-  );
+  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "skill" | "">("");
   const [selectedKeyId, setSelectedKeyId] = useState("");
   const [selectedVersion, setSelectedVersion] = useState("");
   const [query, setQuery] = useState("");
@@ -89,9 +86,15 @@ export default function EvaluatingCreate() {
     const errorlist = [];
     if (!selectedType) errorlist.push(t("evaluation.enterExecType"));
     if (!selectedKeyId) errorlist.push(t("evaluation.enterUniqueId"));
-    if (selectedType === "flow" && !selectedVersion)
+    
+    // 修复版本验证 - 取消注释并添加正确的验证
+    if ((selectedType === "flow" || selectedType === "skill") && !selectedVersion) {
       errorlist.push(t("evaluation.enterVersion"));
+    }
+    
+    // 修复文件验证 - 所有类型都需要测试集数据
     if (!fileRef.current) errorlist.push(t("evaluation.enterFile"));
+    
     if (!prompt) errorlist.push(t("evaluation.enterPrompt"));
 
     if (errorlist.length) return handleError(errorlist);
@@ -117,16 +120,24 @@ export default function EvaluatingCreate() {
     });
   };
 
-  // 助手技能发生变化
+  // 类型选择
   const handleTypeChange = (type) => {
     setQuery("");
-    if (type === "flow") {
-      readFlowsFromDatabase(1, 100, "").then((_flow) => {
-        setDataSource(_flow.data);
-      });
-    } else if (type === "assistant") {
-      getAssistantsApi(1, 100, "").then((data) => {
-        setDataSource((data as any).data as AssistantItemDB[]);
+    if (type) {
+      // 映射类型到对应的 flow_type
+      const typeMap = {
+        flow: 10,
+        assistant: 5,
+        skill: 1
+      };
+      
+      getAppsApi({
+        page: 1,
+        pageSize: 100,
+        keyword: "",
+        type: type
+      }).then((response) => {
+        setDataSource(response.data);
       });
     }
   };
@@ -141,13 +152,20 @@ export default function EvaluatingCreate() {
   };
 
   const handleSearch = useCallback(debounce((value) => {
-    if (selectedType === "flow") {
-      readFlowsFromDatabase(1, 100, value).then((_flow) => {
-        setDataSource(_flow.data);
-      });
-    } else if (selectedType === "assistant") {
-      getAssistantsApi(1, 100, value).then((data) => {
-        setDataSource((data as any).data as AssistantItemDB[]);
+    if (selectedType) {
+      const typeMap = {
+        flow: 10,
+        assistant: 5,
+        skill: 1
+      };
+      
+      getAppsApi({
+        page: 1,
+        pageSize: 100,
+        keyword: value,
+        type: selectedType
+      }).then((response) => {
+        setDataSource(response.data);
       });
     }
   }, 300), [selectedType])
@@ -203,9 +221,12 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="flow">{t("build.skill")}</SelectItem>
+                        <SelectItem value="flow">{t("工作流")}</SelectItem>
                         <SelectItem value="assistant">
                           {t("build.assistant")}
+                        </SelectItem>
+                        <SelectItem value="skill">
+                          {t("build.skill")}
                         </SelectItem>
                       </SelectGroup>
                     </SelectContent>
@@ -237,7 +258,7 @@ export default function EvaluatingCreate() {
                         <SelectGroup>
                           {dataSource.map((item) => {
                             return (
-                              <SelectItem value={item.id}>
+                              <SelectItem key={item.id} value={item.id}>
                                 {item.name}
                               </SelectItem>
                             );
@@ -246,7 +267,7 @@ export default function EvaluatingCreate() {
                       </SelectViewport>
                     </SelectContent>
                   </Select>
-                  {selectedType === "flow" && (
+                  {(selectedType === "flow" || selectedType === "skill") && (
                     <Select
                       value={selectedVersion}
                       onValueChange={(version) => setSelectedVersion(version)}
@@ -267,7 +288,7 @@ export default function EvaluatingCreate() {
                             id: selectedKeyId,
                           })?.version_list?.map((item) => {
                             return (
-                              <SelectItem value={item.id}>
+                              <SelectItem key={item.id} value={item.id}>
                                 {item.name}
                               </SelectItem>
                             );

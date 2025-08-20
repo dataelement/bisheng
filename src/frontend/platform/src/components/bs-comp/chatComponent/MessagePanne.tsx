@@ -10,7 +10,7 @@ import RunLog from "./RunLog";
 import Separator from "./Separator";
 import { useMessageStore } from "./messageStore";
 
-export default function MessagePanne({ debug = false, mark = false, logo, useName, guideWord, loadMore, onMarkClick = (...a: any) => { } }) {
+export default function MessagePanne({ debug = false, mark = false, logo, useName, guideWord, loadMore,chat, onMarkClick = (...a: any) => { } }) {
     const { t } = useTranslation()
     const { chatId, messages, hisMessages } = useMessageStore()
 
@@ -133,6 +133,7 @@ export default function MessagePanne({ debug = false, mark = false, logo, useNam
                             logo={logo}
                             key={msg.id}
                             data={msg}
+                            chat={chat}
                             onUnlike={(chatId) => { thumbRef.current?.openModal(chatId) }}
                             onSource={(data) => { sourceRef.current?.openModal(data) }}
                             onMarkClick={() => onMarkClick('answer', msg.id, findQa(messagesList, index))}

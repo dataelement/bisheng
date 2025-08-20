@@ -19,7 +19,9 @@ import { validateNode } from "../../../utils";
 import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
 
-export default function ChatPanne({ customWsHost = '', appendHistory = false, data, version = 'v1' }) {
+export default function ChatPanne({ customWsHost = '',chatList,chat, appendHistory = false, data, version = 'v1' }) {
+    console.log(chat,21312312);
+    
     const { id, chatId, type } = data
     const { t } = useTranslation()
 
@@ -235,12 +237,12 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             flow && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.SKILL ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={flow.logo} className="" id={flow.id}></TitleLogo>
-                    <span className="text-sm">{flow.name}</span>
+                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
+                    <span className="text-sm">{chat.flow_name}</span>
                 </div>
                 <ChatComponent
                     form={flowSate.isForm}
-                    logo={flow.logo}
+                    logo={chat.logo}
                     stop
                     // stop={flowSate.isReport || flowSate.isRoom}
                     useName={sendUserName}
@@ -259,12 +261,13 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
             assistant && <div className={`w-full chat-box h-full relative px-6 ${type === AppNumType.ASSISTANT ? 'block' : 'hidden'}`}>
                 {/* {flow && <ChatPanne chatId={chatId} flow={flow} />} */}
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-2 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={assistant.logo} className="" id={assistant.id}><AssistantIcon /></TitleLogo>
-                    <span className="text-sm">{assistant.name}</span>
+                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
+                    <span className="text-sm">{chat.flow_name}</span>
                 </div>
                 <ChatComponent
                     stop
-                    logo={assistant.logo}
+                    logo={chat.logo}
+                    chat={chat}
                     useName={sendUserName}
                     questions={assistantState.guide_question.filter((item) => item)}
                     guideWord={assistantState.guide_word}
@@ -281,8 +284,8 @@ export default function ChatPanne({ customWsHost = '', appendHistory = false, da
         {
             workflow && <div className={`w-full chat-box h-full relative ${type === AppNumType.FLOW ? 'block' : 'hidden'}`}>
                 <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-6 py-1 dark:bg-[#1B1B1B]">
-                    <TitleLogo url={workflow.logo} className="" id={workflow.id}></TitleLogo>
-                    <span className="text-sm">{workflow.name}</span>
+                    <TitleLogo url={chat.logo} className="" id={chat.flow_id}  type={chat.flow_type}></TitleLogo>
+                     <span className="text-sm">{chat.flow_name}</span>
                 </div>
                 <ChatPane autoRun={autoRun} chatId={flowChatId} flow={workflow} wsUrl={wsUrl} />
             </div>
