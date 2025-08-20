@@ -15,11 +15,8 @@ from bisheng.database.models.knowledge_file import (
 )
 from bisheng.interface.embeddings.custom import FakeEmbedding
 
-<<<<<<< HEAD
 
-=======
-@bisheng_celery.task
->>>>>>> fix: fix circular dependencies
+@bisheng_celery.task(acks_late=True)
 def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
     """
     重建知识库的异步任务
