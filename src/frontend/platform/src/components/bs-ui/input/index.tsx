@@ -3,6 +3,7 @@ import * as React from "react"
 import { useState } from "react"
 import { SearchIcon } from "../../bs-icons/search"
 import { cname, generateUUID } from "../utils"
+import { QuestionTooltip } from "../tooltip"
 
 export interface InputProps
     extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -107,7 +108,103 @@ const SearchInput = React.forwardRef<HTMLInputElement, InputProps & { inputClass
 
 SearchInput.displayName = "SearchInput"
 
+export const PassInput = React.forwardRef<HTMLInputElement, InputProps & { 
+    inputClassName?: string, 
+    iconClassName?: string 
+}>(({ 
+    className, 
+    inputClassName, 
+    iconClassName,
+    value,
+    onChange,
+    id,
+    label,
+    placeholder = '', 
+    error = '',
+    tooltip = '',
+    required = false,
+    name,
+    ...props
+}, ref) => {
+    
+    const [displayValue, setDisplayValue] = useState('');
+    const [realValue, setRealValue] = useState(value || '');
 
+    // 将真实值转换为星号显示
+    React.useEffect(() => {
+        setDisplayValue(value ? new Array(value.length).fill('●').join('') : '');
+        setRealValue(value || '');
+    }, [value]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value;
+        
+        // 计算实际变化：比较星号显示值和输入值
+        if (newValue.length > displayValue.length) {
+            // 用户正在输入新字符
+            const newChar = newValue.slice(-1);
+            const updatedRealValue = realValue + newChar;
+            setRealValue(updatedRealValue);
+            
+            // 触发父组件的 onChange
+            if (onChange) {
+                const syntheticEvent = {
+                    ...e,
+                    target: {
+                        ...e.target,
+                        value: updatedRealValue,
+                        name: name || ''
+                    }
+                };
+                onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+            }
+        } else if (newValue.length < displayValue.length) {
+            // 用户正在删除字符
+            const updatedRealValue = realValue.slice(0, -1);
+            setRealValue(updatedRealValue);
+            
+            // 触发父组件的 onChange
+            if (onChange) {
+                const syntheticEvent = {
+                    ...e,
+                    target: {
+                        ...e.target,
+                        value: updatedRealValue,
+                        name: name || ''
+                    }
+                };
+                onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+            }
+        }
+        
+        // 更新显示值（星号）
+        setDisplayValue(newValue.length > 0 ? new Array(newValue.length).fill('*').join('') : '');
+    };
+
+    return (
+        <div className={cname("", className)}>
+            <label htmlFor={id} className="bisheng-label flex items-center gap-1 mb-2">
+                {label}
+                {tooltip && <QuestionTooltip content={tooltip} />}
+                {required && <span className="bisheng-tip">*</span>}
+            </label>
+            
+            <Input
+                type="text" // 使用 text 类型以便显示星号
+                value={displayValue}
+                placeholder={placeholder}
+                onChange={handleInputChange}
+                className={inputClassName}
+                id={id}
+                name={name}
+                ref={ref}
+                {...props}
+            />
+
+            {error && <p className="bisheng-tip mt-1">{typeof error === 'string' ? error : '不能为空'}</p>}
+        </div>
+    );
+});
 const PasswordInput = React.forwardRef<HTMLInputElement, InputProps & { inputClassName?: string, iconClassName?: string }>(
     ({ className, inputClassName, iconClassName, ...props }, ref) => {
         const [type, setType] = useState('password')

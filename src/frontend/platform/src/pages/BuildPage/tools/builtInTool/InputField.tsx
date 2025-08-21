@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useEffect, useState } from "react";
 
-export const InputField = ({ label, type = "text", id, name, required = false, placeholder = '', value, onChange, error = '', tooltip = '' }) => {
+export const InputField = ({ label, type = "text", id, name, required = false, placeholder = '', value, onChange, error = '', tooltip = '',...prop }) => {
 
     return <div key={id} className="">
         <label htmlFor={id} className="bisheng-label flex items-center gap-1">
@@ -21,6 +21,7 @@ export const InputField = ({ label, type = "text", id, name, required = false, p
             autoComplete="off"
             onChange={onChange}
             min="0"
+            {...prop}
         />
         {error && <p className="bisheng-tip mt-1">{typeof error === 'string' ? error : label + ' 不能为空'}</p>}
     </div>

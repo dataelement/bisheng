@@ -5,6 +5,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import {InputField, SelectField} from "./InputField";
+import { PassInput } from '@/components/bs-ui/input';
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
@@ -141,7 +142,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                             error={errors.domain}
                         />
                     )}
-
+{/* 
                     <InputField
                         required
                         label={<Label>API Key</Label>}
@@ -152,7 +153,20 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                         value={localFormData.apiKey}
                         onChange={handleChange}
                         error={errors.apiKey}
-                    />
+                    /> */}
+                    <PassInput
+                     required
+                      id="e2b-apikey-input"
+                     label={<Label>API Key</Label>}
+                       placeholder="请输入API Key"
+                    type='text'
+                      name="apiKey"
+                        onChange={handleChange}
+                     value={localFormData.apiKey}
+                      error={errors.apiKey}
+                    >
+                        
+                    </PassInput>
                 </div>
             )}
 
