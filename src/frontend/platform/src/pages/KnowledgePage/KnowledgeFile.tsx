@@ -346,7 +346,7 @@ useEffect(() => {
             </div>}
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
-                    <SearchInput placeholder="知识库或文件名称" onChange={(e) => search(e.target.value)} />
+                    <SearchInput placeholder={t('lib.searchPlaceholder')} onChange={(e) => search(e.target.value)} />
                     <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create')}</Button>
                 </div>
                 <Table>
