@@ -88,22 +88,17 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
         let desc = descRef.current.value
         if (!desc) {
             desc = `当回答与${name}相关的问题时，参考此知识库`;
-            if (descRef.current) {
-                descRef.current.value = desc;
-            }
         }
         const errorlist = []
 
         if (!name) errorlist.push(t('lib.enterLibraryName'))
-        if (name.length > 30) errorlist.push(t('lib.libraryNameLimit'))
+        if (name.length > 200) errorlist.push('知识库名称不能超过200字') 
         if (!modal) errorlist.push(t('lib.selectModel'))
         if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'))
 
-        const nameErrors = errorlist.length
         if (desc.length > 200) errorlist.push(t('lib.descriptionLimit'))
 
-        setError({ name: !!nameErrors, desc: errorlist.length > nameErrors })
-        if (errorlist.length) return handleError(errorlist)
+
 
         setIsSubmitting(true)  // 开始提交
     //     try {
@@ -321,6 +316,14 @@ useEffect(() => {
 
     // copy
     const handleCopy = async (elem) => {
+            const newName = `${elem.name}的副本`;
+            if (newName.length > 200) {
+                message({
+                    variant: 'error',
+                    description: '复制失败：复制后的知识库名称超过200字限制'
+                });
+        return;
+    }
         setCopyLoadingId(elem.id); // 设置当前正在复制的ID
         doing[elem.id] = true; // 标记为正在复制
     try {

@@ -146,17 +146,31 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             navigate('/build/apps')
         }
     }, [user])
-    useEffect(() => {
-        if (!parentFormData) {
-            console.log("parentFormData is null", parentFormData);
+useEffect(() => {
+    if (!parentFormData) {
+        console.log("parentFormData is null", parentFormData);
 
-            getWorkstationConfigApi().then(res => {
-                setWebSearchData(res.webSearch)
-                setFormData(res)
-            })
-        }
+        getWorkstationConfigApi().then(res => {
+            if (res) {
+                setWebSearchData(res.webSearch);
+                
+                // 确保 systemPrompt 有值，如果 API 返回为空则使用默认值
+                const defaultSystemPrompt =`你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
+在回答时，请注意以下几点：
+- 当前时间是{cur_date}。
+- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
+- 确保回答不违反法律法规、道德准则和公序良俗。`
+                const systemPrompt = res.systemPrompt || defaultSystemPrompt;
+                
+                setFormData({
+                    ...res,
+                    systemPrompt // 确保 systemPrompt 有值
+                });
+            }
+        });
+    }
+}, []);
 
-    }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -324,12 +338,13 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     isTextarea
                                     value={formData.systemPrompt}
                                     error={errors.systemPrompt}
-                                    placeholder="你是毕昇 AI 助手"
+                                    placeholder={`你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
+在回答时，请注意以下几点：
+- 当前时间是{cur_date}。
+- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
+- 确保回答不违反法律法规、道德准则和公序良俗。`}
                                     maxLength={30000}
-                                    onChange={(val) => setFormData(prev => ({
-                                        ...prev,
-                                        systemPrompt: val
-                                    }))}
+                                 onChange={(val) => handleInputChange('systemPrompt', val, 30000)}
                                 />
                             </div>
                         </div>
@@ -453,7 +468,7 @@ interface UseChatConfigProps {
 const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
     const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || {
         menuShow: true,
-        systemPrompt: '你是毕昇 AI 助手',
+        systemPrompt: "你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。在回答时，请注意以下几点：- 当前时间是{cur_date}。- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。- 确保回答不违反法律法规、道德准则和公序良俗。",
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
@@ -514,20 +529,28 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
     // const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     // const webSearchRef = useRef<HTMLDivElement>(null);
     // const systemPromptRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        if (!parentFormData) {
-            console.log('parentFormData :>> ', parentFormData);
+   useEffect(() => {
+    if (!parentFormData) {
+        console.log('parentFormData :>> ', parentFormData);
 
-            getWorkstationConfigApi().then((res) => {
-                // res.webSearch.params = {
-                //     api_key: '',
-                //     base_url: 'https://api.bing.microsoft.com/v7.0/search'
-                // }
-                res && setFormData(res);
-            })
-        }
-
-    }, [])
+        getWorkstationConfigApi().then((res) => {
+            if (res) {
+                // 确保 systemPrompt 有值
+                const defaultSystemPrompt = `你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
+在回答时，请注意以下几点：
+- 当前时间是{cur_date}。
+- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
+- 确保回答不违反法律法规、道德准则和公序良俗。`
+                const systemPrompt = res.systemPrompt || defaultSystemPrompt;
+                
+                setFormData({
+                    ...res,
+                    systemPrompt // 确保 systemPrompt 有值
+                });
+            }
+        });
+    }
+}, [parentFormData]);
 
     const [errors, setErrors] = useState<FormErrors>({
         sidebarSlogan: '',

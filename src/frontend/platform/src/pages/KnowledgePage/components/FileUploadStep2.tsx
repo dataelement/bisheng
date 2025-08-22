@@ -3,15 +3,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tab
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { cn } from "@/util/utils";
 import { SearchCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
-import Loading from "@/components/ui/loading";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export interface FileItem {
     id: string;
@@ -26,6 +25,7 @@ interface IProps {
     isSubmitting: boolean
     onNext: (step: number, config?: any) => void
     onPrev: () => void
+    isAdjustMode?:boolean
 }
 const enum DisplayModeType {
     OnlyTables = 'table',
@@ -34,27 +34,31 @@ const enum DisplayModeType {
 }
 
 const initialStrategies = [
-    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分，用于分隔段落' },
+    { id: '1', regex: '\\n\\n', position: 'after', rule: '双换行后切分,用于分隔段落' },
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNext, onPrev }: IProps) {
+export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode }: IProps) {
+     console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode });
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
 
-    const displayMode: DisplayModeType = useMemo(
-        () => {
-            const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
-            const hasDocumentFiles = resultFiles.some(file => file.fileType === 'file');
-            return hasTableFiles && !hasDocumentFiles ? DisplayModeType.OnlyTables :
-                !hasTableFiles && hasDocumentFiles ? DisplayModeType.OnlyDocuments :
-                    DisplayModeType.Mixed;
-        }, [resultFiles]
-    )
+    const displayStep = isAdjustMode ? step + 1 : step;
+    const displayMode: DisplayModeType | null = useMemo(() => {
+        if (!resultFiles || resultFiles.length === 0) return null;
+        
+        const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
+        const hasDocumentFiles = resultFiles.some(file => file.fileType === 'file');
+        
+        return hasTableFiles && !hasDocumentFiles ? DisplayModeType.OnlyTables :
+            !hasTableFiles && hasDocumentFiles ? DisplayModeType.OnlyDocuments :
+                DisplayModeType.Mixed;
+    }, [resultFiles]);
+
 
     const [showPreview, setShowPreview] = useState(false)
-    const [previewCount, setPreviewCount] = useState(0) // 预览次数
+    const [previewCount, setPreviewCount] = useState(0)
     const {
         rules,
         setRules,
@@ -65,7 +69,11 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
         strategies,
         setStrategies
     } = useFileProcessingRules(initialStrategies, resultFiles, kid);
-
+   const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
+   const applyRuleRef = useRef(applyRule);
+   useEffect(() => {
+    applyRuleRef.current = applyRule;
+}, [applyRule]);
     // 起始行不能大于结束行校验
     const vildateCell = () => {
         if (applyEachCell
@@ -81,17 +89,23 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
 
     const { toast } = useToast()
     const handleNext = () => {
+             console.log(step,displayStep, 'previewCount11');
         const nextStep = step + 1
-        if (step === 2) {
+        if (step === 2||displayStep===2) {
+          
+            
             if (vildateCell()) return
-
-            setApplyRule({
+ 
+             const config = {
                 applyEachCell,
                 cellGeneralConfig,
                 rules
-            })
+            };
+       setApplyRule(config);
+    console.log(applyRuleRef.current,111);
+
             setSelectedChunkIndex(-1) // 清空选中块
-            return onNext(nextStep);
+            return  onNext(nextStep, config);
         }
         //  合并配置
         const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr
@@ -117,25 +131,27 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
     };
 
     // 预览
-    const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
+ 
     const handlePreview = () => {
         if (vildateCell()) return
         setShowPreview(true)
         setPreviewCount(c => c + 1) // 刷新分段
+
+        
         setApplyRule({
             applyEachCell,
             cellGeneralConfig,
             rules
         })
+                console.log(applyRule, 'previewCount');
     }
 
-    if (![2, 3].includes(step)) return null
-
+   
     return <div>
         <div className="flex flex-row justify-center gap-4">
             {/* 左侧区域 */}
             {
-                step === 2 && <div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-1/2' : 'w-2/3')}>
+                displayStep === 2 && (    <div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-1/2' : 'w-2/3')}>
                     <Tabs
                         defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
                         className="flex flex-col h-full"
@@ -181,11 +197,13 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
                             </Button>
                         </div>
                     </Tabs>
-                </div>
+                </div>)
+            
             }
             {/* 原文预览 & 分段预览 */}
             {
                 (showPreview || step === 3) && (
+                    
                     <PreviewResult
                         step={step}
                         previewCount={previewCount}
@@ -209,11 +227,14 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
             </Button>
             <Button
                 className="h-8"
-                disabled={strategies.length === 0}
+                // disabled={strategies.length === 0}
                 onClick={() => handleNext()}
             >
-                {isSubmitting && <LoadIcon className="mr-1" />}
-                {t('nextStep')}
+                {isSubmitting ? (
+    <LoadingIcon className="h-12 w-12" />
+  ) : (
+    t('nextStep')
+  )}
             </Button>
         </div>
     </div>
@@ -222,7 +243,18 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
 
 
 const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
-    const [rules, setRules] = useState(null);
+    const [rules, setRules] = useState({
+        knowledgeId: kid,
+        fileList: [],
+        separator: ['\\n\\n', '\\n'],
+        separatorRule: ['after', 'after'],
+        chunkSize: "1000",
+        chunkOverlap: "100",
+        retainImages: true,
+        enableFormula: true,
+        forceOcr: true,
+        pageHeaderFooter: true
+    });
     const [applyEachCell, setApplyEachCell] = useState(false); // 为每个表格单独设置
     const [cellGeneralConfig, setCellGeneralConfig] = useState({
         slice_length: 10,
@@ -248,27 +280,21 @@ const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {
 
     // Initialize rules when resultFiles change
     useEffect(() => {
-        setRules({
-            knowledgeId: kid,
-            fileList: resultFiles.map(file => ({
-                id: file.id,
-                filePath: file.file_path,
-                fileName: file.fileName,
-                suffix: file.suffix,
-                fileType: file.fileType,
-                excelRule: file.fileType === 'table' ? {
-                    ...cellGeneralConfig
-                } : {}
-            })),
-            separator: ['\\n\\n', '\\n'],
-            separatorRule: ['after', 'after'],
-            chunkSize: "1000",
-            chunkOverlap: "0",
-            retainImages: true,
-            enableFormula: true,
-            forceOcr: true,
-            pageHeaderFooter: true
-        });
+        if (resultFiles && resultFiles.length > 0) {
+            setRules(prev => ({
+                ...prev,
+                fileList: resultFiles.map(file => ({
+                    id: file.id,
+                    filePath: file.file_path,
+                    fileName: file.fileName,
+                    suffix: file.suffix,
+                    fileType: file.fileType,
+                    excelRule: file.fileType === 'table' ? {
+                        ...cellGeneralConfig
+                    } : {}
+                }))
+            }));
+        }
     }, [resultFiles, kid, cellGeneralConfig]);
 
     return {
