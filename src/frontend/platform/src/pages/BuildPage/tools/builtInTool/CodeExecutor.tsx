@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from "react-i18next";
 import {InputField, SelectField} from "./InputField";
 import { PassInput } from '@/components/bs-ui/input';
+import { QuestionTooltip } from '@/components/bs-ui/tooltip';
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
@@ -94,7 +95,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     return (
         <>
             <div className="mb-6">
-                <Label className="text-base font-medium mb-3 block">代码执行方式</Label>
+                <Label className="text-base font-medium mb-3 block">代码执行方式{t('模型')}</Label>
                 <RadioGroup 
                     value={localFormData.executionMode} 
                     className="flex gap-6" 
@@ -120,12 +121,12 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                             onValueChange={handleServiceProviderChange}
                         >
                             <div className="flex items-center space-x-2">
-                                 <RadioGroupItem value="private" id="provider-private" />
-                              <Label htmlFor="provider-private">自托管</Label>
+                                <RadioGroupItem value="private" id="provider-private" />
+                                <Label htmlFor="provider-private" >自托管 <QuestionTooltip content={'需要提前在您的本地环境部署 E2B ，并将 domain 指向自托管地址，API Key 鉴权由您部署的 E2B 后台处理。'} /></Label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="official" id="provider-official" />
-                                <Label htmlFor="provider-official">官方云</Label>
+                                <Label htmlFor="provider-official">官方云 <QuestionTooltip content={'使用 E2B 官方云服务，需要从 E2B 官方获取 API Key。'} /></Label>
                             </div>
                         </RadioGroup>
                     </div>

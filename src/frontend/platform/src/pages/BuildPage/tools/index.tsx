@@ -118,7 +118,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             onClick={() => setType("mcp")}
                         >
                             <CpuIcon />
-                            <span>MCP工具</span>
+                            <span>{t("tools.mcpTools")}</span>
                         </div>
                     </div>
                     <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-betwee px-2">
