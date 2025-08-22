@@ -70,13 +70,18 @@ export default function Files({ onPreview }) {
     };
 
     const applyFilters = () => {
-        setSelectedFilters(tempFilters);
-        filterData({ status: tempFilters.length === 3 || tempFilters.length === 0 ? [] : tempFilters });
+        setSelectedFilters([...tempFilters]);
+        // 确保传递正确的筛选参数格式
+        filterData({ status: tempFilters.length > 0 ? tempFilters.join(',') : undefined });
         setIsFilterOpen(false);
     };
 
     const resetFilters = () => {
-        setTempFilters([]);
+        const emptyFilters: number[] = [];
+        setTempFilters(emptyFilters);
+        setSelectedFilters(emptyFilters);
+        filterData({ status: undefined });
+        setIsFilterOpen(false);
     };
 
     const handleDelete = (id) => {
@@ -179,12 +184,11 @@ export default function Files({ onPreview }) {
     const hasSelectedFailedFiles = useMemo(() => {
         return getSelectedFiles().some(file => file.status === 3);
     }, [selectedFiles, datalist]);
-
-
-    // const extension = useMemo(() => {
-    //     return el.file_name.split('.').pop().toLowerCase() || 'txt';
-    // }, [el.file_name])
-
+    useEffect(() => {
+        if (isFilterOpen) {
+            setTempFilters([...selectedFilters]);
+        }
+    }, [isFilterOpen, selectedFilters]);
     return (
         <div className="relative">
             {loading && (
@@ -200,7 +204,6 @@ export default function Files({ onPreview }) {
                         {/* 批量操作按钮组 */}
                         {selectedFiles.size > 0 && (
                             <div className="flex gap-2">
-
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchDelete}
@@ -250,14 +253,13 @@ export default function Files({ onPreview }) {
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
                                 {t('status')}
                                 <div className="relative">
-                                    <DropdownMenu>
+                                    <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                                         <DropdownMenuTrigger asChild>
                                             <Button
                                                 variant="ghost"
                                                 className={`flex items-center gap-1 ${selectedFilters.length > 0 ? 'text-blue-500' : ''}`}
                                             >
                                                 <Filter size={16} />
-                                                {selectedFilters.length > 0 && <span className="text-xs">{selectedFilters.length}个</span>}
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent
@@ -268,18 +270,37 @@ export default function Files({ onPreview }) {
                                             }}
                                             align="end"
                                         >
-                                            <div className="px-2 ">
+                                            <div className="px-2">
                                                 {[
-                                                    { value: 1, label: '解析中', color: 'text-blue-500', icon: <Dot color="#3b82f6" size={64} className="-ml-3 mr-[-10px]" /> },
-                                                    { value: 2, label: '已完成', color: 'text-green-500', icon: <Dot color="#10b981" size={64} className="-ml-3 mr-[-10px]" /> },
-                                                    { value: 3, label: '解析失败', color: 'text-red-500', icon: <Dot color="#ef4444" size={64} className="-ml-3 mr-[-10px]" /> }
+                                                    {
+                                                        value: 2,
+                                                        label: '已完成',
+                                                        color: 'text-blue-500',
+                                                        icon: <img src="/success.svg" className="w-16 h-8" alt="已完成" />
+                                                    },
+                                                    {
+                                                        value: 1,
+                                                        label: '解析中',
+                                                        color: 'text-green-500',
+                                                        icon: <img src="/analysis.svg" className="w-16 h-8" alt="解析中" />
+                                                    },
+                                                    {
+                                                        value: 3,
+                                                        label: '解析失败',
+                                                        color: 'text-red-500',
+                                                        icon: <img src="/failed.svg" className="w-16 h-8" alt="解析失败" />
+                                                    }
                                                 ].map(({ value, label, color, icon }) => (
                                                     <div
                                                         key={value}
-                                                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-gray-100 rounded"
+                                                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-gray-100 rounded cursor-pointer"
                                                         onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            handleFilterChange(value)
+                                                            e.stopPropagation();
+                                                            setTempFilters(prev =>
+                                                                prev.includes(value)
+                                                                    ? prev.filter(v => v !== value)
+                                                                    : [...prev, value]
+                                                            );
                                                         }}
                                                     >
                                                         <input
@@ -288,9 +309,8 @@ export default function Files({ onPreview }) {
                                                             onChange={() => { }}
                                                             className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                                         />
-                                                        <div className={`flex items-center gap-1 ${color}`}> {/* 将 gap-2 改为 gap-1 */}
+                                                        <div className="flex items-center gap-2">
                                                             {icon}
-                                                            <span className="text-sm font-medium -ml-1">{label}</span> {/* 添加 -ml-1 */}
                                                         </div>
                                                     </div>
                                                 ))}
@@ -347,12 +367,10 @@ export default function Files({ onPreview }) {
                                 </TableCell>
                                 <TableCell className="min-w-[250px]">
                                     <div className="flex items-center gap-2">
-                                        {/* 文件图标 */}
                                         <FileIcon
                                             type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
                                             className="size-[30px] min-w-[30px]"
                                         />
-                                        {/* 文件名 */}
                                         {truncateString(el.file_name, 35)}
                                     </div>
                                 </TableCell>
@@ -374,9 +392,8 @@ export default function Files({ onPreview }) {
                                         <div className="flex items-center">
                                             <TooltipProvider delayDuration={100}>
                                                 <Tooltip>
-                                                    <TooltipTrigger className="flex items-center gap-0">
-                                                        <Dot color="#ef4444" size={64} className="-ml-6 -mr-3" />
-                                                        <span className='text-red-500 -ml-2'>{t('parseFailed')}</span>
+                                                    <TooltipTrigger className="flex items-center gap-2">
+                                                        <img src="/failed.svg" className="w-16 h-8" alt="解析失败" />
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         <div className="max-w-96 text-left break-all whitespace-normal">{el.remark}</div>
@@ -385,26 +402,14 @@ export default function Files({ onPreview }) {
                                             </TooltipProvider>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center">
+                                        <div className="flex items-center gap-2">
                                             {el.status === 2 ? (
-                                                <Dot color="#10b981" size={64} className="-ml-6 -mr-3" />
+                                                <img src="/success.svg" className="w-16 h-8" alt="已完成" />
                                             ) : el.status === 1 ? (
-                                                <Dot color="#3b82f6" size={64} className="-ml-6 -mr-3" />
+                                                <img src="/analysis.svg" className="w-16 h-8" alt="解析中" />
                                             ) : (
-                                                <Dot color="#ef4444" size={64} className="-ml-6 -mr-3" />
+                                                <img src="/failed.svg" className="w-16 h-8" alt="解析失败" />
                                             )}
-                                            <span className={
-                                                el.status === 2 ? 'text-green-500 -ml-1' :  // 已完成 - 绿色
-                                                    el.status === 1 ? 'text-blue-500 -ml-1' :   // 解析中 - 蓝色
-                                                        'text-red-500 -ml-1'                        // 解析失败 - 红色
-                                            }>
-                                                {[
-                                                    t('parseFailed'),  // 0 - 保留但不使用
-                                                    t('parsing'),      // 1 - 解析中
-                                                    t('completed'),    // 2 - 已完成
-                                                    t('parseFailed')   // 3 - 解析失败
-                                                ][el.status]}
-                                            </span>
                                         </div>
                                     )}
                                 </TableCell>
