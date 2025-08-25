@@ -814,15 +814,19 @@ class LinsightWorkbenchImpl:
         # 单独初始化代码解释器工具
         config_tool_ids.remove(bisheng_code_tool.id)
         code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
+        if "config" not in code_config:
+            code_config["config"] = {}
+        if "e2b" not in code_config["config"]:
+            code_config["config"]["e2b"] = {}
         # 默认60分钟的有效期
-        code_config["timeout"] = 3600
-        code_config["keep_sandbox"] = True
+        code_config["config"]["e2b"]["timeout"] = 3600
+        code_config["config"]["e2b"]["keep_sandbox"] = True
         file_list = []
         for root, dirs, files in os.walk(file_dir):
             for file in files:
                 file_path = os.path.join(root, file)
                 file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, "./")))
-        code_config["file_list"] = file_list
+        code_config["config"]["e2b"]["file_list"] = file_list
         bisheng_code_tool.extra = code_config
 
         tools = AssistantAgent.sync_init_preset_tools([bisheng_code_tool], None, None)
