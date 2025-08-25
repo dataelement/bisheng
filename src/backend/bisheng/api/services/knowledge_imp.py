@@ -752,7 +752,7 @@ def read_chunk_text(
             )
 
         # 沿用原来的方法处理md文件
-        loader = filetype_load_map["md"](file_path=md_file_name)
+        loader = filetype_load_map["md"](file_path=md_file_name, autodetect_encoding=True)
         documents = loader.load()
 
     elif file_extension_name in ["txt", "md"]:

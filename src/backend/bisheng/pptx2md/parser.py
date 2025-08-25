@@ -20,10 +20,13 @@ from functools import partial
 from operator import attrgetter
 from typing import List, Union
 
+import pptx
 from PIL import Image
 from pptx import Presentation
 from pptx.enum.dml import MSO_COLOR_TYPE, MSO_THEME_COLOR
 from pptx.enum.shapes import MSO_SHAPE_TYPE, PP_PLACEHOLDER
+from pptx.parts.image import Image as PPTXImage
+from pptx.util import lazyproperty
 from rapidfuzz import process as fuze_process
 from tqdm import tqdm
 
@@ -45,6 +48,34 @@ from bisheng.pptx2md.types import (
 logger = logging.getLogger(__name__)
 
 picture_count = 0
+
+
+# 自定义Image，解决pptx中部分图片格式不支持的问题
+class CustomImage(PPTXImage):
+    def __init__(self, blob: bytes, filename: str = None):
+        super(CustomImage, self).__init__(blob=blob, filename=filename)
+
+    @lazyproperty
+    def ext(self) -> str:
+        """Canonical file extension for this image e.g. `'png'`.
+
+        The returned extension is all lowercase and is the canonical extension for the content type
+        of this image, regardless of what extension may have been used in its filename, if any.
+        """
+        ext_map = {
+            "BMP": "bmp",
+            "GIF": "gif",
+            "JPEG": "jpg",
+            "PNG": "png",
+            "TIFF": "tiff",
+            "WMF": "wmf",
+            "WEBP": "webp",
+        }
+        format = self._format
+        if format not in ext_map:
+            tmpl = "unsupported image format, expected one of: %s, got '%s'"
+            raise ValueError(tmpl % (ext_map.keys(), format))
+        return ext_map[format]
 
 
 def is_title(shape):
@@ -78,9 +109,9 @@ def is_list_block(shape) -> bool:
 def is_accent(font):
     if font.underline or font.italic or (
             font.color.type == MSO_COLOR_TYPE.SCHEME and
-        (font.color.theme_color == MSO_THEME_COLOR.ACCENT_1 or font.color.theme_color == MSO_THEME_COLOR.ACCENT_2 or
-         font.color.theme_color == MSO_THEME_COLOR.ACCENT_3 or font.color.theme_color == MSO_THEME_COLOR.ACCENT_4 or
-         font.color.theme_color == MSO_THEME_COLOR.ACCENT_5 or font.color.theme_color == MSO_THEME_COLOR.ACCENT_6)):
+            (font.color.theme_color == MSO_THEME_COLOR.ACCENT_1 or font.color.theme_color == MSO_THEME_COLOR.ACCENT_2 or
+             font.color.theme_color == MSO_THEME_COLOR.ACCENT_3 or font.color.theme_color == MSO_THEME_COLOR.ACCENT_4 or
+             font.color.theme_color == MSO_THEME_COLOR.ACCENT_5 or font.color.theme_color == MSO_THEME_COLOR.ACCENT_6)):
         return True
     return False
 
@@ -150,17 +181,18 @@ def process_picture(config: ConversionConfig, shape, slide_idx) -> Union[ImageEl
 
     global picture_count
 
+    image = CustomImage(shape.image.blob, shape.image.filename)
     file_prefix = ''.join(os.path.basename(config.pptx_path).split('.')[:-1])
     pic_name = file_prefix + f'_{picture_count}'
-    pic_ext = shape.image.ext
+    pic_ext = image.ext
     if not os.path.exists(config.image_dir):
         os.makedirs(config.image_dir)
 
     output_path = config.image_dir / f'{pic_name}.{pic_ext}'
     common_path = os.path.commonpath([config.output_path, config.image_dir])
-    img_outputter_path = os.path.relpath(output_path, common_path)
+    img_outputter_path = os.path.relpath(output_path, common_path).replace('\\', '/')
     with open(output_path, 'wb') as f:
-        f.write(shape.image.blob)
+        f.write(image.blob)
         picture_count += 1
 
     # normal images
