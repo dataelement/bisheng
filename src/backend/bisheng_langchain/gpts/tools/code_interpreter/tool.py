@@ -81,6 +81,9 @@ class CodeInterpreterTool:
     def _run(self, python_code: str) -> dict:
         return self.executor.run(python_code)
 
+    def close(self) -> None:
+        self.executor.close()
+
     def as_tool(self) -> Tool:
         return Tool.from_function(
             func=self._run,

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
 
+from bisheng.api.v1.user import clear_error_password_key
 from bisheng.database.base import session_getter
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
@@ -376,3 +377,10 @@ class GptsToolsDao(GptsToolsBase):
         with session_getter() as session:
             statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
+        statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+        async with async_session_getter(tool_key) as session:
+            result = await session.exec(statement)
+            return result.first()

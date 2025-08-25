@@ -52,3 +52,6 @@ class BaseExecutor(ABC):
             object_name=object_name,
             expires=timedelta(days=7),
         )
+
+    def close(self) -> None:
+        pass
