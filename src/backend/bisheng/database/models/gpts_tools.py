@@ -5,8 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
 
-from bisheng.api.v1.user import clear_error_password_key
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
