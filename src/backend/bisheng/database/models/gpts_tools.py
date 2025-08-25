@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update
 
-from bisheng.database.base import session_getter
+from bisheng.database.base import session_getter, async_session_getter
 from bisheng.database.constants import ToolPresetType
 from bisheng.database.models.base import SQLModelSerializable
 from bisheng.utils import md5_hash, generate_uuid
@@ -69,7 +69,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
-    extra: Optional[str] = Field(default=None, sa_column=Column(Text, index=False),
+    extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
                                  description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
                                              '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -376,3 +376,10 @@ class GptsToolsDao(GptsToolsBase):
         with session_getter() as session:
             statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
+        statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+        async with async_session_getter() as session:
+            result = await session.exec(statement)
+            return result.first()

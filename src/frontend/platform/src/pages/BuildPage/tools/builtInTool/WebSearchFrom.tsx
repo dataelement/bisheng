@@ -47,33 +47,33 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
     const [formErrors, setFormErrors] = useState({});
 
     // 初始化时获取联网搜索配置
-    useEffect(() => {
-        const fetchWebSearchConfig = async () => {
-            try {
-                const res = await getAssistantToolsApi('default');
-                const webSearchTool = res.find(item => item.name === "联网搜索");
+    // useEffect(() => {
+    //     const fetchWebSearchConfig = async () => {
+    //         try {
+    //             const res = await getAssistantToolsApi('default');
+    //             const webSearchTool = res.find(item => item.name === "联网搜索");
 
-                if (webSearchTool && webSearchTool.extra) {
-                    const extraData = JSON.parse(webSearchTool.extra);
-                    setSelectedTool(extraData.type || 'bing');
-                    setAllToolsConfig({
-                        ...defaultToolParams,
-                        ...extraData.config
-                    });
-                }
-            } catch (error) {
-                toast({
-                    title: "获取配置失败",
-                    description: error.message,
-                    variant: "error",
-                });
-            } finally {
-                setLoading(false);
-            }
-        };
+    //             if (webSearchTool && webSearchTool.extra) {
+    //                 const extraData = JSON.parse(webSearchTool.extra);
+    //                 setSelectedTool(extraData.type || 'bing');
+    //                 setAllToolsConfig({
+    //                     ...defaultToolParams,
+    //                     ...extraData.config
+    //                 });
+    //             }
+    //         } catch (error) {
+    //             toast({
+    //                 title: "获取配置失败",
+    //                 description: error.message,
+    //                 variant: "error",
+    //             });
+    //         } finally {
+    //             setLoading(false);
+    //         }
+    //     };
 
-        fetchWebSearchConfig();
-    }, []);
+    //     fetchWebSearchConfig();
+    // }, []);
 
     const validationRules = {
         bing: {
@@ -260,7 +260,7 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
 
     return (
         <>
-           {loading? <LoadingIcon />:
+           {/* {loading? <LoadingIcon />: */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <SelectField
                 label="联网搜索引擎"
@@ -288,11 +288,11 @@ const WebSearchForm = ({ formData, onSubmit, errors = {},enabled,prompt }) => {
                         {t('build.cancel')}
                     </Button>
                 </DialogClose>
-                <Button className="px-11" type="submit" disabled={loading}>
+                <Button className="px-11" type="submit">
                     {t('build.confirm')}
                 </Button>
             </DialogFooter>
-        </form>}
+        </form>
         </>
     
     );

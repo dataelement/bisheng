@@ -131,22 +131,29 @@ class LinsightWorkflowTask:
 
         # 初始化执行组件
         llm = await self._get_llm()
-        # 生成工具列表
         tools = await self._generate_tools(session_model, llm)
-        linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
-        tools.extend(linsight_tools)
-        # 创建智能体
-        agent = await self._create_agent(session_model, llm, tools)
+        try:
+            # 生成工具列表
+            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            tools.extend(linsight_tools)
+            # 创建智能体
+            agent = await self._create_agent(session_model, llm, tools)
 
-        # 检查是否在初始化过程中被终止
-        self._check_termination()
+            # 检查是否在初始化过程中被终止
+            self._check_termination()
 
-        # 生成并保存任务
-        task_info = await agent.generate_task(session_model.sop)
-        await self._save_task_info(session_model, task_info)
+            # 生成并保存任务
+            task_info = await agent.generate_task(session_model.sop)
+            await self._save_task_info(session_model, task_info)
 
-        # 执行任务
-        success = await self._execute_agent_tasks(agent, task_info, session_model)
+            # 执行任务
+            success = await self._execute_agent_tasks(agent, task_info, session_model)
+        finally:
+            # 清理代码解释器的沙盒
+            for one in tools:
+                if one.name == "bisheng_code_interpreter":
+                    one.close()
+                    break
 
         if success:
             await self._handle_task_completion(session_model, llm)
@@ -240,7 +247,7 @@ class LinsightWorkflowTask:
         if not session_model.tools:
             return []
 
-        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm)
+        return await LinsightWorkbenchImpl.init_linsight_config_tools(session_version=session_model, llm=llm, need_upload=True, file_dir=self.file_dir)
 
     async def _create_agent(self, session_model: LinsightSessionVersion, llm: BishengLLM, tools: List) -> LinsightAgent:
 

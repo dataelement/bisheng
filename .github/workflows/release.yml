@@ -89,6 +89,15 @@ jobs:
 
           docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}
           docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:latest
+
+          echo "sync arm image"
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-backend:${{ steps.get_version.outputs.VERSION }}-arm64
+
+          docker pull ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker tag ${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64 cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
+          docker push cr.dataelem.com/${{ env.DOCKERHUB_REPO }}bisheng-frontend:${{ steps.get_version.outputs.VERSION }}-arm64
           echo "--- sync over ---"
 
   test_pull_images:

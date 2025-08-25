@@ -68,7 +68,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 onClick={() => setType("mcp")}
                             >
                                 <CpuIcon />
-                                <span>MCP工具</span>
+                                <span>{t('tools.mcpTools')}</span>
                             </div>
                         </div>
                     </div>

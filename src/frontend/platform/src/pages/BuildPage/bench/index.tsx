@@ -23,6 +23,7 @@ import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { getAssistantToolsApi, updateAssistantToolApi } from "@/controllers/API/assistant";
 
 
+
 export interface FormErrors {
     sidebarSlogan: string;
     welcomeMessage: string;
@@ -146,19 +147,31 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             navigate('/build/apps')
         }
     }, [user])
-    useEffect(() => {
-        if (!parentFormData) {
-            console.log("parentFormData is null", parentFormData);
-
-            getWorkstationConfigApi().then(res => {
-                res.webSearch && setWebSearchData(res.webSearch)
-                setFormData((prev) => {
-                    return 'menuShow' in res ? res : { ...prev, ...res }
-                })
-            })
+ useEffect(() => {
+    getAssistantToolsApi('default').then(res => {
+        const webSearchTool = res.find(tool => tool.name === "联网搜索");
+        console.log(webSearchTool.extra, 99);
+        
+        // 解析 extra 字段
+        let webSearchConfig = {};
+        try {
+            if (webSearchTool.extra) {
+                webSearchConfig = JSON.parse(webSearchTool.extra);
+            }
+        } catch (e) {
+            console.error('Failed to parse web search config:', e);
         }
-
-    }, [])
+        
+        setWebSearchData(webSearchConfig);
+        setFormData(prev => ({ 
+            ...prev, 
+            webSearch: {
+                ...prev.webSearch,
+                ...webSearchConfig
+            }
+        }));
+    });
+}, []);
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -372,7 +385,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                 </Button>
                             }
                         >
-                            {console.log(1111, webSearchData, formData.webSearch.prompt)}
+                            {console.log(1111, webSearchData, formData)}
                             <WebSearchConfig
                                 config={formData.webSearch.prompt}
                                 onChange={handleWebSearchChange}
@@ -431,7 +444,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     <WebSearchForm
                         prompt={formData.webSearch.prompt}
                         enabled={formData.webSearch.enabled}
-                        formData={formData.webSearch}
+                        formData={formData}
                         onSubmit={handleWebSearchSave}
                     />
                 </DialogContent>

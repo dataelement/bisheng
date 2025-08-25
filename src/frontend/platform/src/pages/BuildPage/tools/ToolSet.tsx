@@ -14,6 +14,7 @@ import EmailConfigForm from "./builtInTool/EmailConfig";
 import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
 import WebSearchForm from "./builtInTool/WebSearchFrom";
 import { useWebSearchStore } from './webSearchStore'
+import CodeExecutor from "./builtInTool/CodeExecutor";
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
@@ -38,12 +39,20 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     useImperativeHandle(ref, () => ({
 
         edit: (item) => {
+            console.log(item,333);
+            
             setName(item.name);
             idRef.current = item.id;
             console.log(item, webSearchData, 222);
-            const config =
-                webSearchData || {};
-
+             let config = {};
+            try {
+                if (item.extra) {
+                    config = JSON.parse(item.extra);
+                    console.log('Parsed extra config:', config);
+                }
+            } catch (e) {
+                console.error('接口返回失败');
+            }
             setFormData(config);
             setOpen(true);
         }
@@ -105,6 +114,8 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
                 return <TianyanchaToolForm formData={formData} onSubmit={handleSubmit} />;
             case '联网搜索':
                 return <WebSearchForm formData={formData} onSubmit={handleSubmit} />;
+            case '代码执行器':
+                return <CodeExecutor formData={formData} onSubmit={handleSubmit} />;
             default:
                 return null;
         }

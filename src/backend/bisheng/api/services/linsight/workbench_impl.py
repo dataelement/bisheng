@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import uuid
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from io import BytesIO
 from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
 from urllib.parse import unquote
 
+from e2b.sandbox.filesystem.filesystem import WriteEntry
 from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -24,6 +26,7 @@ from bisheng.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.app_context import app_ctx
 from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
@@ -800,14 +803,46 @@ class LinsightWorkbenchImpl:
         )
 
     @classmethod
+    async def _init_bisheng_code_tool(cls, config_tool_ids: List[int], file_dir: str) -> List[BaseTool]:
+        """
+        特殊处理初始化毕昇的代码解释器工具
+        """
+        tools = []
+        bisheng_code_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key='bisheng_code_interpreter')
+        if not bisheng_code_tool or bisheng_code_tool.id not in config_tool_ids:
+            return tools
+        # 单独初始化代码解释器工具
+        config_tool_ids.remove(bisheng_code_tool.id)
+        code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
+        if "config" not in code_config:
+            code_config["config"] = {}
+        if "e2b" not in code_config["config"]:
+            code_config["config"]["e2b"] = {}
+        # 默认60分钟的有效期
+        code_config["config"]["e2b"]["timeout"] = 3600
+        code_config["config"]["e2b"]["keep_sandbox"] = True
+        file_list = []
+        for root, dirs, files in os.walk(file_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+        code_config["config"]["e2b"]["file_list"] = file_list
+        bisheng_code_tool.extra = code_config
+
+        tools = AssistantAgent.sync_init_preset_tools([bisheng_code_tool], None, None)
+        return tools
+
+    @classmethod
     async def init_linsight_config_tools(cls, session_version: LinsightSessionVersion,
-                                         llm: BishengLLM) -> List[BaseTool]:
+                                         llm: BishengLLM, need_upload:bool=False, file_dir:str=None) -> List[BaseTool]:
         """
         初始化灵思配置的工具
 
         Args:
             session_version: 会话版本模型
             llm: LLM实例
+            need_upload: 是否需要给代码解释器绑定用户上传的文件
+            file_dir: 用户上传文件的根目录
 
         Returns:
             工具列表
@@ -823,6 +858,11 @@ class LinsightWorkbenchImpl:
         # 获取工作台配置的工具ID
         ws_config = await WorkStationService.aget_config()
         config_tool_ids = cls._extract_tool_ids(ws_config.linsightConfig.tools or [])
+
+        # todo 更好的工具初始化方案
+        if need_upload and file_dir:
+            bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir)
+            tools.extend(bisheng_code_tool)
 
         # 过滤有效的工具ID
         valid_tool_ids = [tid for tid in tool_ids if tid in config_tool_ids]

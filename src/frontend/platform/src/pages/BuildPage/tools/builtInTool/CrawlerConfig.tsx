@@ -41,7 +41,7 @@ const CrawlerConfigForm = ({ formData, onSubmit }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-6"  autoComplete="off">
             {/* API Key */}
             <InputField
                 required

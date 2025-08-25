@@ -102,7 +102,7 @@ export const useLinsightManager = () => {
             ...params,
             output_result,
             execute_feedback,
-            summary: output_result?.answer,
+            // summary: output_result?.answer,
             status: newStatus,
             files: files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
             tasks: customTask ? tasks : buildTaskTree(tasks),
