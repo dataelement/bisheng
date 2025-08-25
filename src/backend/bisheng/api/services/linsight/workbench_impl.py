@@ -823,7 +823,7 @@ class LinsightWorkbenchImpl:
                 file_path = os.path.join(root, file)
                 file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, "./")))
         code_config["file_list"] = file_list
-        bisheng_code_tool.extra = json.dumps(code_config)
+        bisheng_code_tool.extra = code_config
 
         tools = AssistantAgent.sync_init_preset_tools([bisheng_code_tool], None, None)
         return tools

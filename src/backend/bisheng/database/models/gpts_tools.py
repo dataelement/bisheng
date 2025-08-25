@@ -69,7 +69,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
 
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
-    extra: Optional[str] = Field(default=None, sa_column=Column(Text, index=False),
+    extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
                                  description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
                                              '表示配置信息从系统配置里获取,多层级用.隔开')
     id: Optional[int] = Field(default=None, primary_key=True)
