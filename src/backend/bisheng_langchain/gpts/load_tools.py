@@ -102,7 +102,10 @@ def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
 
 
 def _get_native_code_interpreter(**kwargs: Any) -> Tool:
-    return CodeInterpreterTool(**kwargs).as_tool()
+    executor_type = kwargs.pop("type", "local")
+    config = kwargs.pop("config", {}).get(executor_type, {})
+    kwargs.update(config)
+    return CodeInterpreterTool(executor_type=executor_type, **kwargs).as_tool()
 
 
 # 第二个list内填必填参数，第三个list内填可选参数
@@ -113,7 +116,7 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
                               ['openai_api_base', 'openai_proxy', 'azure_deployment', 'azure_endpoint',
                                'openai_api_version']),
     'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url'], []),
-    'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
+    'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['config', 'type']),
     'bisheng_rag': (BishengRAGTool.get_rag_tool, ['name', 'description'],
                     ['vector_store', 'keyword_store', 'llm', 'collection_name', 'max_content',
                      'sort_by_source_and_index']),

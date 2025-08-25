@@ -5,14 +5,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
-                                                      generate_opening_dialog,
-                                                      optimize_assistant_prompt)
-from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
-from bisheng_langchain.gpts.load_tools import load_tools
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
-from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
@@ -38,6 +30,14 @@ from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
+from bisheng_langchain.gpts.assistant import ConfigurableAssistant
+from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
+                                                      generate_opening_dialog,
+                                                      optimize_assistant_prompt)
+from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
+from bisheng_langchain.gpts.load_tools import load_tools
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
+from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 
 class AssistantAgent(AssistantUtils):
@@ -125,7 +125,8 @@ class AssistantAgent(AssistantUtils):
         """
         # 特殊处理下bisheng_code_interpreter的参数
         if tool.tool_key == 'bisheng_code_interpreter':
-            return {'minio': settings.get_minio_conf().model_dump()}
+            params = json.loads(tool.extra) if tool.extra else {}
+            return {'minio': settings.get_minio_conf().model_dump(), **params}
         if not tool.extra:
             return {}
         params = json.loads(tool.extra)
