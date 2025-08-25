@@ -1,7 +1,7 @@
 import itertools
 import os
 import sys
-from typing import List, Type
+from typing import List, Type, Any
 
 from langchain_community.tools import Tool
 from pydantic import BaseModel, Field
@@ -61,8 +61,10 @@ class CodeInterpreterToolArguments(BaseModel):
 class CodeInterpreterTool(BaseTool):
     """Tool for evaluating python code in native environment."""
 
-    name = 'bisheng_code_interpreter'
+    name: str = 'bisheng_code_interpreter'
     args_schema: Type[BaseModel] = CodeInterpreterToolArguments
+    executor_type: str = "local"
+    executor: Any = None
 
     def __init__(
             self,
