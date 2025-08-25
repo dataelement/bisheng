@@ -241,7 +241,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'final_result':
                     updateLinsight(id, {
                         output_result: taskData.data.output_result,
-                        summary: taskData.data.output_result.answer,
+                        // summary: taskData.data.output_result.answer,
                         file_list: taskData.data.output_result.final_files || [],
                         status: SopStatus.completed
                     })
