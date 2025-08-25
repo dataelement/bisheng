@@ -1,25 +1,25 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
 import {
+  ApiErrorWatcher,
   Login,
   Registration,
   RequestPasswordReset,
   ResetPassword,
-  VerifyEmail,
-  ApiErrorWatcher,
   TwoFactorScreen,
+  VerifyEmail,
 } from '~/components/Auth';
-import { AuthContextProvider } from '~/hooks/AuthContext';
-import RouteErrorBoundary from './RouteErrorBoundary';
-import StartupLayout from './Layouts/Startup';
-import LoginLayout from './Layouts/Login';
-import dashboardRoutes from './Dashboard';
-import ShareRoute from './ShareRoute';
-import ChatRoute from './ChatRoute';
-import Search from './Search';
-import Root from './Root';
 import Sop from '~/components/Sop';
 import WebView from '~/components/WebView';
+import { AuthContextProvider } from '~/hooks/AuthContext';
 import AgentCenter from '~/pages/Apps';
+import AppChat from '~/pages/AppChat';
+import Zombie from '~/pages/zombie';
+import ChatRoute from './ChatRoute';
+import LoginLayout from './Layouts/Login';
+import StartupLayout from './Layouts/Startup';
+import Root from './Root';
+import RouteErrorBoundary from './RouteErrorBoundary';
+import ShareRoute from './ShareRoute';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -102,11 +102,15 @@ export const router = createBrowserRouter([
           {
             path: 'apps',
             element: <AgentCenter />,
-          }
-          // {
-          //   path: 'search',
-          //   element: <Search />,
-          // },
+          },
+          {
+            path: 'chat/:cid/:fid/:type',
+            element: <AppChat />,
+          },
+          {
+            path: 'zombie',
+            element: <Zombie />,
+          },
         ],
       },
     ],
