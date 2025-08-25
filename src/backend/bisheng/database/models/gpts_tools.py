@@ -380,6 +380,6 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
         statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
-        async with async_session_getter(tool_key) as session:
+        async with async_session_getter() as session:
             result = await session.exec(statement)
             return result.first()
