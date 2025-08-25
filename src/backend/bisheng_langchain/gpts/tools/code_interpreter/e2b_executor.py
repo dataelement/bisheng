@@ -25,11 +25,21 @@ class E2bCodeExecutor(BaseExecutor):
         self.file_list = file_list
         self.keep_sandbox = keep_sandbox  # 是否保持一个sandbox, 默认只有在执行的时候才创建一个沙盒
 
+        if self.file_list:
+            new_file_list = []
+            for one in self.file_list:
+                with open(one.data, 'rb') as f:
+                    new_file_list.append({
+                        "path": one.path,
+                        "data": f.read()
+                    })
+            self.file_list = new_file_list
+
         self.sandbox = None
         if self.keep_sandbox:
             self.sandbox = Sandbox(domain=domain, api_key=api_key, timeout=timeout)
             if self.file_list:
-                self.sandbox.files.write_files(file_list)
+                self.sandbox.files.write(file_list)
 
     @property
     def description(self) -> str:
@@ -47,7 +57,7 @@ class E2bCodeExecutor(BaseExecutor):
         try:
             sandbox = Sandbox(domain=self.domain, api_key=self.api_key, timeout=self.timeout)
             if self.file_list:
-                sandbox.files.write_files(self.file_list)
+                sandbox.files.write(self.file_list)
             execution = sandbox.run_code(code)
             results, file_list = self.parse_results(execution.results)
             return {
