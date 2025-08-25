@@ -62,25 +62,9 @@ class CodeInterpreterTool(BaseTool):
     """Tool for evaluating python code in native environment."""
 
     name: str = 'bisheng_code_interpreter'
+    description: str = "code interpreter"
     args_schema: Type[BaseModel] = CodeInterpreterToolArguments
-    executor_type: str = "local"
     executor: Any = None
-
-    def __init__(
-            self,
-            executor_type: str = 'local',
-            **kwargs
-    ) -> None:
-        super().__init__(**kwargs)
-        self.executor_type = executor_type
-        if self.executor_type == 'local':
-            self.executor = LocalExecutor(**kwargs)
-        else:
-            self.executor = E2bCodeExecutor(**kwargs)
-
-    @property
-    def description(self) -> str:
-        return self.executor.description
 
     def _run(self, python_code: str) -> dict:
         return self.executor.run(python_code)

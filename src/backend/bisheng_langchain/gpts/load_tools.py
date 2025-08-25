@@ -19,6 +19,8 @@ from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.self_arxiv import ArxivAPIWrapperSelf
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
+from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import E2bCodeExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
@@ -105,7 +107,11 @@ def _get_native_code_interpreter(**kwargs: Any) -> Tool:
     executor_type = kwargs.pop("type", "local")
     config = kwargs.pop("config", {}).get(executor_type, {})
     kwargs.update(config)
-    return CodeInterpreterTool(executor_type=executor_type, **kwargs)
+    if executor_type == 'local':
+        executor = LocalExecutor(**kwargs)
+    else:
+        executor = E2bCodeExecutor(**kwargs)
+    return CodeInterpreterTool(executor=executor, description=executor.description)
 
 
 # 第二个list内填必填参数，第三个list内填可选参数
