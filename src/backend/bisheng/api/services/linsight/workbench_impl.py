@@ -812,7 +812,7 @@ class LinsightWorkbenchImpl:
         if not bisheng_code_tool or bisheng_code_tool.id not in config_tool_ids:
             return tools
         # 单独初始化代码解释器工具
-        config_tool_ids.pop(bisheng_code_tool.id)
+        config_tool_ids.remove(bisheng_code_tool.id)
         code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
         # 默认60分钟的有效期
         code_config["timeout"] = 3600
