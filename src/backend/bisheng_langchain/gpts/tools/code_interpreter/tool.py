@@ -5,6 +5,7 @@ from typing import List, Type
 
 from langchain_community.tools import Tool
 from pydantic import BaseModel, Field
+from langchain_core.tools import BaseTool
 
 from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import E2bCodeExecutor
 from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
@@ -57,7 +58,7 @@ class CodeInterpreterToolArguments(BaseModel):
     )
 
 
-class CodeInterpreterTool:
+class CodeInterpreterTool(BaseTool):
     """Tool for evaluating python code in native environment."""
 
     name = 'bisheng_code_interpreter'
@@ -68,6 +69,7 @@ class CodeInterpreterTool:
             executor_type: str = 'local',
             **kwargs
     ) -> None:
+        super().__init__(**kwargs)
         self.executor_type = executor_type
         if self.executor_type == 'local':
             self.executor = LocalExecutor(**kwargs)
@@ -83,11 +85,3 @@ class CodeInterpreterTool:
 
     def close(self) -> None:
         self.executor.close()
-
-    def as_tool(self) -> Tool:
-        return Tool.from_function(
-            func=self._run,
-            name=self.name,
-            description=self.description,
-            args_schema=self.args_schema,
-        )

@@ -105,7 +105,7 @@ def _get_native_code_interpreter(**kwargs: Any) -> Tool:
     executor_type = kwargs.pop("type", "local")
     config = kwargs.pop("config", {}).get(executor_type, {})
     kwargs.update(config)
-    return CodeInterpreterTool(executor_type=executor_type, **kwargs).as_tool()
+    return CodeInterpreterTool(executor_type=executor_type, **kwargs)
 
 
 # 第二个list内填必填参数，第三个list内填可选参数
