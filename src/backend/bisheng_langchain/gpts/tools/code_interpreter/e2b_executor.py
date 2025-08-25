@@ -39,7 +39,7 @@ class E2bCodeExecutor(BaseExecutor):
         if self.keep_sandbox:
             self.sandbox = Sandbox(domain=domain, api_key=api_key, timeout=timeout)
             if self.file_list:
-                self.sandbox.files.write(file_list)
+                self.sandbox.files.write(self.file_list)
 
     @property
     def description(self) -> str:
