@@ -73,7 +73,7 @@ def _get_web_search(**kwargs: Any) -> BaseTool:
     return WebSearchTool(api_wrapper=search_tool)
 
 
-def _get_dalle_image_generator(**kwargs: Any) -> Tool:
+def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
     if kwargs.get('openai_proxy'):
         kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
         kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))

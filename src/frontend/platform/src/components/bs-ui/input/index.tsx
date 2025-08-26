@@ -129,11 +129,13 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
     
     const [displayValue, setDisplayValue] = useState('');
     const [realValue, setRealValue] = useState(value || '');
+    const [showClear, setShowClear] = useState(false);
 
     // 将真实值转换为星号显示
     React.useEffect(() => {
-        setDisplayValue(value ? new Array(value.length).fill('●').join('') : '');
+        setDisplayValue(value ? new Array(value.length).fill('•').join('') : '');
         setRealValue(value || '');
+        setShowClear(!!value);
     }, [value]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,7 +180,53 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
         }
         
         // 更新显示值（星号）
-        setDisplayValue(newValue.length > 0 ? new Array(newValue.length).fill('*').join('') : '');
+        setDisplayValue(newValue.length > 0 ? new Array(newValue.length).fill('•').join('') : '');
+        setShowClear(newValue.length > 0);
+    };
+
+    // 清空输入
+    const handleClear = () => {
+        setDisplayValue('');
+        setRealValue('');
+        setShowClear(false);
+        
+        if (onChange) {
+            const syntheticEvent = {
+                target: {
+                    value: '',
+                    name: name || ''
+                }
+            };
+            onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+        }
+    };
+
+    // 处理粘贴事件
+    const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+        const pasteData = e.clipboardData.getData('text/plain');
+        if (pasteData) {
+            // 阻止默认粘贴行为，手动处理
+            e.preventDefault();
+            
+            const updatedRealValue = realValue + pasteData;
+            setRealValue(updatedRealValue);
+            
+            // 更新显示值（星号）
+            const newDisplayValue = displayValue + new Array(pasteData.length).fill('•').join('');
+            setDisplayValue(newDisplayValue);
+            setShowClear(true);
+            
+            // 触发父组件的 onChange
+            if (onChange) {
+                const syntheticEvent = {
+                    target: {
+                        value: updatedRealValue,
+                        name: name || ''
+                    }
+                };
+                onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+            }
+        }
     };
 
     return (
@@ -189,17 +237,37 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
                 {required && <span className="bisheng-tip">*</span>}
             </label>
             
-            <Input
-                type="text" // 使用 text 类型以便显示星号
-                value={displayValue}
-                placeholder={placeholder}
-                onChange={handleInputChange}
-                className={inputClassName}
-                id={id}
-                name={name}
-                ref={ref}
-                {...props}
-            />
+            <div className="relative">
+                <Input
+                    type="text" // 使用 text 类型以便显示星号
+                    value={displayValue}
+                    placeholder={placeholder}
+                    onChange={handleInputChange}
+                    onPaste={handlePaste}
+                    className={cname("pr-20", inputClassName)} // 增加右边距以容纳按钮
+                    id={id}
+                    name={name}
+                    ref={ref}
+                    {...props}
+                />
+                
+                {/* 操作按钮容器 */}
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
+                    {/* 清空按钮 */}
+                    {showClear && (
+                        <button
+                            type="button"
+                            onClick={handleClear}
+                            className="text-gray-500 hover:text-gray-700 p-1"
+                            title="清空"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            </div>
 
             {error && <p className="bisheng-tip mt-1">{typeof error === 'string' ? error : '不能为空'}</p>}
         </div>

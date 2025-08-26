@@ -24,10 +24,16 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         const newFormData = { ...temp, ...formData };
         newFormData.provider = formData.azure_deployment ? 'azure' : 'openai';
         const apiKey = formData.openai_api_key;
-        if (formData.provider === 'openai') {
+        console.log(newFormData.provider,formData.provider,44);
+        
+        if (newFormData.provider === 'openai') {
+            console.log(111);
+            
             newFormData.openai_api_key = apiKey;
             newFormData.azure_api_key = '';
         } else {
+            console.log(222);
+            
             newFormData.openai_api_key = '';
             newFormData.azure_api_key = apiKey;
         }

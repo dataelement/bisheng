@@ -13,6 +13,7 @@ const connections: Record<string, WebSocket> = {};
 export const useLinsightWebSocket = (versionId) => {
     const { getLinsight, updateLinsight } = useLinsightManager()
     const { showToast } = useToastContext();
+    const maxRetryCountRef = useRef(5);
 
     const linsight = getLinsight(versionId);
     const task = useMemo(() => {
@@ -269,6 +270,13 @@ export const useLinsightWebSocket = (versionId) => {
             console.log(`WebSocket closed for session ${id}`);
             if (connections[id] === websocket) {
                 delete connections[id];
+                if (maxRetryCountRef.current > 0) {
+                    setTimeout(() => {
+                        connect(id, { type: 'relink' })
+                        maxRetryCountRef.current--;
+                    }, 1000);
+                }
+            } else {
             }
         };
 
@@ -285,6 +293,7 @@ export const useLinsightWebSocket = (versionId) => {
         if (!connections[task.versionId] ||
             connections[task.versionId].readyState !== WebSocket.OPEN) {
             connect(task.versionId, { type: 'init' });
+            maxRetryCountRef.current = 3;
         }
     }, [task])
 

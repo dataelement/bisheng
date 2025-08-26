@@ -95,7 +95,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     return (
         <>
             <div className="mb-6">
-                <Label className="text-base font-medium mb-3 block">代码执行方式{t('模型')}</Label>
+                <Label className=" mb-3 mt-4 block">代码执行方式</Label>
                 <RadioGroup 
                     value={localFormData.executionMode} 
                     className="flex gap-6" 
@@ -114,7 +114,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             {localFormData.executionMode === 'e2b' && (
                 <div className="space-y-4">
                     <div>
-                        <Label className="text-base font-medium mb-3 block">服务提供方</Label>
+                        <Label className="mb-3 block">服务提供方</Label>
                         <RadioGroup 
                             value={localFormData.serviceProvider} 
                             className="flex gap-6" 
@@ -178,7 +178,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                     </Button>
                 </DialogClose>
                 <Button className="px-11" onClick={handleSubmit}>
-                    {t('build.confirm')}
+                    {t('save')}
                 </Button>
             </DialogFooter>
         </>
