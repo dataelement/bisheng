@@ -90,7 +90,7 @@ const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, o
 
     const { toast } = useToast()
   const internalHandleNext = () => {
-        console.log(step, displayStep, 'previewCount11');
+        console.log(step, displayStep,'previewCount11');
         const nextStep = step + 1;
         if (step === 2 || displayStep === 2) {
             if (vildateCell()) return;

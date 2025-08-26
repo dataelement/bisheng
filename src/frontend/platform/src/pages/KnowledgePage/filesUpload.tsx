@@ -32,6 +32,8 @@ export default function FilesUpload() {
     const fileUploadStep2Ref = useRef(null);
     const [isNextDisabled, setIsNextDisabled] = useState(true);
     const handleNext = () => {
+        console.log(111, currentStep, isAdjustMode, uploadConfig, segmentRules);
+
         if (currentStep === (isAdjustMode ? 1 : 2)) {
             // 步骤2时调用子组件的方法
             if (fileUploadStep2Ref.current) {
@@ -74,12 +76,30 @@ export default function FilesUpload() {
 
     // 保存知识库
     const submittingRef = useRef(false);
+    // 修改 handleSave 函数
     const handleSave = (_config) => {
         if (submittingRef.current) return;
         submittingRef.current = true;
         setIsSubmitting(true);
-        
-        captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
+
+        // 将配置转换为API需要的格式
+        const apiConfig = {
+            knowledge_id: Number(_config.rules.knowledgeId || kid),
+            separator: _config.rules.separator,
+            separator_rule: _config.rules.separatorRule,
+            chunk_size: _config.rules.chunkSize,
+            chunk_overlap: _config.rules.chunkOverlap,
+            file_list: _config.rules.fileList.map(item => ({
+                file_path: item.filePath,
+                excel_rule: _config.applyEachCell ? item.excelRule : _config.cellGeneralConfig
+            })),
+            retain_images: _config.rules.retainImages,
+            enable_formula: _config.rules.enableFormula,
+            force_ocr: _config.rules.forceOcr,
+            fileter_page_header_footer: _config.rules.pageHeaderFooter
+        };
+
+        captureAndAlertRequestErrorHoc(subUploadLibFile(apiConfig).then(res => {
             const _repeatFiles = res.filter(e => e.status === 3)
 
             if (_repeatFiles.length) {
@@ -100,9 +120,8 @@ export default function FilesUpload() {
             setIsSubmitting(false);
         }))
 
-        _tempConfigRef.current = _config
+        _tempConfigRef.current = apiConfig;
     }
-
     // 默认配置保存
     const handleSaveByDefaultConfig = async (_config) => {
         await captureAndAlertRequestErrorHoc(subUploadLibFile(_config).then(res => {
@@ -219,17 +238,24 @@ export default function FilesUpload() {
                             <>
                                 <PreviewResult
                                     rules={segmentRules.rules}
-                                    resultFiles={resultFiles} // 如果需要文件信息也可以传递
+                                    resultFiles={resultFiles}
                                     onPrev={() => setCurrentStep(isAdjustMode ? 1 : 2)}
                                     onNext={(config) => {
-                                        // 下一步进入数据处理并保存
                                         const nextStep = isAdjustMode ? 3 : 4;
                                         setCurrentStep(nextStep);
-                                        handleSave(config);
+                                        handleSave({
+                                            applyEachCell: segmentRules.applyEachCell,
+                                            cellGeneralConfig: segmentRules.cellGeneralConfig,
+                                            rules: segmentRules.rules
+                                        });
                                     }}
-                                      onPreviewResult={(isSuccess) => {
-                                     setIsNextDisabled(!isSuccess);
+                                    onPreviewResult={(isSuccess) => {
+                                        setIsNextDisabled(!isSuccess);
                                     }}
+                                    step={currentStep}
+                                    previewCount={0}
+                                    applyEachCell={segmentRules.applyEachCell}
+                                    cellGeneralConfig={segmentRules.cellGeneralConfig}
                                 />
                                 <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
                                     <Button
@@ -243,8 +269,15 @@ export default function FilesUpload() {
                                     </Button>
                                     <Button
                                         className="h-8"
-                                        onClick={handleNext} // 使用父组件的 handleNext
-                                         disabled={isNextDisabled} 
+                                        onClick={() => {
+                                            const config = {
+                                                applyEachCell: segmentRules.applyEachCell,
+                                                cellGeneralConfig: segmentRules.cellGeneralConfig,
+                                                rules: segmentRules.rules
+                                            };
+                                            handleSave(config);
+                                        }}
+                                        disabled={isNextDisabled}
                                     >
                                         {isSubmitting ? (
                                             <LoadingIcon className="h-12 w-12" />
@@ -254,8 +287,6 @@ export default function FilesUpload() {
                                     </Button>
                                 </div>
                             </>
-
-
                         )}
 
                         {/* 步骤4: 数据处理 (正常模式) / 步骤3: 数据处理 (调整模式) */}
