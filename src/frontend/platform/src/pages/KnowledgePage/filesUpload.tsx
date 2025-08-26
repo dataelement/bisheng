@@ -12,6 +12,7 @@ import FileUploadStep1 from "./components/FileUploadStep1";
 import FileUploadStep2 from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 
 const StepLabels = [
     '上传文件',
@@ -28,7 +29,24 @@ export default function FilesUpload() {
     const { message } = useToast()
     const [isAdjustMode, setIsAdjustMode] = useState(location.state?.isAdjustMode || false);
     const [currentStep, setCurrentStep] = useState(1);
-    
+    const fileUploadStep2Ref = useRef(null);
+    const [isNextDisabled, setIsNextDisabled] = useState(true);
+    const handleNext = () => {
+        if (currentStep === (isAdjustMode ? 1 : 2)) {
+            // 步骤2时调用子组件的方法
+            if (fileUploadStep2Ref.current) {
+                fileUploadStep2Ref.current.handleNext();
+            }
+        } else if (currentStep === (isAdjustMode ? 2 : 3)) {
+            // 步骤3时直接进入下一步
+            const nextStep = isAdjustMode ? 3 : 4;
+            setCurrentStep(nextStep);
+            if (uploadConfig) {
+                handleSave(uploadConfig);
+            }
+        }
+    };
+
     // 文件列表
     const [resultFiles, setResultFiles] = useState(() => {
         if (location.state?.isAdjustMode && location.state?.fileData) {
@@ -43,17 +61,17 @@ export default function FilesUpload() {
         }
         return [];
     });
-    
+
     // 新增：存储分段策略配置
     const [segmentRules, setSegmentRules] = useState(null);
-    
+
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const adjustedStepLabels = isAdjustMode 
-        ? ['分段策略', '原文对比', '数据处理'] 
+    const adjustedStepLabels = isAdjustMode
+        ? ['分段策略', '原文对比', '数据处理']
         : ['上传文件', '分段策略', '原文对比', '数据处理'];
-    
+
     const _tempConfigRef = useRef({})
-    
+
     // 保存知识库
     const submittingRef = useRef(false);
     const handleSave = (_config) => {
@@ -104,9 +122,10 @@ export default function FilesUpload() {
     const repeatCallBackRef = useRef(() => {
         setCurrentStep(isAdjustMode ? 3 : 4)
     })
-    
+
     // 重试解析
     const [retryLoad, setRetryLoad] = useState(false)
+    const [uploadConfig, setUploadConfig] = useState(null);
     const handleRetry = (objs) => {
         setRetryLoad(true)
         const params = {
@@ -124,10 +143,10 @@ export default function FilesUpload() {
             repeatCallBackRef.current()
         }))
     }
-    
+
     const handleBack = () => {
         if (currentStep === 1) {
-            navigate(-1); 
+            navigate(-1);
         } else {
             setCurrentStep(prev => prev - 1);
         }
@@ -136,8 +155,8 @@ export default function FilesUpload() {
     // 处理从 FileUploadStep2 接收的分段策略配置
     const handleStep2Next = (step, config) => {
         if (config) {
-            // 保存分段策略配置
             setSegmentRules(config);
+            setUploadConfig(config);
         }
         setCurrentStep(step);
     };
@@ -157,11 +176,11 @@ export default function FilesUpload() {
                     </Button>
                     <span className="text-foreground text-sm font-black pl-4">返回知识库</span>
                 </div>
-                
+
                 {/* 上方步进条 */}
                 <StepProgress
                     align="center"
-                    currentStep={isAdjustMode  ? currentStep - 1 : currentStep}
+                    currentStep={isAdjustMode ? currentStep - 1 : currentStep}
                     labels={adjustedStepLabels}
                 />
             </div>
@@ -181,10 +200,11 @@ export default function FilesUpload() {
                                 hidden={currentStep !== 1}
                             />
                         )}
-                        
+
                         {/* 步骤2: 分段策略 (正常模式) / 步骤1: 分段策略 (调整模式) */}
                         {(currentStep === (isAdjustMode ? 1 : 2)) && (
                             <FileUploadStep2
+                                ref={fileUploadStep2Ref}
                                 step={currentStep}
                                 resultFiles={resultFiles}
                                 isSubmitting={isSubmitting}
@@ -196,17 +216,46 @@ export default function FilesUpload() {
 
                         {/* 步骤3: 原文对比 (正常模式) / 步骤2: 原文对比 (调整模式) */}
                         {(currentStep === (isAdjustMode ? 2 : 3)) && segmentRules && (
-                            <PreviewResult
-                                rules={segmentRules.rules} 
-                                resultFiles={resultFiles} // 如果需要文件信息也可以传递
-                                onPrev={() => setCurrentStep(isAdjustMode ? 1 : 2)}
-                                onNext={(config) => {
-                                    // 下一步进入数据处理并保存
-                                    const nextStep = isAdjustMode ? 3 : 4;
-                                    setCurrentStep(nextStep);
-                                    handleSave(config);
-                                }}
-                            />
+                            <>
+                                <PreviewResult
+                                    rules={segmentRules.rules}
+                                    resultFiles={resultFiles} // 如果需要文件信息也可以传递
+                                    onPrev={() => setCurrentStep(isAdjustMode ? 1 : 2)}
+                                    onNext={(config) => {
+                                        // 下一步进入数据处理并保存
+                                        const nextStep = isAdjustMode ? 3 : 4;
+                                        setCurrentStep(nextStep);
+                                        handleSave(config);
+                                    }}
+                                      onPreviewResult={(isSuccess) => {
+                                     setIsNextDisabled(!isSuccess);
+                                    }}
+                                />
+                                <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+                                    <Button
+                                        className="h-8"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setCurrentStep(isAdjustMode ? 1 : 2);
+                                        }}
+                                    >
+                                        {t('previousStep')}
+                                    </Button>
+                                    <Button
+                                        className="h-8"
+                                        onClick={handleNext} // 使用父组件的 handleNext
+                                         disabled={isNextDisabled} 
+                                    >
+                                        {isSubmitting ? (
+                                            <LoadingIcon className="h-12 w-12" />
+                                        ) : (
+                                            t('nextStep')
+                                        )}
+                                    </Button>
+                                </div>
+                            </>
+
+
                         )}
 
                         {/* 步骤4: 数据处理 (正常模式) / 步骤3: 数据处理 (调整模式) */}

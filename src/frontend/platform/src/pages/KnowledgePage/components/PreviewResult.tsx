@@ -22,13 +22,14 @@ interface IProps {
     previewCount: number;
     applyEachCell: boolean;
     cellGeneralConfig: any;
+     onPreviewResult?: (isSuccess: boolean) => void; 
 }
 export type Partition = {
     [key in string]: { text: string, type: string, part_id: string }
 }
-export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig }: IProps) {
+export default function PreviewResult({ previewCount, rules, step, applyEachCell, cellGeneralConfig, onPreviewResult }: IProps) {
     const { id } = useParams()
-
+   const [previewSuccess, setPreviewSuccess] = useState(true);
     const [chunks, setChunks] = useState([]) // 当前文件分块
     const [partitions, setPartitions] = useState<Partition>({}) // 当前文件分区
     const [selectId, setSelectId] = useState(''); // 当前选择文件id
@@ -93,9 +94,13 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
             // 解析失败时,使用支持的原文件预览
             ["pdf", "txt", "md", "html", "docx", "png", "jpg", "jpeg", "bmp"].includes(currentFile.suffix)
                 && setFileViewUrl({ load: false, url: currentFile.filePath })
+                  setPreviewSuccess(false);
+            onPreviewResult && onPreviewResult(false);
         }).then(res => {
             if (!res) {
                 setFileViewUrl({ load: false, url: '' })
+                setPreviewSuccess(false);
+                onPreviewResult && onPreviewResult(false);
                 return setLoading(false)
             }
             if (res === 'canceled') return
@@ -111,6 +116,9 @@ export default function PreviewResult({ previewCount, rules, step, applyEachCell
 
             setFileViewUrl({ load: false, url: res.file_url })
             setPartitions(res.partitions)
+              const success = res.chunks && res.chunks.length > 0;
+            setPreviewSuccess(success);
+            onPreviewResult && onPreviewResult(success);
             setLoading(false)
         })
 

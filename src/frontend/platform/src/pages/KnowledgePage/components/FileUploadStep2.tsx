@@ -11,6 +11,7 @@ import PreviewResult from "./PreviewResult";
 import RuleFile from "./RuleFile";
 import RuleTable from "./RuleTable";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { forwardRef, useImperativeHandle } from 'react';
 
 export interface FileItem {
     id: string;
@@ -25,7 +26,7 @@ interface IProps {
     isSubmitting: boolean
     onNext: (step: number, config?: any) => void
     onPrev: () => void
-    isAdjustMode?:boolean
+    isAdjustMode?: boolean
 }
 const enum DisplayModeType {
     OnlyTables = 'table',
@@ -38,19 +39,19 @@ const initialStrategies = [
     { id: '2', regex: '\\n', position: 'after', rule: '单换行后切分，用于分隔普通换行' }
 ];
 
-export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode }: IProps) {
-     console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode });
+const FileUploadStep2 = forwardRef(({ step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode }: IProps, ref) => {
+    console.log('FileUploadStep2 props:', { step, resultFiles, isAdjustMode });
     const { id: kid } = useParams()
     const { t } = useTranslation('knowledge')
     const setSelectedChunkIndex = useKnowledgeStore((state) => state.setSelectedChunkIndex);
-
+  const [previewFailed, setPreviewFailed] = useState(false);
     const displayStep = isAdjustMode ? step + 1 : step;
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
-        
+
         const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
         const hasDocumentFiles = resultFiles.some(file => file.fileType === 'file');
-        
+
         return hasTableFiles && !hasDocumentFiles ? DisplayModeType.OnlyTables :
             !hasTableFiles && hasDocumentFiles ? DisplayModeType.OnlyDocuments :
                 DisplayModeType.Mixed;
@@ -69,11 +70,11 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
         strategies,
         setStrategies
     } = useFileProcessingRules(initialStrategies, resultFiles, kid);
-   const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
-   const applyRuleRef = useRef(applyRule);
-   useEffect(() => {
-    applyRuleRef.current = applyRule;
-}, [applyRule]);
+    const [applyRule, setApplyRule] = useState<any>({}) // 应用规则
+    const applyRuleRef = useRef(applyRule);
+    useEffect(() => {
+        applyRuleRef.current = applyRule;
+    }, [applyRule]);
     // 起始行不能大于结束行校验
     const vildateCell = () => {
         if (applyEachCell
@@ -88,28 +89,25 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
     }
 
     const { toast } = useToast()
-    const handleNext = () => {
-             console.log(step,displayStep, 'previewCount11');
-        const nextStep = step + 1
-        if (step === 2||displayStep===2) {
-          
-            
-            if (vildateCell()) return
- 
-             const config = {
+  const internalHandleNext = () => {
+        console.log(step, displayStep, 'previewCount11');
+        const nextStep = step + 1;
+        if (step === 2 || displayStep === 2) {
+            if (vildateCell()) return;
+
+            const config = {
                 applyEachCell,
                 cellGeneralConfig,
                 rules
             };
-       setApplyRule(config);
-    console.log(applyRuleRef.current,111);
+            setApplyRule(config);
+            console.log(applyRuleRef.current, 111);
 
-            setSelectedChunkIndex(-1) // 清空选中块
-            return  onNext(nextStep, config);
+            setSelectedChunkIndex(-1); // 清空选中块
+            return onNext(nextStep, config);
         }
-        //  合并配置
-        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr
-            , retainImages, separator, separatorRule } = rules;
+        // 合并配置
+        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, retainImages, separator, separatorRule } = rules;
 
         const params = {
             knowledge_id: kid,
@@ -125,33 +123,37 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
             enable_formula: enableFormula,
             force_ocr: forceOcr,
             fileter_page_header_footer: pageHeaderFooter
-        }
+        };
 
         onNext(nextStep, params);
     };
 
+    // 使用 useImperativeHandle 暴露方法给父组件
+    useImperativeHandle(ref, () => ({
+        handleNext: internalHandleNext
+    }));
     // 预览
- 
+
     const handlePreview = () => {
         if (vildateCell()) return
         setShowPreview(true)
         setPreviewCount(c => c + 1) // 刷新分段
 
-        
+
         setApplyRule({
             applyEachCell,
             cellGeneralConfig,
             rules
         })
-                console.log(applyRule, 'previewCount');
+        console.log(applyRule, 'previewCount');
     }
 
-   
+
     return <div>
         <div className="flex flex-row justify-center gap-4">
             {/* 左侧区域 */}
             {
-                displayStep === 2 && (    <div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-1/2' : 'w-2/3')}>
+                displayStep === 2 && (<div className={cn(" h-full flex flex-col max-w-[760px]", showPreview ? 'w-1/2' : 'w-2/3')}>
                     <Tabs
                         defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
                         className="flex flex-col h-full"
@@ -198,18 +200,19 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
                         </div>
                     </Tabs>
                 </div>)
-            
+
             }
             {/* 原文预览 & 分段预览 */}
             {
                 (showPreview || step === 3) && (
-                    
+
                     <PreviewResult
                         step={step}
                         previewCount={previewCount}
                         rules={applyRule.rules}
                         applyEachCell={applyRule.applyEachCell}
                         cellGeneralConfig={applyRule.cellGeneralConfig}
+                          onPreviewResult={(isSuccess) => setPreviewFailed(!isSuccess)}
                     />
                 )
             }
@@ -228,18 +231,21 @@ export default function FileUploadStep2({ step, resultFiles, isSubmitting, onNex
             <Button
                 className="h-8"
                 // disabled={strategies.length === 0}
-                onClick={() => handleNext()}
+                 disabled={previewFailed || isSubmitting}
+                  onClick={internalHandleNext}
             >
                 {isSubmitting ? (
-    <LoadingIcon className="h-12 w-12" />
-  ) : (
-    t('nextStep')
-  )}
+                    <LoadingIcon className="h-12 w-12" />
+                ) : (
+                    t('nextStep')
+                )}
             </Button>
         </div>
     </div>
-};
+});
+FileUploadStep2.displayName = 'FileUploadStep2';
 
+export default FileUploadStep2;
 
 
 const useFileProcessingRules = (initialStrategies, resultFiles, kid) => {

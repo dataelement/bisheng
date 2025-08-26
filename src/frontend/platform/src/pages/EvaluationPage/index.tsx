@@ -35,6 +35,8 @@ import {
 } from "./types";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { CircleHelpIcon } from "lucide-react";
 
 export default function EvaluationPage() {
   const navigate = useNavigate();
@@ -147,19 +149,41 @@ export default function EvaluationPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      {!!el.status && (
-                        <Badge
-                          variant={EvaluationStatusLabelMap[el.status].variant}
-                          className={"whitespace-nowrap"}
-                        >
-                          {t(EvaluationStatusLabelMap[el.status].label)}
-                          {el.status === EvaluationStatusEnum.running
-                            ? ` ${el.progress}`
-                            : null}
-                        </Badge>
-                      )}
-                    </TableCell>
+
+               <TableCell>
+  {console.log(el,33)}
+  {!!el.status && (
+    <div className="flex items-center">
+      <Badge
+        variant={EvaluationStatusLabelMap[el.status].variant}
+        className={"whitespace-nowrap min-w-[60px] justify-center"} 
+      >
+        {t(EvaluationStatusLabelMap[el.status].label)}
+        {el.status === EvaluationStatusEnum.running
+          ? ` ${el.progress}`
+          : null}
+      {el.status === EvaluationStatusEnum.failed && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className=" max-w-[50px]">
+                <CircleHelpIcon className="h-3.5 w-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-xs">
+                {el.description || t("description")}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      </Badge>
+      
+   
+    </div>
+  )}
+</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap">
                         {el.result_score
