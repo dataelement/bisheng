@@ -320,17 +320,22 @@ class WorkFlowService(BaseService):
         """
         获取常用技能
         """
-        # 通过user_id和tag获取id列表
+        # 通过user_id和tag获取id列表，并保持按create_time升序的顺序
         flow_ids = []
+        user_link_order = {}  # 记录每个应用在用户常用列表中的顺序
         
         ret = UserLinkDao.get_user_link(user.user_id, [app_type.value for app_type in UserLinkType.app.value])
         if not ret:
             return [], 0
-        flow_ids = [one.type_detail for one in ret]
+        
+        # 保存原始顺序和flow_ids
+        for index, user_link in enumerate(ret):
+            flow_ids.append(user_link.type_detail)
+            user_link_order[user_link.type_detail] = index
 
-        # 获取用户可见的技能列表
+        # 获取用户可见的技能列表（不进行分页，因为我们需要手动排序）
         if user.is_admin():
-            data, total = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, flow_ids, None, None, None, None, page, page_size)
+            data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, flow_ids, None, None, None, None, 0, 0)
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
@@ -339,8 +344,16 @@ class WorkFlowService(BaseService):
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data, total = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, flow_ids, None, user.user_id, flow_id_extra, page,
-                                               page_size)
+            data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, flow_ids, None, user.user_id, flow_id_extra, 0, 0)
+        
+        # 按照用户添加到常用的顺序重新排序
+        data.sort(key=lambda x: user_link_order.get(x['id'], float('inf')))
+        
+        # 手动实现分页
+        total = len(data)
+        start_index = (page - 1) * page_size
+        end_index = start_index + page_size
+        data = data[start_index:end_index]
 
         # 应用ID列表
         resource_ids = []
