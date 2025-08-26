@@ -140,15 +140,63 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
+        const selectionStart = e.target.selectionStart;
+        const selectionEnd = e.target.selectionEnd;
         
-        // 计算实际变化：比较星号显示值和输入值
+        // 处理全选删除的情况
+        if (selectionStart === 0 && selectionEnd === displayValue.length && newValue === '') {
+            // 用户全选并删除了所有内容
+            setRealValue('');
+            setDisplayValue('');
+            setShowClear(false);
+            
+            if (onChange) {
+                const syntheticEvent = {
+                    ...e,
+                    target: {
+                        ...e.target,
+                        value: '',
+                        name: name || ''
+                    }
+                };
+                onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+            }
+            return;
+        }
+        
+        // 处理部分选择删除的情况
+        if (newValue.length < displayValue.length && selectionStart !== null && selectionEnd !== null) {
+            // 用户选择了一段文本并删除
+            const deletedCount = displayValue.length - newValue.length;
+            const realValueArray = realValue.split('');
+            realValueArray.splice(selectionStart, deletedCount);
+            const updatedRealValue = realValueArray.join('');
+            
+            setRealValue(updatedRealValue);
+            setDisplayValue(newValue.length > 0 ? new Array(newValue.length).fill('•').join('') : '');
+            setShowClear(newValue.length > 0);
+            
+            if (onChange) {
+                const syntheticEvent = {
+                    ...e,
+                    target: {
+                        ...e.target,
+                        value: updatedRealValue,
+                        name: name || ''
+                    }
+                };
+                onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+            }
+            return;
+        }
+        
+        // 原有逻辑：处理单个字符的添加或删除
         if (newValue.length > displayValue.length) {
             // 用户正在输入新字符
-            const newChar = newValue.slice(-1);
-            const updatedRealValue = realValue + newChar;
+            const addedChars = newValue.slice(displayValue.length);
+            const updatedRealValue = realValue + addedChars;
             setRealValue(updatedRealValue);
             
-            // 触发父组件的 onChange
             if (onChange) {
                 const syntheticEvent = {
                     ...e,
@@ -161,11 +209,11 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
                 onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
             }
         } else if (newValue.length < displayValue.length) {
-            // 用户正在删除字符
-            const updatedRealValue = realValue.slice(0, -1);
+            // 用户正在删除字符（单个删除）
+            const deletedCount = displayValue.length - newValue.length;
+            const updatedRealValue = realValue.slice(0, -deletedCount);
             setRealValue(updatedRealValue);
             
-            // 触发父组件的 onChange
             if (onChange) {
                 const syntheticEvent = {
                     ...e,
@@ -250,23 +298,6 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
                     ref={ref}
                     {...props}
                 />
-                
-                {/* 操作按钮容器 */}
-                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
-                    {/* 清空按钮 */}
-                    {showClear && (
-                        <button
-                            type="button"
-                            onClick={handleClear}
-                            className="text-gray-500 hover:text-gray-700 p-1"
-                            title="清空"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    )}
-                </div>
             </div>
 
             {error && <p className="bisheng-tip mt-1">{typeof error === 'string' ? error : '不能为空'}</p>}
