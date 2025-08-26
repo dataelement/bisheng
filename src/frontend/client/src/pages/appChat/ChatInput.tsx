@@ -9,7 +9,7 @@ import { useAreaText } from "./useAreaText";
 export default function ChatInput({ v }) {
     const [bishengConfig] = useRecoilState(bishengConfState)
     const { inputDisabled, error: inputMsg, showUpload, showStop } = useRecoilValue(currentRunningState)
-    const { accepts, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
+    const { accepts, chatState, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText()
 
     const placholder = useMemo(() => {
         const reason = inputMsg || ' '
@@ -32,7 +32,7 @@ export default function ChatInput({ v }) {
             {/* 引导问题 */}
 
             {/* 附件 */}
-            {!inputDisabled && <InputFiles accepts={accepts} size={bishengConfig?.uploaded_files_maximum_size || 50} v={v} onChange={setChatFiles} />}
+            {showUpload && !inputDisabled && <InputFiles accepts={accepts} size={bishengConfig?.uploaded_files_maximum_size || 50} v={v} onChange={setChatFiles} />}
             {/* send */}
             <div className="flex gap-2 absolute right-7 top-4 z-10">
                 {showStop ?
@@ -47,17 +47,16 @@ export default function ChatInput({ v }) {
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                         <SendIcon size={20} className={`${inputDisabled || fileUploading ? 'text-muted-foreground' : 'text-foreground'}`} />
-                        {/* todo  stop */}
                     </div>
                 }
             </div>
             {/* stop & 重置 */}
             <div className="absolute w-full flex justify-center left-0 -top-14">
-                {!showStop && <Button
+                {!showStop && chatState?.flow?.flow_type === 10 && <Button
                     className="rounded-full bg-[#fff] dark:bg-[#1B1B1B]"
                     variant="outline"
                     onClick={handleRestart}>
-                    <RefreshCw className="mr-1" size={16} />开启新对话
+                    <RefreshCw className="mr-1" size={16} />重新运行
                 </Button>
                 }
             </div>

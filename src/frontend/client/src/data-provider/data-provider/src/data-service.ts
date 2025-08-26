@@ -745,6 +745,7 @@ export const listConversations = (
         "user": conv.user_id,
         "__v": 0,
         "_id": conv.chat_id,
+        "flowId": conv.flow_id,
         "flowType": conv.flow_type
       })),
       pageNumber: pageNumber,

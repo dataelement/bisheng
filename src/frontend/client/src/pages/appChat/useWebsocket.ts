@@ -19,6 +19,7 @@ export const enum ActionType {
     FORM_SUBMIT = 'form_submit',
     MESSAGE_INPUT = 'message_input',
     SKILL_INPUT = 'skill_input',
+    SKILL_FORM_SUBMIT = 'skill_form_submit'
 }
 
 export const useWebSocket = (helpers) => {
@@ -34,6 +35,7 @@ export const useWebSocket = (helpers) => {
     useEffect(() => {
         const connect = () => {
             if (websocket) return
+            if (!helpers.wsUrl) return
 
             const isSecureProtocol = window.location.protocol === "https:";
             const webSocketProtocol = isSecureProtocol ? "wss" : "ws";
@@ -106,11 +108,11 @@ export const useWebSocket = (helpers) => {
                 return helpers.message.endMsg(helpers.chatId, data)
             }
 
-            /***** 技能 start******/
-            if (helpers.flow.flow_type === 1) {
+            /***** 技能 & 助手 start******/
+            if (helpers.flow.flow_type !== 10) {
                 if (Array.isArray(data) && data.length) return
                 if (data.type === 'start') {
-                    const _data = SkillMethod.getStartParam(data)
+                    const _data = SkillMethod.getStartParam(data, helpers.chatId)
                     helpers.message.createMsg(helpers.chatId, _data)
                 } else if (data.type === 'stream') {
                     helpers.message.skillStreamMsg(helpers.chatId, data)
@@ -118,6 +120,11 @@ export const useWebSocket = (helpers) => {
                 if (['end', 'end_cover'].includes(data.type) && data.receiver?.is_self) {
                     // 群聊@自己时
                     helpers.showInputForm({})
+                } else if (['end', 'end_cover'].includes(data.type)) {
+                    // todo 无未闭合的消息，先创建（补一条start）  工具类除外
+                    helpers.message.skillStreamMsg(helpers.chatId, data)
+                } else if (data.type === 'close') {
+                    helpers.message.skillCloseMsg()
                 }
 
                 return
@@ -250,6 +257,11 @@ export const useWebSocket = (helpers) => {
                             }
                         },
                     })
+
+                    helpers.message.createSendMsg(submitData.input)
+                    break;
+                case ActionType.SKILL_FORM_SUBMIT:
+                    sendWsMsg(submitData.data)
 
                     helpers.message.createSendMsg(submitData.input)
                     break;

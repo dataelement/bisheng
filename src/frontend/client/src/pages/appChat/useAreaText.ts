@@ -32,8 +32,6 @@ export const useAreaText = () => {
     const [chatId] = useRecoilState(chatIdState)
     const [tabs] = useRecoilState(tabsState)
 
-    console.log('chatState :>> ', chatState);
-
     const [accepts, setAccepts] = useState('')
 
     const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -47,20 +45,20 @@ export const useAreaText = () => {
         if (!msg && textareaRef.current?.value.trim() === "" && chatFile.length === 0) return
         const message = msg || textareaRef.current?.value || ""
 
-        if (chatState.flow.flow_type === flowType.SKILL) {
-            const data = SkillMethod.getSendParam({ tabs, flow: chatState.flow, chatId, message })
-            setSubmitDataState({
-                input: msg,
-                action: ActionType.SKILL_INPUT,
-                data
-            })
-        } else {
+        if (chatState.flow.flow_type === flowType.WORK_FLOW) {
             setSubmitDataState({
                 input: message,
                 action: ActionType.INPUT,
                 chatId,
                 flow: chatState!.flow,
                 files: chatFile,
+            })
+        } else {
+            const data = SkillMethod.getSendParam({ tabs, flow: chatState.flow, chatId, message })
+            setSubmitDataState({
+                input: message,
+                action: ActionType.SKILL_INPUT,
+                data
             })
         }
         if (textareaRef.current) {
@@ -98,15 +96,35 @@ export const useAreaText = () => {
     }
 
     // 表单输入
-    const handleFormSubmit = ({ message, nodeId, data }: { message: string; nodeId: string; data: any }) => {
-        setSubmitDataState({
-            input: message,
-            action: ActionType.FORM_SUBMIT,
-            data,
-            nodeId,
-            chatId,
-            flowId: chatState.flow.id,
-        })
+    const handleFormSubmit = ({ message, nodeId, data, skill }: { message: string; nodeId: string; data: any, skill?: boolean }) => {
+        if (skill) {
+            setSubmitDataState({
+                input: message,
+                action: ActionType.SKILL_FORM_SUBMIT,
+                data: {
+                    chatHistory: [],
+                    chat_id: chatId,
+                    flow_id: chatState.flow.id,
+                    description: chatState.flow.description,
+                    inputs: {
+                        data,
+                        id: '',
+                        query: message,
+                    },
+                    name: chatState.flow.name,
+                }
+            })
+        } else {
+            setSubmitDataState({
+                input: message,
+                action: ActionType.FORM_SUBMIT,
+                data,
+                nodeId,
+                chatId,
+                flowId: chatState.flow.id,
+            })
+        }
+
         setRunningState((prev) => ({
             ...prev,
             [chatId]: {
@@ -215,7 +233,8 @@ export const useAreaText = () => {
         handleStopClick,
         handleRestart,
         setChatFiles: setChatFileState,
-        accepts
+        accepts,
+        chatState
     }
 }
 

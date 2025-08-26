@@ -29,6 +29,11 @@ export async function getFlowApi(flowId: string, version: string = 'v1'): Promis
     return await request.get(`/api/${version}/flows/${flowId}`)
 }
 
+// 获取助手详情
+export const getAssistantDetailApi = async (id: string, version: string = 'v1'): Promise<any> => {
+    return await request.get(`/api/${version}/assistant/info/${id}`)
+};
+
 export const baseMsgItem = {
     id: Math.random() * 1000000,
     isSend: false,
@@ -85,20 +90,30 @@ export async function getChatHistoryApi(flowId: string, chatId: string, flowType
         const newData = Number(flowType) === 10 ? filterFlowMsg(res.data) : filterSkillMsg(res.data)
 
         return newData.map(item => {
-            let { message, files, is_bot, intermediate_steps, category, ...other } = item
+            let { message, files, is_bot, isSend, intermediate_steps, category, ...other } = item
             try {
                 message = message && message[0] === '{' ? JSON.parse(message) : message || ''
             } catch (e) {
                 // 未考虑的情况暂不处理
                 console.error('消息 to JSON error :>> ', e);
             }
+            // 修正数据
+            const _isSend = isSend || !is_bot;
+            const _category = _isSend ? 'question' : category
+            const _files = (files ? JSON.parse(files) : []).map(file => {
+                return {
+                    file_name: file.file_name || file.name,
+                    file_url: file.file_url || file.path,
+                }
+            })
+
             return {
                 ...other,
-                category,
+                category: _category,
                 chatKey: typeof message === 'string' ? undefined : Object.keys(message)[0],
                 end: true,
-                files: files ? JSON.parse(files) : [],
-                isSend: !is_bot,
+                files: _files,
+                isSend: _isSend,
                 message,
                 thought: intermediate_steps,
                 reasoning_log: message.reasoning_content || '',
@@ -233,3 +248,37 @@ export const uploadFileWithProgress = async (file, callback, type: 'knowledge' |
         // Handle errors
     }
 };
+
+
+/**
+ * get组件 variables 变量
+ * params flow_id, node_id
+ */
+const enum VariableType {
+    /** 文本 */
+    Text = "text",
+    /** 下拉框 */
+    Select = "select",
+    /** 文件 */
+    File = "file"
+}
+export function getVariablesApi(params) {
+    return (request.get(`/api/v1/variable/list`, { params }) as Promise<any[]>).then(res => {
+        return res.data.map((item) => {
+            const types = ['', VariableType.Text, VariableType.Select, VariableType.File]
+            return {
+                id: item.id,
+                update: true,
+                name: item.variable_name,
+                type: types[item.value_type],
+                nodeId: item.node_id,
+                required: item.is_option === 1,
+                maxLength: item.value_type === 1 ? item.value : '',
+                options: item.value_type === 2 ? item.value
+                    .split(',')
+                    .map((op, i) => ({ key: i, value: op })) : [],
+                value: ''
+            }
+        }) as any[]
+    });
+}

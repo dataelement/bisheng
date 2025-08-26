@@ -1,21 +1,33 @@
+import { formatDate } from "~/utils";
 
 const runLogsTypes = ['tool', 'flow', 'knowledge']
-
+// 兼容处理技能和助手
 export const SkillMethod = {
     /** 获取input发送参数 */
     getSendParam: ({ tabs, flow, chatId, message }) => {
-        let inputs = tabs[flow.id].formKeysData.input_keys;
-        const input = inputs.find((el: any) => !el.type)
-        const inputKey = input ? Object.keys(input)[0] : '';
         const msgData = {
             chatHistory: [],
             flow_id: flow.id,
             chat_id: chatId,
             name: flow.name,
-            description: flow.description,
+            description: flow.description || flow.desc,
             inputs: {}
         } as any
-        if (message) msgData.inputs = { ...input, [inputKey]: message }
+        if (flow.flow_type === 1) {
+            let inputs = tabs[flow.id].formKeysData.input_keys;
+            const input = inputs.find((el: any) => !el.type)
+            const inputKey = input ? Object.keys(input)[0] : '';
+            if (message) msgData.inputs = { ...input, [inputKey]: message }
+        } else {
+            msgData.inputs = {
+                data: {
+                    chatId,
+                    id: flow.id,
+                    type: 5
+                },
+                input: message
+            }
+        }
         // if (formDataRef.current?.length) {
         //     msgData.inputs.data = formDataRef.current
         //     formDataRef.current = null
@@ -24,18 +36,36 @@ export const SkillMethod = {
         return msgData
     },
     /** start参数 */
-    getStartParam: (data: any) => {
+    getStartParam: (data: any, chatId) => {
         data.message = runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '';
         data.thought = data.intermediate_steps || ''
+        data.category = runLogsTypes.includes(data.category) ? data.category : 'stream_msg'
+        data.chat_id = chatId
         return data
     },
     /** 更新消息 */
-    updateStreamMessage: (wsdata: any, messages: any, cover?: boolean) => {
+    updateStreamMessage: (data: any, chatId, messages: any, cover?: boolean) => {
+        const wsdata = data.type === 'stream' ? {
+            chat_id: chatId,
+            message: data.message,
+            category: runLogsTypes.includes(data.category) ? data.category : 'stream_msg',
+            thought: data.intermediate_steps
+        } : {
+            ...data,
+            chat_id: chatId,
+            end: true,
+            thought: data.intermediate_steps || '',
+            messageId: data.message_id,
+            noAccess: false,
+            liked: 0,
+            category: runLogsTypes.includes(data.category) ? data.category : 'stream_msg',
+            create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
+        }
         const isRunLog = runLogsTypes.includes(wsdata.category);
         // run log类型存在嵌套情况，使用 extra 匹配 currentMessage; 否则取最近
         let currentMessageIndex = 0
         for (let i = messages.length - 1; i >= 0; i--) {
-            if (messages[i].isSend) break;
+            if (!messages[i].is_bot) break;
             if (isRunLog && messages[i].extra === wsdata.extra) {
                 currentMessageIndex = i;
                 break;
@@ -50,7 +80,7 @@ export const SkillMethod = {
         const currentMessage = messages[currentMessageIndex]
         // deepseek
         let message = ''
-        let reasoning_log = currentMessage.reasoning_log
+        let reasoning_log = currentMessage.reasoning_log || ''
         if (isRunLog) {
             message = JSON.parse(wsdata.message)
         } else if (typeof wsdata.message !== 'string' && wsdata.message && 'reasoning_content' in wsdata.message) {
@@ -99,7 +129,7 @@ export const SkillMethod = {
             const prevMessage = messages[currentMessageIndex - 1];
 
             // hack 
-            if (wsdata.type === 'end_cover' && !prevMessage.isSend) {
+            if (wsdata.type === 'end_cover' && prevMessage.is_bot) {
                 cover = true
             }
 

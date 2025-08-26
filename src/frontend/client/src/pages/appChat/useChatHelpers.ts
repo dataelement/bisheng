@@ -152,6 +152,7 @@ export default function useChatHelpers() {
                         source,
                         user_id,
                         reasoning_log,
+                        thought
                     } = data
 
                     const messageId = message_id || (category === "guide_word" ? generateUUID(4) : "")
@@ -177,6 +178,7 @@ export default function useChatHelpers() {
                             create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                             extra,
                             reasoning_log,
+                            thought
                         },
                     ]
                 }),
@@ -239,16 +241,25 @@ export default function useChatHelpers() {
             )
         },
         skillStreamMsg: (chatid: string, data: any) => {
-            const wsdata = {
-                chat_id: data.chat_id,
-                message: data.message,
-                thought: data.intermediate_steps
-            }
             setChats((prev) =>
                 updateChatMessages(prev, chatid, (messages) => {
-                    return SkillMethod.updateStreamMessage(wsdata, messages)
+                    return SkillMethod.updateStreamMessage(data, chatid, messages,
+                        data.type === 'end_cover' && data.category === 'anwser'
+                    )
                 })
             )
+        },
+        skillCloseMsg: () => {
+            setRunningState((prev) => ({
+                ...prev,
+                [chatId]: {
+                    ...prev[chatId],
+                    running: false,
+                    inputDisabled: false,
+                    inputForm: true,
+                    showStop: false
+                },
+            }))
         },
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息

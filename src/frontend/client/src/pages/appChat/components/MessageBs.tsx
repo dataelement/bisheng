@@ -9,7 +9,7 @@ import MessageButtons from "./MessageButtons";
 import MessageSource from "./MessageSource";
 
 
-const ReasoningLog = ({ loading, msg = '' }) => {
+export const ReasoningLog = ({ loading, msg = '' }) => {
     const [open, setOpen] = useState(true)
 
     if (!msg) return null
@@ -43,8 +43,16 @@ const ReasoningLog = ({ loading, msg = '' }) => {
 export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }:
     { logo: React.ReactNode, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
 
-    const message = useMemo(() => {
-        return typeof data.message === 'string' ? data.message : data.message.msg
+    const [message, reasoningLog] = useMemo(() => {
+        const msg = typeof data.message === 'string' ? data.message : data.message.msg
+        const regex = /<think>(.*?)<\/think>/s;
+        const match = msg.match(regex);
+        if (match) {
+            const outsideContent = msg.replace(regex, ''); // 标签外内容（移除标签及内部）
+            const insideContent = match[1]; // 标签内内容
+            return [outsideContent, insideContent]
+        }
+        return [msg, '']
     }, [data.message])
 
     const messageRef = useRef<HTMLDivElement>(null)
@@ -54,7 +62,7 @@ export default function MessageBs({ logo, data, onUnlike = () => { }, onSource }
 
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
-            <ReasoningLog loading={!data.end && data.reasoning_log} msg={data.reasoning_log} />
+            <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
                 <div className="flex justify-between items-center mb-1">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}

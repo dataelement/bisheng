@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
-import { baseMsgItem, getBysConfigApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { baseMsgItem, getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
 import ChatView from "./ChatView";
 import { bishengConfState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
 import { useToastContext } from "~/Providers";
@@ -58,7 +58,12 @@ export default function index() {
                     }
                     break;
                 case flowType.ASSISTANT:
-                    // flowData = await getFlowApi(id!, apiVersion)
+                    const res = await Promise.all([
+                        getAssistantDetailApi(fid!),
+                        getChatHistoryApi(fid, cid, type)
+                    ])
+                    flowData = { ...res[0].data, flow_type: flowType.ASSISTANT }
+                    messages = res[1].reverse()
                     break;
                 default:
             }
@@ -72,16 +77,18 @@ export default function index() {
                 }
             })
             // 更新状态
+            // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
             setRunningState((prev) => {
                 return {
                     ...prev,
                     [cid]: {
                         running: false,
-                        inputDisabled: Number(type) !== flowType.SKILL,
+                        inputDisabled: Number(type) === flowType.WORK_FLOW,
                         error: '',
-                        inputForm: null,
-                        showUpload: false,
-                        showStop: false
+                        inputForm: Number(type) !== flowType.WORK_FLOW || null,
+                        showUpload: Number(type) === flowType.WORK_FLOW,
+                        showStop: false,
+                        guideWord: flowData?.guide_question
                     }
                 }
             })
