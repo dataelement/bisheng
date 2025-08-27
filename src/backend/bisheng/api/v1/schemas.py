@@ -601,8 +601,10 @@ class FrequentlyUsedChat(BaseModel):
     type_detail: str = Field(..., description='用户相关联的type_id')
 
 
-class UpdateEmbeddingModelReq(BaseModel):
-    """更新embedding模型请求"""
+class UpdateKnowledgeReq(BaseModel):
+    """更新知识库模型请求"""
     model_id: int = Field(..., description='embedding模型ID')
     model_type: Optional[str] = Field(default=None, description='模型类型，不传时会根据model_id自动查询')
     knowledge_id: Optional[int] = Field(default=None, description='知识库ID，如果为空则更新所有私有知识库')
+    knowledge_name: Optional[str] = Field(default=None, description='知识库名称')
+    description: Optional[str] = Field(default=None, description='知识库描述')

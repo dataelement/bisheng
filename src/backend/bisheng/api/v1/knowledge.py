@@ -16,7 +16,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
-                                    resp_200, resp_500, resp_501, resp_502, UpdateEmbeddingModelReq)
+                                    resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq)
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -202,7 +202,7 @@ def get_filelist(*,
                  knowledge_id: int = 0,
                  page_size: int = 10,
                  page_num: int = 1,
-                 status: Optional[int] = None):
+                 status: List[int] = Query(default=None)):
     """ 获取知识库文件信息. """
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
                                                              file_name, status, page_num,
@@ -660,12 +660,13 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
     return resp_200({"status": "success"})
 
 
-@router.post('/update_embedding_model', status_code=200)
-def update_embedding_model(*,
+@router.post('/update_knowledge', status_code=200)
+def update_knowledge_model(*,
                           login_user: UserPayload = Depends(get_login_user),
-                          req_data: UpdateEmbeddingModelReq):
+                          req_data: UpdateKnowledgeReq):
     """
-    更新embedding模型时重建知识库接口
+    更新知识库接口
+    更新embedding模型时重建知识库
     流程：
     1. 根据前端传进来的model_id, model_type，先判断是不是embedding模型
     2. 如果不是则返回resp501("不是embedding模型") 如果是则把knowledge表中所有type为2的数据status改成3，model改成传入的model_id
@@ -692,6 +693,8 @@ def update_embedding_model(*,
         # 更新知识库状态和模型
         knowledge.state = KnowledgeState.REBUILDING.value
         knowledge.model = str(req_data.model_id)
+        knowledge.name = req_data.knowledge_name
+        knowledge.description = req_data.description
         KnowledgeDao.update_one(knowledge)
         
         # 发起异步任务
