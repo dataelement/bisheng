@@ -7,7 +7,7 @@ import { useRecoilState, useRecoilValue } from "recoil"
 import { Chat } from "~/@types/chat"
 import { baseMsgItem } from "~/api/apps"
 import { formatDate, generateUUID } from "~/utils"
-import { flowType } from "."
+import { FLOW_TYPES } from "."
 import { bishengConfState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
 import { SkillMethod } from "./appUtils/skillMethod"
@@ -29,9 +29,9 @@ export default function useChatHelpers() {
         const basePath = __APP_ENV__.BASE_URL;
 
         const routeConfig = {
-            [flowType.SKILL]: `${host}${basePath}/api/v1/chat/${flow.id}?type=L1`,
-            [flowType.ASSISTANT]: `${window.location.host}${basePath}/api/v1/assistant/chat/${flow.id}`,
-            [flowType.WORK_FLOW]: `${host}${basePath}/api/v1/workflow/chat/${flow.id}?chat_id=${chatId}`
+            [FLOW_TYPES.SKILL]: `${host}${basePath}/api/v1/chat/${flow.id}?type=L1`,
+            [FLOW_TYPES.ASSISTANT]: `${window.location.host}${basePath}/api/v1/assistant/chat/${flow.id}`,
+            [FLOW_TYPES.WORK_FLOW]: `${host}${basePath}/api/v1/workflow/chat/${flow.id}?chat_id=${chatId}`
         };
 
         return routeConfig[type] || '';

@@ -9,7 +9,7 @@ import { useAutoScroll } from "~/hooks/useAutoScroll";
 import { chatIdState, chatsState, currentChatState } from "./store/atoms";
 
 export const useMessage = () => {
-    const { cid } = useParams();
+    const { conversationId } = useParams();
     const chatState = useRecoilValue(currentChatState)
     const [chatId] = useRecoilState(chatIdState)
 
@@ -22,7 +22,7 @@ export const useMessage = () => {
 
 
     return {
-        chatId: cid,
+        chatId: conversationId,
         messages,
         messageScrollRef
     }

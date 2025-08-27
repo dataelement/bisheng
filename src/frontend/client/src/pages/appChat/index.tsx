@@ -2,109 +2,122 @@ import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { ChatMessageType, FlowData } from "~/@types/chat";
-import { baseMsgItem, getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { getAssistantDetailApi, getBysConfigApi, getChatHistoryApi, getFlowApi, postBuildInit } from "~/api/apps";
+import { useToastContext } from "~/Providers";
 import ChatView from "./ChatView";
 import { bishengConfState, chatIdState, chatsState, currentChatState, runningState, tabsState } from "./store/atoms";
-import { useToastContext } from "~/Providers";
 
-export const enum flowType {
+const API_VERSION = 'v1';
+export const enum FLOW_TYPES {
     WORK_FLOW = 10,
     ASSISTANT = 5,
     SKILL = 1,
 }
 
 export default function index() {
-    const { cid, fid, type } = useParams();
+    const { conversationId: cid, fid, type } = useParams();
     const [chats, setChats] = useRecoilState(chatsState)
     const [__, setRunningState] = useRecoilState(runningState)
     const [_, setChatId] = useRecoilState(chatIdState)
     const chatState = useRecoilValue(currentChatState)
-    const apiVersion = 'v1'
-
     const build = useBuild()
 
     useConfig()
 
     // 切换会话
     const init = async () => {
+        if (!cid) return;
+
         let flowData: FlowData | null = null
         let messages: ChatMessageType[] = []
         const currentData = chats[cid]
+        let error = ''
 
         // 无缓存，从新加载
-        if (!currentData) {
-            // if () skill build
-            switch (Number(type)) {
-                case flowType.SKILL:
-                case flowType.WORK_FLOW:
-                    // 获取详情和历史消息
-                    const [flowRes, msgRes] = await Promise.all([
-                        getFlowApi(fid!, apiVersion),
-                        getChatHistoryApi(fid, cid, type)
-                    ])
-                    flowData = flowRes.data
-                    messages = msgRes.reverse()
-                    // 插入分割线
-                    // if (messages.length) {
-                    //     messages.push({
-                    //         ...baseMsgItem,
-                    //         id: Math.random() * 1000000,
-                    //         category: 'divider',
-                    //         message: '以上为历史消息',
-                    //     })
-                    // }
-                    if (Number(type) === flowType.SKILL) {
-                        await build(flowData, cid)
-                    }
-                    break;
-                case flowType.ASSISTANT:
-                    const res = await Promise.all([
-                        getAssistantDetailApi(fid!),
-                        getChatHistoryApi(fid, cid, type)
-                    ])
-                    flowData = { ...res[0].data, flow_type: flowType.ASSISTANT }
-                    messages = res[1].reverse()
-                    break;
-                default:
-            }
+        if (currentData) return;
 
-            setChats({
-                ...chats,
-                [cid]: {
-                    flow: flowData || { name: 'lost' },
-                    messages: messages,
-                    historyEnd: false
+        const numericType = Number(type);
+
+        switch (numericType) {
+            case FLOW_TYPES.SKILL:
+            case FLOW_TYPES.WORK_FLOW:
+                // 获取详情和历史消息
+                const [flowRes, msgRes] = await Promise.all([
+                    getFlowApi(fid!, API_VERSION),
+                    getChatHistoryApi(fid, cid, type)
+                ])
+
+                flowData = { ...flowRes.data, isNew: !messages.length }
+                messages = msgRes.reverse()
+
+                if (flowRes.status_code !== 200) {
+                    error = flowRes.status_message
                 }
-            })
-            // 更新状态
-            // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
-            setRunningState((prev) => {
-                return {
-                    ...prev,
-                    [cid]: {
-                        running: false,
-                        inputDisabled: Number(type) === flowType.WORK_FLOW,
-                        error: '',
-                        inputForm: Number(type) !== flowType.WORK_FLOW || null,
-                        showUpload: Number(type) === flowType.WORK_FLOW,
-                        showStop: false,
-                        guideWord: flowData?.guide_question
-                    }
+                // 插入分割线
+                // if (messages.length) {
+                //     messages.push({
+                //         ...baseMsgItem,
+                //         id: Math.random() * 1000000,
+                //         category: 'divider',
+                //         message: '以上为历史消息',
+                //     })
+                // }
+                if (numericType === FLOW_TYPES.SKILL) {
+                    await build(flowData, cid);
                 }
-            })
+                break;
+            case FLOW_TYPES.ASSISTANT:
+                const [assistantRes, historyRes] = await Promise.all([
+                    getAssistantDetailApi(fid),
+                    getChatHistoryApi(fid, cid, type)
+                ]);
+
+                messages = historyRes.reverse();
+                flowData = { ...assistantRes.data, flow_type: FLOW_TYPES.ASSISTANT, isNew: !messages.length };
+
+                if (assistantRes.status_code !== 200) {
+                    error = assistantRes.status_message;
+                }
+                break;
+            default:
         }
+
+        setChats(prevChats => ({
+            ...prevChats,
+            [cid]: {
+                flow: flowData || { name: 'lost' },
+                messages,
+                historyEnd: false
+            }
+        }));
+
+        // 更新状态
+        // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
+        setRunningState((prev) => {
+            return {
+                ...prev,
+                [cid]: {
+                    running: false,
+                    inputDisabled: error || numericType === FLOW_TYPES.WORK_FLOW,
+                    error,
+                    inputForm: numericType !== FLOW_TYPES.WORK_FLOW || null,
+                    showUpload: numericType === FLOW_TYPES.WORK_FLOW,
+                    showStop: false,
+                    guideWord: flowData?.guide_question
+                }
+            }
+        })
+
         setChatId(cid!)
     }
 
     useEffect(() => {
-        if (cid) {
-            init()
-        }
+        init()
     }, [cid])
 
     if (!cid || !chatState?.flow) return null;
 
-    return <ChatView data={chatState.flow} v={apiVersion} />
+    return <ChatView data={chatState.flow} v={API_VERSION} />
 };
 
 

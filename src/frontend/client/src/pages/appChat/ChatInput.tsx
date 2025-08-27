@@ -1,7 +1,7 @@
-import { RefreshCw, SendIcon } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
-import { Button, Textarea } from "~/components";
+import { Button, SendIcon, Textarea } from "~/components";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
@@ -42,12 +42,13 @@ export default function ChatInput({ v }) {
                     >
                         <div className="size-4 bg-gray-900 rounded-sm"></div>
                     </div> :
-                    <div
+                    <button
                         id="bs-send-btn"
-                        className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
+                        className="rounded-full bg-black/80 p-1 text-white outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-20"
+                        disabled={inputDisabled || fileUploading}
                         onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
-                        <SendIcon size={20} className={`${inputDisabled || fileUploading ? 'text-muted-foreground' : 'text-foreground'}`} />
-                    </div>
+                        <SendIcon size={20} />
+                    </button>
                 }
             </div>
             {/* stop & 重置 */}

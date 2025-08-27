@@ -29,6 +29,7 @@ export default function Conversation({
   isLatestConvo,
 }: ConversationProps) {
   const params = useParams();
+
   const currentConvoId = useMemo(() => params.conversationId, [params.conversationId]);
   const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
   const activeConvos = useRecoilValue(store.allConversationsSelector);
@@ -219,7 +220,7 @@ export default function Conversation({
             alt={conversation?.flowType}
           >
             <img src={__APP_ENV__.BASE_URL + (conversation?.flowType === 20 ? "/assets/linsi.png" : "/assets/talk.png")} className='size-6 inline-block mr-2.5' alt="" />
-            ({conversation?.flowType}){title}
+            {title}
           </div>
           {isActiveConvo ? (
             <div className="absolute bottom-0 right-0 top-0 w-20 rounded-r-lg bg-gradient-to-l" />

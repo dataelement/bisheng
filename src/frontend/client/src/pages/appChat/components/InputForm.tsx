@@ -7,6 +7,7 @@ import { useToastContext } from "~/Providers";
 import { emitAreaTextEvent, EVENT_TYPE, FileTypes } from "../useAreaText";
 import InputComponent from "./InputComponent";
 import InputFileComponent from "./InputFileComponent";
+import { MessageWarper } from "./MessageBsChoose";
 
 const enum FormItemType {
     Text = 'text',
@@ -39,7 +40,7 @@ interface WorkflowNodeParam {
     hidden?: boolean;
 }
 
-const InputForm = ({ data, flow }: { data: WorkflowNodeParam, flow: any }) => {
+const InputForm = ({ data, flow, logo }: { data: WorkflowNodeParam, flow: any }) => {
     const formDataRef = useRef(data.value.reduce((map, item) => {
         map[item.key] = { key: item.key, type: item.type, label: item.value, fileName: '', value: '' }
         return map
@@ -85,90 +86,88 @@ const InputForm = ({ data, flow }: { data: WorkflowNodeParam, flow: any }) => {
     }
 
     const [multiVal, setMultiVal] = useState([])
-    return <div className="flex w-full">
-        <div className="max-w-[90%] min-w-96">
-            <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
-                {
-                    data.value.map((item, i) => (
-                        <div key={item.id} className="w-full text-sm bisheng-label">
-                            {item.required && <span className="text-red-500">*</span>}
-                            {item.value}
-                            {/* <span className="text-status-red">{item.required ? " *" : ""}</span> */}
-                            <div className="mb-2">
-                                {(() => {
-                                    switch (item.type) {
-                                        case FormItemType.Text:
-                                            return (
-                                                <InputComponent
-                                                    type="textarea"
-                                                    password={false}
-                                                    maxLength={10000}
-                                                    flow={flow}
-                                                    onChange={(val) => handleChange(item, val)}
-                                                />
-                                            )
-                                        case FormItemType.Select:
-                                            return (
-                                                item.multiple ?
-                                                    <MultiSelect
-                                                        multiple
-                                                        className={''}
-                                                        value={multiVal[item.key] || []}
-                                                        options={
-                                                            item.options.map(el => ({
-                                                                label: el.text,
-                                                                value: el.text
-                                                            }))
-                                                        }
-                                                        placeholder={'请选择'}
-                                                        onChange={(v) => {
-                                                            setMultiVal(prev => ({ ...prev, [item.key]: v }));
-                                                            handleChange(item, v.join(','))
-                                                        }}
-                                                    >
-                                                        {/* {children?.(reload)} */}
-                                                    </MultiSelect>
-                                                    : <Select onValueChange={(val) => handleChange(item, val)}>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectGroup>
-                                                                {item.options.map(el => (
-                                                                    <SelectItem key={el.text} value={el.text}>
-                                                                        {el.text}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectGroup>
-                                                        </SelectContent>
-                                                    </Select>
-                                            )
-                                        case FormItemType.File:
-                                            return (
-                                                <InputFileComponent
-                                                    isSSO
-                                                    disabled={false}
-                                                    placeholder="当前文件为空"
-                                                    value={''}
-                                                    multiple={item.multiple}
-                                                    onChange={(name) => updataFileName(item, name)}
-                                                    // fileTypes={FileTypes[item.file_type.toUpperCase()]}
-                                                    suffixes={FileTypes[item.file_type.toUpperCase()]}
-                                                    onFileChange={(val) => handleChange(item, val)}
-                                                />
-                                            )
-                                        default:
-                                            return null
-                                    }
-                                })()}
-                            </div>
+    return <MessageWarper flow={flow} logo={logo}>
+        <div className="max-h-[520px] overflow-y-auto space-y-2">
+            {
+                data.value.map((item, i) => (
+                    <div key={item.id} className="w-full text-sm bisheng-label">
+                        {item.required && <span className="text-red-500">*</span>}
+                        {item.value}
+                        {/* <span className="text-status-red">{item.required ? " *" : ""}</span> */}
+                        <div className="mb-2">
+                            {(() => {
+                                switch (item.type) {
+                                    case FormItemType.Text:
+                                        return (
+                                            <InputComponent
+                                                type="textarea"
+                                                password={false}
+                                                maxLength={10000}
+                                                flow={flow}
+                                                onChange={(val) => handleChange(item, val)}
+                                            />
+                                        )
+                                    case FormItemType.Select:
+                                        return (
+                                            item.multiple ?
+                                                <MultiSelect
+                                                    multiple
+                                                    className={''}
+                                                    value={multiVal[item.key] || []}
+                                                    options={
+                                                        item.options.map(el => ({
+                                                            label: el.text,
+                                                            value: el.text
+                                                        }))
+                                                    }
+                                                    placeholder={'请选择'}
+                                                    onChange={(v) => {
+                                                        setMultiVal(prev => ({ ...prev, [item.key]: v }));
+                                                        handleChange(item, v.join(','))
+                                                    }}
+                                                >
+                                                    {/* {children?.(reload)} */}
+                                                </MultiSelect>
+                                                : <Select onValueChange={(val) => handleChange(item, val)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectGroup>
+                                                            {item.options.map(el => (
+                                                                <SelectItem key={el.text} value={el.text}>
+                                                                    {el.text}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectGroup>
+                                                    </SelectContent>
+                                                </Select>
+                                        )
+                                    case FormItemType.File:
+                                        return (
+                                            <InputFileComponent
+                                                isSSO
+                                                disabled={false}
+                                                placeholder="当前文件为空"
+                                                value={''}
+                                                multiple={item.multiple}
+                                                onChange={(name) => updataFileName(item, name)}
+                                                // fileTypes={FileTypes[item.file_type.toUpperCase()]}
+                                                suffixes={FileTypes[item.file_type.toUpperCase()]}
+                                                onFileChange={(val) => handleChange(item, val)}
+                                            />
+                                        )
+                                    default:
+                                        return null
+                                }
+                            })()}
                         </div>
-                    ))
-                }
-                <Button size="sm" className="w-full" onClick={submit}>开始</Button>
-            </div>
+                    </div>
+                ))
+            }
+            <Button size="sm" className="w-full" onClick={submit}>开始</Button>
         </div>
-    </div>
+    </MessageWarper>
 };
 
 export default InputForm

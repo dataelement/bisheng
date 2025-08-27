@@ -7,12 +7,14 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import InputFileComponent from "./InputFileComponent";
 import { Button } from "~/components";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
+import { MessageWarper } from "./MessageBsChoose";
+
 /**
  * @component 会话报告生成专用表单
  * @description
  * 表单项数据由组件的参数信息和单独接口获取的必填信息及排序信息而来。
  */
-const InputFormSkill = forwardRef(({ flow }, ref) => {
+const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
     const type = 'chat'
     const vid = 0
     const { showToast } = useToastContext();
@@ -80,51 +82,53 @@ const InputFormSkill = forwardRef(({ flow }, ref) => {
 
     if (items.length === 0) return null
 
-    return <div className="max-w-[600px] min-w-96  flex flex-col gap-6 rounded-xl p-4 bg-[#F5F6F8] dark:bg-[#313336]">
-        <div className="max-h-[520px] overflow-y-auto">
-            {items.map((item, i) => <div key={item.id} className="w-full text-sm">
-                {item.name}
-                <span className="text-red-500">{item.required ? " *" : ""}</span>
-                <div className="mt-2">
-                    {item.type === 'text' ? <InputComponent
-                        type='textarea'
-                        password={false}
-                        value={item.value}
-                        onChange={(val) => handleChange(i, val)}
-                    /> :
-                        item.type === 'select' ?
-                            <Select onValueChange={(val) => handleChange(i, val)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        {
-                                            item.options.map(el => <SelectItem key={el.value} value={el.value}>{el.value}</SelectItem>)
-                                        }
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select> :
-                            item.type === 'file' ?
-                                <InputFileComponent
-                                    isSSO
-                                    disabled={false}
-                                    placeholder="当前文件为空"
-                                    value={''}
-                                    onChange={(e) => fileKindexVpath.current[i] = e}
-                                    fileTypes={["pdf"]}
-                                    suffixes={flow.data.nodes.find(el => el.id === item.nodeId)
-                                        ?.data.node.template.file_path.suffixes || ['xxx']}
-                                    onFileChange={(val: string) => handleChange(i, val)}
-                                    flow={flow}
-                                ></InputFileComponent> : <></>
-                    }
+    return <MessageWarper flow={flow} logo={logo}>
+        <div className="">
+            <div className="max-h-[520px] overflow-y-auto space-y-2">
+                {items.map((item, i) => <div key={item.id} className="w-full text-sm">
+                    {item.name}
+                    <span className="text-red-500">{item.required ? " *" : ""}</span>
+                    <div className="mt-2">
+                        {item.type === 'text' ? <InputComponent
+                            type='textarea'
+                            password={false}
+                            value={item.value}
+                            onChange={(val) => handleChange(i, val)}
+                        /> :
+                            item.type === 'select' ?
+                                <Select onValueChange={(val) => handleChange(i, val)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectGroup>
+                                            {
+                                                item.options.map(el => <SelectItem key={el.value} value={el.value}>{el.value}</SelectItem>)
+                                            }
+                                        </SelectGroup>
+                                    </SelectContent>
+                                </Select> :
+                                item.type === 'file' ?
+                                    <InputFileComponent
+                                        isSSO
+                                        disabled={false}
+                                        placeholder="当前文件为空"
+                                        value={''}
+                                        onChange={(e) => fileKindexVpath.current[i] = e}
+                                        fileTypes={["pdf"]}
+                                        suffixes={flow.data.nodes.find(el => el.id === item.nodeId)
+                                            ?.data.node.template.file_path.suffixes || ['xxx']}
+                                        onFileChange={(val: string) => handleChange(i, val)}
+                                        flow={flow}
+                                    ></InputFileComponent> : <></>
+                        }
+                    </div>
                 </div>
+                )}
             </div>
-            )}
+            {type === 'chat' && <Button className="mt-4 w-full" size="sm" onClick={handleStart}>开始</Button>}
         </div>
-        {type === 'chat' && <Button size="sm" onClick={handleStart}>开始</Button>}
-    </div>
+    </MessageWarper>
 });
 
 export default InputFormSkill
