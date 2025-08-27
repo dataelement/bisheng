@@ -200,15 +200,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_by_filters(cls,
                             knowledge_id: int,
                             file_name: str = None,
-                            status: int = None,
+                            status: List[int] = None,
                             page: int = 0,
                             page_size: int = 0,
                             file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        if status is not None:
-            statement = statement.where(KnowledgeFile.status == status)
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
         if page and page_size:
@@ -244,14 +244,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def count_file_by_filters(cls,
                               knowledge_id: int,
                               file_name: str = None,
-                              status: int = None,
+                              status: List[int] = None,
                               file_ids: List[int] = None) -> int:
         statement = select(func.count(
             KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        if status is not None:
-            statement = statement.where(KnowledgeFile.status == status)
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
         with session_getter() as session:

@@ -15,17 +15,17 @@ from bisheng.database.models.user_role import UserRoleDao
 
 
 class KnowledgeTypeEnum(Enum):
-    QA = 1
-    NORMAL = 0
+    QA = 1  # QA知识库
+    NORMAL = 0   # 文档知识库
     PRIVATE = 2  # 工作台的个人知识库
 
 
 class KnowledgeState(Enum):
-    UNPUBLISHED = 0
-    PUBLISHED = 1
+    UNPUBLISHED = 0 
+    PUBLISHED = 1 #文档知识库成功的状态
     COPYING = 2
-    REBUILDING = 3
-    FAILED = 4
+    REBUILDING = 3 #文档知识库重建中的状态
+    FAILED = 4 #文档知识库重建失败的状态
 
 
 class KnowledgeBase(SQLModelSerializable):

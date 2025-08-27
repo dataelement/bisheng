@@ -731,7 +731,7 @@ class KnowledgeService(KnowledgeUtils):
             login_user: UserPayload,
             knowledge_id: int,
             file_name: str = None,
-            status: int = None,
+            status: List[int] = None,
             page: int = 1,
             page_size: int = 10,
             file_ids: List[int] = None,
