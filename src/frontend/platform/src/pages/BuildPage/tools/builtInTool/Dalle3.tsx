@@ -21,18 +21,33 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
 
     const [localFormData, setLocalFormData] = useState(() => {
-        const newFormData = { ...temp, ...formData };
-        newFormData.provider = formData.azure_deployment ? 'azure' : 'openai';
-        const apiKey = formData.openai_api_key;
-        if (formData.provider === 'openai') {
-            newFormData.openai_api_key = apiKey;
-            newFormData.azure_api_key = '';
-        } else {
-            newFormData.openai_api_key = '';
-            newFormData.azure_api_key = apiKey;
+        // 如果formData为空，使用默认值
+        if (!formData || Object.keys(formData).length === 0) {
+            return { ...temp };
         }
-        return newFormData
+        // 优先检查是否有Azure特定字段
+        const hasAzureFields = formData.azure_deployment || formData.azure_endpoint || formData.azure_api_key;
+        // 检查是否有OpenAI特定字段（排除默认值）
+        const hasOpenAIFields = formData.openai_api_key && formData.openai_api_key !== '';
+        
+        let provider = 'openai'; // 默认值
+        
+        if (hasAzureFields) {
+            provider = 'azure';
+        } else if (hasOpenAIFields) {
+            provider = 'openai';
+        }
+        
+        // 根据provider类型设置正确的API Key字段
+        return {
+            ...temp,
+            ...formData,
+            provider,
+            openai_api_key: provider === 'openai' ? (formData.openai_api_key || formData.azure_api_key || '') : '',
+            azure_api_key: provider === 'azure' ? (formData.azure_api_key || formData.openai_api_key || '') : ''
+        };
     });
+    
     const [errors, setErrors] = useState({});
 
     const handleChange = (e) => {
@@ -47,6 +62,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const validateForm = () => {
         const formErrors = {};
         let isValid = true;
+        
         if (localFormData.provider === 'openai' && !localFormData.openai_api_key) {
             formErrors.openai_api_key = true;
             isValid = false;
@@ -54,31 +70,51 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             if (!localFormData.azure_api_key) {
                 formErrors.azure_api_key = true;
                 isValid = false;
-            } else if (!localFormData.azure_deployment) {
+            }
+            if (!localFormData.azure_deployment) {
                 formErrors.azure_deployment = true;
                 isValid = false;
-            } else if (!localFormData.azure_endpoint) {
+            }
+            if (!localFormData.azure_endpoint) {
                 formErrors.azure_endpoint = true;
                 isValid = false;
-            } else if (!localFormData.openai_api_version) {
+            }
+            if (!localFormData.openai_api_version) {
                 formErrors.openai_api_version = true;
                 isValid = false;
             }
         }
+        
         setErrors(formErrors);
         return isValid;
     };
 
-  const handleSubmit = (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            onSubmit(localFormData);
+            // 准备提交的数据，根据provider类型设置正确的API Key字段
+            const submitData = { ...localFormData };
+            
+            if (submitData.provider === 'openai') {
+                // 清理Azure相关字段
+                submitData.azure_api_key = '';
+                submitData.azure_deployment = '';
+                submitData.azure_endpoint = '';
+                submitData.openai_api_version = '';
+            } else {
+                // 清理OpenAI相关字段
+                submitData.openai_api_key = '';
+                submitData.openai_proxy = '';
+            }
+            
+            // 移除临时使用的provider字段（如果需要）
+            const { provider, ...finalData } = submitData;
+            onSubmit(finalData);
         }
     };
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {console.log(localFormData,'221')}
             <RadioGroup value={localFormData.provider} className="flex gap-6 mt-2" onValueChange={handleProviderChange}>
                 <div className="flex items-center space-x-2">
                     <RadioGroupItem value="openai" id="provider-openai" />
