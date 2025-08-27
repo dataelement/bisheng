@@ -309,7 +309,7 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def generate_sop(cls, linsight_session_version_id: str,
-                           previous_session_version_id: str,
+                           previous_session_version_id: Optional[str] = None,
                            feedback_content: Optional[str] = None,
                            reexecute: bool = False,
                            login_user: Optional[UserPayload] = None,
