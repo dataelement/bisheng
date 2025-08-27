@@ -89,10 +89,17 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             const submitData = {
                 type: localFormData.executionMode,
                 config: {
-                    // 保存当前选择的服务提供商类型
-                    e2b: {
-                        type: localFormData.serviceProvider
-                    },
+                  e2b: {
+                    type: localFormData.serviceProvider,
+                    // 根据当前选择的服务商保存对应的配置
+                    ...(localFormData.serviceProvider === 'private' && {
+                        domain: localFormData.privateDomain,
+                        api_key: localFormData.privateApiKey
+                    }),
+                    ...(localFormData.serviceProvider === 'official' && {
+                        api_key: localFormData.officialApiKey
+                    })
+                },
                     // 同时保存两种配置
                     private: {
                         domain: localFormData.privateDomain,
