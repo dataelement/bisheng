@@ -33,7 +33,7 @@ class FlowType(Enum):
 
 
 class AppEnum(Enum):
-    APP = 'flow'
+    Flow = 'flow'
     ASSISTANT = 'assistant'
     WORKFLOW = 'workflow'
 
