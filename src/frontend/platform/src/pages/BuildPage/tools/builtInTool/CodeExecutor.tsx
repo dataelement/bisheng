@@ -10,24 +10,31 @@ import { QuestionTooltip } from '@/components/bs-ui/tooltip';
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
-      const domainRef = useRef(null);
+    const domainRef = useRef(null);
     const apiKeyRef = useRef(null);
 
-  const [localFormData, setLocalFormData] = useState(() => {
+    const [localFormData, setLocalFormData] = useState(() => {
+        // 从表单数据中提取所有配置
         const executionMode = formData.type || 'local';
- const serviceProvider = formData.config?.e2b?.type || 'private';
-        const domain = formData.config?.e2b?.domain || '';
-        const apiKey = formData.config?.e2b?.api_key || '';
+        const serviceProvider = formData.config?.e2b?.type || 'private';
+        
+        // 同时获取两种配置
+        const privateDomain = formData.config?.private?.domain || formData.config?.e2b_private?.domain || '';
+        const privateApiKey = formData.config?.private?.api_key || formData.config?.e2b_private?.api_key || '';
+        const officialApiKey = formData.config?.official?.api_key || formData.config?.e2b_official?.api_key || '';
 
         return {
             executionMode,
             serviceProvider,
-            domain,
-            apiKey
+            privateDomain,
+            privateApiKey,
+            officialApiKey
         };
     });
+    
     const [errors, setErrors] = useState({});
-   useEffect(() => {
+    
+    useEffect(() => {
         if (domainRef.current) {
             domainRef.current.value = '';
         }
@@ -35,12 +42,13 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             apiKeyRef.current.value = '';
         }
     }, []);
+    
     const handleChange = (e) => {
         const { name, value } = e.target;
         setLocalFormData((prev) => ({ ...prev, [name]: value }));
     };
 
-     const handleExecutionModeChange = (value) => {
+    const handleExecutionModeChange = (value) => {
         setLocalFormData((prev) => ({ ...prev, executionMode: value }));
     };
 
@@ -48,45 +56,53 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         setLocalFormData((prev) => ({ ...prev, serviceProvider: value }));
     };
 
-  const validateForm = () => {
+    const validateForm = () => {
         const formErrors = {};
         let isValid = true;
 
         if (localFormData.executionMode === 'e2b') {
+            // 验证当前选中的服务提供商配置
             if (localFormData.serviceProvider === 'private') {
-                if (!localFormData.domain) {
-                    formErrors.domain = 'domain 不能为空';
+                if (!localFormData.privateDomain) {
+                    formErrors.privateDomain = 'Domain 不能为空';
                     isValid = false;
                 }
-            }
-            if (!localFormData.apiKey) {
-                formErrors.apiKey = 'API Key 不能为空';
-                isValid = false;
+                if (!localFormData.privateApiKey) {
+                    formErrors.privateApiKey = 'API Key 不能为空';
+                    isValid = false;
+                }
+            } else {
+                if (!localFormData.officialApiKey) {
+                    formErrors.officialApiKey = 'API Key 不能为空';
+                    isValid = false;
+                }
             }
         }
         setErrors(formErrors);
         return isValid;
     };
 
-  const handleSubmit = (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
+            // 构建完整的表单数据，同时保存两种配置
             const submitData = {
-                type: localFormData.executionMode
-            };
-
-            if (localFormData.executionMode === 'e2b') {
-                submitData.config = {
+                type: localFormData.executionMode,
+                config: {
+                    // 保存当前选择的服务提供商类型
                     e2b: {
-                        type: localFormData.serviceProvider,
-                        api_key: localFormData.apiKey
+                        type: localFormData.serviceProvider
+                    },
+                    // 同时保存两种配置
+                    private: {
+                        domain: localFormData.privateDomain,
+                        api_key: localFormData.privateApiKey
+                    },
+                    official: {
+                        api_key: localFormData.officialApiKey
                     }
-                };
-                
-                if (localFormData.serviceProvider === 'private') {
-                    submitData.config.e2b.domain = localFormData.domain;
                 }
-            }
+            };
 
             onSubmit(submitData);
         }
@@ -111,6 +127,8 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                     </div>
                 </RadioGroup>
             </div>
+            
+            {/* 只在选择E2B沙箱运行时显示配置 */}
             {localFormData.executionMode === 'e2b' && (
                 <div className="space-y-4">
                     <div>
@@ -130,44 +148,31 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                             </div>
                         </RadioGroup>
                     </div>
-                              {localFormData.serviceProvider === 'private' && (
-                
-                      <InputField
+                    
+                    {localFormData.serviceProvider === 'private' && (
+                        <InputField
                             required
                             label={<Label>Domain</Label>}
                             id="e2b-domain-input"
-                            name="domain"
+                            name="privateDomain"
                             placeholder="https://e2b.internal.mycorp"
-                            value={localFormData.domain}
+                            value={localFormData.privateDomain}
                             onChange={handleChange}
-                            error={errors.domain}
+                            error={errors.privateDomain}
                         />
                     )}
-{/* 
-                    <InputField
-                        required
-                        label={<Label>API Key</Label>}
-                        type="password"
-                        id="e2b-apikey-input"
-                        name="apiKey"
-                        placeholder="请输入API Key"
-                        value={localFormData.apiKey}
-                        onChange={handleChange}
-                        error={errors.apiKey}
-                    /> */}
+                    
                     <PassInput
-                     required
-                      id="e2b-apikey-input"
-                     label={<Label>API Key</Label>}
-                       placeholder="请输入API Key"
-                    type='text'
-                      name="apiKey"
+                        required
+                        id="e2b-apikey-input"
+                        label={<Label>API Key</Label>}
+                        placeholder="请输入API Key"
+                        type='text'
+                        name={localFormData.serviceProvider === 'private' ? 'privateApiKey' : 'officialApiKey'}
                         onChange={handleChange}
-                     value={localFormData.apiKey}
-                      error={errors.apiKey}
-                    >
-                        
-                    </PassInput>
+                        value={localFormData.serviceProvider === 'private' ? localFormData.privateApiKey : localFormData.officialApiKey}
+                        error={localFormData.serviceProvider === 'private' ? errors.privateApiKey : errors.officialApiKey}
+                    />
                 </div>
             )}
 
