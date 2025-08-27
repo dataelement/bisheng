@@ -60,7 +60,7 @@ export default function Notification() {
                             >
                                 <ToastIcon type={notification.type} />
                                 <AlertTitle>{notification.title}</AlertTitle>
-                                <AlertDescription>
+                                <AlertDescription className="break-words whitespace-pre-wrap overflow-wrap-anywhere">
                                     {notification.description}
                                 </AlertDescription>
                             </Alert>
