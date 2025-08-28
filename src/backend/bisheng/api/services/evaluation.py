@@ -264,7 +264,7 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
         if not input_event or input_event.message.get('input_schema', {}).get("tab") == "form_input":
             raise Exception("目前仅支持“一问一答”类型的工作流")
         # 默认只输入对话框输入的工作流
-        workflow.set_user_input({"user_input": question})
+        workflow.set_user_input({input_event.message.get('node_id'): {"user_input": question}})
         workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         continue_workflow.delay(unique_id, workflow_id, chat_id, user_id)
         events = []
