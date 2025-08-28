@@ -203,7 +203,7 @@ export default function Files({ onPreview }) {
                     <div className="flex gap-4 items-center">
                         {/* 批量操作按钮组 */}
                         {selectedFiles.size > 0 && (
-                            <div className="flex gap-2">
+                            <div className="flex">
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchDelete}
@@ -423,7 +423,7 @@ export default function Files({ onPreview }) {
                                                     e.stopPropagation();
                                                     handleRetry([el.id]);
                                                 }}
-                                                title={t('retry')}
+                                                title={t('重试')}
                                             >
                                                 <RotateCw size={16} />
                                             </Button>
