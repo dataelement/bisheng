@@ -2,7 +2,7 @@ import json
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, BinaryIO, Union
+from typing import Any, Dict, List, Optional, BinaryIO, Union, Tuple
 
 import requests
 from bisheng_langchain.rag.extract_info import extract_title
@@ -25,6 +25,8 @@ from sqlmodel import select
 
 from bisheng.api.errcode.knowledge import KnowledgeSimilarError
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
+from bisheng.api.services.mineru_loader import MineruLoader
+from bisheng.api.services.mineru_text_splitter import MinerUTextSplitter
 from bisheng.api.services.handler.impl.xls_split_handle import XlsSplitHandle
 from bisheng.api.services.handler.impl.xlsx_split_handle import XlsxSplitHandle
 from bisheng.api.services.libreoffice_converter import (
@@ -56,7 +58,7 @@ from bisheng.database.models.knowledge_file import (
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.settings import settings
+from bisheng.settings import settings as bisheng_settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
 
@@ -67,6 +69,9 @@ filetype_load_map = {
     "md": TextLoader,
     "docx": UnstructuredWordDocumentLoader,
     "pptx": UnstructuredPowerPointLoader,
+    "png": TextLoader,  # 图片格式使用TextLoader作为默认处理
+    "jpg": TextLoader,
+    "jpeg": TextLoader,
 }
 
 split_handles = [
@@ -324,7 +329,7 @@ def decide_vectorstores(
     param: dict = {"embedding": embedding}
 
     if vector_store == "ElasticKeywordsSearch":
-        vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
+        vector_config = bisheng_settings.get_vectors_conf().elasticsearch.model_dump()
         if not vector_config:
             # 无相关配置
             raise RuntimeError("vector_stores.elasticsearch not find in config.yaml")
@@ -333,7 +338,7 @@ def decide_vectorstores(
             vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
 
     elif vector_store == "Milvus":
-        vector_config = settings.get_vectors_conf().milvus.model_dump()
+        vector_config = bisheng_settings.get_vectors_conf().milvus.model_dump()
         if not vector_config:
             # 无相关配置
             raise RuntimeError("vector_stores.milvus not find in config.yaml")
@@ -644,56 +649,118 @@ def parse_document_title(title: str) -> str:
 
 
 def read_chunk_text(
-        input_file,
-        file_name,
-        separator: Optional[List[str]],
-        separator_rule: Optional[List[str]],
+        input_file: str,
+        file_name: str,
+        separator: List[str],
+        separator_rule: List[str],
         chunk_size: int,
         chunk_overlap: int,
-        knowledge_id: Optional[int] = None,
+        knowledge_id: int = None,
         retain_images: int = 1,
         enable_formula: int = 1,
-        force_ocr: int = 1,
+        force_ocr: int = 0,
         filter_page_header_footer: int = 0,
         excel_rule: ExcelRule = None,
-        no_summary: bool = False,
-
-) -> (List[str], List[dict], str, Any):  # type: ignore
+) -> Tuple[List[str], List[Dict], str, List]:
     """
-    0：chunks text
-    1：chunks metadata
-    2：parse_type: etl4lm or un_etl4lm
-    3: ocr bbox data: maybe None
+    读取文件内容并切分
     """
-    # 获取文档总结标题的llm
-    llm = None
-    if not no_summary:
-        try:
-            llm = decide_knowledge_llm()
-            knowledge_llm = LLMService.get_knowledge_llm()
-        except Exception as e:
-            logger.exception("knowledge_llm_error:")
-            raise Exception(
-                f"文档知识库总结模型已失效，请前往模型管理-系统模型设置中进行配置。{str(e)}"
-            )
-
-    text_splitter = ElemCharacterTextSplitter(
-        separators=separator,
-        separator_rule=separator_rule,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        is_separator_regex=True,
-    )
-    # 加载文档内容
-    logger.info(f"start_file_loader file_name={file_name}")
-    parse_type = ParseType.UN_ETL4LM.value
-    # excel 文件的处理单独出来
-    partitions = []
-    texts = []
-    etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", None)
+    # 调试日志：记录传入的参数
+    logger.info(f"read_chunk_text called with: file_name={file_name}, knowledge_id={knowledge_id}, retain_images={retain_images}")
+    
+    if not os.path.exists(input_file):
+        raise FileNotFoundError(f"文件不存在: {input_file}")
+    
+    # 获取文件扩展名
     file_extension_name = file_name.split(".")[-1].lower()
+    logger.info(f"Processing file: {file_name}, extension: {file_extension_name}")
+    
+    # 获取知识库配置
+    settings = bisheng_settings
+    etl_for_lm_url = settings.get_knowledge().get("etl4lm", {}).get("url", "")
+    provider = settings.get_knowledge().get("etl4lm", {}).get("provider", "etl4lm")
+    
+    logger.info(f"ETL4LM settings: url={etl_for_lm_url}, provider={provider}")
+    
+    # 初始化 parse_type 和 partitions 变量
+    parse_type = ParseType.ETL4LM.value
+    partitions = []
+    
+    # 初始化 texts 变量，避免 NameError
+    texts = []
+    documents = []
+    
+    # 根据文件类型选择加载器
+    if file_extension_name in ["pdf", "png", "jpg", "jpeg"]:
+        # mineru只支持PDF和图片格式
+        if provider == "mineru":
+            # 通过 MinerU FastAPI 服务解析PDF和图片
+            logger.info(f"Using MinerU loader for {file_extension_name} with knowledge_id={knowledge_id}")
+            loader = MineruLoader(
+                file_name,
+                input_file,
+                base_url=etl_for_lm_url,  # 例如 http://172.19.0.3:8009
+                timeout=settings.get_knowledge().get("etl4lm", {}).get("timeout", 600),
+                backend=settings.get_knowledge().get("etl4lm", {}).get("backend", "pipeline"),
+                knowledge_id=knowledge_id,
+                # pipeline 后端可选配置
+                parse_method=settings.get_knowledge().get("etl4lm", {}).get("parse_method", "auto"),
+                lang=settings.get_knowledge().get("etl4lm", {}).get("lang", "ch"),
+                formula_enable=settings.get_knowledge().get("etl4lm", {}).get("formula_enable", True),
+                table_enable=settings.get_knowledge().get("etl4lm", {}).get("table_enable", True),
+                # vlm-sglang-client 后端可选配置
+                server_url=settings.get_knowledge().get("etl4lm", {}).get("server_url", None),
+            )
+            documents = loader.load()
+            parse_type = ParseType.ETL4LM.value
+            partitions = getattr(loader, "partitions", None) or []
+            
+            # 使用MinerU专用切分器
+            logger.info(f"Using MinerU text splitter for {file_extension_name}")
+            mineru_splitter = MinerUTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                preserve_headers=True,
+                preserve_tables=True,
+                preserve_formulas=True,
+                min_chunk_size=100,
+                max_chunk_size=2000
+            )
+            
+            # 直接返回切分结果，跳过后续的通用切分
+            split_documents, metadatas = mineru_splitter.split_mineru_documents(
+                documents, knowledge_id
+            )
+            
+            # 提取文本内容
+            raw_texts = [doc.page_content for doc in split_documents]
+            
+            # 设置parse_type和partitions
+            parse_type = ParseType.ETL4LM.value
+            partitions = parse_partitions(partitions)
+            
+            logger.info(f"MinerU processing completed. Generated {len(raw_texts)} chunks")
+            return raw_texts, metadatas, parse_type, partitions
+        else:
+            # 使用 ETL4LM 处理 PDF 和图片
+            logger.info(f"Using ETL4LM loader for {file_extension_name} with knowledge_id={knowledge_id}")
+            loader = Etl4lmLoader(
+                file_name,
+                input_file,
+                unstructured_api_url=etl_for_lm_url,
+                ocr_sdk_url=settings.get_knowledge().get("etl4lm", {}).get("ocr_sdk_url", ""),
+                force_ocr=bool(force_ocr),
+                enable_formular=bool(enable_formula),
+                timeout=settings.get_knowledge().get("etl4lm", {}).get("timeout", 60),
+                filter_page_header_footer=bool(filter_page_header_footer),
+                knowledge_id=knowledge_id,
+            )
+            documents = loader.load()
+            parse_type = ParseType.ETL4LM.value
+            partitions = loader.partitions
+            partitions = parse_partitions(partitions)
 
-    if file_extension_name in ["xls", "xlsx", "csv"]:
+    elif file_extension_name in ["xls", "xlsx", "csv"]:
         # set default values.
         if not excel_rule:
             excel_rule = ExcelRule()
@@ -713,6 +780,9 @@ def read_chunk_text(
 
         # skip following processes and return splited values.
         texts, documents = combine_multiple_md_files_to_raw_texts(path=md_files_path)
+        
+        # 设置 Excel 文件的 parse_type
+        parse_type = ParseType.UN_ETL4LM.value
 
     elif file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
 
@@ -754,10 +824,17 @@ def read_chunk_text(
         # 沿用原来的方法处理md文件
         loader = filetype_load_map["md"](file_path=md_file_name)
         documents = loader.load()
+        
+        # 设置 Office 文档的 parse_type
+        parse_type = ParseType.UN_ETL4LM.value
 
     elif file_extension_name in ["txt", "md"]:
         loader = filetype_load_map[file_extension_name](file_path=input_file, autodetect_encoding=True)
         documents = loader.load()
+        
+        # 设置文本文件的 parse_type
+        parse_type = ParseType.UN_ETL4LM.value
+
     else:
         if etl_for_lm_url:
             if file_extension_name in ["pdf"]:
@@ -765,48 +842,89 @@ def read_chunk_text(
                 if is_pdf_damaged(input_file):
                     raise Exception('The file is damaged.')
             etl4lm_settings = settings.get_knowledge().get("etl4lm", {})
-            loader = Etl4lmLoader(
-                file_name,
-                input_file,
-                unstructured_api_url=etl4lm_settings.get("url", ""),
-                ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
-                force_ocr=bool(force_ocr),
-                enable_formular=bool(enable_formula),
-                timeout=etl4lm_settings.get("timeout", 60),
-                filter_page_header_footer=bool(filter_page_header_footer),
-                knowledge_id=knowledge_id,
-            )
-            documents = loader.load()
-            parse_type = ParseType.ETL4LM.value
-            partitions = loader.partitions
-            partitions = parse_partitions(partitions)
-        else:
-            if file_extension_name in ['pdf']:
-                md_file_name, local_image_dir, doc_id = convert_file_to_md(
-                    file_name=file_name,
-                    input_file_name=input_file,
+            provider = etl4lm_settings.get("provider", "etl4lm").lower()
+            
+            # 只有在 mineru 配置下且文件格式是 mineru 支持的格式时，才使用 mineru 处理
+            if provider == "mineru" and file_extension_name in ["pdf", "png", "jpg", "jpeg"]:
+                # 通过 MinerU FastAPI 服务解析PDF和图片
+                loader = MineruLoader(
+                    file_name,
+                    input_file,
+                    base_url=etl4lm_settings.get("url", ""),  # 例如 http://172.19.0.3:8009
+                    timeout=etl4lm_settings.get("timeout", 600),
+                    backend=etl4lm_settings.get("backend", "pipeline"),
                     knowledge_id=knowledge_id,
-                    retain_images=bool(retain_images),
+                    # pipeline 后端可选配置
+                    parse_method=etl4lm_settings.get("parse_method", "auto"),
+                    lang=etl4lm_settings.get("lang", "ch"),
+                    formula_enable=etl4lm_settings.get("formula_enable", True),
+                    table_enable=etl4lm_settings.get("table_enable", True),
+                    # vlm-sglang-client 后端可选配置
+                    server_url=etl4lm_settings.get("server_url", None),
                 )
-                if not md_file_name: raise Exception(f"failed to parse {file_name}, please check backend log")
-
-                # save images to minio
-                if local_image_dir and retain_images == 1:
-                    put_images_to_minio(
-                        local_image_dir=local_image_dir,
-                        knowledge_id=knowledge_id,
-                        doc_id=doc_id,
-                    )
-                    # 沿用原来的方法处理md文件
-                loader = filetype_load_map["md"](file_path=md_file_name)
                 documents = loader.load()
+                parse_type = ParseType.ETL4LM.value
+                partitions = getattr(loader, "partitions", None) or []
+                
+                # 使用MinerU专用切分器
+                logger.info(f"Using MinerU text splitter for {file_extension_name}")
+                mineru_splitter = MinerUTextSplitter(
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                    preserve_headers=True,
+                    preserve_tables=True,
+                    preserve_formulas=True,
+                    min_chunk_size=100,
+                    max_chunk_size=2000
+                )
+                
+                # 直接返回切分结果，跳过后续的通用切分
+                split_documents, metadatas = mineru_splitter.split_mineru_documents(
+                    documents, knowledge_id
+                )
+                
+                # 提取文本内容
+                raw_texts = [doc.page_content for doc in split_documents]
+                
+                # 设置parse_type和partitions
+                parse_type = ParseType.ETL4LM.value
+                partitions = parse_partitions(partitions)
+                
+                logger.info(f"MinerU processing completed. Generated {len(raw_texts)} chunks")
+                return raw_texts, metadatas, parse_type, partitions
+            elif provider == "etl4lm":
+                # 只有在明确配置为 etl4lm 时才使用 Etl4lmLoader
+                logger.info(f"Using ETL4LM loader for {file_extension_name} with knowledge_id={knowledge_id}")
+                loader = Etl4lmLoader(
+                    file_name,
+                    input_file,
+                    unstructured_api_url=etl4lm_settings.get("url", ""),
+                    ocr_sdk_url=etl4lm_settings.get("ocr_sdk_url", ""),
+                    force_ocr=bool(force_ocr),
+                    enable_formular=bool(enable_formula),
+                    timeout=etl4lm_settings.get("timeout", 60),
+                    filter_page_header_footer=bool(filter_page_header_footer),
+                    knowledge_id=knowledge_id,
+                )
+                documents = loader.load()
+                parse_type = ParseType.ETL4LM.value
+                partitions = loader.partitions
+                partitions = parse_partitions(partitions)
             else:
+                # 其他情况（包括 mineru 配置但不支持的文件格式）使用默认处理逻辑
+                logger.info(f"Provider {provider} not supported for {file_extension_name}, using default processing")
                 if file_extension_name not in filetype_load_map:
                     raise Exception("类型不支持")
                 loader = filetype_load_map[file_extension_name](file_path=input_file)
                 documents = loader.load()
+                parse_type = ParseType.UN_ETL4LM.value
 
     logger.info(f"start_extract_title file_name={file_name}")
+    
+    # 获取知识库 LLM 配置和对象
+    llm = decide_knowledge_llm()
+    knowledge_llm = LLMService.get_knowledge_llm() if llm else None
+    
     if llm:
         t = time.time()
         for one in documents:
@@ -820,12 +938,109 @@ def read_chunk_text(
             one.metadata["title"] = parse_document_title(title)
         logger.info("file_extract_title=success timecost={}", time.time() - t)
 
-    if file_extension_name in ["xls", "xlsx", "csv"]:
-        for one in texts:
-            one.metadata["title"] = documents[0].metadata.get("title", "")
+    # 为 Office 文档类型优化分隔符策略
+    if file_extension_name in ["doc", "docx", "html", "mhtml", "ppt", "pptx"]:
+        # 使用传入的 separator 参数，为所有 Office 文档类型提供更好的切分器选择
+        
+        # 修复分隔符问题：将转义的分隔符转换为真正的换行符
+        processed_separators = []
+        if separator:
+            for sep in separator:
+                if sep == '\\n\\n':
+                    processed_separators.append('\n\n')
+                elif sep == '\\n':
+                    processed_separators.append('\n')
+                else:
+                    processed_separators.append(sep)
+        else:
+            # 如果没有提供分隔符，使用默认值
+            processed_separators = ['\n\n', '\n']
+        
+        # 参数验证和默认值保护 - 只在参数无效时才使用默认值
+        original_chunk_size = chunk_size
+        original_chunk_overlap = chunk_overlap
+        
+        if not chunk_size or chunk_size <= 0:
+            chunk_size = 1000
+            logger.warning(f"WARNING: Invalid chunk_size ({original_chunk_size}), using default value: {chunk_size}")
+        
+        # 修复 chunk_overlap = 0 的问题
+        if not chunk_overlap or chunk_overlap < 0:
+            chunk_overlap = 100
+            logger.warning(f"WARNING: Invalid chunk_overlap ({original_chunk_overlap}), using default value: {chunk_overlap}")
+        elif chunk_overlap == 0:
+            # chunk_overlap = 0 会导致切分失败，强制使用合理值
+            chunk_overlap = min(chunk_size // 10, 200)  # 使用 chunk_size 的 1/10，但不超过 200
+            logger.warning(f"WARNING: chunk_overlap is 0, which will cause splitting failure. Adjusted to: {chunk_overlap}")
+        
+        # 参数合理性检查 - 只给出警告，不强制修改
+        if chunk_size > 10000:
+            logger.warning(f"WARNING: chunk_size ({chunk_size}) is very large, this may cause issues")
+        if chunk_overlap >= chunk_size:
+            chunk_overlap = min(chunk_size // 2, 200)
+            logger.warning(f"WARNING: chunk_overlap ({original_chunk_overlap}) >= chunk_size ({chunk_size}), adjusted to: {chunk_overlap}")
+        
+        # 为所有 Office 文档类型使用 RecursiveCharacterTextSplitter 以支持多个分隔符
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        text_splitter = RecursiveCharacterTextSplitter(
+            separators=processed_separators,  # 使用处理后的分隔符
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            add_start_index=True,
+            # 添加更多配置选项以确保正确切分
+            length_function=len,  # 使用字符长度函数
+            is_separator_regex=False,  # 分隔符不是正则表达式
+        )
     else:
-        logger.info(f"start_split_text file_name={file_name}")
-        texts = text_splitter.split_documents(documents)
+        # 其他文件使用 CharacterTextSplitter
+        separator_str = separator[0] if separator else "\n\n"
+        
+        # 参数验证和默认值保护 - 只在参数无效时才使用默认值
+        original_chunk_size = chunk_size
+        original_chunk_overlap = chunk_overlap
+        
+        if not chunk_size or chunk_size <= 0:
+            chunk_size = 1000
+            logger.warning(f"WARNING: Invalid chunk_size ({original_chunk_size}), using default value: {chunk_size}")
+        if not chunk_overlap or chunk_overlap < 0:
+            chunk_overlap = 100
+            logger.warning(f"WARNING: Invalid chunk_overlap ({original_chunk_overlap}), using default value: {chunk_overlap}")
+        
+        # 参数合理性检查 - 只给出警告，不强制修改
+        if chunk_size > 10000:
+            logger.warning(f"WARNING: chunk_size ({chunk_size}) is very large, this may cause issues")
+        if chunk_overlap >= chunk_size:
+            logger.warning(f"WARNING: chunk_overlap ({chunk_overlap}) >= chunk_size ({chunk_size}), this may cause issues")
+        
+        text_splitter = CharacterTextSplitter(
+            separator=separator_str,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            add_start_index=True,
+        )
+
+    # 统一进行文本切分
+    if file_extension_name in ["xls", "xlsx", "csv"]:
+        # Excel 文件已经在前面处理过了，只需要设置标题
+        if texts and len(texts) > 0:
+            for one in texts:
+                if hasattr(one, 'metadata') and one.metadata:
+                    one.metadata["title"] = documents[0].metadata.get("title", "") if documents and len(documents) > 0 else ""
+        logger.info(f"Excel file processing completed - generated {len(texts)} chunks")
+    else:
+        # 其他文件类型使用 text_splitter 进行切分
+        if documents and len(documents) > 0:
+            logger.info(f"start_split_text file_name={file_name}")
+            texts = text_splitter.split_documents(documents)
+            
+            # 检查是否有过大的chunk
+            for i, text in enumerate(texts):
+                chunk_size_actual = len(text.page_content) if hasattr(text, 'page_content') else len(str(text))
+                if chunk_size_actual > 10000:
+                    logger.warning(f"WARNING: Chunk {i+1} is very large ({chunk_size_actual} characters), may indicate splitting failure")
+        else:
+            logger.warning(f"WARNING: No documents to split for {file_name}")
+            texts = []
 
     raw_texts = [t.page_content for t in texts]
     logger.info(f"start_process_metadata file_name={file_name}")
