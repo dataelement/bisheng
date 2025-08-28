@@ -179,7 +179,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'task_end':
                     updateLinsight(id, (prev) => {
                         const newStatus = taskData.data.status
-                        const errorMsg = newStatus === 'failed' ? taskData.data.result.answer : ''
+                        const errorMsg = taskData.data.result.answer
                         if (!taskData.data.parent_task_id) {
                             // 更新一级任务
                             const newTasks = prev.tasks.map(task =>
@@ -203,7 +203,7 @@ export const useLinsightWebSocket = (versionId) => {
                             ...parent,
                             children: parent.children.map(child =>
                                 child.id === taskData.data.id
-                                    ? { ...child, status: newStatus, errorMsg, event_type: taskData.event_type }
+                                    ? { ...child, status: newStatus, errorMsg: newStatus === 'failed' ? errorMsg : '', event_type: taskData.event_type }
                                     : child
                             )
                         };
