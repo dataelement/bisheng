@@ -9,7 +9,6 @@ import { InputField, SelectField } from "./InputField";
 const temp = {
     provider: 'openai',
     openai_api_key: '',
-    azure_api_key: '',
     openai_api_base: 'https://api.openai.com/v1',
     openai_proxy: '',
     azure_deployment: '',
@@ -21,30 +20,31 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
 
     const [localFormData, setLocalFormData] = useState(() => {
-        // 如果formData为空，使用默认值
         if (!formData || Object.keys(formData).length === 0) {
             return { ...temp };
         }
-        // 优先检查是否有Azure特定字段
-        const hasAzureFields = formData.azure_deployment || formData.azure_endpoint || formData.azure_api_key;
-        // 检查是否有OpenAI特定字段（排除默认值）
-        const hasOpenAIFields = formData.openai_api_key && formData.openai_api_key !== '';
         
-        let provider = 'openai'; // 默认值
+        // 根据已有字段判断是哪种配置
+        const hasAzureFields = formData.azure_deployment || formData.azure_endpoint || formData.openai_api_version;
+        const provider = hasAzureFields ? 'azure' : 'openai';
         
-        if (hasAzureFields) {
-            provider = 'azure';
-        } else if (hasOpenAIFields) {
-            provider = 'openai';
+        // 根据provider类型决定显示哪个API Key
+        let displayApiKey = '';
+        console.log(provider,222);
+        
+        if (provider === 'openai') {
+            displayApiKey = formData.openai_api_key || '';
+             formData.openai_api_key = displayApiKey; 
+        } else {
+            displayApiKey = formData.openai_api_key || '';
+             formData.openai_api_key = displayApiKey;
         }
         
-        // 根据provider类型设置正确的API Key字段
         return {
             ...temp,
             ...formData,
             provider,
-            openai_api_key: provider === 'openai' ? (formData.openai_api_key || formData.azure_api_key || '') : '',
-            azure_api_key: provider === 'azure' ? (formData.azure_api_key || formData.openai_api_key || '') : ''
+            openai_api_key: displayApiKey
         };
     });
     
@@ -63,14 +63,12 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         const formErrors = {};
         let isValid = true;
         
-        if (localFormData.provider === 'openai' && !localFormData.openai_api_key) {
+        if (!localFormData.openai_api_key) {
             formErrors.openai_api_key = true;
             isValid = false;
-        } else if (localFormData.provider === 'azure') {
-            if (!localFormData.azure_api_key) {
-                formErrors.azure_api_key = true;
-                isValid = false;
-            }
+        }
+        
+        if (localFormData.provider === 'azure') {
             if (!localFormData.azure_deployment) {
                 formErrors.azure_deployment = true;
                 isValid = false;
@@ -92,23 +90,26 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         if (validateForm()) {
-            // 准备提交的数据，根据provider类型设置正确的API Key字段
-            const submitData = { ...localFormData };
+            // 根据当前选择的provider创建提交数据
+            let finalData = {};
             
-            if (submitData.provider === 'openai') {
-                // 清理Azure相关字段
-                submitData.azure_api_key = '';
-                submitData.azure_deployment = '';
-                submitData.azure_endpoint = '';
-                submitData.openai_api_version = '';
+            if (localFormData.provider === 'openai') {
+                // 只保存OpenAI相关字段
+                finalData = {
+                    openai_api_key: localFormData.openai_api_key,
+                    openai_api_base: localFormData.openai_api_base,
+                    openai_proxy: localFormData.openai_proxy
+                };
             } else {
-                // 清理OpenAI相关字段
-                submitData.openai_api_key = '';
-                submitData.openai_proxy = '';
+                // 只保存Azure相关字段
+                finalData = {
+                    openai_api_key: localFormData.openai_api_key,
+                    azure_deployment: localFormData.azure_deployment,
+                    azure_endpoint: localFormData.azure_endpoint,
+                    openai_api_version: localFormData.openai_api_version
+                };
             }
             
-            // 移除临时使用的provider字段（如果需要）
-            const { provider, ...finalData } = submitData;
             onSubmit(finalData);
         }
     };
@@ -127,19 +128,21 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
             </RadioGroup>
 
             <div className="flex flex-col gap-4">
+                {/* 统一的API Key字段 */}
+                <InputField
+                    required
+                    label={localFormData.provider === 'openai' ? "OpenAI API Key" : "Azure OpenAI API Key"}
+                    type="password"
+                    id="openai_api_key"
+                    name="openai_api_key"
+                    placeholder={t('build.enterApiKey')}
+                    value={localFormData.openai_api_key}
+                    onChange={handleChange}
+                    error={errors.openai_api_key}
+                />
+
                 {localFormData.provider === 'openai' ? (
                     <>
-                        <InputField
-                            required
-                            label="OpenAI API Key"
-                            type="password"
-                            id="openai_api_key"
-                            name="openai_api_key"
-                            placeholder={t('build.enterApiKey')}
-                            value={localFormData.openai_api_key}
-                            onChange={handleChange}
-                            error={errors.openai_api_key}
-                        />
                         <InputField
                             label="OpenAI Base URL"
                             id="openai_api_base"
@@ -159,17 +162,6 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                     </>
                 ) : (
                     <>
-                        <InputField
-                            required
-                            label="Azure OpenAI API Key"
-                            type="password"
-                            id="azure_api_key"
-                            name="azure_api_key"
-                            placeholder={t('build.enterApiKey')}
-                            value={localFormData.azure_api_key}
-                            onChange={handleChange}
-                            error={errors.azure_api_key}
-                        />
                         <InputField
                             required
                             label="Deployment Name"
@@ -192,7 +184,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                         />
                         <InputField
                             required
-                            label="Openai API Version"
+                            label="OpenAI API Version"
                             id="openai_api_version"
                             name="openai_api_version"
                             placeholder="格式示例：2024-02-01"
@@ -204,7 +196,6 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                 )}
             </div>
 
-            {/* 这里是 DialogFooter */}
             <DialogFooter className="mt-4">
                 <DialogClose>
                     <Button variant="outline" className="px-11" type="button">
