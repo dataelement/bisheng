@@ -29,6 +29,9 @@ RUN mkdir -p /opt/pandoc && \
     cp pandoc-3.6.4/bin/pandoc /usr/bin/ && \
     rm -rf /opt/pandoc
 
+# 安装 uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # 安装 Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 
