@@ -13,6 +13,7 @@ const connections: Record<string, WebSocket> = {};
 export const useLinsightWebSocket = (versionId) => {
     const { getLinsight, updateLinsight } = useLinsightManager()
     const { showToast } = useToastContext();
+    const maxRetryCountRef = useRef(5);
 
     const linsight = getLinsight(versionId);
     const task = useMemo(() => {
@@ -178,7 +179,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'task_end':
                     updateLinsight(id, (prev) => {
                         const newStatus = taskData.data.status
-                        const errorMsg = newStatus === 'failed' ? taskData.data.result.answer : ''
+                        const errorMsg = taskData.data.result.answer
                         if (!taskData.data.parent_task_id) {
                             // 更新一级任务
                             const newTasks = prev.tasks.map(task =>
@@ -202,7 +203,7 @@ export const useLinsightWebSocket = (versionId) => {
                             ...parent,
                             children: parent.children.map(child =>
                                 child.id === taskData.data.id
-                                    ? { ...child, status: newStatus, errorMsg, event_type: taskData.event_type }
+                                    ? { ...child, status: newStatus, errorMsg: newStatus === 'failed' ? errorMsg : '', event_type: taskData.event_type }
                                     : child
                             )
                         };
@@ -241,7 +242,7 @@ export const useLinsightWebSocket = (versionId) => {
                 case 'final_result':
                     updateLinsight(id, {
                         output_result: taskData.data.output_result,
-                        summary: taskData.data.output_result.answer,
+                        // summary: taskData.data.output_result.answer,
                         file_list: taskData.data.output_result.final_files || [],
                         status: SopStatus.completed
                     })
@@ -269,6 +270,13 @@ export const useLinsightWebSocket = (versionId) => {
             console.log(`WebSocket closed for session ${id}`);
             if (connections[id] === websocket) {
                 delete connections[id];
+                if (maxRetryCountRef.current > 0) {
+                    setTimeout(() => {
+                        connect(id, { type: 'relink' })
+                        maxRetryCountRef.current--;
+                    }, 1000);
+                }
+            } else {
             }
         };
 
@@ -285,6 +293,7 @@ export const useLinsightWebSocket = (versionId) => {
         if (!connections[task.versionId] ||
             connections[task.versionId].readyState !== WebSocket.OPEN) {
             connect(task.versionId, { type: 'init' });
+            maxRetryCountRef.current = 3;
         }
     }, [task])
 
