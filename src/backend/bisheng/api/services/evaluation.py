@@ -32,7 +32,8 @@ from bisheng.graph.graph.base import Graph
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
-from bisheng.worker import RedisCallback, execute_workflow, continue_workflow
+from bisheng.worker.workflow.redis_callback import RedisCallback
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 flow_data_store = redis_client
