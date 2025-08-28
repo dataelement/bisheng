@@ -24,8 +24,7 @@ from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalEx
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
-    DallEAPIWrapper,
-    DallEImageGenerator,
+    DallEImageGenerator, ProxyDallEAPIWrapper,
 )
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from bisheng_langchain.gpts.tools.local_file.local_file import LocalFileTool
@@ -74,10 +73,6 @@ def _get_web_search(**kwargs: Any) -> BaseTool:
 
 
 def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
-    if kwargs.get('openai_proxy'):
-        kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
-        kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))
-
     # 说明是azure的openai配置
     if kwargs.get("azure_endpoint"):
         kwargs['api_key'] = kwargs.pop('openai_api_key')
@@ -85,10 +80,13 @@ def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
         return DallEImageGenerator(
             api_wrapper=AzureDallEWrapper(**kwargs)
         )
+    if kwargs.get('openai_proxy'):
+        kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
+        kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))
     kwargs['api_key'] = kwargs.pop('openai_api_key')
     kwargs['base_url'] = kwargs.pop('openai_api_base', None)
     return DallEImageGenerator(
-        api_wrapper=DallEAPIWrapper(
+        api_wrapper=ProxyDallEAPIWrapper(
             model='dall-e-3',
             **kwargs
         )
