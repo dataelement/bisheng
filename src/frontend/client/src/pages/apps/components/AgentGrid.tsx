@@ -23,6 +23,7 @@ interface AgentGridProps {
   onRemoveFromFavorites: (userId: string, type: number, id: string) => void
   sectionRefs: React.MutableRefObject<Record<string, HTMLElement | null>>
   refreshTrigger: number
+  onCardClick: (agent: Agent) => void
 }
 
 interface Category {
@@ -31,7 +32,7 @@ interface Category {
   selected: boolean
 }
 
-export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, sectionRefs, refreshTrigger }: AgentGridProps) {
+export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, sectionRefs, refreshTrigger, onCardClick }: AgentGridProps) {
   const [categories, setCategories] = useState<Category[]>([])
   const [agentsByCategory, setAgentsByCategory] = useState<Record<string, Agent[]>>({})
   const [uncategorizedAgents, setUncategorizedAgents] = useState<Agent[]>([])
@@ -53,7 +54,7 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
     try {
       const result = await getFrequently(pageNum, 8) // 添加分页参数
       console.log("常用助手数据:", result.data)
-      
+
       const agents: Agent[] = result.data.map((item: any) => ({
         id: item.id.toString(),
         type: item.flow_type,
@@ -63,11 +64,11 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
         userId: item.user_id.toString(),
         category: "frequently_used"
       }))
-      
-      setAllAgents(prev => 
+
+      setAllAgents(prev =>
         pageNum === 1 ? agents : [...prev, ...agents]
       )
-      
+
       // 设置分页信息
       const hasMore = agents.length === 8
       setFrequentlyUsedPagination({
@@ -91,30 +92,30 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
       setCategoriesLoading(true)
       const tags = await getHomeLabelApi()
       console.log("获取到的分类标签:", tags.data)
-      
+
       const categoryList = tags.data.map((tag: any) => ({
         label: tag.name,
         value: tag.id.toString(),
         selected: true
       }))
-      
+
       setCategories(categoryList)
-      
+
       const initialPagination: Record<string, { page: number; total: number; hasMore: boolean }> = {}
       const initialLoading: Record<string, boolean> = {}
-      
+
       categoryList.forEach((category: Category) => {
         initialPagination[category.value] = { page: 1, total: 0, hasMore: true }
         initialLoading[category.value] = true
       })
-      
+
       setPagination(initialPagination)
       setLoading(initialLoading)
-      
+
       categoryList.forEach((category: Category) => {
         fetchAgentsForCategory(category.value, 1)
       })
-      
+
       fetchUncategorizedAgents(1)
     } catch (error) {
       console.error("获取分类失败:", error)
@@ -125,18 +126,18 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
 
   const fetchAgentsForCategory = async (categoryId: string, pageNum: number) => {
     setLoading(prev => ({ ...prev, [categoryId]: true }))
-    
+
     try {
       console.log(`获取分类 ${categoryId} 的数据，页码: ${pageNum}`)
-      
+
       const result = await getChatOnlineApi(
         pageNum,
         "",
         parseInt(categoryId),
       )
-      
+
       console.log(`分类 ${categoryId} 获取到的数据:`, result)
-      
+
       const agents: Agent[] = result.data.map((item: any) => ({
         id: item.id.toString(),
         type: item.flow_type,
@@ -146,20 +147,20 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
         userId: item.user_id.toString(),
         category: categoryId
       }))
-      
+
       setAgentsByCategory(prev => ({
         ...prev,
-        [categoryId]: pageNum === 1 
-          ? agents 
+        [categoryId]: pageNum === 1
+          ? agents
           : [...(prev[categoryId] || []), ...agents]
       }))
-      
+
       const hasMore = agents.length === 8
-      
+
       setPagination(prev => ({
         ...prev,
-        [categoryId]: { 
-          page: pageNum, 
+        [categoryId]: {
+          page: pageNum,
           total: result.total,
           hasMore
         }
@@ -173,14 +174,14 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
 
   const fetchUncategorizedAgents = async (pageNum: number) => {
     setUncategorizedLoading(true)
-    
+
     try {
       console.log(`获取未分类数据，页码: ${pageNum}`)
-      
+
       const result = await getUncategorized(pageNum, 8)
-      
+
       console.log(`未分类获取到的数据:`, result)
-      
+
       const agents: Agent[] = result.data.map((item: any) => ({
         id: item.id.toString(),
         type: item.flow_type,
@@ -190,13 +191,13 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
         userId: item.user_id.toString(),
         category: "uncategorized"
       }))
-      
-      setUncategorizedAgents(prev => 
+
+      setUncategorizedAgents(prev =>
         pageNum === 1 ? agents : [...prev, ...agents]
       )
-      
+
       const hasMore = agents.length === 8
-      
+
       setUncategorizedPagination({
         page: pageNum,
         total: result.total,
@@ -249,10 +250,10 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
   }, [refreshTrigger])
 
   const sections = [
-    { 
-      id: "frequently_used", 
-      name: "常用", 
-      agents: allAgents, 
+    {
+      id: "frequently_used",
+      name: "常用",
+      agents: allAgents,
       isFavoriteSection: true,
       pagination: frequentlyUsedPagination,
       loading: frequentlyUsedLoading
@@ -265,10 +266,10 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
       pagination: pagination[category.value] || { page: 1, total: 0, hasMore: false },
       loading: loading[category.value] || false
     })),
-    { 
-      id: "uncategorized", 
-      name: "未分类", 
-      agents: uncategorizedAgents, 
+    {
+      id: "uncategorized",
+      name: "未分类",
+      agents: uncategorizedAgents,
       isFavoriteSection: false,
       pagination: uncategorizedPagination,
       loading: uncategorizedLoading
@@ -298,7 +299,7 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
             }}
           >
             <h2 className="text-base font-medium mb-4 text-blue-600">{section.name}</h2>
-            
+
             {categoryLoading && section.agents.length === 0 ? (
               <div className="flex justify-center items-center h-32">
                 <Loader2 className="h-6 w-6 animate-spin" />
@@ -306,10 +307,11 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
             ) : (
               <>
                 <div className="grid grid-cols-4 gap-4">
-                  {section.agents.map((agent) => (                    
+                  {section.agents.map((agent) => (
                     <AgentCard
                       key={agent.id}
                       agent={agent}
+                      onClick={() => onCardClick(agent)}
                       isFavorite={isFavorite(agent.id)}
                       showRemove={section.isFavoriteSection}
                       onAddToFavorites={() => handleAddToFavorites(agent.type, agent.id)}
@@ -317,7 +319,7 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
                     />
                   ))}
                 </div>
-                
+
                 {categoryPagination.hasMore && (
                   <div className="flex justify-end mt-6">
                     <Button

@@ -128,19 +128,19 @@ export default function apps() {
     }
 
     const { toast } = useToast()
-const handleSetting = (data) => {
-    if (!data.write) {
-        return toast({ variant: 'warning', description: '无编辑权限' })
+    const handleSetting = (data) => {
+        if (!data.write) {
+            return toast({ variant: 'warning', description: '无编辑权限' })
+        }
+        if (data.flow_type === 5) {
+            navigate(`/assistant/${data.id}`, { state: { flow: data } })
+        } else if (data.flow_type === 1) {
+            const vid = data.version_list.find(item => item.is_current === 1)?.id
+            navigate(`/build/skill/${data.id}/${vid}`, { state: { flow: data } })
+        } else {
+            navigate(`/flow/${data.id}`, { state: { flow: data } })
+        }
     }
-    if (data.flow_type === 5) {
-        navigate(`/assistant/${data.id}`,{ state: { flow: data } })
-    } else if (data.flow_type === 1) {
-        const vid = data.version_list.find(item => item.is_current === 1)?.id
-        navigate(`/build/skill/${data.id}/${vid}`,{ state: { flow: data } })
-    } else {
-        navigate(`/flow/${data.id}`, { state: { flow: data } })
-    }
-}
 
     const createAppModalRef = useRef(null)
     const handleCreateApp = async (type, tempId = 0, item?: any) => {
@@ -158,15 +158,15 @@ const handleSetting = (data) => {
                 navigate(`/build/skill/${res.id}/${res.version_id}`)
             }))
         } else {
-              createAppModalRef.current.open(
-            type,
-            tempId,
-            {
-                id: item?.id,
-                logo: item?.logo,
-                type: TypeNames[item.flow_type]
-            }
-        );
+            createAppModalRef.current.open(
+                type,
+                tempId,
+                // {
+                //     id: item?.id,
+                //     logo: item?.logo,
+                //     type: TypeNames[item.flow_type]
+                // }
+            );
         }
     }
 
@@ -234,7 +234,7 @@ const handleSetting = (data) => {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                      onClick={() => {
+                                    onClick={() => {
                                         handleSetting(item);
                                         createAppModalRef.current?.open(
                                             TypeNames[item.flow_type],

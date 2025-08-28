@@ -1,8 +1,9 @@
-import { useRecoilValue } from 'recoil';
-import { QueryKeys, dataService } from '~/data-provider/data-provider/src';
-import { useQuery } from '@tanstack/react-query';
 import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
-import { TEndpointsConfig, TStartupConfig, BsConfig } from '~/data-provider/data-provider/src';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useRecoilValue } from 'recoil';
+import { getKnowledgeStatusApi } from '~/api';
+import { BsConfig, QueryKeys, TEndpointsConfig, TStartupConfig, dataService } from '~/data-provider/data-provider/src';
 import store from '~/store';
 
 export const useGetEndpointsQuery = <TData = TEndpointsConfig>(
@@ -59,9 +60,31 @@ export const useGetBsConfig = (
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-      refetchOnMount: 'always',  
+      refetchOnMount: 'always',
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,
     },
   );
 };
+
+export const useModelBuilding = () => {
+  const [shouldPoll, setShouldPoll] = useState(true);
+
+  const { data, refetch } = useQuery({
+    queryKey: ['knowledgeStatus'],
+    queryFn: async () => {
+      const res = await getKnowledgeStatusApi();
+
+      if (res.data?.status === 'success') {
+        setShouldPoll(false);
+        return false
+      }
+      return false
+    },
+    refetchOnWindowFocus: false,
+    enabled: shouldPoll, // 由状态控制是否启用查询
+    refetchInterval: shouldPoll ? 3000 : false, // 轮询间隔3秒，停止时设为false
+  });
+
+  return [data === undefined ? true : data, refetch] as const;
+}

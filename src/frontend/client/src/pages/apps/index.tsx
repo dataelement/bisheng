@@ -1,12 +1,17 @@
 "use client"
 
+import { useQueryClient } from '@tanstack/react-query'
 import { Search, X } from "lucide-react"
-import { useRef, useState, useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router"
+import { addToFrequentlyUsed, getChatOnlineApi, removeFromFrequentlyUsed } from "~/api/apps"
 import { Input } from "~/components/ui"
+import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
+import store from "~/store"
+import { addConversation, generateUUID } from "~/utils"
 import { AgentGrid } from "./components/AgentGrid"
 import { AgentNavigation } from "./components/AgentNavigation"
 import { SearchOverlay } from "./components/SearchOverlay"
-import { getAppsApi,getChatOnlineApi,addToFrequentlyUsed, removeFromFrequentlyUsed } from "~/api/apps"
 
 export default function AgentCenter() {
     const [searchQuery, setSearchQuery] = useState("")
@@ -16,10 +21,10 @@ export default function AgentCenter() {
     const [searchLoading, setSearchLoading] = useState(false)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
     const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
-const [refreshTrigger, setRefreshTrigger] = useState(0);
-const refreshAgentData = () => {
-    setRefreshTrigger(prev => prev + 1);
-}
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const refreshAgentData = () => {
+        setRefreshTrigger(prev => prev + 1);
+    }
     // 从本地存储加载收藏列表
     useEffect(() => {
         const savedFavorites = localStorage.getItem('agent-favorites')
@@ -54,7 +59,7 @@ const refreshAgentData = () => {
 
     const handleSearchChange = async (query: string) => {
         setSearchQuery(query)
-        
+
         if (query.trim()) {
             setIsSearching(true)
             setSearchLoading(true)
@@ -79,31 +84,68 @@ const refreshAgentData = () => {
         setSearchResults([])
     }
 
-const addToFavorites = async (type: string, id: string) => {
-  let mappedType: string;
-  if (type === '1') {
-    mappedType = 'flow';
-  } else if (type === '5') {
-    mappedType = 'assistant';
-  } else {
-    mappedType = 'workflow';
-  }
-  const res = await addToFrequentlyUsed(mappedType, id);
-  setFavorites(res.data);
-  
-  return res;
-}
+    const addToFavorites = async (type: string, id: string) => {
+        let mappedType: string;
+        if (type === '1') {
+            mappedType = 'flow';
+        } else if (type === '5') {
+            mappedType = 'assistant';
+        } else {
+            mappedType = 'workflow';
+        }
+        const res = await addToFrequentlyUsed(mappedType, id);
+        setFavorites(res.data);
 
-    const removeFromFavorites = async (userId:string,type: string, id: string) => {
-          let mappedType: string;
-            if (type === '1') {
-                mappedType = 'flow';
-            } else if (type === '5') {
-                mappedType = 'assistant';
-            } else {
-                mappedType = 'workflow';
+        return res;
+    }
+
+    const removeFromFavorites = async (userId: string, type: string, id: string) => {
+        let mappedType: string;
+        if (type === '1') {
+            mappedType = 'flow';
+        } else if (type === '5') {
+            mappedType = 'assistant';
+        } else {
+            mappedType = 'workflow';
+        }
+        const res = await removeFromFrequentlyUsed(userId, mappedType, id);
+    }
+
+    const clearAllConversations = store.useClearConvoState();
+    const { setConversation } = store.useCreateConversationAtom(0);
+    const queryClient = useQueryClient();
+
+    const navigate = useNavigate();
+    const handleCardClick = (agent) => {
+        console.log('agent :>> ', agent);
+
+        const _chatId = generateUUID(32)
+        const flowId = agent.id
+        // 新建会话
+        queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
+            if (!convoData) {
+                return convoData;
             }
-              const res = await removeFromFrequentlyUsed(userId,mappedType, id);
+            setConversation((prevState: any) => {
+                return {
+                    ...prevState,
+                    conversationId: _chatId
+                }
+            })
+            return addConversation(convoData, {
+                conversationId: _chatId,
+                createdAt: "",
+                endpoint: null,
+                endpointType: null,
+                model: "",
+                flowId,
+                flowType: agent.type,
+                title: agent.name,
+                tools: [],
+                updatedAt: ""
+            });
+        });
+        navigate(`/chat/${_chatId}/${flowId}/10`);
     }
 
     return (
@@ -116,7 +158,7 @@ const addToFavorites = async (type: string, id: string) => {
                         <p className="text-muted-foreground text-base">您可以在这里选择需要的智能体来进行生产与工作～</p>
                     </div>
                     <div className="mt-12 flex items-center justify-between">
-                        <AgentNavigation onCategoryChange={handleCategoryChange}  onRefresh={refreshAgentData}/>
+                        <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
                         <div className="relative w-80">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
                             <Input
@@ -148,18 +190,20 @@ const addToFavorites = async (type: string, id: string) => {
                             onAddToFavorites={addToFavorites}
                             onRemoveFromFavorites={removeFromFavorites}
                             sectionRefs={sectionRefs}
-                              refreshTrigger={refreshTrigger}
+                            refreshTrigger={refreshTrigger}
+                            onCardClick={handleCardClick}
                         />
                     ) : (
-             <SearchOverlay
-    query={searchQuery}
-    results={searchResults} // 传递实际搜索结果
-    loading={searchLoading} 
-    favorites={favorites}
-    onAddToFavorites={addToFavorites}
-    onRemoveFromFavorites={removeFromFavorites} 
-    onClose={handleSearchClear}
-/>
+                        <SearchOverlay
+                            query={searchQuery}
+                            results={searchResults} // 传递实际搜索结果
+                            loading={searchLoading}
+                            favorites={favorites}
+                            onAddToFavorites={addToFavorites}
+                            onRemoveFromFavorites={removeFromFavorites}
+                            onClose={handleSearchClear}
+                            onCardClick={handleCardClick}
+                        />
                     )}
                 </div>
             </div>

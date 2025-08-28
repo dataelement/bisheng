@@ -2,7 +2,7 @@ import { FileText, GlobeIcon, Hammer, KeyRound, Pencil, Settings2Icon } from 'lu
 import { useEffect, useMemo } from 'react';
 import { Switch } from '~/components/ui';
 import { Select, SelectContent, SelectTrigger } from '~/components/ui/Select';
-import { useGetBsConfig } from '~/data-provider';
+import { useGetBsConfig, useModelBuilding } from '~/data-provider';
 import {
     BsConfig
 } from '~/data-provider/data-provider/src';
@@ -11,6 +11,7 @@ import { cn } from '~/utils';
 // 工具
 export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSearchType, disabled }
     : { linsi: boolean, config?: BsConfig, searchType: string, setSearchType: (type: string) => void, disabled: boolean }) => {
+    const [building] = useModelBuilding()
 
     // 每次重置工具
     useEffect(() => {
@@ -53,7 +54,7 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
                         <span className="text-xs font-normal">个人知识库</span>
                     </div>
                     <Switch className='data-[state=checked]:bg-blue-600'
-                        disabled={disabled}
+                        disabled={building || disabled}
                         checked={searchType === 'knowledgeSearch'}
                         onCheckedChange={val => {
                             if (searchType === 'knowledgeSearch') {
@@ -72,21 +73,21 @@ export const ChatToolDown = ({ linsi, tools, setTools, config, searchType, setSe
 
 const LinsiTools = ({ tools, setTools }) => {
     const { data: bsConfig } = useGetBsConfig()
-
-    const defaultTools = [{
-        id: 'pro_knowledge',
-        name: '组织知识库',
-        icon: <KeyRound size="16" />,
-        checked: true
-    },
-    {
-        id: 'knowledge',
-        name: '个人知识库',
-        icon: <Pencil size="16" />,
-        checked: true
-    },]
+    const [building] = useModelBuilding()
 
     useEffect(() => {
+        const defaultTools = [{
+            id: 'pro_knowledge',
+            name: '组织知识库',
+            icon: <KeyRound size="16" />,
+            checked: true
+        },
+        {
+            id: 'knowledge',
+            name: '个人知识库',
+            icon: <Pencil size="16" />,
+            checked: !building
+        },]
         if (bsConfig) {
             const tools = bsConfig.linsightConfig?.tools || []
             const newTools = tools.map(tool => ({
@@ -99,7 +100,7 @@ const LinsiTools = ({ tools, setTools }) => {
             setTools((tools) => [...defaultTools, ...newTools])
         }
 
-    }, [bsConfig])
+    }, [bsConfig, building])
 
 
     const active = useMemo(() => tools.some(tool => tool.checked), [tools])
@@ -120,6 +121,7 @@ const LinsiTools = ({ tools, setTools }) => {
                     </div>
                     <Switch className='data-[state=checked]:bg-blue-600'
                         checked={tool.checked}
+                        disabled={tool.id === 'knowledge' && building}
                         onCheckedChange={val =>
                             setTools(tools.map(t => t.id === tool.id ? { ...t, checked: val } : t))
                         }
