@@ -12,6 +12,7 @@ import { addConversation, generateUUID } from "~/utils"
 import { AgentGrid } from "./components/AgentGrid"
 import { AgentNavigation } from "./components/AgentNavigation"
 import { SearchOverlay } from "./components/SearchOverlay"
+import { useGetBsConfig } from '~/data-provider'
 
 export default function AgentCenter() {
     const [searchQuery, setSearchQuery] = useState("")
@@ -148,14 +149,16 @@ export default function AgentCenter() {
         navigate(`/chat/${_chatId}/${flowId}/10`);
     }
 
+    const { data: bsConfig } = useGetBsConfig()
+
     return (
         <div className="min-h-screen bg-background">
             {/* Fixed Header */}
             <div className="sticky top-0 z-40 bg-background border-b">
                 <div className="container mx-auto px-6 py-6">
                     <div className="mt-2">
-                        <h1 className="text-blue-600 text-[32px] font-medium mb-2">探索BISHENG的智能体</h1>
-                        <p className="text-muted-foreground text-base">您可以在这里选择需要的智能体来进行生产与工作～</p>
+                        <h1 className="text-blue-600 text-[32px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || '探索BISHENG的智能体'}</h1>
+                        <p className="text-muted-foreground text-base">{bsConfig?.applicationCenterDescription || '您可以在这里选择需要的智能体来进行生产与工作～'}</p>
                     </div>
                     <div className="mt-12 flex items-center justify-between">
                         <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
