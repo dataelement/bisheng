@@ -41,7 +41,7 @@ export function AgentCard({
                 <CardContent className="p-0">
                     <div className="">
                         <div className="flex gap-2 items-center p-5 pb-2 font-semibold leading-none tracking-tight truncate-doubleline">
-                            <AppAvator />
+                            <AppAvator flowType={agent.type}/>
                             <h3 className="leading-5 align-middle">{agent.name}</h3>
                         </div>
                         <div className="p-5 pt-0 h-fit max-h-[60px] overflow-auto scrollbar-hide mb-4">

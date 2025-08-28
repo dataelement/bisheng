@@ -1,121 +1,152 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { AgentCard } from "./AgentCard"
-
-// Mock search results
-const mockSearchResults = [
-    {
-        id: "s1",
-        name: "智能搜索助手",
-        description: "基于先进的搜索算法，帮助您快速找到所需信息。",
-        icon: "🔍",
-        category: "search",
-    },
-    { id: "s2", name: "文档搜索", description: "专业的文档搜索工具，支持多种文件格式。", icon: "📄", category: "search" },
-    { id: "s3", name: "代码搜索", description: "为开发者提供的代码搜索和分析工具。", icon: "💻", category: "search" },
-    { id: "s4", name: "图片搜索", description: "智能图片搜索和识别服务。", icon: "🖼️", category: "search" },
-    { id: "s5", name: "语音搜索", description: "支持语音输入的智能搜索助手。", icon: "🎤", category: "search" },
-    { id: "s6", name: "视频搜索", description: "专业的视频内容搜索和分析工具。", icon: "🎥", category: "search" },
-    { id: "s7", name: "学术搜索", description: "专门用于学术研究的文献搜索工具。", icon: "🎓", category: "search" },
-    { id: "s8", name: "商品搜索", description: "电商平台商品搜索和比价工具。", icon: "🛍️", category: "search" },
-    { id: "s9", name: "新闻搜索", description: "实时新闻搜索和资讯聚合服务。", icon: "📰", category: "search" },
-    { id: "s10", name: "地图搜索", description: "地理位置搜索和导航服务。", icon: "🗺️", category: "search" },
-]
 
 interface SearchOverlayProps {
     query: string
+    results: any[]
+    loading: boolean
     favorites: string[]
     onAddToFavorites: (agentId: string) => void
+    onRemoveFromFavorites: (agentId: string) => void
     onClose: () => void
 }
 
-export function SearchOverlay({ query, favorites, onAddToFavorites, onClose }: SearchOverlayProps) {
-    const [displayedResults, setDisplayedResults] = useState<typeof mockSearchResults>([])
-    const [isLoading, setIsLoading] = useState(false)
+export function SearchOverlay({ 
+    query, 
+    results,
+    loading,
+    favorites, 
+    onAddToFavorites, 
+    onRemoveFromFavorites,
+    onClose 
+}: SearchOverlayProps) {
+    const [displayedResults, setDisplayedResults] = useState<any[]>([])
+    const [isLoadingMore, setIsLoadingMore] = useState(false)
     const [hasMore, setHasMore] = useState(true)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
     const itemsPerLoad = 8
 
-    // Filter results based on query
-    const filteredResults = mockSearchResults.filter(
-        (agent) =>
+    // 过滤结果
+    const filteredResults = useMemo(() => {
+        return results.filter((agent: any) =>
             agent.name.toLowerCase().includes(query.toLowerCase()) ||
-            agent.description.toLowerCase().includes(query.toLowerCase()),
-    )
+            agent.description.toLowerCase().includes(query.toLowerCase())
+        )
+    }, [results, query])
 
     const loadMoreItems = useCallback(() => {
-        if (isLoading || !hasMore) return
+        if (isLoadingMore || !hasMore) return
 
-        setIsLoading(true)
+        setIsLoadingMore(true)
 
-        // Simulate loading delay
-        setTimeout(() => {
+        // 使用requestAnimationFrame确保在下一帧执行
+        requestAnimationFrame(() => {
             const currentLength = displayedResults.length
             const nextItems = filteredResults.slice(currentLength, currentLength + itemsPerLoad)
-
+            
             setDisplayedResults((prev) => [...prev, ...nextItems])
             setHasMore(currentLength + nextItems.length < filteredResults.length)
-            setIsLoading(false)
-        }, 300)
-    }, [displayedResults.length, filteredResults, isLoading, hasMore])
+            setIsLoadingMore(false)
+        })
+    }, [displayedResults.length, filteredResults, isLoadingMore, hasMore, itemsPerLoad])
 
+    // 重置显示结果
     useEffect(() => {
         const initialItems = filteredResults.slice(0, itemsPerLoad)
         setDisplayedResults(initialItems)
         setHasMore(initialItems.length < filteredResults.length)
-    }, [query])
+    }, [filteredResults, itemsPerLoad])
 
+    // 滚动事件处理 - 使用防抖优化性能
     const handleScroll = useCallback(() => {
         const container = scrollContainerRef.current
-        if (!container) return
+        if (!container || isLoadingMore || !hasMore) return
 
         const { scrollTop, scrollHeight, clientHeight } = container
-        const threshold = 100 // Load more when 100px from bottom
+        const threshold = 50 // 减小阈值，更容易触发加载
+        
+        // 添加调试信息
+        console.log("Scroll check:", {
+            scrollTop,
+            scrollHeight,
+            clientHeight,
+            threshold: scrollHeight - scrollTop - clientHeight,
+            hasMore,
+            isLoadingMore
+        })
 
-        if (scrollHeight - scrollTop - clientHeight < threshold && hasMore && !isLoading) {
+        if (scrollHeight - scrollTop - clientHeight < threshold) {
+            console.log("Loading more items...")
             loadMoreItems()
         }
-    }, [hasMore, isLoading, loadMoreItems])
+    }, [hasMore, isLoadingMore, loadMoreItems])
 
+    // 添加滚动事件监听 - 使用被动事件监听器提高性能
     useEffect(() => {
         const container = scrollContainerRef.current
         if (!container) return
 
-        container.addEventListener("scroll", handleScroll)
+        container.addEventListener("scroll", handleScroll, { passive: true })
         return () => container.removeEventListener("scroll", handleScroll)
     }, [handleScroll])
+
+    // 初始加载完成后检查是否需要加载更多
+    useEffect(() => {
+        const container = scrollContainerRef.current
+        if (!container || filteredResults.length <= itemsPerLoad) return
+        
+        // 检查内容是否不足一屏，如果是则自动加载更多
+        if (container.scrollHeight <= container.clientHeight && hasMore && !isLoadingMore) {
+            console.log("Auto-loading more items due to short content")
+            loadMoreItems()
+        }
+    }, [filteredResults, hasMore, isLoadingMore, loadMoreItems, itemsPerLoad])
 
     return (
         <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50">
             <div ref={scrollContainerRef} className="h-full overflow-auto">
                 <div className="container mx-auto px-6 py-6">
-                    {/* <div className="mb-6">
-                        <h2 className="text-xl font-medium mb-2 text-left">
-                            搜索结果 "{query}" ({filteredResults.length} 个结果)
-                        </h2>
-                    </div> */}
-
-                    {displayedResults.length > 0 ? (
+                    {loading && displayedResults.length === 0 ? (
+                        <div className="text-center py-12">
+                            <div className="inline-flex items-center gap-2 text-muted-foreground">
+                                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                                搜索中...
+                            </div>
+                        </div>
+                    ) : displayedResults.length > 0 ? (
                         <>
+                            <div className="mb-6">
+                                <h2 className="text-xl font-medium mb-2 text-left">
+                                    搜索结果 "{query}" ({filteredResults.length} 个结果)
+                                </h2>
+                            </div>
+
                             <div className="grid grid-cols-4 gap-2 mb-8">
                                 {displayedResults.map((agent) => (
                                     <AgentCard
                                         key={agent.id}
-                                        agent={agent}
-                                        isFavorite={favorites.includes(agent.id)}
+                                        agent={{
+                                            id: agent.id.toString(),
+                                            name: agent.name,
+                                            description: agent.description || "暂无描述",
+                                            icon: "🤖",
+                                            category: "search"
+                                        }}
+                                        isFavorite={favorites.includes(agent.id.toString())}
                                         showRemove={false}
-                                        onAddToFavorites={() => onAddToFavorites(agent.id)}
-                                        onRemoveFromFavorites={() => { }}
+                                        onAddToFavorites={() => onAddToFavorites(agent.id.toString())}
+                                        onRemoveFromFavorites={() => onRemoveFromFavorites(agent.id.toString())}
                                     />
                                 ))}
                             </div>
 
-                            {isLoading && (
+                            {isLoadingMore && (
                                 <div className="text-center py-8">
                                     <div className="inline-flex items-center gap-2 text-muted-foreground">
                                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                                        加载中...
+                                        加载更多...
                                     </div>
                                 </div>
                             )}
