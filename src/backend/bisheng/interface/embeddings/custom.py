@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 
 import numpy as np
 from langchain.embeddings.base import Embeddings
+from langchain_community.embeddings.dashscope import BATCH_SIZE
 from loguru import logger
 from pydantic import ConfigDict, Field, BaseModel
 
@@ -9,6 +10,8 @@ from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, 
                                                 LLMServerType)
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
+
+BATCH_SIZE["text-embedding-v4"] = 10  # 设置DashScope的批处理大小为1
 
 
 class OpenAIProxyEmbedding(Embeddings):

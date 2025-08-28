@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bisheng"
-version = "2.0.2"
+version = "2.0.3"
 description = "A Python package with a built-in web application"
 authors = ["Dataelement <hanfeng@dataelem.com>"]
 maintainers = [
@@ -116,6 +116,7 @@ filetype = "1.2.0"
 aiomysql = "^0.2.0"
 sse-starlette = "^2.3.6"
 transformers = "^4.53.0"
+e2b-code-interpreter = "^1.5.2"
 
 [tool.poetry.dev-dependencies]
 black = "^23.1.0"

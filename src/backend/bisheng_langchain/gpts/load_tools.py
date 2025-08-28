@@ -19,11 +19,12 @@ from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.self_arxiv import ArxivAPIWrapperSelf
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
+from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import E2bCodeExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
-    DallEAPIWrapper,
-    DallEImageGenerator,
+    DallEImageGenerator, ProxyDallEAPIWrapper,
 )
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
 from bisheng_langchain.gpts.tools.local_file.local_file import LocalFileTool
@@ -71,11 +72,7 @@ def _get_web_search(**kwargs: Any) -> BaseTool:
     return WebSearchTool(api_wrapper=search_tool)
 
 
-def _get_dalle_image_generator(**kwargs: Any) -> Tool:
-    if kwargs.get('openai_proxy'):
-        kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
-        kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))
-
+def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
     # 说明是azure的openai配置
     if kwargs.get("azure_endpoint"):
         kwargs['api_key'] = kwargs.pop('openai_api_key')
@@ -83,10 +80,13 @@ def _get_dalle_image_generator(**kwargs: Any) -> Tool:
         return DallEImageGenerator(
             api_wrapper=AzureDallEWrapper(**kwargs)
         )
+    if kwargs.get('openai_proxy'):
+        kwargs['http_async_client'] = httpx.AsyncClient(proxies=kwargs.get('openai_proxy'))
+        kwargs['http_client'] = httpx.Client(proxies=kwargs.get('openai_proxy'))
     kwargs['api_key'] = kwargs.pop('openai_api_key')
     kwargs['base_url'] = kwargs.pop('openai_api_base', None)
     return DallEImageGenerator(
-        api_wrapper=DallEAPIWrapper(
+        api_wrapper=ProxyDallEAPIWrapper(
             model='dall-e-3',
             **kwargs
         )
@@ -102,7 +102,14 @@ def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
 
 
 def _get_native_code_interpreter(**kwargs: Any) -> Tool:
-    return CodeInterpreterTool(**kwargs).as_tool()
+    executor_type = kwargs.pop("type", "local")
+    config = kwargs.pop("config", {}).get(executor_type, {})
+    kwargs.update(config)
+    if executor_type == 'local':
+        executor = LocalExecutor(**kwargs)
+    else:
+        executor = E2bCodeExecutor(**kwargs)
+    return CodeInterpreterTool(executor=executor, description=executor.description)
 
 
 # 第二个list内填必填参数，第三个list内填可选参数
@@ -113,7 +120,7 @@ _EXTRA_PARAM_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[Optio
                               ['openai_api_base', 'openai_proxy', 'azure_deployment', 'azure_endpoint',
                                'openai_api_version']),
     'bing_search': (_get_bing_search, ['bing_subscription_key', 'bing_search_url'], []),
-    'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['files']),
+    'bisheng_code_interpreter': (_get_native_code_interpreter, ["minio"], ['config', 'type']),
     'bisheng_rag': (BishengRAGTool.get_rag_tool, ['name', 'description'],
                     ['vector_store', 'keyword_store', 'llm', 'collection_name', 'max_content',
                      'sort_by_source_and_index']),

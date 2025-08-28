@@ -38,7 +38,7 @@ const TianyanchaToolForm = ({ formData, onSubmit }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4"  autoComplete="off">
             <InputField
                 required
                 label="API Key"

@@ -19,7 +19,7 @@ import ToolSet from "./ToolSet";
 const MANAGED_TOOLS = [
     'Dalle3绘画', 'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
-    '发送邮件', '飞书消息', '联网搜索'
+    '发送邮件', '飞书消息', '联网搜索','代码执行器'
 ];
 
 interface TabToolsProps {
@@ -93,6 +93,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         placeholder={t("tools.search")}
                         className="mt-6"
                         onChange={(e) => setKeyword(e.target.value)}
+                          readOnly={true}
                     />
                     <div className="mt-4">
                         <div
@@ -117,7 +118,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             onClick={() => setType("mcp")}
                         >
                             <CpuIcon />
-                            <span>MCP工具</span>
+                            <span>{t("tools.mcpTools")}</span>
                         </div>
                     </div>
                     <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-betwee px-2">
