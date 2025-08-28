@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AgentCard } from "./AgentCard"
 
 interface SearchOverlayProps {
@@ -10,17 +10,19 @@ interface SearchOverlayProps {
     favorites: string[]
     onAddToFavorites: (agentId: string) => void
     onRemoveFromFavorites: (agentId: string) => void
+    onCardClick: (agent: any) => void
     onClose: () => void
 }
 
-export function SearchOverlay({ 
-    query, 
+export function SearchOverlay({
+    query,
     results,
     loading,
-    favorites, 
-    onAddToFavorites, 
+    favorites,
+    onAddToFavorites,
     onRemoveFromFavorites,
-    onClose 
+    onCardClick,
+    onClose
 }: SearchOverlayProps) {
     const [displayedResults, setDisplayedResults] = useState<any[]>([])
     const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -45,7 +47,7 @@ export function SearchOverlay({
         requestAnimationFrame(() => {
             const currentLength = displayedResults.length
             const nextItems = filteredResults.slice(currentLength, currentLength + itemsPerLoad)
-            
+
             setDisplayedResults((prev) => [...prev, ...nextItems])
             setHasMore(currentLength + nextItems.length < filteredResults.length)
             setIsLoadingMore(false)
@@ -66,7 +68,7 @@ export function SearchOverlay({
 
         const { scrollTop, scrollHeight, clientHeight } = container
         const threshold = 50 // 减小阈值，更容易触发加载
-        
+
         // 添加调试信息
         console.log("Scroll check:", {
             scrollTop,
@@ -96,7 +98,7 @@ export function SearchOverlay({
     useEffect(() => {
         const container = scrollContainerRef.current
         if (!container || filteredResults.length <= itemsPerLoad) return
-        
+
         // 检查内容是否不足一屏，如果是则自动加载更多
         if (container.scrollHeight <= container.clientHeight && hasMore && !isLoadingMore) {
             console.log("Auto-loading more items due to short content")
@@ -127,6 +129,7 @@ export function SearchOverlay({
                                 {displayedResults.map((agent) => (
                                     <AgentCard
                                         key={agent.id}
+                                        onClick={() => onCardClick(agent)}
                                         agent={{
                                             id: agent.id.toString(),
                                             name: agent.name,
