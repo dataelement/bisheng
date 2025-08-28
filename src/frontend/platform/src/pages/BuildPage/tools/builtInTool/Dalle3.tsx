@@ -18,7 +18,7 @@ const temp = {
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation();
-
+    const [pro,setPro] = useState('')
     const [localFormData, setLocalFormData] = useState(() => {
         if (!formData || Object.keys(formData).length === 0) {
             return { ...temp };
@@ -31,6 +31,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
         // 根据provider类型决定显示哪个API Key
         let displayApiKey = '';
         console.log(provider,222);
+        setPro(provider)
         
         if (provider === 'openai') {
             displayApiKey = formData.openai_api_key || '';
@@ -56,6 +57,13 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     };
 
     const handleProviderChange = (value) => {
+        console.log(value,pro,formData.openai_api_key);
+        
+        if(value!==pro){
+            localFormData.openai_api_key=''
+        }else{
+            localFormData.openai_api_key=formData.openai_api_key
+        }
         setLocalFormData((prev) => ({ ...prev, provider: value }));
     };
 
