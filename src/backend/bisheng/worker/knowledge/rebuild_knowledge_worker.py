@@ -18,7 +18,6 @@ from bisheng.worker import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)
-@bisheng_celery.task(acks_late=True)
 def rebuild_knowledge_celery(knowledge_id: int, new_model_id: str) -> str:
     """
     重建知识库的异步任务
