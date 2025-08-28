@@ -2,29 +2,32 @@ import asyncio
 import copy
 import datetime
 import json
+import os
 import time
 from abc import abstractmethod
 from typing import List, Optional, Any
 
+import aiofiles
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, AIMessage
 from langchain_openai.chat_models.base import _convert_message_to_dict
-from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 from bisheng_langchain.linsight.const import TaskStatus, CallUserInputToolName, ExecConfig
 from bisheng_langchain.linsight.event import ExecStep, GenerateSubTask, BaseEvent, NeedUserInput, TaskStart, TaskEnd
 from bisheng_langchain.linsight.prompt import SingleAgentPrompt, SummarizeHistoryPrompt, LoopAgentSplitPrompt, \
-    LoopAgentPrompt, SummarizeAnswerPrompt
+    LoopAgentPrompt, SummarizeAnswerPrompt, SplitEvent
 from bisheng_langchain.linsight.utils import encode_str_tokens, generate_uuid_str, \
-    record_llm_prompt, extract_json_from_markdown
+    record_llm_prompt, extract_json_from_markdown, get_model_name_from_llm
 
 
 class BaseTask(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     id: str = Field(..., description='Unique ID')
-    parent_id: Optional[str] = Field(default=None, description='父任务id')
-    next_id: Optional[list[str]] = Field(default=None, description='下一批任务的id列表')
+    parent_id: Optional[str] = Field(default=None, description='父任务id，有则说明是二级任务')
+    next_id: Optional[list[str]] = Field(default=None, description='依赖当前任务的任务id列表')
+    first_task: bool = Field(default=False, description='是否是第一个任务，有些逻辑需要知道是否是首个任务')
 
     query: str = Field(..., description='用户问题')
     file_dir: str = Field(default="", description='存储文件的目录')
@@ -38,6 +41,7 @@ class BaseTask(BaseModel):
     task_manager: Optional[Any] = Field(None, description='Task manager for handling tasks and workflows')
     user_input: Optional[str] = Field(default=None, description='用户输入的内容')
     exec_config: ExecConfig = Field(default_factory=ExecConfig, description='执行过程中的配置')
+    file_list: Optional[list[str]] = Field(default_factory=list, description='用户上传的所有文件列表')
     file_list_str: Optional[str] = Field(default='', description='用户上传的文件列表字符串')
 
     # llm generate task field
@@ -62,16 +66,10 @@ class BaseTask(BaseModel):
     original_done: Optional[str] = Field(default='', description='已完成的内容')
     last_answer: Optional[str] = Field(default='', description='上一步骤的答案，暂无用处')
 
-    @field_validator("display_target", mode="before")
-    @classmethod
-    def auto_set_display_target(cls, v, values):
-        if v is None or v == "":
-            return values.data.get("target", "")
-        return v
-
     @model_validator(mode="before")
     @classmethod
     def validate_task(cls, values: dict) -> dict:
+        # Convert all string fields to str type, because llm may generate them as int or other types
         if values.get("target"):
             values["target"] = str(values["target"])
         if values.get("prompt"):
@@ -86,6 +84,18 @@ class BaseTask(BaseModel):
             values["profile"] = str(values["profile"])
         if values.get("workflow"):
             values["workflow"] = str(values["workflow"])
+        if values.get("precautions"):
+            values["precautions"] = str(values["precautions"])
+        if not values.get("display_target"):
+            values["display_target"] = values.get("target", "")
+        else:
+            values["display_target"] = str(values["display_target"])
+        if values.get("original_query"):
+            values["original_query"] = str(values["original_query"])
+        if values.get("original_method"):
+            values["original_method"] = str(values["original_method"])
+        if values.get("original_done"):
+            values["original_done"] = str(values["original_done"])
         return values
 
     def get_task_info(self) -> dict:
@@ -99,10 +109,33 @@ class BaseTask(BaseModel):
             if key == "query":
                 continue
             step_answer = await self.task_manager.get_step_answer(key)
-            input_str += f"{key}: \"{step_answer}\"\n"
+            input_str += f"<{key}的输出>\n{step_answer}\n</{key}的输出>\n"
         if input_str:
             input_str = f"输入：\n{input_str}"
         return input_str
+
+    async def _base_invoke_llm(self, llm: BaseLanguageModel, tools: Optional[list[dict]], messages: list[BaseMessage],
+                               **kwargs) -> BaseMessage:
+        for i in range(max(self.exec_config.retry_num, 1)):
+            try:
+                # get tool schema
+                start_time = time.time()
+                if tools:
+                    res = await llm.ainvoke(messages, tools=tools, **kwargs)
+                else:
+                    res = await llm.ainvoke(messages, **kwargs)
+                if self.exec_config.debug and res:
+                    record_llm_prompt(llm, "\n".join([one.text() for one in messages]), res.text(),
+                                      res, time.time() - start_time,
+                                      self.exec_config.debug_id)
+                return res
+            except Exception as e:
+                if i == self.exec_config.retry_num - 1:
+                    raise e
+                else:
+                    await asyncio.sleep(self.exec_config.retry_sleep)
+                    continue
+        raise Exception("Failed to invoke LLM after retries.")
 
     async def _ainvoke_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
@@ -110,24 +143,8 @@ class BaseTask(BaseModel):
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
-        for i in range(max(self.exec_config.retry_num, 1)):
-            try:
-                # get tool schema
-                tool_args = self.task_manager.get_all_tool_schema
-                start_time = time.time()
-                res = await self.llm.ainvoke(messages, tools=tool_args, **kwargs)
-                if self.exec_config.debug and res:
-                    record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                                      res, time.time() - start_time,
-                                      self.exec_config.debug_id)
-                return res
-            except Exception as e:
-                if i == self.exec_config.retry_num - 1:
-                    raise e
-                else:
-                    await asyncio.sleep(self.exec_config.retry_sleep)
-                    continue
-        raise Exception("Failed to invoke LLM after retries.")
+        tools = self.task_manager.get_all_tool_schema
+        return await self._base_invoke_llm(self.llm, tools, messages, **kwargs)
 
     async def _ainvoke_llm_without_tools(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
         """
@@ -135,22 +152,72 @@ class BaseTask(BaseModel):
         :param messages: List of messages to be sent to the language model.
         :return: The response from the language model.
         """
-        for i in range(max(self.exec_config.retry_num, 1)):
-            try:
-                start_time = time.time()
-                res = await self.llm.ainvoke(messages, **kwargs)
-                if self.exec_config.debug and res:
-                    record_llm_prompt(self.llm, "\n".join([one.text() for one in messages]), res.text(),
-                                      res, time.time() - start_time,
-                                      self.exec_config.debug_id)
-                return res
-            except Exception as e:
-                if i == self.exec_config.retry_num - 1:
-                    raise e
-                else:
-                    await asyncio.sleep(self.exec_config.retry_sleep)
-                    continue
-        raise Exception("Failed to invoke LLM after retries.")
+        return await self._base_invoke_llm(self.llm, None, messages, **kwargs)
+
+    async def _split_task_llm(self, messages: list[BaseMessage], **kwargs) -> BaseMessage:
+        """
+        Invoke the language model to split the task into subtasks.
+        :param messages: List of messages to be sent to the language model.
+        :return: The response from the language model containing the split tasks.
+        """
+        model_name = get_model_name_from_llm(llm=self.llm)
+        # 目前只支持openai模型的json模式输出
+        if model_name.startswith("gpt"):
+            kwargs["response_format"] = SplitEvent
+        return await self._base_invoke_llm(self.llm, None, messages, **kwargs)
+
+    async def _get_all_files(self, dir_path: str) -> List[str]:
+        """
+        获取指定目录下的所有文件路径
+        Get all file paths in the specified directory.
+        :param dir_path: The directory path to search for files.
+        :return: A list of file paths.
+        """
+        file_paths = []
+        if not os.path.exists(dir_path):
+            return file_paths
+        for entry in os.scandir(dir_path):
+            if entry.is_file():
+                file_paths.append(entry.path)
+            elif entry.is_dir():
+                # 如果是目录，则递归获取子目录的文件
+                sub_files = await self._get_all_files(entry.path)
+                file_paths.extend(sub_files)
+            else:
+                raise FileNotFoundError
+        return file_paths
+
+    async def _get_file_content(self) -> str:
+        """
+        切分任务时获取文件内容
+        Get the content of the files uploaded by the user.
+        :return: A string containing the content of the files.
+        """
+        file_content = ""
+        ignore_files = ""
+        # 如果是第一个任务则获取用户上传的文件内容
+        if self.first_task:
+            if not self.file_list:
+                return file_content
+        else:
+            # 否则获取中间过程产生的文件内容, 不包含用户上传的文件
+            ignore_files = ";".join(self.file_list)
+
+        all_files = await self._get_all_files(self.file_dir)
+        for one_file in all_files:
+            one_file_name = os.path.basename(one_file)
+            if one_file_name in ignore_files:
+                continue
+            one_file_content = ""
+            async with aiofiles.open(one_file, mode="r", encoding="utf-8") as f:
+                async for line in f:
+                    one_file_content += line
+                    if len(one_file_content) > self.exec_config.file_content_length:
+                        one_file_content = one_file_content[:self.exec_config.file_content_length]
+                        break
+            if one_file_content:
+                file_content += f"{one_file_name}文件内容:\n{one_file_content}\n\n"
+        return file_content
 
     async def handle_user_input(self, user_input: str) -> None:
         """
@@ -222,15 +289,16 @@ class BaseTask(BaseModel):
                                              step_list=self.task_manager.get_step_list(),
                                              processed_steps=self.task_manager.get_processed_steps(),
                                              input_str=await self.get_input_str(),
+                                             file_content=await self._get_file_content(),
                                              prompt=self.target,
                                              precautions=self.precautions)
         messages = [HumanMessage(content=prompt)]
         sub_task = None
         for i in range(self.exec_config.retry_num):
             if i > 0:
-                res = await self._ainvoke_llm_without_tools(messages, temperature=self.exec_config.retry_temperature)
+                res = await self._split_task_llm(messages, temperature=self.exec_config.retry_temperature)
             else:
-                res = await self._ainvoke_llm_without_tools(messages)
+                res = await self._split_task_llm(messages)
             try:
                 # 解析生成的任务json数据
                 sub_task = extract_json_from_markdown(res.content)

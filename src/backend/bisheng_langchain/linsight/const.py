@@ -13,6 +13,7 @@ class ExecConfig(BaseModel):
     retry_sleep: int = Field(default=5, description='灵思任务执行过程中模型调用重试间隔时间（秒）')
     max_file_num: int = Field(default=5, description='生成SOP时，prompt里放的用户上传文件信息的数量')
     retry_temperature: float = Field(default=1, description='重试时的模型温度')
+    file_content_length: int = Field(default=5000, description='拆分子任务时读取文件内容的字符数，超过后会截断')
 
 
 CallUserInputToolName = "call_user_input"

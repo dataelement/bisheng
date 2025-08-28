@@ -5,7 +5,12 @@ from typing import List, Dict, Any
 
 from loguru import logger
 
+from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.database.models import LinsightSessionVersion, LinsightExecuteTask
+from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum
+from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
+from bisheng.linsight.state_message_manager import LinsightStateMessageManager
+from bisheng.settings import settings
 from bisheng.utils import util
 from bisheng.utils.minio_client import minio_client
 from bisheng.utils.util import sync_func_to_async
@@ -272,3 +277,69 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
         # 发生异常时，返回原始事件，不做任何修改
 
     return event
+
+
+# 启动worker时检查是否有未完成的任务并终止
+async def check_and_terminate_incomplete_tasks():
+    """
+    检查是否有未完成的任务并终止
+    """
+
+    # 清理Redis中的任务数据
+    await LinsightStateMessageManager.cleanup_all_sessions()
+
+    try:
+        incomplete_linsight_session_versions = await LinsightSessionVersionDao.get_session_versions_by_status(
+            status=SessionVersionStatusEnum.IN_PROGRESS)
+
+        if not incomplete_linsight_session_versions:
+            logger.info("没有未完成的灵思会话版本，跳过终止操作")
+            return
+        logger.warning(f"发现 {len(incomplete_linsight_session_versions)} 个未完成的灵思会话版本，准备终止它们")
+
+        user_ids = [session.user_id for session in incomplete_linsight_session_versions]
+
+        session_version_ids = [session.id for session in incomplete_linsight_session_versions]
+
+        # 批量更新会话状态为已终止
+        await LinsightSessionVersionDao.batch_update_session_versions_status(
+            session_version_ids=session_version_ids,
+            status=SessionVersionStatusEnum.FAILED,
+            output_result={
+                "error_message":"后端服务重启"
+            }
+        )
+
+        # 批量更新执行任务状态为已终止
+        await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
+            session_version_ids=session_version_ids,
+            status=ExecuteTaskStatusEnum.FAILED,
+            where=(
+                LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
+                LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED
+            )
+
+        )
+
+        logger.warning(f"已终止 {len(incomplete_linsight_session_versions)} 个未完成的灵思会话版本和相关执行任务")
+
+        system_config = await settings.aget_all_config()
+        # 获取Linsight_invitation_code
+        linsight_invitation_code = system_config.get("linsight_invitation_code", False)
+
+        # 回滚邀请码
+        if linsight_invitation_code:
+            for user_id in user_ids:
+                try:
+                    await InviteCodeService.revoke_invite_code(user_id=user_id)
+                    logger.info(f"已回滚用户 {user_id} 的邀请码")
+                except Exception as e:
+                    logger.error(f"回滚用户 {user_id} 的邀请码失败: {e}")
+
+        else:
+            logger.warning("系统配置中未启用 Linsight 邀请码功能，跳过回滚操作")
+
+        logger.info("检查并终止未完成任务操作已完成")
+    except Exception as e:
+        logger.error(f"检查并终止未完成任务时发生异常: {e}")
+        return

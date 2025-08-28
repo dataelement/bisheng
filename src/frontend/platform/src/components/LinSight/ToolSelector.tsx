@@ -318,6 +318,7 @@ const ToolSelector = ({
                 value={toolSearchTerm}
                 onChange={(e) => setToolSearchTerm(e.target.value)}
                 onClear={() => setToolSearchTerm('')}
+                
               />
             </div>
 

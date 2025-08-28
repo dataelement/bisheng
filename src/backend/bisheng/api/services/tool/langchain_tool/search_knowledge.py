@@ -15,8 +15,8 @@ from bisheng.utils.embedding import decide_embeddings
 
 class ToolInput(BaseModel):
     query: str = Field(..., description='需要检索的关键词')
-    knowledge_id: Optional[str] = Field(default=None, description='语义检索库id')
-    limit: Optional[int] = Field(default=2, description='返回结果的最大数量')
+    knowledge_id: str = Field(..., description='语义检索库id')
+    limit: int = Field(default=2, description='返回结果的最大数量')
     call_reason: str = Field(default='', description='调用该工具的原因，原因中不要使用id来描述文件或知识库')
 
 

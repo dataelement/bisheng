@@ -42,9 +42,10 @@ class TaskManage(BaseModel):
         return self
 
     def rebuild_tasks(self, query: str, llm: BaseLanguageModel, file_dir: str, sop: str,
-                      exec_config: ExecConfig, file_list_str: str = '') -> None:
+                      exec_config: ExecConfig, file_list: list[str], file_list_str: str = '') -> None:
         res = []
         child_map = {}  # task_id: [child_task]
+        first_task = True
         for task in self.tasks:
             if not isinstance(task, dict):
                 raise TypeError(f"Task must be an instance of dict, not {type(task)}")
@@ -56,6 +57,7 @@ class TaskManage(BaseModel):
                                      file_dir=file_dir,
                                      finally_sop=sop,
                                      exec_config=exec_config,
+                                     file_list=file_list,
                                      file_list_str=file_list_str)
             else:
                 task_instance = ReactTask(**task,
@@ -65,7 +67,10 @@ class TaskManage(BaseModel):
                                           file_dir=file_dir,
                                           finally_sop=sop,
                                           exec_config=exec_config,
+                                          file_list=file_list,
                                           file_list_str=file_list_str)
+            task_instance.first_task = first_task
+            first_task = False
             if task_instance.parent_id is None:
                 res.append(task_instance)
                 continue

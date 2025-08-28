@@ -1,10 +1,9 @@
-import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List
-from uuid import UUID
+from typing import Optional, Dict, List, Tuple, Union
 
-from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey
+from sqlalchemy import Enum as SQLEnum, Column, JSON, Text, DateTime, text, CHAR, ForeignKey, ColumnExpressionArgument, \
+    update
 from sqlmodel import Field, select, col
 from bisheng.database.base import async_session_getter, uuid_hex
 from bisheng.database.models.base import SQLModelSerializable
@@ -154,3 +153,30 @@ class LinsightExecuteTaskDao(object):
             await session.commit()
             await session.refresh(task)
             return task
+
+    # 根据session_version_id批量更新任务状态
+    @classmethod
+    async def batch_update_status_by_session_version_id(cls, session_version_ids: List[str],
+                                                        status: ExecuteTaskStatusEnum,
+                                                        where) -> None:
+        """
+        根据会话版本ID批量更新任务状态
+        :param session_version_ids:
+        :param status:
+        :param where:
+        :return:
+        """
+
+        async with async_session_getter() as session:
+            statement = (
+                update(LinsightExecuteTask)
+                .where(col(LinsightExecuteTask.session_version_id).in_(session_version_ids))  # 显式转 str
+            )
+
+            if where:
+                statement = statement.where(*where)
+
+            statement = statement.values(status=status)
+
+            await session.exec(statement)
+            await session.commit()
