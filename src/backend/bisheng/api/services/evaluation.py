@@ -1,6 +1,5 @@
 import asyncio
 import io
-import json
 import os
 from collections import defaultdict
 from copy import deepcopy
@@ -95,7 +94,7 @@ class EvaluationService:
             if one.version:
                 evaluation_item['version_name'] = flow_versions.get(one.version)
             if one.result_score:
-                evaluation_item['result_score'] = json.loads(one.result_score)
+                evaluation_item['result_score'] = one.result_score
 
             # 处理任务进度
             if one.status != EvaluationTaskStatus.running.value:

@@ -1,7 +1,9 @@
+import json
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
+from pydantic import field_validator
 from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
 from sqlmodel import Field, select
 
@@ -42,6 +44,13 @@ class EvaluationBase(SQLModelSerializable):
                                                              nullable=True,
                                                              server_default=text('CURRENT_TIMESTAMP'),
                                                              onupdate=text('CURRENT_TIMESTAMP')))
+
+    @field_validator('result_score', mode='before')
+    @classmethod
+    def validate_result_score(cls, value):
+        if value and isinstance(value, str):
+            return json.loads(value)
+        return value
 
 
 class Evaluation(EvaluationBase, table=True):
