@@ -1,6 +1,7 @@
 export enum EvaluationType {
   flow = "flow",
   assistant = "assistant",
+  workflow = "workflow"
 }
 
 export const EvaluationTypeLabelMap = {
@@ -9,6 +10,9 @@ export const EvaluationTypeLabelMap = {
   },
   [EvaluationType.assistant]: {
     label: "build.assistant",
+  },
+   [EvaluationType.workflow]: {
+    label: "build.workflow",
   },
 };
 
