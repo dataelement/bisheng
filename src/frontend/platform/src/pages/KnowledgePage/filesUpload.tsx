@@ -69,8 +69,8 @@ export default function FilesUpload() {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const adjustedStepLabels = isAdjustMode
-        ? ['分段策略', '原文对比', '数据处理']
-        : ['上传文件', '分段策略', '原文对比', '数据处理'];
+        ? [t('segmentStrategy'),t('textComparison'),   t('dataProcessing')]
+        : [t('uploadFile'), t('segmentStrategy'), t('textComparison'),  t('dataProcessing')];
 
     const _tempConfigRef = useRef({})
 
