@@ -48,9 +48,7 @@ export const TaskControls = ({
         current ? tasks.findIndex(t => t.id === current.id) + 1 : 1
     ), [current, tasks]);
 
-    const [stoped, setStoped] = useState(userRequestedStop)
     const handleStopClick = () => {
-        setStoped(true)
         onStop()
     }
 
@@ -93,7 +91,7 @@ export const TaskControls = ({
                                         <span className='whitespace-nowrap text-sm text-gray-600'>显示概览窗口</span>
                                         <Switch onCheckedChange={setShowOverview} />
                                         {
-                                            !stoped && !userRequestedStop && <Button
+                                            !userRequestedStop && !userRequestedStop && <Button
                                                 className='ml-4 text-primary border-primary'
                                                 variant="outline"
                                                 onClick={handleStopClick}
@@ -106,7 +104,7 @@ export const TaskControls = ({
                             </div>
                         )}
                         {isCompleted && !feedbackProvided && (
-                            <FeedbackComponent stop={stoped} onFeedback={feedback} />
+                            <FeedbackComponent stop={userRequestedStop} onFeedback={feedback} />
                         )}
                     </div>
                 </motion.div>

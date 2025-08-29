@@ -33,7 +33,7 @@ export interface FormErrors {
     systemPrompt: string;
     model: string;
     kownledgeBase: string;
-       applicationCenterWelcomeMessage: string;
+    applicationCenterWelcomeMessage: string;
     applicationCenterDescription: string;
 }
 
@@ -105,8 +105,6 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
-       applicationCenterWelcomeMessage: string;
-    applicationCenterDescription: string;
 }
 
 export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
@@ -118,9 +116,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
-     const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
-    const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
-
     const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
@@ -137,9 +132,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         knowledgeBaseRef,
         modelRefs,
         webSearchRef,
-        systemPromptRef,
-         appCenterWelcomeRef,
-        appCenterDescriptionRef
+        systemPromptRef
     }, parentFormData, parentSetFormData);
 
     useEffect(() => {
@@ -155,31 +148,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             navigate('/build/apps')
         }
     }, [user])
-useEffect(() => {
-    if (!parentFormData) {
-        console.log("parentFormData is null", parentFormData);
+    useEffect(() => {
+        if (!parentFormData) {
+            console.log("parentFormData is null", parentFormData);
 
-        getWorkstationConfigApi().then(res => {
-            if (res) {
-                setWebSearchData(res.webSearch);
-                
-                // 确保 systemPrompt 有值，如果 API 返回为空则使用默认值
-                const defaultSystemPrompt =`你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
-在回答时，请注意以下几点：
-- 当前时间是{cur_date}。
-- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
-- 确保回答不违反法律法规、道德准则和公序良俗。`
-                const systemPrompt = res.systemPrompt || defaultSystemPrompt;
-                
-                setFormData({
-                    ...res,
-                    systemPrompt // 确保 systemPrompt 有值
-                });
-            }
-        });
-    }
-}, []);
+            getWorkstationConfigApi().then(res => {
+                setWebSearchData(res.webSearch)
+                setFormData(res)
+            })
+        }
 
+    }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -415,7 +394,6 @@ useEffect(() => {
                                 </Button>
                             }
                         >
-                            {console.log(1111, webSearchData, formData.webSearch.prompt)}
                             <WebSearchConfig
                                 config={formData.webSearch.prompt}
                                 onChange={handleWebSearchChange}
@@ -474,7 +452,7 @@ useEffect(() => {
                     <WebSearchForm
                         prompt={formData.webSearch.prompt}
                         enabled={formData.webSearch.enabled}
-                        formData={formData.webSearch}
+                        formData={formData}
                         onSubmit={handleWebSearchSave}
                     />
                 </DialogContent>
@@ -493,7 +471,7 @@ interface UseChatConfigProps {
     modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
     webSearchRef: React.RefObject<HTMLDivElement>;
     systemPromptRef: React.RefObject<HTMLDivElement>;
-        appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
+    appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
     appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -508,7 +486,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
-           applicationCenterWelcomeMessage: '',
+        applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
         models: [{ key: generateUUID(4), id: null, name: '', displayName: '' }],
         maxTokens: 15000,
@@ -578,10 +556,9 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 - 确保回答不违反法律法规、道德准则和公序良俗。`
                 const systemPrompt = res.systemPrompt || defaultSystemPrompt;
                 
-                setFormData({
-                    ...res,
-                    systemPrompt // 确保 systemPrompt 有值
-                });
+                setFormData((prev) => {
+                    return 'menuShow' in res ? res : { ...prev, ...res, systemPrompt }
+                })
             }
         });
     }
@@ -811,8 +788,8 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
-             applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim(), 
-        applicationCenterDescription: formData.applicationCenterDescription.trim(), 
+            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim(), 
+            applicationCenterDescription: formData.applicationCenterDescription.trim(), 
             maxTokens: formData.maxTokens || 15000,
         };
 

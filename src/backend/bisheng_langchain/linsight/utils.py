@@ -80,6 +80,22 @@ def generate_uuid_str() -> str:
     return uuid.uuid4().hex
 
 
+def get_model_name_from_llm(llm: BaseLanguageModel) -> str:
+    """
+    Get the model name from a BaseLanguageModel instance.
+    :param llm: An instance of BaseLanguageModel.
+    :return: The model name as a string. If the model name cannot be determined, returns "unknown_model".
+    """
+    try:
+        model_name = getattr(llm, "model")
+    except AttributeError:
+        try:
+            model_name = getattr(llm, "model_name") or getattr(llm, "deployment_name")
+        except AttributeError:
+            model_name = "unknown_model"
+    return model_name
+
+
 def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_usage: Any, cost_time: float,
                       debug_id: str):
     if not debug_id:
@@ -98,13 +114,8 @@ def record_llm_prompt(llm: BaseLanguageModel, prompt: str, answer: str, token_us
                 'cached_tokens', 0) or token_usage.get('input_tokens_details', {}).get('cache_read', 0)
     except Exception:
         pass
-    try:
-        model_name = getattr(llm, "model")
-    except AttributeError:
-        try:
-            model_name = getattr(llm, "model_name") or getattr(llm, "deployment_name", "unknown_model")
-        except AttributeError:
-            model_name = "unknown_model"
+
+    model_name = get_model_name_from_llm(llm)
 
     debug_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "linsightdebug"))
     os.makedirs(debug_path, exist_ok=True)

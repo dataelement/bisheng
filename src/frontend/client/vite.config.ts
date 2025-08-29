@@ -46,7 +46,7 @@ export default defineConfig({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.116:9000',
+        target: 'http://192.168.106.120:3002',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {

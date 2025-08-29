@@ -364,7 +364,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     config = parentFormData;
                 }
 
-                if (config) {
+                if (config && 'menuShow' in config) {
                     setFormData({
                         ...defaultFormValues,
                         ...config,
@@ -383,6 +383,11 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                     if (tools?.length > 0) {
                         setSelectedTools(tools);
                     }
+                } else {
+                    setFormData((prev) => ({
+                        ...prev,
+                        ...config
+                    }))
                 }
             } catch (error) {
                 toast({ variant: 'error', description: '初始化数据加载失败' });
@@ -1026,7 +1031,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             {...getLocalFileRootProps()}
                             className="group h-40 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary"
                         >
-                            <input {...getLocalFileInputProps()}/>
+                            <input {...getLocalFileInputProps()} />
                             <UploadIcon className="group-hover:text-primary size-5" />
                             <p className="text-sm">{t('code.clickOrDragHere')}</p>
 

@@ -277,6 +277,11 @@ const Task = ({
             )}
             <div className={isExpanded ? 'block' : 'hidden'}>
                 {children}
+                {/* 任务总结 */}
+                {task.status !== 'failed' && task.errorMsg && <div className='bs-mkdown relative mb-6 text-sm px-4 py-3 rounded-lg bg-[#F8F9FB] text-[#303133] leading-6 break-all'>
+                    <Markdown content={task.errorMsg} isLatestMessage={true} webContent={false} />
+                    <div className='bg-gradient-to-t w-full h-10 from-[#F8F9FB] from-0% to-transparent to-100% absolute bottom-0'></div>
+                </div>}
             </div>
             {/* error */}
             {task.status === 'failed' && task.errorMsg && <ErrorDisplay title="任务执行中断" taskError={task.errorMsg} />}

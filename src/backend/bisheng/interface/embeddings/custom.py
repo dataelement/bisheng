@@ -2,6 +2,7 @@ from typing import List, Optional, Dict
 
 import numpy as np
 from langchain.embeddings.base import Embeddings
+from langchain_community.embeddings.dashscope import BATCH_SIZE
 from loguru import logger
 from pydantic import ConfigDict, Field, BaseModel
 
@@ -9,6 +10,8 @@ from bisheng.database.models.llm_server import (LLMDao, LLMModel, LLMModelType, 
                                                 LLMServerType)
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.utils import wrapper_bisheng_model_limit_check
+
+BATCH_SIZE["text-embedding-v4"] = 10  # 设置DashScope的批处理大小为1
 
 
 class OpenAIProxyEmbedding(Embeddings):
@@ -110,8 +113,6 @@ class BishengEmbedding(BaseModel, Embeddings):
         class_object = self._get_embedding_class(server_info.type)
         params = self._get_embedding_params(server_info, model_info)
         try:
-            if server_info.type == LLMServerType.OLLAMA.value:
-                params['query_instruction'] = 'passage: '
             self.embeddings = instantiate_embedding(class_object, params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
@@ -150,6 +151,10 @@ class BishengEmbedding(BaseModel, Embeddings):
         ]:
             params['openai_api_key'] = params.pop('openai_api_key', None) or 'EMPTY'
             params['chunk_size'] = params.pop('chunk_size', 1)
+        elif server_info.type == LLMServerType.OPENAI.value:
+            params['chunk_size'] = params.pop('chunk_size', 1)
+        elif server_info.type == LLMServerType.OLLAMA.value:
+            params['query_instruction'] = 'passage: '
         return params
 
     @wrapper_bisheng_model_limit_check

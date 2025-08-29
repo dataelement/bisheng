@@ -54,6 +54,7 @@ class LinsightStateMessageManager:
     DEFAULT_EXPIRATION = 3600
     DEFAULT_RETRY_ATTEMPTS = 3
     DEFAULT_RETRY_DELAY = 1
+    KEY_PREFIX = "linsight_tasks:"
 
     def __init__(self, session_version_id: str):
         """
@@ -67,7 +68,7 @@ class LinsightStateMessageManager:
         self._logger = logger
 
         # Redis key管理
-        self._key_prefix = f"linsight_tasks:{self._session_version_id}:"
+        self._key_prefix = f"{self.KEY_PREFIX}{session_version_id}:"
         self._keys = {
             'session_version_info': f"{self._key_prefix}session_version_info",
             'messages': f"{self._key_prefix}messages",
@@ -433,3 +434,21 @@ class LinsightStateMessageManager:
         except Exception as e:
             self._logger.error(f"Failed to get session stats: {e}")
             return {'error': str(e)}
+
+
+    # 清理所有会话相关的Redis数据
+    @classmethod
+    async def cleanup_all_sessions(cls) -> None:
+        """
+        清理所有会话相关的Redis数据
+        """
+        try:
+            pattern = f"{cls.KEY_PREFIX}*"
+            keys = await redis_client.async_connection.keys(pattern)
+
+            if keys:
+                await redis_client.async_connection.delete(*keys)
+                logger.info(f"Cleaned up {len(keys)} keys for all sessions")
+        except Exception as e:
+            logger.error(f"Failed to cleanup all session data: {e}")
+            return

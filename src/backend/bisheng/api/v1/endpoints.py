@@ -354,6 +354,7 @@ async def get_download_url(object_name: str):
     minio_client = MinioClient()
     try:
         url = minio_client.get_share_link(object_name)
+        url = minio_client.clear_minio_share_host(file_url=url)
         return resp_200(url)
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')

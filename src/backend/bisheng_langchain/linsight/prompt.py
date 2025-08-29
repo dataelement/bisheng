@@ -1,3 +1,5 @@
+from pydantic import BaseModel
+
 # 生成sop的prompt模板, variables -> query: 用户问题；sop：参考sop; tools_str: 已有工具字符串；file_list_str: 用户上传的文件名列表
 # knowledge_list_str: 用户有权限的知识库列表
 SopPrompt = """<背景>
@@ -208,9 +210,28 @@ SingleAgentPrompt = """你是一个强大的{profile}，可以使用提供的工
 
 请根据阶段目标，使用适当的工具来完成任务，如果是最后一步，回答需要明确当前任务的产出内容是什么。"""
 
+
+class TaskItem(BaseModel):
+    思考: str
+    标题层级类型: str
+    标题层级: str
+    当前目标: str
+    当前方法: str
+    输出方法: str
+
+
+class SplitEvent(BaseModel):
+    总体思考: str
+    总体任务目标: str
+    总体方法: str
+    已经完成的内容: str
+    可用资源: str
+    任务列表: list[TaskItem]
+
+
 # 并发agent拆分子任务的prompt模板
 # variables -> query: 用户问题；sop: 用户SOP；step_list: 任务整体规划；
-# processed_steps: 已经处理的步骤；input_str: 用户输入信息; prompt: 当前阶段问题
+# processed_steps: 已经处理的步骤；input_str: 前置任务的输出; prompt: 当前阶段问题；file_content: 用户上传的文件内容或者中间文件内容
 LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用户提供的任务要求，将复杂内容拆分为清晰、完整且互不重复的并行操作任务。请按以下规则执行：
 你需要先分析再拆解，分析用户的问题，并根据问题进行拆解。
 你的拆解将会逐个送入接下来的流程节点中进行处理。
@@ -244,6 +265,8 @@ LoopAgentSplitPrompt = """你是一名专业的流程拆解专家，请根据用
 你现在已经完成了{processed_steps}
 
 {input_str}
+
+{file_content}
 
 请用以下格式模板响应：
 ```json
