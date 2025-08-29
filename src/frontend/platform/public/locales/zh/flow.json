@@ -165,5 +165,13 @@
     "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
     "displayNameTooltip": "用户会话页面展示此名称",
     "variableNameTooltipFile": "用于存储用户会话页面填写的内容，可在临时会话文件列表中选择此变量",
-    "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量"
+    "variableNameTooltipOther": "用于存储用户会话页面填写的内容，可在其他节点中引用此变量",
+    "modelSettings": "模型设置",
+    "model": "模型",
+    "modelRequired": "模型不可为空",
+    "selectModel": "选择模型",
+    "predictCount": "预测问题数量",
+    "historyCount": "历史消息数量",
+    "temperature": "温度",
+    "predictionSettings": "预测配置"
 }

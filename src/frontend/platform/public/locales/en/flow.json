@@ -165,5 +165,13 @@
     "storeFilesSentInCurrentSession": "Store files sent in the current session",
     "displayNameTooltip": "Displayed on the user conversation page",
     "variableNameTooltipFile": "Used to store content entered on the user conversation page; can be selected from the temporary session file list",
-    "variableNameTooltipOther": "Used to store content entered on the user conversation page; can be referenced in other nodes"
+    "variableNameTooltipOther": "Used to store content entered on the user conversation page; can be referenced in other nodes",
+    "modelSettings": "Model Settings",
+    "model": "Model",
+    "modelRequired": "Model cannot be empty",
+    "selectModel": "Select Model",
+    "predictCount": "Prediction Count",
+    "historyCount": "History Count",
+    "temperature": "Temperature",
+    "predictionSettings": "Prediction Settings"
 }
