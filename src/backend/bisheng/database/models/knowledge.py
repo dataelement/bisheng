@@ -127,7 +127,11 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+        elif knowledge_type is False:
+            # 当显式传入False时，不过滤个人知识库
+            pass
         else:
+            # 默认情况下过滤掉个人知识库
             statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
             # 同时模糊检索知识库内的文件名称来查询对应的知识库
@@ -210,11 +214,13 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     def judge_knowledge_permission(cls, user_name: str,
-                                   knowledge_ids: List[int]) -> List[Knowledge]:
+                                   knowledge_ids: List[int], 
+                                   include_private: bool = False) -> List[Knowledge]:
         """
         根据用户名和知识库ID列表，获取用户有权限查看的知识库列表
         :param user_name: 用户名
         :param knowledge_ids: 知识库ID列表
+        :param include_private: 是否包含个人知识库
         :return: 返回用户有权限的知识库列表
         """
         # 获取用户信息
@@ -242,8 +248,15 @@ class KnowledgeDao(KnowledgeBase):
                                                           AccessType.KNOWLEDGE)
 
         # 查询是否包含了用户自己创建的知识库
-        user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
-                                                     filter_knowledge=knowledge_ids)
+        if include_private:
+            # 如果需要包含个人知识库，则不进行类型过滤
+            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                         filter_knowledge=knowledge_ids,
+                                                         knowledge_type=False)
+        else:
+            # 默认行为：过滤掉个人知识库
+            user_knowledge_list = cls.get_user_knowledge(user_info.user_id,
+                                                         filter_knowledge=knowledge_ids)
         if not role_access_list and not user_knowledge_list:
             return []
 

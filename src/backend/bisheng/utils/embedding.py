@@ -29,7 +29,8 @@ def create_knowledge_vector_store(knowledge_ids: List[str], user_name: str, chec
     params = {
         'user_name': user_name,
         'collection_name': [{'key': knowledge_id} for knowledge_id in knowledge_ids],
-        '_is_check_auth': check_auth
+        '_is_check_auth': check_auth,
+        '_include_private': True  # 新增参数，支持包含个人知识库
     }
     
     class_obj = import_vectorstore(node_type)
@@ -60,7 +61,8 @@ def create_knowledge_keyword_store(knowledge_ids: List[str], user_name: str, che
     params = {
         'user_name': user_name,
         'index_name': [{'key': knowledge_id} for knowledge_id in knowledge_ids],
-        '_is_check_auth': check_auth
+        '_is_check_auth': check_auth,
+        '_include_private': True  # 新增参数，支持包含个人知识库
     }
     
     class_obj = import_vectorstore(node_type)
