@@ -30,6 +30,7 @@ from bisheng.database.models.mark_task import MarkTaskDao
 
 from bisheng.cache.redis import redis_client
 from bisheng.database.base import session_getter
+from bisheng.database.models.api_key import ApiKeyDao, ApiKeyCreate, ApiKeyRead, ApiKeyUpdate
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.constants import AdminRole, DefaultRole
@@ -824,3 +825,145 @@ def md5_hash(string):
     md5 = hashlib.md5()
     md5.update(string.encode('utf-8'))
     return md5.hexdigest()
+
+
+@router.post('/user/api_key/create', status_code=200)
+async def create_api_key(*,
+                        request: Request,
+                        api_key_req: ApiKeyCreate,
+                        login_user: UserPayload = Depends(get_login_user)):
+    """
+    创建API Key
+    """
+    try:
+        # 检查用户是否已有太多API Key（可选限制）
+        existing_keys = ApiKeyDao.get_user_api_keys(login_user.user_id)
+        if len(existing_keys) >= 10:  # 限制每个用户最多10个API Key
+            raise HTTPException(status_code=400, detail='API Key数量已达上限')
+        
+        # 创建API Key
+        api_key = ApiKeyDao.create_api_key(login_user.user_id, api_key_req)
+        
+        # 记录审计日志
+        AuditLogService.create_api_key(login_user, get_request_ip(request), api_key)
+        
+        # 返回完整的API Key（只在创建时返回一次）
+        return resp_200({
+            'id': api_key.id,
+            'key_name': api_key.key_name,
+            'api_key': api_key.api_key,  # 完整的key
+            'expires_at': api_key.expires_at,
+            'create_time': api_key.create_time
+        })
+    except Exception as e:
+        logger.exception(f'create_api_key error: {e}')
+        raise HTTPException(status_code=500, detail='创建API Key失败')
+
+
+@router.get('/user/api_key/list', status_code=200)
+async def list_api_keys(login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取用户的API Key列表
+    """
+    try:
+        api_keys = ApiKeyDao.get_user_api_keys(login_user.user_id)
+        result = []
+        for key in api_keys:
+            key_read = ApiKeyRead(**key.__dict__)
+            key_read.mask_api_key()  # 遮盖API Key
+            result.append(key_read.__dict__)
+        
+        return resp_200(result)
+    except Exception as e:
+        logger.exception(f'list_api_keys error: {e}')
+        raise HTTPException(status_code=500, detail='获取API Key列表失败')
+
+
+@router.patch('/user/api_key/{api_key_id}', status_code=200)
+async def update_api_key(*,
+                        request: Request,
+                        api_key_id: int,
+                        api_key_update: ApiKeyUpdate,
+                        login_user: UserPayload = Depends(get_login_user)):
+    """
+    更新API Key
+    """
+    try:
+        # 检查API Key是否属于当前用户
+        existing_key = ApiKeyDao.get_api_key_by_id(api_key_id)
+        if not existing_key or existing_key.user_id != login_user.user_id:
+            raise HTTPException(status_code=404, detail='API Key不存在')
+        
+        # 更新API Key
+        updated_key = ApiKeyDao.update_api_key(api_key_id, api_key_update)
+        if not updated_key:
+            raise HTTPException(status_code=404, detail='API Key不存在')
+        
+        # 记录审计日志
+        AuditLogService.update_api_key(login_user, get_request_ip(request), updated_key)
+        
+        # 返回遮盖后的结果
+        key_read = ApiKeyRead(**updated_key.__dict__)
+        key_read.mask_api_key()
+        return resp_200(key_read.__dict__)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'update_api_key error: {e}')
+        raise HTTPException(status_code=500, detail='更新API Key失败')
+
+
+@router.delete('/user/api_key/{api_key_id}', status_code=200)
+async def delete_api_key(*,
+                        request: Request,
+                        api_key_id: int,
+                        login_user: UserPayload = Depends(get_login_user)):
+    """
+    删除API Key
+    """
+    try:
+        # 检查API Key是否属于当前用户
+        existing_key = ApiKeyDao.get_api_key_by_id(api_key_id)
+        if not existing_key or existing_key.user_id != login_user.user_id:
+            raise HTTPException(status_code=404, detail='API Key不存在')
+        
+        # 删除API Key
+        success = ApiKeyDao.delete_api_key(api_key_id)
+        if not success:
+            raise HTTPException(status_code=404, detail='API Key不存在')
+        
+        # 记录审计日志
+        AuditLogService.delete_api_key(login_user, get_request_ip(request), existing_key)
+        
+        return resp_200()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'delete_api_key error: {e}')
+        raise HTTPException(status_code=500, detail='删除API Key失败')
+
+
+@router.get('/user/api_key/{api_key_id}/usage', status_code=200)
+async def get_api_key_usage(*,
+                           api_key_id: int,
+                           login_user: UserPayload = Depends(get_login_user)):
+    """
+    获取API Key使用统计
+    """
+    try:
+        # 检查API Key是否属于当前用户
+        api_key = ApiKeyDao.get_api_key_by_id(api_key_id)
+        if not api_key or api_key.user_id != login_user.user_id:
+            raise HTTPException(status_code=404, detail='API Key不存在')
+        
+        return resp_200({
+            'total_uses': api_key.total_uses,
+            'last_used_at': api_key.last_used_at,
+            'is_active': api_key.is_active,
+            'expires_at': api_key.expires_at
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f'get_api_key_usage error: {e}')
+        raise HTTPException(status_code=500, detail='获取API Key使用统计失败')

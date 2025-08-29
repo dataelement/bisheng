@@ -37,6 +37,7 @@ import Report from "./pages/Report";
 import SystemPage from "./pages/SystemPage";
 import ResoucePage from "./pages/resoucePage";
 import { AppNumType } from "./types/app";
+import { ApiKeyPage } from "./pages/SystemPage/components/ApiKey";
 
 // react 与 react router dom版本不匹配
 // const FileLibPage = lazy(() => import(/* webpackChunkName: "FileLibPage" */ "./pages/FileLibPage"));
@@ -129,6 +130,7 @@ const privateRouter = [
   { path: "/report/:id/", element: <Report /> },
   { path: "/diff/:id/:vid/:cid", element: <ErrorHoc Comp={DiffFlowPage} /> },
   { path: "/reset", element: <ResetPwdPage /> },
+  { path: "/apikey", element: <ApiKeyPage /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <Navigate to="/" replace /> }
 ]

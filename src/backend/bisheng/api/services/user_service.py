@@ -8,6 +8,7 @@ from bisheng.api.errcode.base import UnAuthorizedError
 from bisheng.api.errcode.user import (UserLoginOfflineError, UserNameAlreadyExistError,
                                       UserNeedGroupAndRoleError)
 from bisheng.api.JWT import ACCESS_TOKEN_EXPIRE_TIME
+from bisheng.api.services.api_key_auth import ApiKeyAuth
 from bisheng.api.utils import md5_hash
 from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.cache.redis import redis_client
@@ -285,16 +286,22 @@ def get_assistant_list_by_access(role_id: int, name: str, page_num: int, page_si
     }
 
 
-async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
+async def get_login_user(request: Request, authorize: AuthJWT = Depends()) -> UserPayload:
     """
     获取当前登录的用户
     """
-    # 校验是否过期，过期则直接返回http 状态码的 401
-    authorize.jwt_required()
+    # 获取API Key
+    api_key = ApiKeyAuth.get_api_key_from_request(request)
+    user = None
+    if api_key:
+        user = ApiKeyAuth.authenticate_api_key(api_key)
+        user = UserPayload(**user) if user else None
+    if not user or not api_key:
+        # 校验是否过期，过期则直接返回http 状态码的 401
+        authorize.jwt_required()
 
-    current_user = json.loads(authorize.get_jwt_subject())
-    user = UserPayload(**current_user)
-
+        current_user = json.loads(authorize.get_jwt_subject())
+        user = UserPayload(**current_user)
     # 判断是否允许多点登录
     if not settings.get_system_login_method().allow_multi_login:
         # 获取access_token
@@ -305,11 +312,11 @@ async def get_login_user(authorize: AuthJWT = Depends()) -> UserPayload:
     return user
 
 
-async def get_admin_user(authorize: AuthJWT = Depends()) -> UserPayload:
+async def get_admin_user(request: Request, authorize: AuthJWT = Depends()) -> UserPayload:
     """
     获取超级管理账号，非超级管理员用户，抛出异常
     """
-    login_user = await get_login_user(authorize)
+    login_user = await get_login_user(request, authorize)
     if not login_user.is_admin():
         raise UnAuthorizedError.http_exception()
     return login_user
