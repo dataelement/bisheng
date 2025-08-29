@@ -116,6 +116,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
+    const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
+const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
@@ -132,7 +134,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         knowledgeBaseRef,
         modelRefs,
         webSearchRef,
-        systemPromptRef
+        systemPromptRef,
+          appCenterWelcomeRef, 
+    appCenterDescriptionRef,
     }, parentFormData, parentSetFormData);
 
     useEffect(() => {
@@ -790,7 +794,6 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             inputPlaceholder: formData.inputPlaceholder.trim(),
             applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim(), 
             applicationCenterDescription: formData.applicationCenterDescription.trim(), 
-            maxTokens: formData.maxTokens || 15000,
         };
 
         console.log('Saving data:', dataToSave);
