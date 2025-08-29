@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import os
 from collections import defaultdict
 from copy import deepcopy
@@ -62,7 +63,7 @@ class EvaluationService:
         flow_version_ids = []
 
         for one in res_evaluations:
-            if one.exec_type == ExecType.FLOW.value:
+            if one.exec_type in [ExecType.FLOW.value, ExecType.WORKFLOW.value]:
                 flow_ids.append(one.unique_id)
                 if one.version:
                     flow_version_ids.append(one.version)
@@ -87,14 +88,15 @@ class EvaluationService:
 
         for one in res_evaluations:
             evaluation_item = jsonable_encoder(one)
-            if one.exec_type == ExecType.FLOW.value:
+            if one.exec_type in [ExecType.FLOW.value, ExecType.WORKFLOW.value]:
                 evaluation_item['unique_name'] = flow_names.get(one.unique_id)
             if one.exec_type == ExecType.ASSISTANT.value:
                 evaluation_item['unique_name'] = assistant_names.get(one.unique_id)
             if one.version:
                 evaluation_item['version_name'] = flow_versions.get(one.version)
             if one.result_score:
-                evaluation_item['result_score'] = one.result_score
+                evaluation_item['result_score'] = json.loads(one.result_score) if isinstance(one.result_score,
+                                                                                             str) else one.result_score
 
             # 处理任务进度
             if one.status != EvaluationTaskStatus.running.value:
@@ -359,7 +361,7 @@ def add_evaluation_task(evaluation_id: int):
         }
 
         dataset = Dataset.from_dict(data_samples)
-        answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm)
+        answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm, human_prompt=evaluation.prompt)
         score = evaluate(dataset, metrics=[answer_correctness_bisheng])
         df = score.to_pandas()
         result = df.to_dict(orient="list")

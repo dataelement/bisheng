@@ -1,9 +1,7 @@
-import json
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from pydantic import field_validator
 from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
 from sqlmodel import Field, select
 
@@ -33,7 +31,7 @@ class EvaluationBase(SQLModelSerializable):
     status: int = Field(index=True, default=1, description='任务执行状态。1:执行中 2: 执行失败 3:执行成功')
     prompt: str = Field(default='', sa_column=Column(Text), description='评测指令文本')
     result_file_path: str = Field(default='', description='评测结果的 minio 地址')
-    result_score: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON), description='最终评测分数')
     description: str = Field(default='', sa_column=Column(Text), description='错误描述信息')
     is_delete: int = Field(default=0, description='是否删除')
     create_time: Optional[datetime] = Field(default=None,
@@ -44,13 +42,6 @@ class EvaluationBase(SQLModelSerializable):
                                                              nullable=True,
                                                              server_default=text('CURRENT_TIMESTAMP'),
                                                              onupdate=text('CURRENT_TIMESTAMP')))
-
-    @field_validator('result_score', mode='before')
-    @classmethod
-    def validate_result_score(cls, value):
-        if value and isinstance(value, str):
-            return json.loads(value)
-        return value
 
 
 class Evaluation(EvaluationBase, table=True):
