@@ -11,13 +11,14 @@ import { SettingIcon } from "../../bs-icons/setting";
 import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { Switch } from "../../bs-ui/switch";
+import { AppNumType, AppType, AppTypeToNum } from "@/types/app";
 
 interface IProps<T> {
   data: T,
   /** id为''时，表示新建 */
   id?: number | string,
   logo?: string,
-  type: "skill" | "sheet" | "assistant" | "setting", // 技能列表｜侧边弹窗列表
+  type: AppType | AppNumType;// 技能列表｜侧边弹窗列表
   title: string,
   edit?: boolean,
   description: React.ReactNode | string,
@@ -67,8 +68,52 @@ export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
   return <div className={cname(`rounded-md flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
-export function TitleLogo({ id = 0, url, className = '', children = <SkillIcon /> }) {
-  return url ? <img src={url} className={cname(`w-6 h-6 rounded-sm object-cover`, className)} /> : <TitleIconBg id={id} className={className}>{children}</TitleIconBg>
+export function TitleLogo({
+  id = 0,
+  url,
+  className = '',
+  type = AppNumType.SKILL, // 默认使用数字类型
+  size = 'w-6 h-6'
+}) {
+   console.log(type,'1');
+  // 根据类型获取背景颜色
+  const getBgColor = () => {
+    switch(type) {
+      case AppNumType.SKILL:
+        return 'bg-purple-600';
+      case AppNumType.ASSISTANT:
+        return 'bg-orange-600';
+      case AppNumType.FLOW:
+        return 'bg-blue-700';
+      default:
+        return 'bg-purple-600';
+    }
+  };
+
+  const getIcon = () => {
+    switch(type) {
+      case AppNumType.ASSISTANT: 
+        return <AssistantIcon className="w-4 h-4" />;
+      case AppNumType.FLOW: 
+        return <FlowIcon className="w-4 h-4" />;
+      default: // AppNumType.SKILL
+        return <SkillIcon className="w-4 h-4" />;
+    }
+  };
+
+  return (
+    <div className={cname(
+      `${size} rounded-md flex justify-center items-center`,
+      getBgColor(),
+      className
+    )}>
+      {url ? (
+        <img src={url} className="w-full h-full rounded-sm object-cover" />
+      ) : (
+        getIcon()
+      )}
+    </div>
+  );
 }
 
 export default function CardComponent<T>({
@@ -93,6 +138,7 @@ export default function CardComponent<T>({
   onCheckedChange,
   onSetting
 }: IProps<T>) {
+console.log(type,'12322');
 
   const [_checked, setChecked] = useState(checked)
 
@@ -166,12 +212,12 @@ export default function CardComponent<T>({
   return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => edit && onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
-        <TitleLogo
-          url={logo}
-          id={id}
-        >
-          {type === 'skill' ? <SkillIcon /> : type === 'assistant' ? <AssistantIcon /> : <FlowIcon />}
-        </TitleLogo>
+
+<TitleLogo
+  url={logo}
+  id={id}
+  type={typeof type === 'string' ? AppTypeToNum[type] : type}
+/>
         <div className="flex gap-1 items-center">
           {headSelecter}
           <Switch
@@ -184,10 +230,10 @@ export default function CardComponent<T>({
           ></Switch>
         </div>
       </div>
-      <CardTitle className="truncate-doubleline leading-5 max-w-[280px]">{title}</CardTitle>
+      <CardTitle className="truncate-doubleline leading-5">{title}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
-      <CardDescription className="break-all min-w-0">{description}</CardDescription>
+      <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="h-20 grid grid-rows-2 self-end">
       {labelPannel}

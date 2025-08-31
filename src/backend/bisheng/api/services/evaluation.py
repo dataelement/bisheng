@@ -19,18 +19,22 @@ from bisheng.api.services.flow import FlowService
 from bisheng.api.services.llm import LLMService
 from bisheng.api.services.user_service import UserPayload
 from bisheng.api.utils import build_flow, build_input_keys_response
+from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
 from bisheng.cache import InMemoryCache
 from bisheng.cache.redis import redis_client
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
 from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
 from bisheng.database.models.user import UserDao
 from bisheng.graph.graph.base import Graph
 from bisheng.utils import generate_uuid
 from bisheng.utils.logger import logger
 from bisheng.utils.minio_client import MinioClient
+from bisheng.worker.workflow.redis_callback import RedisCallback
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
+from bisheng.workflow.common.workflow import WorkflowStatus
 
 flow_data_store = redis_client
 
@@ -59,7 +63,7 @@ class EvaluationService:
         flow_version_ids = []
 
         for one in res_evaluations:
-            if one.exec_type == ExecType.FLOW.value:
+            if one.exec_type in [ExecType.FLOW.value, ExecType.WORKFLOW.value]:
                 flow_ids.append(one.unique_id)
                 if one.version:
                     flow_version_ids.append(one.version)
@@ -84,15 +88,17 @@ class EvaluationService:
 
         for one in res_evaluations:
             evaluation_item = jsonable_encoder(one)
-            if one.exec_type == ExecType.FLOW.value:
+            if one.exec_type in [ExecType.FLOW.value, ExecType.WORKFLOW.value]:
                 evaluation_item['unique_name'] = flow_names.get(one.unique_id)
             if one.exec_type == ExecType.ASSISTANT.value:
                 evaluation_item['unique_name'] = assistant_names.get(one.unique_id)
             if one.version:
                 evaluation_item['version_name'] = flow_versions.get(one.version)
             if one.result_score:
-                evaluation_item['result_score'] = json.loads(one.result_score)
+                evaluation_item['result_score'] = json.loads(one.result_score) if isinstance(one.result_score,
+                                                                                             str) else one.result_score
 
+            # 处理任务进度
             if one.status != EvaluationTaskStatus.running.value:
                 evaluation_item['progress'] = f'100%'
             elif redis_client.exists(EvaluationService.get_redis_key(one.id)):
@@ -100,6 +106,8 @@ class EvaluationService:
             else:
                 evaluation_item['progress'] = f'0%'
 
+            # 确保错误描述信息能够返回给前端
+            evaluation_item['description'] = one.description or ''
             evaluation_item['user_name'] = cls.get_user_name(one.user_id)
             data.append(evaluation_item)
 
@@ -232,6 +240,64 @@ class EvaluationService:
         return {"input": ""}
 
 
+def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluation, question: str) -> str:
+    # 初始化工作流
+    unique_id = generate_uuid()
+    workflow_id = evaluation.unique_id
+    chat_id = ""
+    user_id = str(evaluation.user_id)
+    workflow = RedisCallback(unique_id, workflow_id, chat_id, user_id)
+    workflow.set_workflow_data(workflow_info.data)
+    workflow.set_workflow_status(WorkflowStatus.WAITING.value)
+    execute_workflow.delay(unique_id, workflow_id, chat_id, user_id)
+
+    # 监听工作流的执行结果
+    input_event = None
+    for event in workflow.sync_get_response_until_break():
+        input_event = event
+
+    status_info = workflow.get_workflow_status()
+    if status_info["status"] == WorkflowStatus.FAILED.value:
+        raise Exception(status_info.get("reason", "workflow run failed"))
+    elif status_info['status'] == WorkflowStatus.SUCCESS.value:
+        raise Exception("目前仅支持“一问一答”类型的工作流")
+    elif status_info['status'] == WorkflowStatus.INPUT.value:
+        if not input_event or input_event.message.get('input_schema', {}).get("tab") == "form_input":
+            raise Exception("目前仅支持“一问一答”类型的工作流")
+        # 默认只输入对话框输入的工作流
+        workflow.set_user_input({input_event.message.get('node_id'): {"user_input": question}})
+        workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+        continue_workflow.delay(unique_id, workflow_id, chat_id, user_id)
+        events = []
+        for event in workflow.sync_get_response_until_break():
+            events.append(event)
+        status_info = workflow.get_workflow_status()
+        if status_info['status'] == WorkflowStatus.FAILED.value:
+            raise Exception(status_info.get("reason", "workflow run failed"))
+        elif status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.INPUT.value]:
+            workflow.set_workflow_stop()
+            # 获取第一个输出事件的内容作为回答，如果没有则报错
+            if not events:
+                raise Exception("目前仅支持“一问一答”类型的工作流")
+            answer = None
+            for event in events:
+                if event.category in [WorkflowEventType.OutputMsg.value, WorkflowEventType.OutputWithInput.value,
+                                      WorkflowEventType.OutputWithChoose.value]:
+                    answer = event.message.get('msg', "")
+                    break
+                elif event.category == WorkflowEventType.StreamMsg.value and event.type != 'stream':
+                    answer = event.message.get('msg', "")
+                    break
+            if answer is None:
+                raise Exception("目前仅支持“一问一答”类型的工作流")
+            return answer
+        else:
+            workflow.set_workflow_stop()
+            raise Exception(f"workflow status is unknown: {status_info}")
+    else:
+        raise Exception(f"workflow status is unknown: {status_info}")
+
+
 def add_evaluation_task(evaluation_id: int):
     evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
     if not evaluation:
@@ -267,7 +333,7 @@ def add_evaluation_task(evaluation_id: int):
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
 
-        if evaluation.exec_type == ExecType.ASSISTANT.value:
+        elif evaluation.exec_type == ExecType.ASSISTANT.value:
             assistant = AssistantDao.get_one_assistant(evaluation.unique_id)
             if not assistant:
                 raise Exception("Assistant not found")
@@ -279,6 +345,12 @@ def add_evaluation_task(evaluation_id: int):
                     one["answer"] = messages[-1].content
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
+        elif evaluation.exec_type == ExecType.WORKFLOW.value:
+            workflow_info = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
+            if not workflow_info or workflow_info.flow_id != evaluation.unique_id:
+                raise Exception("workflow version info not found")
+            for index, one in enumerate(csv_data):
+                one["answer"] = execute_workflow_get_answer(workflow_info, evaluation, one.get('question', ""))
 
         _llm = LLMService.get_evaluation_llm_object()
         llm = LangchainLLM(_llm)
@@ -289,7 +361,7 @@ def add_evaluation_task(evaluation_id: int):
         }
 
         dataset = Dataset.from_dict(data_samples)
-        answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm)
+        answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm, human_prompt=evaluation.prompt)
         score = evaluate(dataset, metrics=[answer_correctness_bisheng])
         df = score.to_pandas()
         result = df.to_dict(orient="list")
@@ -335,7 +407,7 @@ def add_evaluation_task(evaluation_id: int):
         df = pd.DataFrame(data=row_list, columns=[one[1] for one in columns])
         result_file_path = EvaluationService.upload_result_file(df)
 
-        evaluation.result_score = json.dumps(total_dict)
+        evaluation.result_score = total_dict
         evaluation.status = EvaluationTaskStatus.success.value
         evaluation.result_file_path = result_file_path
         EvaluationDao.update_evaluation(evaluation=evaluation)
@@ -345,5 +417,6 @@ def add_evaluation_task(evaluation_id: int):
     except Exception as e:
         logger.exception(f'evaluation task failed id={evaluation_id} {str(e)}')
         evaluation.status = EvaluationTaskStatus.failed.value
+        evaluation.description = str(e)[-500:]  # 限制错误描述长度，避免过长
         EvaluationDao.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)

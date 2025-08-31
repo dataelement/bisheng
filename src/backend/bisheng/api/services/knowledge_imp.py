@@ -5,8 +5,6 @@ import time
 from typing import Any, Dict, List, Optional, BinaryIO, Union
 
 import requests
-from bisheng_langchain.rag.extract_info import extract_title
-from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
@@ -59,6 +57,8 @@ from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.settings import settings
 from bisheng.utils.embedding import decide_embeddings
 from bisheng.utils.minio_client import minio_client
+from bisheng_langchain.rag.extract_info import extract_title
+from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
 filetype_load_map = {
     "txt": TextLoader,
@@ -606,7 +606,7 @@ def parse_partitions(partitions: List[Any]) -> Dict:
             if index == len(bboxes) - 1:
                 val = text[indexes[index][0]:]
             else:
-                val = text[indexes[index][0]:indexes[index][1] + 1]
+                val = text[indexes[index][0]:indexes[index][1]]
             res[key] = {"text": val, "type": part["type"], "part_id": part_index}
     return res
 
@@ -752,7 +752,7 @@ def read_chunk_text(
             )
 
         # 沿用原来的方法处理md文件
-        loader = filetype_load_map["md"](file_path=md_file_name)
+        loader = filetype_load_map["md"](file_path=md_file_name, autodetect_encoding=True)
         documents = loader.load()
 
     elif file_extension_name in ["txt", "md"]:

@@ -143,9 +143,9 @@ export default function MainLayout() {
                                 </span>
                             </a>
                         )}
-                        <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                        {/* <NavLink to='/' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                             <ApplicationIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.app')}</span>
-                        </NavLink>
+                        </NavLink> */}
                         {
                             isMenu('build') &&
                             <NavLink to='/build' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`} >

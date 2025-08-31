@@ -16,6 +16,8 @@ from bisheng.database.models.llm_server import LLMDao, LLMServer, LLMModel, LLMM
 from bisheng.interface.importing import import_by_type
 from bisheng.interface.initialize.loading import instantiate_llm, instantiate_embedding
 from bisheng.utils.embedding import decide_embeddings
+from bisheng.database.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.database.models.knowledge import KnowledgeState
 
 
 class LLMService:
@@ -415,6 +417,8 @@ class LLMService:
         :param config_obj:
         :return:
         """
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 
         config = await ConfigDao.aget_config(ConfigKeyEnum.LINSIGHT_LLM)
         if not config:
@@ -433,6 +437,27 @@ class LLMService:
                 from bisheng.api.services.linsight.sop_manage import SOPManageService
 
                 background_tasks.add_task(SOPManageService.rebuild_sop_vector_store_task, embeddings)
+
+                # 更新个人知识库
+                # 1.更新所有type为2(私有知识库)的knowledge状态和模型
+                private_knowledges = KnowledgeDao.get_all_knowledge(
+                    knowledge_type=KnowledgeTypeEnum.PRIVATE
+                )
+
+                updated_count = 0
+                for knowledge in private_knowledges:
+                    # 更新状态为重建中，模型为新的model_id
+                    knowledge.state = KnowledgeState.REBUILDING.value
+                    knowledge.model = str(embeddings.model_id)
+                    KnowledgeDao.update_one(knowledge)
+                    updated_count += 1
+                    
+                    # 3. 为每个knowledge发起异步任务
+                    rebuild_knowledge_celery.delay(knowledge.id, str(embeddings.model_id))
+                    logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={embeddings.model_id}")
+            
+                logger.info(f"Updated {updated_count} private knowledge bases to use new embedding model {embeddings.model_id}")                
+
 
         config.value = json.dumps(config_obj.model_dump(), ensure_ascii=False)
 

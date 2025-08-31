@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
@@ -22,8 +23,8 @@ export default defineConfig({
       //   // target: 'http://localhost:3080',
       //   changeOrigin: true,
       // },
-      '/workspace/bisheng': {
-        target: "http://192.168.106.20:3001",
+      '^(/workspace)?/bisheng': {
+        target: "http://192.168.106.120:3003",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -31,7 +32,7 @@ export default defineConfig({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.20:3001',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -51,7 +52,7 @@ export default defineConfig({
         rewrite: (path) => {
           return path.replace(/^\/workspace/, '');
         },
-      }
+      },
     },
   },
   base: app_env.BASE_URL || '/',
@@ -122,6 +123,14 @@ export default defineConfig({
       threshold: 10240, // compress files larger than 10KB
       algorithm: 'gzip',
       ext: '.gz',
+    }),
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
+          dest: './'
+        }
+      ]
     }),
   ],
   publicDir: './public',

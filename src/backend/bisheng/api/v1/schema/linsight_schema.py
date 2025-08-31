@@ -33,8 +33,8 @@ class LinsightQuestionSubmitSchema(BaseModel):
     question: str = Field(..., description="用户提交的问题")
     org_knowledge_enabled: bool = Field(False, description="是否启用组织知识库")
     personal_knowledge_enabled: bool = Field(False, description="是否启用个人知识库")
-    files: List[SubmitFileSchema] = Field(None, description="上传的文件列表")
-    tools: List[LinsightToolSchema] = Field(None, description="可用的工具列表")
+    files: Optional[List[SubmitFileSchema]] = Field(None, description="上传的文件列表")
+    tools: Optional[List[LinsightToolSchema]] = Field(None, description="可用的工具列表")
 
     @field_validator("tools")
     @classmethod

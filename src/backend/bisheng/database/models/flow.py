@@ -32,6 +32,15 @@ class FlowType(Enum):
     LINSIGHT = 20 # 灵思模式
 
 
+class AppEnum(Enum):
+    Flow = 'flow'
+    ASSISTANT = 'assistant'
+    WORKFLOW = 'workflow'
+
+
+class UserLinkType(Enum):
+    app = AppEnum
+
 class FlowBase(SQLModelSerializable):
     name: str = Field(index=True)
     user_id: Optional[int] = Field(default=None, index=True)
@@ -334,6 +343,7 @@ class FlowDao(FlowBase):
                      flow_type: int = None,
                      user_id: int = None,
                      id_extra: list = None,
+                     id_list_not_in: list = None,
                      page: int = 0,
                      limit: int = 0) -> (List[Dict], int):
         """ 获取所有的应用 包含技能、助手、工作流 """
@@ -369,6 +379,9 @@ class FlowDao(FlowBase):
             else:
                 statement = statement.where(sub_query.c.user_id == user_id)
                 count_statement = count_statement.where(sub_query.c.user_id == user_id)
+        if id_list_not_in:
+            statement = statement.where(~sub_query.c.id.in_(id_list_not_in))
+            count_statement = count_statement.where(~sub_query.c.id.in_(id_list_not_in))
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(sub_query.c.update_time.desc())

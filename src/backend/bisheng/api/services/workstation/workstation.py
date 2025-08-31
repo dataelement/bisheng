@@ -20,6 +20,14 @@ from bisheng.database.models.gpts_tools import GptsToolsDao
 from bisheng.database.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
+from fastapi import BackgroundTasks, Request
+from langchain_core.messages import AIMessage, HumanMessage
+from loguru import logger
+from openai import BaseModel
+from bisheng.utils.embedding import create_knowledge_keyword_store
+from bisheng.utils.embedding import create_knowledge_vector_store
+from bisheng.api.services.knowledge import mixed_retrieval_recall
+
 
 
 class WorkStationService(BaseService):
@@ -149,27 +157,55 @@ class WorkStationService(BaseService):
 
     @classmethod
     def queryChunksFromDB(cls, question: str, login_user: UserPayload):
+        """
+        从数据库中查询相关知识块
+        
+        Args:
+            question: 用户查询问题
+            login_user: 登录用户信息
+            
+        Returns:
+            List[str]: 格式化后的知识库内容列表，格式为：
+                "[file name]:文件名\n[file content begin]\n内容\n[file content end]\n"
+        """
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                     KnowledgeTypeEnum.PRIVATE)
 
         if not knowledge:
             return []
+        
+        vector_store = create_knowledge_vector_store([str(knowledge[0].id)], login_user.user_name)
+        keyword_store = create_knowledge_keyword_store([str(knowledge[0].id)], login_user.user_name)
 
-        search_kwargs = {'partition_key': knowledge[0].id}
-        embedding = knowledge_imp.decide_embeddings(knowledge[0].model)
-        vectordb = knowledge_imp.decide_vectorstores(knowledge[0].collection_name, 'Milvus',
-                                                     embedding)
-        vectordb.partition_key = knowledge[0].id
-        content = vectordb.as_retriever(search_kwargs=search_kwargs)._get_relevant_documents(
-            question, run_manager=None)
-        if content:
-            content = [
-                knowledge_imp.KnowledgeUtils.chunk2promt(c.page_content, c.metadata)
-                for c in content
-            ]
-        else:
-            content = []
-        return content
+        # 获取配置中的最大token数，如果没有配置则使用默认值
+        config = cls.get_config()
+        max_tokens = config.maxTokens if config else 1500
+        
+        # 获取知识库溯源模型 ID，如果没有配置则使用知识库的嵌入模型 ID
+        from bisheng.api.services.llm import LLMService
+        knowledge_llm = LLMService.get_knowledge_llm()
+        model_id = knowledge_llm.source_model_id
+        
+        docs = mixed_retrieval_recall(question, vector_store, keyword_store, max_tokens, model_id)
+        logger.info("docs message:{}", docs)
+        # 将检索结果格式化为指定的模板格式
+        formatted_results = []
+        if docs:
+            for doc in docs:
+                # 获取文件名，优先从 metadata 中获取
+                file_name = doc.metadata.get('file_name', 'unknown_file')
+                if not file_name or file_name == 'unknown_file':
+                    # 尝试从其他字段获取文件名
+                    file_name = doc.metadata.get('source', doc.metadata.get('filename', 'unknown_file'))
+                
+                # 获取文档内容
+                content = doc.page_content.strip()
+                
+                # 按照模板格式组织内容
+                formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
+                formatted_results.append(formatted_content)
+        
+        return formatted_results
 
     @classmethod
     def get_chat_history(cls, chat_id: str, size: int = 4):

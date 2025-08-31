@@ -16,6 +16,7 @@ class KnowledgeFileStatus(Enum):
     PROCESSING = 1  # 处理中
     SUCCESS = 2  # 成功
     FAILED = 3  # 解析失败
+    REBUILDING = 4  # 重建中
 
 
 class QAStatus(Enum):
@@ -37,7 +38,8 @@ class ParseType(Enum):
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
-    file_name: str = Field(index=True, max_length=200)
+    file_name: str = Field(sa_column=Column(String(length=1000), index=True))
+    file_size: Optional[int] = Field(default=None, index=False, description='文件大小，单位为bytes')
     md5: Optional[str] = Field(default=None, index=False)
     parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
                                       index=False,
@@ -198,15 +200,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_by_filters(cls,
                             knowledge_id: int,
                             file_name: str = None,
-                            status: int = None,
+                            status: List[int] = None,
                             page: int = 0,
                             page_size: int = 0,
                             file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        if status is not None:
-            statement = statement.where(KnowledgeFile.status == status)
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
         if page and page_size:
@@ -215,18 +217,41 @@ class KnowledgeFileDao(KnowledgeFileBase):
         with session_getter() as session:
             return session.exec(statement).all()
 
+
+
+    @classmethod
+    def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
+        """
+        根据知识库ID和状态列表查询文件
+        
+        Args:
+            knowledge_id: 知识库ID
+            status_list: 状态值列表
+            
+        Returns:
+            List[KnowledgeFile]: 匹配的文件列表
+        """
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.status.in_(status_list)
+        )
+        
+        with session_getter() as session:
+            return session.exec(statement).all() 
+
+
     @classmethod
     def count_file_by_filters(cls,
                               knowledge_id: int,
                               file_name: str = None,
-                              status: int = None,
+                              status: List[int] = None,
                               file_ids: List[int] = None) -> int:
         statement = select(func.count(
             KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
             statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        if status is not None:
-            statement = statement.where(KnowledgeFile.status == status)
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
         if file_ids:
             statement = statement.where(KnowledgeFile.id.in_(file_ids))
         with session_getter() as session:

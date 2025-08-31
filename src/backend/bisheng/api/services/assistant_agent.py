@@ -550,6 +550,45 @@ class AssistantAgent(AssistantUtils):
 
         return result
 
+    async def astream(self, query: str, chat_history: List = None, callback: Callbacks = None):
+        """
+        运行智能体对话 - 流式版本
+        """
+        await self.fake_callback(callback)
+
+        if chat_history:
+            chat_history.append(HumanMessage(content=query))
+            inputs = chat_history
+        else:
+            inputs = [HumanMessage(content=query)]
+
+        # trim message
+        inputs = await self.trim_messages(inputs)
+
+        if self.current_agent_executor == 'ReAct':
+            # ReAct模式暂时不支持流式，降级到非流式
+            result = await self.react_run(inputs, callback)
+            # 记录聊天历史
+            await self.record_chat_history([one.to_json() for one in result])
+            yield result
+        else:
+            # 使用流式调用
+            config = RunnableConfig(callbacks=callback)
+            final_messages = []
+            
+            async for chunk in self.agent.astream({'messages': inputs}, config=config):
+                if 'messages' in chunk:
+                    # 获取新消息
+                    messages = chunk['messages']
+                    if messages:
+                        final_messages = messages
+                        # 流式输出最新的消息
+                        yield messages
+            
+            # 记录聊天历史
+            if final_messages:
+                await self.record_chat_history([one.to_json() for one in final_messages])
+
     async def react_run(self, inputs: List, callback: Callbacks = None):
         """ react 模式的输入和执行 """
         result = await self.agent.ainvoke({

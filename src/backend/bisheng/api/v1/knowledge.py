@@ -16,7 +16,7 @@ from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.services.user_service import UserPayload, get_login_user
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
-                                    resp_200, resp_500)
+                                    resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq)
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
@@ -25,6 +25,8 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
+from bisheng.database.models.knowledge import KnowledgeState
+from bisheng.database.models.llm_server import LLMDao, LLMModelType
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -200,7 +202,7 @@ def get_filelist(*,
                  knowledge_id: int = 0,
                  page_size: int = 10,
                  page_num: int = 1,
-                 status: Optional[int] = None):
+                 status: List[int] = Query(default=None)):
     """ 获取知识库文件信息. """
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
                                                              file_name, status, page_num,
@@ -614,3 +616,98 @@ def post_import_file(*,
         error_result.append(have_data)
 
     return resp_200({"errors": error_result})
+
+@router.get('/status', status_code=200)
+def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
+    """
+    查看知识库状态接口
+    流程：
+    1. 根据用户id先判断用户有没有个人知识库，没有直接返回200
+    2. 如果拥有知识库，根据用户id查看所在知识库状态，如果个人知识库的状态处于REBUILDING 3 或者 FAILED 4 时，
+       返回 "个人知识库embedding模型已更换，正在重建知识库，请稍后再试" 状态码 502
+    """
+    # 查询用户的个人知识库
+    user_private_knowledge = KnowledgeDao.get_user_knowledge(
+        login_user.user_id, 
+        None, 
+        KnowledgeTypeEnum.PRIVATE
+    )
+    
+    # 如果用户没有个人知识库，直接返回200
+    if not user_private_knowledge:
+        return resp_200({"status": "success"})
+    
+    # 获取第一个个人知识库（通常用户只有一个个人知识库）
+    private_knowledge = user_private_knowledge[0]
+    
+    # 检查知识库状态
+    
+    if private_knowledge.state == KnowledgeState.REBUILDING.value:
+        # 返回502状态码和相应提示信息
+        return resp_502(
+            message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
+        )
+    if private_knowledge.state == KnowledgeState.FAILED.value:
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+        rebuild_knowledge_celery.delay(private_knowledge.id, str(private_knowledge.model))
+        # 返回502状态码和相应提示信息
+        return resp_502(
+            message="个人知识库embedding模型已更换，正在重建知识库，请稍后再试"
+        )
+
+    # 知识库状态正常，返回200
+    return resp_200({"status": "success"})
+
+
+@router.post('/update_knowledge', status_code=200)
+def update_knowledge_model(*,
+                          login_user: UserPayload = Depends(get_login_user),
+                          req_data: UpdateKnowledgeReq):
+    """
+    更新知识库接口
+    更新embedding模型时重建知识库
+    流程：
+    1. 根据前端传进来的model_id, model_type，先判断是不是embedding模型
+    2. 如果不是则返回resp501("不是embedding模型") 如果是则把knowledge表中所有type为2的数据status改成3，model改成传入的model_id
+    3. 每一个knowledge_id都发起异步任务进行知识库重建
+    """
+    try:
+        # 1. 验证是否为embedding模型
+        model_info = LLMDao.get_model_by_id(req_data.model_id)
+        if not model_info:
+            return resp_501(message="模型不存在")
+        
+        # 如果前端没有传model_type，使用数据库中的model_type
+        model_type = req_data.model_type if req_data.model_type else model_info.model_type
+        
+        if model_type != LLMModelType.EMBEDDING.value:
+            return resp_501(message="不是embedding模型")
+        
+
+        # 处理指定的知识库
+        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if not knowledge:
+            return resp_501(message="指定的知识库不存在")
+        
+        # 更新知识库状态和模型
+        knowledge.state = KnowledgeState.REBUILDING.value
+        knowledge.model = str(req_data.model_id)
+        knowledge.name = req_data.knowledge_name
+        knowledge.description = req_data.description
+        KnowledgeDao.update_one(knowledge)
+        
+        # 发起异步任务
+        # 延迟导入以避免循环导入
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
+        rebuild_knowledge_celery.delay(knowledge.id, str(req_data.model_id))
+        logger.info(f"Started rebuild task for knowledge_id={knowledge.id} with model_id={req_data.model_id}")
+
+        return resp_200(
+            message="已开始重建知识库"
+        )
+        
+    except Exception as e:
+        logger.exception(f"rebuilding knowledge error: {str(e)}")
+        return resp_500(message=f"重建知识库失败: {str(e)}")
+    

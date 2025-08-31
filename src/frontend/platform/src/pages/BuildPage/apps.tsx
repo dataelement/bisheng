@@ -133,18 +133,17 @@ export default function apps() {
             return toast({ variant: 'warning', description: '无编辑权限' })
         }
         if (data.flow_type === 5) {
-            // 上线状态下，助手不能进入编辑
-            navigate(`/assistant/${data.id}`)
+            navigate(`/assistant/${data.id}`, { state: { flow: data } })
         } else if (data.flow_type === 1) {
             const vid = data.version_list.find(item => item.is_current === 1)?.id
-            navigate(`/build/skill/${data.id}/${vid}`)
+            navigate(`/build/skill/${data.id}/${vid}`, { state: { flow: data } })
         } else {
-            navigate(`/flow/${data.id}`)
+            navigate(`/flow/${data.id}`, { state: { flow: data } })
         }
     }
 
     const createAppModalRef = useRef(null)
-    const handleCreateApp = async (type, tempId = 0) => {
+    const handleCreateApp = async (type, tempId = 0, item?: any) => {
         if (type === AppType.SKILL) {
             if (!tempId) return navigate('/build/skill')
             // 选模板(创建技能)
@@ -159,7 +158,15 @@ export default function apps() {
                 navigate(`/build/skill/${res.id}/${res.version_id}`)
             }))
         } else {
-            createAppModalRef.current.open(type, tempId)
+            createAppModalRef.current.open(
+                type,
+                tempId,
+                // {
+                //     id: item?.id,
+                //     logo: item?.logo,
+                //     type: TypeNames[item.flow_type]
+                // }
+            );
         }
     }
 
@@ -227,7 +234,18 @@ export default function apps() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    onClick={() => handleSetting(item)}
+                                    onClick={() => {
+                                        handleSetting(item);
+                                        createAppModalRef.current?.open(
+                                            TypeNames[item.flow_type],
+                                            0,
+                                            {
+                                                id: item.id,
+                                                logo: item.logo,
+                                                type: TypeNames[item.flow_type]
+                                            }
+                                        );
+                                    }}
                                     onSwitchClick={() => {
                                         !item.write && item.status !== 2 && message({
                                             description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),

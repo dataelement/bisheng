@@ -146,7 +146,7 @@ export default function HomePage({ onSelect }) {
                 logo={chat.logo}
                 title={chat.name}
                 description={chat.description}
-                type="sheet"
+                type={chat.flow_type}
                 icon={getChatTypeIcon(chat.flow_type)}
                 footer={renderChatTypeBadge(chat.flow_type)}
                 onClick={() => onSelect(chat)}

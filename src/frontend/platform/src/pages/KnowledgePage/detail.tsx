@@ -9,10 +9,14 @@ export default function FilesPage() {
     const [value, setValue] = useState('file')
     const [fileId, setFileId] = useState('')
     const { t } = useTranslation('knowledge')
+   const [fileTitle, setFileTitle] = useState(true);
 
     const onPreview = (id: string) => {
         setFileId(id)
         setValue('chunk')
+        setFileTitle(false)
+        console.log(fileTitle,212);
+        
     }
 
     return <div className="size-full px-2 py-4 relative bg-background-login">
@@ -20,15 +24,15 @@ export default function FilesPage() {
         <Tabs value={value} onValueChange={(v) => { setValue(v); setFileId('') }}>
             <div className="flex justify-between w-1/2">
                 {/* title */}
-                <Header />
-                <TabsList>
+                <Header fileTitle={fileTitle}/>
+                {/* <TabsList>
                     <TabsTrigger value="file">
                         {t('fileManagement')}
                     </TabsTrigger>
                     <TabsTrigger value="chunk">
                         {t('chunkManagement')}
                     </TabsTrigger>
-                </TabsList>
+                </TabsList> */}
             </div>
             <TabsContent value="file">
                 <Files onPreview={onPreview} />

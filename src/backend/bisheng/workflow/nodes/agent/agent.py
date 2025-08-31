@@ -1,7 +1,10 @@
+import typing
 from typing import Any, Dict
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel
+
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
 from langgraph.prebuilt import create_react_agent
@@ -18,12 +21,20 @@ from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
-
-
 agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
     'function call': 'get_openai_functions_agent_executor',
 }
+
+
+class SqlAgentParams(BaseModel):
+    """ SQL Agent 参数模型 """
+    database_engine: typing.Literal['mysql', 'db2', 'postgres', 'gaussdb', 'oracle']
+    db_username: str
+    db_password: str
+    db_address: str
+    db_name: str
+    open: bool = False
 
 
 class AgentNode(BaseNode):
@@ -71,10 +82,11 @@ class AgentNode(BaseNode):
         ]
 
         # 是否支持nl2sql
-        self._sql_agent = self.node_params.get('sql_agent')
+        self._sql_agent = SqlAgentParams.model_validate(self.node_params['sql_agent']) if self.node_params.get(
+            'sql_agent', None) else None
         self._sql_address = ''
-        if self._sql_agent and self._sql_agent['open']:
-            self._sql_address = f'mysql+pymysql://{self._sql_agent["db_username"]}:{self._sql_agent["db_password"]}@{self._sql_agent["db_address"]}/{self._sql_agent["db_name"]}?charset=utf8mb4'
+        if self._sql_agent and self._sql_agent.open:
+            self._sql_address = self._init_sql_address()
 
         # agent
         self._agent_executor_type = 'React'
@@ -192,6 +204,45 @@ class AgentNode(BaseNode):
             'metadata_expr': f'file_id in {file_ids}'
         }
         return self._init_milvus(params)
+
+    def _init_sql_address(self) -> str:
+        """ 初始化 SQL 数据库地址 """
+        if not self._sql_agent:
+            return ''
+        if self._sql_agent.database_engine == 'mysql':
+            try:
+                import pymysql
+            except ImportError:
+                raise ImportError('Please install pymysql and sqlalchemy to use mysql database')
+            return f'mysql+pymysql://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}?charset=utf8mb4'
+        elif self._sql_agent.database_engine == 'db2':
+            try:
+                import ibm_db
+                import ibm_db_sa
+            except ImportError:
+                raise ImportError('Please install ibm_db and ibm_db_sa to use db2 database')
+            return f'db2+ibm_db://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
+        elif self._sql_agent.database_engine == 'postgres':
+            try:
+                import psycopg2
+            except ImportError:
+                raise ImportError('Please install psycopg2 and sqlalchemy to use postgresql database')
+            return f'postgresql+psycopg2://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
+        elif self._sql_agent.database_engine == 'gaussdb':
+            try:
+                import psycopg2
+                import opengauss_sqlalchemy
+            except ImportError:
+                raise ImportError('Please install psycopg2 and opengauss_sqlalchemy to use gaussdb database')
+            return f'opengauss+psycopg2://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
+        elif self._sql_agent.database_engine == 'oracle':
+            try:
+                import oracledb
+            except ImportError:
+                raise ImportError('Please install oracledb and sqlalchemy to use oracle database')
+            return f'oracle+oracledb://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}?service_name={self._sql_agent.db_name}'
+        else:
+            raise ValueError(f'Unsupported database engine: {self._sql_agent.database_engine}')
 
     @staticmethod
     def _init_milvus(params: dict):

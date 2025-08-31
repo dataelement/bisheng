@@ -72,3 +72,9 @@ linsight:
   max_file_num: 5
   # 生成SOP时，prompt里放的组织知识库的最大数量
   max_knowledge_num: 20
+  # 拆分二级任务时读取文件内容的字符数，超过后会截断
+  file_content_length: 5000
+  # 灵思模型默认温度
+  default_temperature: 0
+  # 模型json格式失败重试时的温度
+  retry_temperature: 1

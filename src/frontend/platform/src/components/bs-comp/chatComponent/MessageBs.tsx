@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from "react";
 import MessageButtons from "./MessageButtons";
 import SourceEntry from "./SourceEntry";
 import { useMessageStore } from "./messageStore";
+import { TitleLogo } from "../cardComponent";
 
 // 颜色列表
 const colorList = [
@@ -55,7 +56,7 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+export default function MessageBs({ debug, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick,chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
     const avatarColor = colorList[
         (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
     ]
@@ -88,8 +89,8 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                         {logo ? <div className="max-w-6 min-w-6 max-h-6 rounded-full overflow-hidden">
                             <img className="w-6 h-6" src={logo} />
                         </div>
-                            : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full" style={{ background: avatarColor }} >
-                                <AvatarIcon />
+                            : <div className="w-6 h-6 min-w-6 flex justify-center items-center rounded-full"  >
+                                <TitleLogo url={chat?.logo} className="" id={chat?.flow_id}  type={chat?.flow_type}></TitleLogo>
                             </div>}
                         {data.message.toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">

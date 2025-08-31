@@ -15,7 +15,7 @@ import TxtFileViewer from "./TxtFileViewer";
  * 选中label -> 更新labelsMap
  * 覆盖chunk -> labelsMap + partitions = string -> store -> update markdown
  */
-export default function PreviewFile({ urlState, file, partitions, chunks, setChunks }
+export default function PreviewFile({ urlState, file, partitions, chunks, setChunks,h=true }
     : { urlState: { load: false, url: '' }, file: any, partitions: Partition, chunks: any, setChunks: any }) {
     const { t } = useTranslation('knowledge')
     const selectedChunkIndex = useKnowledgeStore((state) => state.selectedChunkIndex);
@@ -265,7 +265,7 @@ export default function PreviewFile({ urlState, file, partitions, chunks, setChu
     return <div className="w-1/2" onClick={e => {
         e.stopPropagation()
     }}>
-        <div className="flex justify-center items-center relative h-10 mb-2 text-sm">
+        <div className={`flex justify-center items-center relative mb-2 text-sm ${h ? 'h-10' : 'h-3'}`}>
             <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
                 <Info className='mr-1 text-red-500' size={14} />
                 <span className="text-red-500">{t('segmentRangeDetected')}</span>

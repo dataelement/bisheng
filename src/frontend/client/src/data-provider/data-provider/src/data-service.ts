@@ -124,7 +124,7 @@ export function getSearchEnabled(): Promise<boolean> {
 
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
-    const { user_id, user_name, create_time, update_time } = res.data;
+    const { user_id, user_name, create_time, update_time, role } = res.data;
     return {
       "_id": user_id,
       "name": user_name,
@@ -133,7 +133,7 @@ export function getUser(): Promise<t.TUser> {
       "emailVerified": true,
       "avatar": null,
       "provider": "local",
-      "role": "USER",
+      "role": role,
       "plugins": [],
       "termsAccepted": false,
       "backupCodes": [],
@@ -745,6 +745,7 @@ export const listConversations = (
         "user": conv.user_id,
         "__v": 0,
         "_id": conv.chat_id,
+        "flowId": conv.flow_id,
         "flowType": conv.flow_type
       })),
       pageNumber: pageNumber,

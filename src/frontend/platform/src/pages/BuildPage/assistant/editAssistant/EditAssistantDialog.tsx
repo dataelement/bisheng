@@ -1,3 +1,4 @@
+import { TitleLogo } from "@/components/bs-comp/cardComponent";
 import { AssistantIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -8,7 +9,8 @@ import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function EditAssistantDialog({ logo, name, desc, onSave }) {
+export default function EditAssistantDialog({ logo, name, desc, onSave, loca }) {
+console.log(loca,66);
 
     const { t } = useTranslation()
     // State for form fields
@@ -91,11 +93,19 @@ export default function EditAssistantDialog({ logo, name, desc, onSave }) {
         <div className="flex flex-col gap-8 py-6">
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantAvatar')}<span className="bisheng-tip">*</span></label>
-                <Avator
+                {/* <Avator
                     value={formData.logo}
                     className="mt-2"
                     onChange={uploadAvator}
-                ><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                ><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator> */}
+                {console.log(loca,666)}
+                                        <TitleLogo
+                  className=" w-7 h-7 rounded-sm" 
+                  url={loca.logo} 
+                  id={loca.id}
+                  type={loca.flow_type}
+                ></TitleLogo>
+                
                 {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
             </div>
             <div className="">
