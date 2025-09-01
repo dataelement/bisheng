@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
-import { flowType } from ".";
+import { FLOW_TYPES } from ".";
 import { SkillMethod } from "./appUtils/skillMethod";
 import { chatFileState, chatIdState, currentChatState, runningState, submitDataState, tabsState } from "./store/atoms";
 import { ActionType } from "./useWebsocket";
@@ -45,7 +45,7 @@ export const useAreaText = () => {
         if (!msg && textareaRef.current?.value.trim() === "" && chatFile.length === 0) return
         const message = msg || textareaRef.current?.value || ""
 
-        if (chatState.flow.flow_type === flowType.WORK_FLOW) {
+        if (chatState.flow.flow_type === FLOW_TYPES.WORK_FLOW) {
             setSubmitDataState({
                 input: message,
                 action: ActionType.INPUT,

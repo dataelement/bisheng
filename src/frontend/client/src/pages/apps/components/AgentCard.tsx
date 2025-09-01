@@ -21,11 +21,13 @@ interface AgentCardProps {
     showRemove?: boolean // New prop to determine if showing remove or add button
     onAddToFavorites: () => void
     onRemoveFromFavorites: () => void
+    onClick: (e: React.MouseEvent<HTMLDivElement>) => void
 }
 
 export function AgentCard({
     agent,
     showRemove = false,
+    onClick,
     onAddToFavorites,
     onRemoveFromFavorites,
 }: AgentCardProps) {
@@ -37,11 +39,12 @@ export function AgentCard({
                 className={`relative p-0 cursor-pointer rounded-md transition-all duration-200 border-none bg-[#F7F9FC] hover:bg-[#EDEFF6]`}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
+                onClick={onClick}
             >
                 <CardContent className="p-0">
                     <div className="">
                         <div className="flex gap-2 items-center p-5 pb-2 font-semibold leading-none tracking-tight truncate-doubleline">
-                            <AppAvator />
+                            <AppAvator flowType={agent.type} />
                             <h3 className="leading-5 align-middle">{agent.name}</h3>
                         </div>
                         <div className="p-5 pt-0 h-fit max-h-[60px] overflow-auto scrollbar-hide mb-4">

@@ -2,18 +2,18 @@ import { useRef } from "react";
 import { useRecoilValue } from "recoil";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
+import InputFormSkill from "./components/InputFormSkill";
 import MessageBs, { ReasoningLog } from "./components/MessageBs";
 import MessageBsChoose from "./components/MessageBsChoose";
 import MessageFeedbackForm from "./components/MessageFeedbackForm";
 import MessageFile from "./components/MessageFile";
 import MessageNodeRun from "./components/MessageNodeRun";
+import MessageRunlog from "./components/MessageRunlog";
 import MessageSystem from "./components/MessageSystem";
 import MessageUser from "./components/MessageUser";
 import ResouceModal from "./components/ResouceModal";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
-import InputFormSkill from "./components/InputFormSkill";
-import MessageRunlog from "./components/MessageRunlog";
 
 export default function ChatMessages({ useName, logo }) {
     const { messageScrollRef, chatId, messages } = useMessage()
@@ -75,9 +75,9 @@ export default function ChatMessages({ useName, logo }) {
                             ----------- {msg.message} -----------
                         </div>
                     case 'output_with_choose_msg':
-                        return <MessageBsChoose key={msg.id} data={msg} logo={logo} />;
+                        return <MessageBsChoose key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
                     case 'output_with_input_msg':
-                        return <MessageBsChoose type='input' key={msg.id} data={msg} logo={logo} />;
+                        return <MessageBsChoose type='input' key={msg.id} data={msg} logo={logo} flow={chatState.flow} />;
                     case 'node_run':
                         return <MessageNodeRun key={msg.id} data={msg} />;
                     case 'system':
@@ -94,9 +94,10 @@ export default function ChatMessages({ useName, logo }) {
         {guideWord && <GuideWord data={guideWord} />}
         {/* 表单 */}
         {inputForm && (chatState?.flow.flow_type === 10 ?
-            <InputForm data={inputForm} flow={chatState.flow} /> :
-            <InputFormSkill flow={chatState.flow} />
+            <InputForm data={inputForm} flow={chatState.flow} logo={logo} /> :
+            <InputFormSkill flow={chatState.flow} logo={logo} />
         )}
+
         <MessageFeedbackForm ref={thumbRef}></MessageFeedbackForm>
         <ResouceModal ref={sourceRef}></ResouceModal>
     </div>

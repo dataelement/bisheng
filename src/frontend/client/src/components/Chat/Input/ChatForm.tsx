@@ -333,12 +333,16 @@ const ChatForm = ({ isLingsi, setShowCode, index = 0 }) => {
           isLingsi ? "translate-y-0" : "translate-y-2" // 整体轻微上浮
         )}>
           <p className={cn(
-            "py-2.5 px-6 text-sm text-[#6C7EC5] flex items-center",
+            "py-2.5 px-1.5 text-sm text-[#6C7EC5] flex items-center",
             "transition-all duration-300 ease-out delay-200",
             "rounded-full mx-4", // 文字背景
             isLingsi ? "translate-y-0 opacity-100" : "-translate-y-3 opacity-0"
           )}>
-            <span className="font-semibold text-[#4A5AA1] mr-2"><Spline size={14} /></span>
+            <div className="relative h-3.5 mr-4">
+              <div className='size-1.5 rounded-full bg-[#4A5AA1] absolute -left-1 top-0'></div>
+              <div className='w-0.5 h-3 bg-[#4A5AA1] absolute -rotate-45'></div>
+              <div className='size-1.5 rounded-full bg-[#4A5AA1] absolute bottom-0 left-0.5'></div>
+            </div>
             大模型结合业务指导手册自主规划并完成复杂任务
           </p>
           {bsConfig?.linsight_invitation_code &&

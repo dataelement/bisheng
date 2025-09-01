@@ -130,12 +130,13 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
         if (!currentMsg) return get().createWsMsg(
             { ...data, message: data.message.msg, reasoning_log: reasoning_content || '', message_id: unique_id + output_key }
         )
+
         // append
         const newCurrentMessage = {
             ...currentMsg,
             message_id: data.type === 'end' ? data.message_id : currentMsg.message_id,
             message: data.type === 'end' ? data.message.msg : currentMsg.message + data.message.msg,
-            reasoning_log: reasoning_content ? currentMsg.reasoning_log + reasoning_content : currentMsg.reasoning_log,
+            reasoning_log: data.type === 'end' ? currentMsg.reasoning_log : currentMsg.reasoning_log + (reasoning_content || ''),
             create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
             end: data.type === 'end'

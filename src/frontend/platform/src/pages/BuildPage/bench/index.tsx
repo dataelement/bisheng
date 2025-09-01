@@ -33,6 +33,8 @@ export interface FormErrors {
     systemPrompt: string;
     model: string;
     kownledgeBase: string;
+    applicationCenterWelcomeMessage: string;
+    applicationCenterDescription: string;
 }
 
 export interface ChatConfigForm {
@@ -114,6 +116,8 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     const webSearchRef = useRef<HTMLDivElement>(null);
     const systemPromptRef = useRef<HTMLDivElement>(null);
+    const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
+const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     const { config: webSearchData, setConfig: setWebSearchData } = useWebSearchStore()
     const {
         formData,
@@ -130,7 +134,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         knowledgeBaseRef,
         modelRefs,
         webSearchRef,
-        systemPromptRef
+        systemPromptRef,
+          appCenterWelcomeRef, 
+    appCenterDescriptionRef,
     }, parentFormData, parentSetFormData);
 
     useEffect(() => {
@@ -146,31 +152,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             navigate('/build/apps')
         }
     }, [user])
-useEffect(() => {
-    if (!parentFormData) {
-        console.log("parentFormData is null", parentFormData);
+    useEffect(() => {
+        if (!parentFormData) {
+            console.log("parentFormData is null", parentFormData);
 
-        getWorkstationConfigApi().then(res => {
-            if (res) {
-                setWebSearchData(res.webSearch);
-                
-                // 确保 systemPrompt 有值，如果 API 返回为空则使用默认值
-                const defaultSystemPrompt =`你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。
-在回答时，请注意以下几点：
-- 当前时间是{cur_date}。
-- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。
-- 确保回答不违反法律法规、道德准则和公序良俗。`
-                const systemPrompt = res.systemPrompt || defaultSystemPrompt;
-                
-                setFormData({
-                    ...res,
-                    systemPrompt // 确保 systemPrompt 有值
-                });
-            }
-        });
-    }
-}, []);
+            getWorkstationConfigApi().then(res => {
+                setWebSearchData(res.webSearch)
+                setFormData(res)
+            })
+        }
 
+    }, [])
     const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
         setFormData(prev => ({
             ...prev,
@@ -302,7 +294,28 @@ useEffect(() => {
                                 onChange={(v) => handleInputChange('inputPlaceholder', v, 100)}
                             />
                         </div>
+  <div ref={appCenterWelcomeRef}>
+                            <FormInput
+                                label="应用中心欢迎语"
+                                value={formData.applicationCenterWelcomeMessage}
+                                error={errors.applicationCenterWelcomeMessage}
+                                placeholder="探索BISHENG的智能体"
+                                maxLength={1000}
+                                onChange={(v) => handleInputChange('applicationCenterWelcomeMessage', v, 1000)}
+                            />
+                        </div>
 
+                        {/* 新增的应用中心描述输入框 */}
+                        <div ref={appCenterDescriptionRef}>
+                            <FormInput
+                                label="应用中心描述"
+                                value={formData.applicationCenterDescription}
+                                error={errors.applicationCenterDescription}
+                                placeholder="您可以在这里选择需要的智能体来进行生产与工作"
+                                maxLength={1000}
+                                onChange={(v) => handleInputChange('applicationCenterDescription', v, 1000)}
+                            />
+                        </div>
 
                         {/* Model Management */}
                         <div className="mb-6">
@@ -385,7 +398,6 @@ useEffect(() => {
                                 </Button>
                             }
                         >
-                            {console.log(1111, webSearchData, formData.webSearch.prompt)}
                             <WebSearchConfig
                                 config={formData.webSearch.prompt}
                                 onChange={handleWebSearchChange}
@@ -444,7 +456,7 @@ useEffect(() => {
                     <WebSearchForm
                         prompt={formData.webSearch.prompt}
                         enabled={formData.webSearch.enabled}
-                        formData={formData.webSearch}
+                        formData={formData}
                         onSubmit={handleWebSearchSave}
                     />
                 </DialogContent>
@@ -463,11 +475,14 @@ interface UseChatConfigProps {
     modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
     webSearchRef: React.RefObject<HTMLDivElement>;
     systemPromptRef: React.RefObject<HTMLDivElement>;
+    appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
+    appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
 }
 
 const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormData) => {
     const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || {
         menuShow: true,
+        
         systemPrompt: "你是BISHENG智能问答助手，你的任务是根据用户问题进行回答。在回答时，请注意以下几点：- 当前时间是{cur_date}。- 不要泄露任何敏感信息，回答应基于一般性知识和逻辑。- 确保回答不违反法律法规、道德准则和公序良俗。",
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
@@ -475,6 +490,8 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         welcomeMessage: '',
         functionDescription: '',
         inputPlaceholder: '',
+        applicationCenterWelcomeMessage: '',
+        applicationCenterDescription: '',
         models: [{ key: generateUUID(4), id: null, name: '', displayName: '' }],
         maxTokens: 15000,
         voiceInput: { enabled: false, model: '' },
@@ -543,10 +560,9 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
 - 确保回答不违反法律法规、道德准则和公序良俗。`
                 const systemPrompt = res.systemPrompt || defaultSystemPrompt;
                 
-                setFormData({
-                    ...res,
-                    systemPrompt // 确保 systemPrompt 有值
-                });
+                setFormData((prev) => {
+                    return 'menuShow' in res ? res : { ...prev, ...res, systemPrompt }
+                })
             }
         });
     }
@@ -632,7 +648,18 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
         }
-
+        if (formData.applicationCenterWelcomeMessage.length > 1000) {
+                newErrors.applicationCenterWelcomeMessage = '最多1000个字符';
+                if (!firstErrorRef) firstErrorRef = refs.appCenterWelcomeRef;
+                isValid = false;
+            }
+            
+            // 验证应用中心描述
+            if (formData.applicationCenterDescription.length > 1000) {
+                newErrors.applicationCenterDescription = '最多1000个字符';
+                if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
+                isValid = false;
+            }
         // Validate models
         if (formData.models.length === 0) {
             newErrors.model = '至少添加一个模型';
@@ -765,7 +792,8 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
-            maxTokens: formData.maxTokens || 15000,
+            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim(), 
+            applicationCenterDescription: formData.applicationCenterDescription.trim(), 
         };
 
         console.log('Saving data:', dataToSave);

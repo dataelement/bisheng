@@ -57,6 +57,7 @@ export default function DataTableKnowledge<TData, TValue>({
   onUpload,
   columns,
   data,
+  building
 }: DataTableProps<TData, TValue>) {
   const localize = useLocalize();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -135,7 +136,8 @@ export default function DataTableKnowledge<TData, TValue>({
           /> */}
         </div>
         <div>
-          <AttachFileButton disabled={loading} handleFileChange={handleUpload} />
+          {building ? <Button disabled>添加文件</Button> :
+            <AttachFileButton disabled={loading} handleFileChange={handleUpload} />}
         </div>
       </div>
       <div className="relative grid h-full max-h-[calc(100vh-20rem)] w-full flex-1 overflow-hidden overflow-x-auto overflow-y-auto rounded-md border border-black/10 dark:border-white/10">

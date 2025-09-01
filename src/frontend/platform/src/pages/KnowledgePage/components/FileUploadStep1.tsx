@@ -3,10 +3,11 @@ import KnowledgeUploadComponent from "@/components/bs-comp/knowledgeUploadCompon
 import { Button } from "@/components/bs-ui/button";
 import { locationContext } from "@/contexts/locationContext";
 import { useContext, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
 export default function FileUploadStep1({ hidden, onNext, onSave }) {
-    // const { t } = useTranslation('knowledge')
+    const { t } = useTranslation('knowledge')
     const { id: kid } = useParams()
     const { appConfig } = useContext(locationContext)
 
@@ -67,9 +68,9 @@ export default function FileUploadStep1({ hidden, onNext, onSave }) {
             onFileChange={handleFileChange}
         />
         <div className="flex justify-end gap-4 mt-8">
-            <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>直接上传</Button>
+            <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>{t("uploadDirectly")}</Button>
             <Button disabled={loading || !finish} onClick={() => onNext(filesRef.current)} >
-                {fileCount ? <span>共{fileCount}个文件</span> : null} 下一步</Button>
+                {fileCount ? <span>共{fileCount}个文件</span> : null} {t('nextStep')}</Button>
         </div>
     </div>
 

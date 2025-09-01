@@ -15,9 +15,10 @@ interface Category {
 
 interface AgentNavigationProps {
     onCategoryChange: (categoryId: string) => void
+        onRefresh: () => void
 }
 
-export function AgentNavigation({ onCategoryChange }: AgentNavigationProps) {
+export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
     const { user } = useAuthContext();
 
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
@@ -45,6 +46,7 @@ export function AgentNavigation({ onCategoryChange }: AgentNavigationProps) {
         if (shouldClose) {
             await fetchCategoryTags()
             setIsLabelModalOpen(false)
+             onRefresh();
         } else {
             setIsLabelModalOpen(shouldClose)
         }

@@ -44,7 +44,7 @@ export default function EvaluatingCreate() {
   const flow = useMemo(() => {
     return id ? nextFlow : null;
   }, [nextFlow]);
-  const [selectedType, setSelectedType] = useState<"flow" | "assistant" | "skill" | "">("");
+  const [selectedType, setSelectedType] = useState<"workflow" | "assistant" | "skill" | "">("");
   const [selectedKeyId, setSelectedKeyId] = useState("");
   const [selectedVersion, setSelectedVersion] = useState("");
   const [query, setQuery] = useState("");
@@ -88,7 +88,7 @@ export default function EvaluatingCreate() {
     if (!selectedKeyId) errorlist.push(t("evaluation.enterUniqueId"));
     
     // 修复版本验证 - 取消注释并添加正确的验证
-    if ((selectedType === "flow" || selectedType === "skill") && !selectedVersion) {
+    if ((selectedType === "workflow" || selectedType === "skill") && !selectedVersion) {
       errorlist.push(t("evaluation.enterVersion"));
     }
     
@@ -101,6 +101,7 @@ export default function EvaluatingCreate() {
     setLoading(true);
     try {
       await createEvaluationApi({
+        // exec_type: selectedType === "flow" ? "workflow" : selectedType,
         exec_type: selectedType,
         unique_id: selectedKeyId,
         version: selectedVersion,
@@ -208,6 +209,8 @@ export default function EvaluatingCreate() {
                   <Select
                     value={selectedType}
                     onValueChange={(value) => {
+                      console.log(value,222);
+                      
                       setSelectedType(value as any);
                       setSelectedKeyId("");
                       handleTypeChange(value);
@@ -221,7 +224,7 @@ export default function EvaluatingCreate() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="flow">{t("工作流")}</SelectItem>
+                        <SelectItem value="workflow">{t("工作流")}</SelectItem>
                         <SelectItem value="assistant">
                           {t("build.assistant")}
                         </SelectItem>
@@ -267,7 +270,7 @@ export default function EvaluatingCreate() {
                       </SelectViewport>
                     </SelectContent>
                   </Select>
-                  {(selectedType === "flow" || selectedType === "skill") && (
+                  {(selectedType === "workflow" || selectedType === "skill") && (
                     <Select
                       value={selectedVersion}
                       onValueChange={(version) => setSelectedVersion(version)}

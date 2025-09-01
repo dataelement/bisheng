@@ -828,6 +828,10 @@ class KnowledgeService(KnowledgeUtils):
             request, login_user, db_knowledge.id, knowledge_file
         )
 
+        # 5分钟检查下文件是否真的被删除
+        file_worker.delete_knowledge_file_celery.apply_async(args=(file_ids, knowledge_file[0].knowledge_id, True),
+                                                             countdown=300)
+
         return True
 
     @classmethod

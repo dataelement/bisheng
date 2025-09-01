@@ -188,6 +188,8 @@ export default function EvaluationPage() {
                       <div className="flex flex-wrap">
                         {el.result_score
                           ? map(el.result_score, (value, key) => {
+                            console.log(key,222);
+                            
                             return (
                               <span className="whitespace-nowrap">
                                 {

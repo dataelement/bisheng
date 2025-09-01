@@ -1,10 +1,8 @@
-import os
 from typing import Callable, Dict, Optional, Union
 
 import openai
 from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from pydantic import Field, SecretStr, model_validator
-from langchain_core.utils import convert_to_secret_str, get_from_dict_or_env
 
 
 class AzureDallEWrapper(DallEAPIWrapper):

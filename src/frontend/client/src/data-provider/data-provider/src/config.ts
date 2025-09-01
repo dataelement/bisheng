@@ -534,6 +534,8 @@ export type TStartupConfig = {
 };
 
 export type BsConfig = {
+  applicationCenterWelcomeMessage: string;
+  applicationCenterDescription: string;
   enable_etl4lm: boolean;
   sidebarIcon: {
     enabled: boolean;

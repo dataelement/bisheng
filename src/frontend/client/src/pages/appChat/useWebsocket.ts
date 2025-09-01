@@ -2,9 +2,9 @@
 import { useEffect, useRef } from "react"
 import { useRecoilState } from "recoil"
 import { useToastContext } from "~/Providers"
+import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
 import { ERROR_CODES } from "./store/constants"
-import { SkillMethod } from "./appUtils/skillMethod"
 
 const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
@@ -44,6 +44,18 @@ export const useWebSocket = (helpers) => {
 
             ws.onopen = () => {
                 console.log("WebSocket connection established!");
+                // 助手初始化
+                if (helpers.flow.flow_type === 10) {
+                    // console.log('helpers.flow :>> ', helpers.flow);
+                    const { data, ...flow } = helpers.flow
+                    const msg = {
+                        action: flow.isNew ? 'init_data' : 'check_status',
+                        chat_id: helpers.chatId,
+                        flow_id: helpers.flow.id,
+                        data: { ...flow, ...data },
+                    }
+                    ws?.send(JSON.stringify(msg))
+                }
             }
 
             ws.onmessage = (event) => {

@@ -6,14 +6,8 @@ ENV PATH="${PATH}:/root/.local/bin"
 
 WORKDIR /app
 
-# 使用国内源 + 安装依赖（合并指令、清理缓存、禁用推荐包）
-RUN echo "\
-deb https://mirrors.aliyun.com/debian/ bookworm main non-free non-free-firmware contrib\n\
-deb https://mirrors.aliyun.com/debian-security/ bookworm-security main\n\
-deb https://mirrors.aliyun.com/debian/ bookworm-updates main non-free non-free-firmware contrib\n\
-deb https://mirrors.aliyun.com/debian/ bookworm-backports main non-free non-free-firmware contrib" \
-> /etc/apt/sources.list && \
-    apt-get update && \
+# 安装依赖（合并指令、清理缓存、禁用推荐包）
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc g++ curl build-essential postgresql-server-dev-all libreoffice \
     wget procps vim fonts-wqy-zenhei \
@@ -28,6 +22,9 @@ RUN mkdir -p /opt/pandoc && \
     tar xvf pandoc-3.6.4-linux-${PANDOC_ARCH}.tar.gz && \
     cp pandoc-3.6.4/bin/pandoc /usr/bin/ && \
     rm -rf /opt/pandoc
+
+# 安装 uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 安装 Poetry
 RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2

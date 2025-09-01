@@ -1,7 +1,6 @@
 import json
 from typing import List
 
-from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
@@ -20,6 +19,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.utils import generate_uuid
 from bisheng.utils.minio_client import minio_client
 from bisheng.worker import bisheng_celery
+from bisheng_langchain.vectorstores import ElasticKeywordsSearch, Milvus
 
 
 @bisheng_celery.task(acks_late=True)
@@ -335,3 +335,18 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             _parse_knowledge_file(file_id, preview_cache_key, callback_url)
         except Exception as e:
             logger.error("retry_knowledge_file_celery error: {}", str(e))
+
+
+@bisheng_celery.task()
+def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
+    """ 异步删除知识文件及其向量 """
+    with logger.contextualize(trace_id=f'delete_file_{knowledge_id}_{file_ids[0]}'):
+        logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
+        try:
+            knowledge = KnowledgeDao.query_by_id(knowledge_id)
+            if not knowledge:
+                logger.warning(f"knowledge_id={knowledge_id} is deleted, skip delete file")
+                return
+            delete_vector_files(file_ids, knowledge)
+        except Exception as e:
+            logger.error("delete_knowledge_file_celery error: {}", str(e))

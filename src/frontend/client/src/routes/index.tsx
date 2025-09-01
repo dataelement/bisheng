@@ -104,7 +104,7 @@ export const router = createBrowserRouter([
             element: <AgentCenter />,
           },
           {
-            path: 'chat/:cid/:fid/:type',
+            path: 'chat/:conversationId/:fid/:type',
             element: <AppChat />,
           },
           {

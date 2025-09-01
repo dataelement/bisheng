@@ -133,39 +133,45 @@ export default function GenericModal({
   }
 
   function validatePrompt(closeModal: boolean) {
-    postValidatePrompt(field_name, inputValue, nodeClass)
-      .then((apiReturn) => {
-        if (apiReturn) {
-          setNodeClass(apiReturn?.frontend_node, inputValue);
-          // let inputVariables = apiReturn.input_variables ?? [];
-          // if (inputVariables && inputVariables.length === 0) {
-          //   setIsEdit(true);
-          //   setNoticeData({
-          //     title: "Your template has no variables.",
-          //   });
-          // } else {
-          setIsEdit(false);
+         setIsEdit(false);
           setSuccessData({
             title: "Prompt ready",
           });
           setModalOpen(closeModal);
           setValue(inputValue);
-          // }
-        } else {
-          setIsEdit(true);
-          setErrorData({
-            title: "An error occurred, please try again.",
-          });
-        }
-      })
-      .catch((error) => {
-        console.log(error);
-        setIsEdit(true);
-        return setErrorData({
-          title: "This prompt has an issue, please review.",
-          list: [error?.response?.data?.detail],
-        });
-      });
+    // postValidatePrompt(field_name, inputValue, nodeClass)
+    //   .then((apiReturn) => {
+    //     if (apiReturn) {
+    //       setNodeClass(apiReturn?.frontend_node, inputValue);
+    //       // let inputVariables = apiReturn.input_variables ?? [];
+    //       // if (inputVariables && inputVariables.length === 0) {
+    //       //   setIsEdit(true);
+    //       //   setNoticeData({
+    //       //     title: "Your template has no variables.",
+    //       //   });
+    //       // } else {
+    //       setIsEdit(false);
+    //       setSuccessData({
+    //         title: "Prompt ready",
+    //       });
+    //       setModalOpen(closeModal);
+    //       setValue(inputValue);
+    //       // }
+    //     } else {
+    //       setIsEdit(true);
+    //       setErrorData({
+    //         title: "An error occurred, please try again.",
+    //       });
+    //     }
+    //   })
+    //   .catch((error) => {
+    //     console.log(error);
+    //     setIsEdit(true);
+    //     return setErrorData({
+    //       title: "This prompt has an issue, please review.",
+    //       list: [error?.response?.data?.detail],
+    //     });
+    //   });
   }
 
   return (
