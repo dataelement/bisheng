@@ -2,9 +2,10 @@
 
 import { Plus, X } from "lucide-react"
 import { useState } from "react"
+import { Button } from "~/components"
 import AppAvator from "~/components/Avator"
-import { Button } from "~/components/ui/button"
-import { Card, CardContent } from "~/components/ui/card"
+import { Card, CardContent } from "~/components/ui/Card"
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip2"
 
 interface Agent {
