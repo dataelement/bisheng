@@ -1,20 +1,20 @@
 "use client"
 
+import { ChevronDown, Loader2 } from "lucide-react"
 import type React from "react"
 import { useEffect, useState } from "react"
-import { AgentCard } from "./AgentCard"
+import { getChatOnlineApi, getFrequently, getHomeLabelApi, getUncategorized } from "~/api/apps"
 import { Button } from "~/components"
-import { ChevronDown, Loader2 } from "lucide-react"
-import { getHomeLabelApi, getChatOnlineApi, getFrequently, getUncategorized, removeFromFrequentlyUsed } from "~/api/apps"
+import { AgentCard } from "./AgentCard"
 
 interface Agent {
   id: string
   name: string
   description: string
-  icon: string
+  logo: string
   category: string
-  type: number
-  userId: string
+  flow_type: number
+  user_id: string
 }
 
 interface AgentGridProps {
@@ -49,38 +49,30 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
     return favorites ? favorites.includes(agentId) : false
   }
 
-const fetchFrequentlyUsed = async (pageNum: number = 1) => {
-  setFrequentlyUsedLoading(true)
-  try {
-    const result = await getFrequently(pageNum, 8)
-    console.log("常用助手数据:", result.data)
+  const fetchFrequentlyUsed = async (pageNum: number = 1) => {
+    setFrequentlyUsedLoading(true)
+    try {
+      const result = await getFrequently(pageNum, 8)
+      console.log("常用助手数据:", result.data)
 
-    const agents: Agent[] = result.data.map((item: any) => ({
-      id: item.id.toString(),
-      type: item.flow_type,
-      name: item.name,
-      description: item.description || "",
-      icon: "🤖",
-      userId: item.user_id.toString(),
-      category: "frequently_used"
-    }))
+      const agents: Agent[] = result.data
 
-    setAllAgents(prev =>
-      pageNum === 1 ? agents : [...prev, ...agents]
-    )
+      setAllAgents(prev =>
+        pageNum === 1 ? agents : [...prev, ...agents]
+      )
 
-    const hasMore = agents.length === 8
-    setFrequentlyUsedPagination({
-      page: pageNum,
-      total: result.total,
-      hasMore
-    })
-  } catch (error) {
-    console.error("获取常用助手失败:", error)
-  } finally {
-    setFrequentlyUsedLoading(false)
+      const hasMore = agents.length === 8
+      setFrequentlyUsedPagination({
+        page: pageNum,
+        total: result.total,
+        hasMore
+      })
+    } catch (error) {
+      console.error("获取常用助手失败:", error)
+    } finally {
+      setFrequentlyUsedLoading(false)
+    }
   }
-}
 
   useEffect(() => {
     fetchFrequentlyUsed(1)
@@ -123,93 +115,77 @@ const fetchFrequentlyUsed = async (pageNum: number = 1) => {
     }
   }
 
-const fetchAgentsForCategory = async (categoryId: string, pageNum: number) => {
-  setLoading(prev => ({ ...prev, [categoryId]: true }))
+  const fetchAgentsForCategory = async (categoryId: string, pageNum: number) => {
+    setLoading(prev => ({ ...prev, [categoryId]: true }))
 
-  try {
-    console.log(`获取分类 ${categoryId} 的数据，页码: ${pageNum}`)
+    try {
+      console.log(`获取分类 ${categoryId} 的数据，页码: ${pageNum}`)
 
-    const result = await getChatOnlineApi(
-      pageNum,
-      "",
-      parseInt(categoryId),
-    )
+      const result = await getChatOnlineApi(
+        pageNum,
+        "",
+        parseInt(categoryId),
+      )
 
-    console.log(`分类 ${categoryId} 获取到的数据:`, result)
+      console.log(`分类 ${categoryId} 获取到的数据:`, result)
 
-    const agents: Agent[] = result.data.map((item: any) => ({
-      id: item.id.toString(),
-      type: item.flow_type,
-      name: item.name,
-      description: item.description || "",
-      icon: "🤖",
-      userId: item.user_id.toString(),
-      category: categoryId
-    }))
+      const agents: Agent[] = result.data
 
-    setAgentsByCategory(prev => ({
-      ...prev,
-      [categoryId]: pageNum === 1
-        ? agents
-        : [...(prev[categoryId] || []), ...agents]
-    }))
+      setAgentsByCategory(prev => ({
+        ...prev,
+        [categoryId]: pageNum === 1
+          ? agents
+          : [...(prev[categoryId] || []), ...agents]
+      }))
 
-    // 只有当获取到的数据数量等于8时才可能有更多数据
-    const hasMore = agents.length === 8
+      // 只有当获取到的数据数量等于8时才可能有更多数据
+      const hasMore = agents.length === 8
 
-    setPagination(prev => ({
-      ...prev,
-      [categoryId]: {
+      setPagination(prev => ({
+        ...prev,
+        [categoryId]: {
+          page: pageNum,
+          total: result.total,
+          hasMore
+        }
+      }))
+    } catch (error) {
+      console.error(`获取分类 ${categoryId} 的助手失败:`, error)
+    } finally {
+      setLoading(prev => ({ ...prev, [categoryId]: false }))
+    }
+  }
+
+  const fetchUncategorizedAgents = async (pageNum: number) => {
+    setUncategorizedLoading(true)
+
+    try {
+      console.log(`获取未分类数据，页码: ${pageNum}`)
+
+      const result = await getUncategorized(pageNum, 8)
+
+      console.log(`未分类获取到的数据:`, result)
+
+      const agents: Agent[] = result.data
+
+      setUncategorizedAgents(prev =>
+        pageNum === 1 ? agents : [...prev, ...agents]
+      )
+
+      // 只有当获取到的数据数量等于8时才可能有更多数据
+      const hasMore = agents.length === 8
+
+      setUncategorizedPagination({
         page: pageNum,
         total: result.total,
         hasMore
-      }
-    }))
-  } catch (error) {
-    console.error(`获取分类 ${categoryId} 的助手失败:`, error)
-  } finally {
-    setLoading(prev => ({ ...prev, [categoryId]: false }))
+      })
+    } catch (error) {
+      console.error("获取未分类助手失败:", error)
+    } finally {
+      setUncategorizedLoading(false)
+    }
   }
-}
-
-const fetchUncategorizedAgents = async (pageNum: number) => {
-  setUncategorizedLoading(true)
-
-  try {
-    console.log(`获取未分类数据，页码: ${pageNum}`)
-
-    const result = await getUncategorized(pageNum, 8)
-
-    console.log(`未分类获取到的数据:`, result)
-
-    const agents: Agent[] = result.data.map((item: any) => ({
-      id: item.id.toString(),
-      type: item.flow_type,
-      name: item.name,
-      description: item.description || "",
-      icon: "🤖",
-      userId: item.user_id.toString(),
-      category: "uncategorized"
-    }))
-
-    setUncategorizedAgents(prev =>
-      pageNum === 1 ? agents : [...prev, ...agents]
-    )
-
-    // 只有当获取到的数据数量等于8时才可能有更多数据
-    const hasMore = agents.length === 8
-
-    setUncategorizedPagination({
-      page: pageNum,
-      total: result.total,
-      hasMore
-    })
-  } catch (error) {
-    console.error("获取未分类助手失败:", error)
-  } finally {
-    setUncategorizedLoading(false)
-  }
-}
 
   const loadMore = (categoryId: string) => {
     if (categoryId === "frequently_used") {
@@ -225,13 +201,13 @@ const fetchUncategorizedAgents = async (pageNum: number) => {
   }
 
   const handleRemoveFromFavorites = async (userId: string, type: number, id: string) => {
-   try {
-    onRemoveFromFavorites(userId, type, id) // 先删除
-    
-    // 添加短暂延迟确保删除操作完成
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    await fetchFrequentlyUsed(1)
+    try {
+      onRemoveFromFavorites(userId, type, id) // 先删除
+
+      // 添加短暂延迟确保删除操作完成
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      await fetchFrequentlyUsed(1)
     } catch (error) {
       console.error("移除常用助手失败:", error)
     }
@@ -316,8 +292,8 @@ const fetchUncategorizedAgents = async (pageNum: number) => {
                       onClick={() => onCardClick(agent)}
                       isFavorite={isFavorite(agent.id)}
                       showRemove={section.isFavoriteSection}
-                      onAddToFavorites={() => handleAddToFavorites(agent.type, agent.id)}
-                      onRemoveFromFavorites={() => handleRemoveFromFavorites(agent.userId, agent.type, agent.id)}
+                      onAddToFavorites={() => handleAddToFavorites(agent.flow_type, agent.id)}
+                      onRemoveFromFavorites={() => handleRemoveFromFavorites(agent.user_id, agent.flow_type, agent.id)}
                     />
                   ))}
                 </div>

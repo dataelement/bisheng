@@ -142,6 +142,7 @@ console.log(categoryId,22);
 
         const _chatId = generateUUID(32)
         const flowId = agent.id
+        const flowType = agent.flow_type || agent.type
         // 新建会话
         queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
             if (!convoData) {
@@ -160,13 +161,13 @@ console.log(categoryId,22);
                 endpointType: null,
                 model: "",
                 flowId,
-                flowType: agent.type,
+                flowType: flowType,
                 title: agent.name,
                 tools: [],
                 updatedAt: ""
             });
         });
-        navigate(`/chat/${_chatId}/${flowId}/${agent.type}`);
+        navigate(`/chat/${_chatId}/${flowId}/${flowType}`);
     }
 
     const { data: bsConfig } = useGetBsConfig()

@@ -37,7 +37,7 @@ export default function index() {
         let error = ''
 
         // 无缓存，从新加载
-        if (currentData) return;
+        if (currentData) return setChatId(cid!);
 
         const numericType = Number(type);
 

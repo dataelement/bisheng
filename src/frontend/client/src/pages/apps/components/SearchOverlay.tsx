@@ -130,13 +130,7 @@ export function SearchOverlay({
                                     <AgentCard
                                         key={agent.id}
                                         onClick={() => onCardClick(agent)}
-                                        agent={{
-                                            id: agent.id.toString(),
-                                            name: agent.name,
-                                            description: agent.description || "暂无描述",
-                                            icon: "🤖",
-                                            category: "search"
-                                        }}
+                                        agent={agent}
                                         isFavorite={favorites ? favorites.includes(agent.id.toString()) : false}
                                         showRemove={false}
                                         onAddToFavorites={() => onAddToFavorites(agent.id.toString())}
