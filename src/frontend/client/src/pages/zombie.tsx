@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "~/components"
-import { Card } from "~/components/ui/card"
+import { Card } from "~/components/ui/Card"
 
 interface Plant {
     id: string
