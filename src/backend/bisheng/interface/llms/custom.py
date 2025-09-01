@@ -116,7 +116,7 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
 
 _llm_node_type: Dict = {
     # 开源推理框架
-    LLMServerType.OLLAMA.value: {'client': 'ChatOllama', 'params_handler': _get_ollama_params},
+    LLMServerType.OLLAMA.value: {'client': 'CustomChatOllamaWithReasoning', 'params_handler': _get_ollama_params},
     LLMServerType.XINFERENCE.value: {'client': 'ChatOpenAI', 'params_handler': _get_xinference_params},
     LLMServerType.LLAMACPP.value: {'client': 'ChatOpenAI', 'params_handler': _get_openai_params},
     # 此组件是加载本地的模型文件，待确认是否有api服务提供
