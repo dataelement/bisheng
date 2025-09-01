@@ -211,33 +211,31 @@ class AgentNode(BaseNode):
             return ''
         if self._sql_agent.database_engine == 'mysql':
             try:
-                import pymysql
+                pass
             except ImportError:
                 raise ImportError('Please install pymysql and sqlalchemy to use mysql database')
             return f'mysql+pymysql://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}?charset=utf8mb4'
         elif self._sql_agent.database_engine == 'db2':
             try:
-                import ibm_db
-                import ibm_db_sa
+                pass
             except ImportError:
                 raise ImportError('Please install ibm_db and ibm_db_sa to use db2 database')
             return f'db2+ibm_db://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
         elif self._sql_agent.database_engine == 'postgres':
             try:
-                import psycopg2
+                pass
             except ImportError:
                 raise ImportError('Please install psycopg2 and sqlalchemy to use postgresql database')
             return f'postgresql+psycopg2://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
         elif self._sql_agent.database_engine == 'gaussdb':
             try:
-                import psycopg2
-                import opengauss_sqlalchemy
+                pass
             except ImportError:
                 raise ImportError('Please install psycopg2 and opengauss_sqlalchemy to use gaussdb database')
             return f'opengauss+psycopg2://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}'
         elif self._sql_agent.database_engine == 'oracle':
             try:
-                import oracledb
+                pass
             except ImportError:
                 raise ImportError('Please install oracledb and sqlalchemy to use oracle database')
             return f'oracle+oracledb://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}?service_name={self._sql_agent.db_name}'
@@ -293,6 +291,7 @@ class AgentNode(BaseNode):
             self._log_reasoning_content.append(reasoning_content)
             if self._output_user:
                 self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                       name=self.name,
                                                                        msg=ret['output'],
                                                                        reasoning_content=reasoning_content,
                                                                        unique_id=unique_id,
@@ -307,6 +306,7 @@ class AgentNode(BaseNode):
                 self._log_reasoning_content.append(reasoning_content)
                 if self._output_user:
                     self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
+                                                                           name=self.name,
                                                                            msg=ret[output_key],
                                                                            reasoning_content=reasoning_content,
                                                                            unique_id=unique_id,
@@ -400,6 +400,7 @@ class AgentNode(BaseNode):
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
                                               node_id=self.id,
+                                              node_name=self.name,
                                               output=self._output_user,
                                               output_key=output_key,
                                               tool_list=tool_invoke_list,

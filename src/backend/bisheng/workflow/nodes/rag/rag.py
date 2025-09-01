@@ -93,6 +93,7 @@ class RagNode(BaseNode):
             llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                                   unique_id=unique_id,
                                                   node_id=self.id,
+                                                  node_name=self.name,
                                                   output=self._output_user,
                                                   output_key=output_key,
                                                   cancel_llm_end=True)
@@ -104,6 +105,7 @@ class RagNode(BaseNode):
                 if llm_callback.output_len == 0:
                     self.callback_manager.on_output_msg(
                         OutputMsgData(node_id=self.id,
+                                      name=self.name,
                                       msg=result['result'],
                                       unique_id=unique_id,
                                       output_key=output_key,
@@ -112,6 +114,7 @@ class RagNode(BaseNode):
                     # 说明有流式输出，则触发流式结束事件, 因为需要source_document所以在此执行流式结束事件
                     self.callback_manager.on_stream_over(StreamMsgOverData(
                         node_id=self.id,
+                        name=self.name,
                         msg=result['result'],
                         reasoning_content=llm_callback.reasoning_content,
                         unique_id=unique_id,

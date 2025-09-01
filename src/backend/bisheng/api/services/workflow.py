@@ -12,7 +12,7 @@ from bisheng.api.v1.schemas import ChatResponse
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
 from bisheng.chat.utils import SourceType
-from bisheng.database.models.flow import FlowDao, FlowType, FlowStatus
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
@@ -197,7 +197,7 @@ class WorkFlowService(BaseService):
             message_id=chat_response.message_id,
             status='end',
             node_id=chat_response.message.get('node_id'),
-            node_name=chat_response.message.get('node_name'),
+            node_name=chat_response.message.get('name'),
             node_execution_id=chat_response.message.get('unique_id'),
         )
         match workflow_event.event:

@@ -42,10 +42,10 @@ class StartNode(BaseNode):
 
         if self.node_params['guide_word']:
             self.callback_manager.on_guide_word(
-                data=GuideWordData(node_id=self.id, unique_id=unique_id, guide_word=self.node_params['guide_word']))
+                data=GuideWordData(node_id=self.id, name=self.name, unique_id=unique_id, guide_word=self.node_params['guide_word']))
         if self.node_params['guide_question']:
             self.callback_manager.on_guide_question(
-                data=GuideQuestionData(node_id=self.id, unique_id=unique_id,
+                data=GuideQuestionData(node_id=self.id, name=self.name, unique_id=unique_id,
                                        guide_question=self.node_params['guide_question']))
         if not self.node_data.v:
             raise IgnoreException(f'{self.name} -- workflow node is update')
