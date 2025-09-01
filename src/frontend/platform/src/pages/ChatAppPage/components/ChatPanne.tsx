@@ -20,8 +20,6 @@ import ChatReportForm from "../components/ChatReportForm";
 import ForcePrompt from "./ForcePrompt";
 
 export default function ChatPanne({ customWsHost = '',chatList,chat, appendHistory = false, data, version = 'v1' }) {
-    console.log(chat,21312312);
-    
     const { id, chatId, type } = data
     const { t } = useTranslation()
 

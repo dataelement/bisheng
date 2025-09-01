@@ -20,10 +20,9 @@ export default function editAssistant() {
     const { t } = useTranslation()
     const { id: assisId } = useParams()
     const navigate = useNavigate()
-     const { state } = useLocation();
-        const loca = state?.flow; // 获取传递的 flow 数据
-        console.log(loca,1111);
-        
+    const { state } = useLocation();
+    const loca = state?.flow; // 获取传递的 flow 数据
+
     // assistant data
     const { assistantState, changed, loadAssistantState, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()

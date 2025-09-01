@@ -234,18 +234,7 @@ export default function apps() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    onClick={() => {
-                                        handleSetting(item);
-                                        createAppModalRef.current?.open(
-                                            TypeNames[item.flow_type],
-                                            0,
-                                            {
-                                                id: item.id,
-                                                logo: item.logo,
-                                                type: TypeNames[item.flow_type]
-                                            }
-                                        );
-                                    }}
+                                    onClick={() => handleSetting(item)}
                                     onSwitchClick={() => {
                                         !item.write && item.status !== 2 && message({
                                             description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
