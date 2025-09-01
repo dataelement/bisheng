@@ -276,19 +276,19 @@ export default function Files({ onPreview }) {
                                                         value: 2,
                                                         label: '已完成',
                                                         color: 'text-blue-500',
-                                                        icon: <img src="/success.svg" className="w-16 h-8" alt="已完成" />
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/success.svg"} className="w-16 h-8" alt="已完成" />
                                                     },
                                                     {
                                                         value: 1,
                                                         label: '解析中',
                                                         color: 'text-green-500',
-                                                        icon: <img src="/analysis.svg" className="w-16 h-8" alt="解析中" />
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
                                                     },
                                                     {
                                                         value: 3,
                                                         label: '解析失败',
                                                         color: 'text-red-500',
-                                                        icon: <img src="/failed.svg" className="w-16 h-8" alt="解析失败" />
+                                                        icon: <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-16 h-8" alt="解析失败" />
                                                     }
                                                 ].map(({ value, label, color, icon }) => (
                                                     <div
@@ -404,11 +404,11 @@ export default function Files({ onPreview }) {
                                     ) : (
                                         <div className="flex items-center gap-2">
                                             {el.status === 2 ? (
-                                                <img src="/success.svg" className="w-16 h-8" alt="已完成" />
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/success.svg"} className="w-16 h-8" alt="已完成" />
                                             ) : el.status === 1 ? (
-                                                <img src="/analysis.svg" className="w-16 h-8" alt="解析中" />
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/analysis.svg"} className="w-16 h-8" alt="解析中" />
                                             ) : (
-                                                <img src="/failed.svg" className="w-16 h-8" alt="解析失败" />
+                                                <img src={__APP_ENV__.BASE_URL + "/assets/failed.svg"} className="w-16 h-8" alt="解析失败" />
                                             )}
                                         </div>
                                     )}

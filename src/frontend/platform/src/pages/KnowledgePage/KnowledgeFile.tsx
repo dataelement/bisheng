@@ -25,10 +25,10 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getKnowledgeModelConfig, getModelListApi } from "@/controllers/API/finetune";
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import { useTable } from "../../util/hook";
-import { CircleAlert, Copy, Ellipsis,LoaderCircle,Settings,Trash2  } from "lucide-react";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 
-function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', currentLib = null}) {
+function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', currentLib = null }) {
     const { t } = useTranslation()
     const navigate = useNavigate()
 
@@ -37,17 +37,17 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
     const [modal, setModal] = useState(null)
     const [options, setOptions] = useState([])
     const [isSubmitting, setIsSubmitting] = useState(false) // 新增loading状态
-     const [isModelChanged, setIsModelChanged] = useState(false) // 新增：跟踪模型是否被修改
+    const [isModelChanged, setIsModelChanged] = useState(false) // 新增：跟踪模型是否被修改
 
     useEffect(() => {
-    if (mode === 'edit' && currentLib) {
-      if (nameRef.current) nameRef.current.value = currentLib.name;
-      if (descRef.current) descRef.current.value = currentLib.description;
-       setIsModelChanged(false) // 初始化时不显示警告
-    // const currentModel = 
-    //   setModal(currentModel);
-    }
-  }, [mode, currentLib]);
+        if (mode === 'edit' && currentLib) {
+            if (nameRef.current) nameRef.current.value = currentLib.name;
+            if (descRef.current) descRef.current.value = currentLib.description;
+            setIsModelChanged(false) // 初始化时不显示警告
+            // const currentModel = 
+            //   setModal(currentModel);
+        }
+    }, [mode, currentLib]);
     // Fetch model data
     useEffect(() => {
         Promise.all([getKnowledgeModelConfig(), getModelListApi()]).then(([config, data]) => {
@@ -92,7 +92,7 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
         const errorlist = []
 
         if (!name) errorlist.push(t('lib.enterLibraryName'))
-        if (name.length > 200) errorlist.push('知识库名称不能超过200字') 
+        if (name.length > 200) errorlist.push('知识库名称不能超过200字')
         if (!modal) errorlist.push(t('lib.selectModel'))
         if (datalist.find(data => data.name === name)) errorlist.push(t('lib.nameExists'))
 
@@ -101,11 +101,11 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
 
 
         setIsSubmitting(true)  // 开始提交
-    //     try {
-    //   if (mode === 'create') {
-    //     // 创建逻辑...
-    //   } else {}
-    // }
+        //     try {
+        //   if (mode === 'create') {
+        //     // 创建逻辑...
+        //   } else {}
+        // }
         await captureAndAlertRequestErrorHoc(createFileLib({
             name,
             description: desc || `当回答与${name}相关的问题时，参考此知识库`,
@@ -131,26 +131,26 @@ function CreateModal({ datalist, open, setOpen, onLoadEnd, mode = 'create', curr
         });
     }
 
-return <Dialog open={open} onOpenChange={setOpen}>
-    <DialogContent className="sm:max-w-[625px]">
-        <DialogHeader>
-            <DialogTitle>{mode === 'create' ? t('lib.createLibrary') : '知识库设置'}</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
-{mode === 'edit' && (
-    <div className="space-y-4"> {/* 上下排列 */}
-        <div className="flex items-center gap-48"> {/* 左右排列 */}
-            <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId')}</label>
-            <div className="text-sm">{currentLib?.id || ''}</div>
-        </div>
-        <div className="flex items-center gap-48"> {/* 左右排列 */}
-            <label className="bisheng-label text-sm text-gray-500">{t('createTime')}</label>
-            <div className="text-sm">
-                {currentLib?.create_time ? currentLib.create_time.replace('T', ' ') : ''}
-            </div>
-        </div>
-    </div>
-)}
+    return <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+                <DialogTitle>{mode === 'create' ? t('lib.createLibrary') : '知识库设置'}</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-2">
+                {mode === 'edit' && (
+                    <div className="space-y-4"> {/* 上下排列 */}
+                        <div className="flex items-center gap-48"> {/* 左右排列 */}
+                            <label className="bisheng-label text-sm text-gray-500">{t('lib.knowledgeBaseId')}</label>
+                            <div className="text-sm">{currentLib?.id || ''}</div>
+                        </div>
+                        <div className="flex items-center gap-48"> {/* 左右排列 */}
+                            <label className="bisheng-label text-sm text-gray-500">{t('createTime')}</label>
+                            <div className="text-sm">
+                                {currentLib?.create_time ? currentLib.create_time.replace('T', ' ') : ''}
+                            </div>
+                        </div>
+                    </div>
+                )}
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('lib.libraryName')}</label>
                     <span className="text-red-500">*</span>
@@ -168,23 +168,23 @@ return <Dialog open={open} onOpenChange={setOpen}>
                 </div>
                 <div className="">
                     <label htmlFor="roleAndTasks" className="bisheng-label">知识库embedding模型选择</label>
-                  {
-                            modal && <Cascader
-                                defaultValue={modal}
-                                placholder="请在模型管理中配置 embedding 模型"
-                                options={options}
-                                onChange={(a, val) => {
-                                    setModal(val);
-                                    if (mode === 'edit') setIsModelChanged(true); // 仅在编辑模式下标记变更
-                                }}
-                            />
-                        }
-                       {mode === 'edit' && isModelChanged && (
-                            <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
-                                <CircleAlert className="w-4 h-4" color="#ef4444" />
-                                修改 embedding 模型可能会消耗大量模型资源且耗时较久，请谨慎进行
-                            </p>
-                        )}
+                    {
+                        modal && <Cascader
+                            defaultValue={modal}
+                            placholder="请在模型管理中配置 embedding 模型"
+                            options={options}
+                            onChange={(a, val) => {
+                                setModal(val);
+                                if (mode === 'edit') setIsModelChanged(true); // 仅在编辑模式下标记变更
+                            }}
+                        />
+                    }
+                    {mode === 'edit' && isModelChanged && (
+                        <p className="text-red-500 text-sm mt-1 flex items-center gap-1">
+                            <CircleAlert className="w-4 h-4" color="#ef4444" />
+                            修改 embedding 模型可能会消耗大量模型资源且耗时较久，请谨慎进行
+                        </p>
+                    )}
                 </div>
             </div>
             <DialogFooter>
@@ -223,33 +223,33 @@ export default function KnowledgeFile() {
     const navigate = useNavigate()
     const [menuOpen, setMenuOpen] = useState(false);
     const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
-     const [settingsOpen, setSettingsOpen] = useState(false);
-  const [currentSettingLib, setCurrentSettingLib] = useState(null);
-   const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [currentSettingLib, setCurrentSettingLib] = useState(null);
+    const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
 
-const toggleMenu = (id: string, e: React.MouseEvent) => {
-  e.stopPropagation();
-  setOpenMenus(prev => ({
-    ...Object.keys(prev).reduce((acc, key) => {
-      acc[key] = false; // 关闭其他所有菜单
-      return acc;
-    }, {} as Record<string, boolean>),
-    [id]: !prev[id] // 切换当前菜单
-  }));
-  // @ts-ignore
-  window.libname = [el.name, el.description];
-};
+    const toggleMenu = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setOpenMenus(prev => ({
+            ...Object.keys(prev).reduce((acc, key) => {
+                acc[key] = false; // 关闭其他所有菜单
+                return acc;
+            }, {} as Record<string, boolean>),
+            [id]: !prev[id] // 切换当前菜单
+        }));
+        // @ts-ignore
+        window.libname = [el.name, el.description];
+    };
 
-// 点击外部关闭菜单
-useEffect(() => {
-  const handleClickOutside = (event: MouseEvent) => {
-    if (!(event.target as Element).closest('.menu-container')) {
-      setOpenMenus({});
-    }
-  };
-  document.addEventListener('mousedown', handleClickOutside);
-  return () => document.removeEventListener('mousedown', handleClickOutside);
-}, []);
+    // 点击外部关闭菜单
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (!(event.target as Element).closest('.menu-container')) {
+                setOpenMenus({});
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
@@ -316,27 +316,27 @@ useEffect(() => {
 
     // copy
     const handleCopy = async (elem) => {
-            const newName = `${elem.name}的副本`;
-            if (newName.length > 200) {
-                message({
-                    variant: 'error',
-                    description: '复制失败：复制后的知识库名称超过200字限制'
-                });
-        return;
-    }
+        const newName = `${elem.name}的副本`;
+        if (newName.length > 200) {
+            message({
+                variant: 'error',
+                description: '复制失败：复制后的知识库名称超过200字限制'
+            });
+            return;
+        }
         setCopyLoadingId(elem.id); // 设置当前正在复制的ID
         doing[elem.id] = true; // 标记为正在复制
-    try {
-        await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
-        reload();
-    } catch (error) {
-        message({
-            variant: 'error',
-            description: '复制失败'
-        });
-    } finally {
-        setCopyLoadingId(null); // 重置加载状态
-    }
+        try {
+            await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id));
+            reload();
+        } catch (error) {
+            message({
+                variant: 'error',
+                description: '复制失败'
+            });
+        } finally {
+            setCopyLoadingId(null); // 重置加载状态
+        }
     }
 
     return (
@@ -364,129 +364,127 @@ useEffect(() => {
                     <TableBody>
                         {datalist.map((el: any) => (
                             <TableRow
-                            key={el.id}
-                            onClick={() => {
-                                   window.libname = [el.name, el.description];
+                                key={el.id}
+                                onClick={() => {
+                                    window.libname = [el.name, el.description];
                                     navigate(`/filelib/${el.id}`)
                                     handleCachePage()
                                 }}
                             >
                                 {/* <TableCell>{el.id}</TableCell> */}
-                <TableCell className="font-medium max-w-[200px]">
-    <div className="flex items-start gap-2">
-        <img 
-            src="/file-logo.svg" 
-            alt=""
-            className="w-8 h-8 mt-1 rounded object-cover"
-        />
-        
-        <div>
-            <div className="line-clamp-2">{el.name}</div>
-            <div 
-                className="line-clamp-2 relative group"
-                title={el.description.length > 20 ? el.description : undefined}
-            >
-                {el.description.length > 20 ? `${el.description.substring(0, 20)}...` : el.description}
-                {el.description.length > 20 && (
-                    <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10">
-                        {el.description}
-                    </div>
-                )}
-            </div>
-        </div>
-    </div>
-</TableCell>
+                                <TableCell className="font-medium max-w-[200px]">
+                                    <div className="flex items-start gap-2">
+                                        <img
+                                            src={__APP_ENV__.BASE_URL + "/assets/file-logo.svg"}
+                                            alt=""
+                                            className="w-8 h-8 mt-1 rounded object-cover"
+                                        />
+
+                                        <div>
+                                            <div className="line-clamp-2">{el.name}</div>
+                                            <div
+                                                className="line-clamp-2 relative group"
+                                                title={el.description.length > 20 ? el.description : undefined}
+                                            >
+                                                {el.description.length > 20 ? `${el.description.substring(0, 20)}...` : el.description}
+                                                {el.description.length > 20 && (
+                                                    <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10">
+                                                        {el.description}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </TableCell>
                                 {/* <TableCell>{modelNameMap[el.model] || '--'}</TableCell> */}
                                 {/* <TableCell>{el.create_time.replace('T', ' ')}</TableCell> */}
                                 <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                                 <TableCell className="max-w-[300px] break-all">
                                     <div className=" truncate-multiline">{el.user_name || '--'}</div>
                                 </TableCell>
-<TableCell className="text-right">
-  <div className="flex items-center justify-end gap-2">
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center
+                                <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center
                     hover:bg-gray-300 transition-colors duration-200
                     focus:outline-none focus:ring-2 focus:ring-gray-400 relative"
-          disabled={copyLoadingId === el.id}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {copyLoadingId === el.id ? (
-            <>
-              <LoaderCircle className="animate-spin" />
-              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
-                复制中
-              </div>
-            </>
-          ) : (
-            <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-          )}
-        </button>
-      </DropdownMenuTrigger>
-      
-      <DropdownMenuContent 
-        align="end" 
-        className=" rounded-md shadow-lg py-1 border border-gray-200 z-[100]"
-      style={{
-    backgroundColor: 'white',
-    opacity: 1,
-  }}
-        onInteractOutside={() => setOpenMenus({})}
-      >
-        {/* 复制按钮 */}
-        {(el.copiable || user.role === 'admin') && (
-          <DropdownMenuItem
-            className={`flex items-center gap-2 px-4 py-2 ${
-              el.state === 1 ? 'hover:bg-gray-100 cursor-pointer' : 'text-gray-400 cursor-not-allowed'
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (el.state === 1) {
-                handleCopy(el);
-              }
-            }}
-            disabled={el.state !== 1}
-          >
-            <Copy className="w-4 h-4" />
-            {el.state === 1 ? t('lib.copy') : t('lib.copying')}
-          </DropdownMenuItem>
-        )}
+                                                    disabled={copyLoadingId === el.id}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    {copyLoadingId === el.id ? (
+                                                        <>
+                                                            <LoaderCircle className="animate-spin" />
+                                                            <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
+                                                                复制中
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                                    )}
+                                                </button>
+                                            </DropdownMenuTrigger>
 
-        {/* 设置按钮 */}
-        <DropdownMenuItem
-          className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer"
-          onClick={(e) => {
-            e.stopPropagation();
-            setCurrentSettingLib(el);
-            setSettingsOpen(true);
-          }}
-        >
-          <Settings className="w-4 h-4" />
-          {t('设置')}
-        </DropdownMenuItem>
+                                            <DropdownMenuContent
+                                                align="end"
+                                                className=" rounded-md shadow-lg py-1 border border-gray-200 z-[100]"
+                                                style={{
+                                                    backgroundColor: 'white',
+                                                    opacity: 1,
+                                                }}
+                                                onInteractOutside={() => setOpenMenus({})}
+                                            >
+                                                {/* 复制按钮 */}
+                                                {(el.copiable || user.role === 'admin') && (
+                                                    <DropdownMenuItem
+                                                        className={`flex items-center gap-2 px-4 py-2 ${el.state === 1 ? 'hover:bg-gray-100 cursor-pointer' : 'text-gray-400 cursor-not-allowed'
+                                                            }`}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (el.state === 1) {
+                                                                handleCopy(el);
+                                                            }
+                                                        }}
+                                                        disabled={el.state !== 1}
+                                                    >
+                                                        <Copy className="w-4 h-4" />
+                                                        {el.state === 1 ? t('lib.copy') : t('lib.copying')}
+                                                    </DropdownMenuItem>
+                                                )}
 
-        {/* 删除按钮 */}
-        <DropdownMenuItem
-          className={`flex items-center gap-2 px-4 py-2 ${
-            el.copiable ? ' hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (el.copiable) {
-              handleDelete(el.id);
-            }
-          }}
-          disabled={!el.copiable}
-        >
-          <Trash2 className="w-4 h-4" />
-          {t('delete')}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </div>
-</TableCell>
+                                                {/* 设置按钮 */}
+                                                <DropdownMenuItem
+                                                    className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setCurrentSettingLib(el);
+                                                        setSettingsOpen(true);
+                                                    }}
+                                                >
+                                                    <Settings className="w-4 h-4" />
+                                                    {t('设置')}
+                                                </DropdownMenuItem>
+
+                                                {/* 删除按钮 */}
+                                                <DropdownMenuItem
+                                                    className={`flex items-center gap-2 px-4 py-2 ${el.copiable ? ' hover:bg-gray-100' : 'text-gray-400 cursor-not-allowed'
+                                                        }`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (el.copiable) {
+                                                            handleDelete(el.id);
+                                                        }
+                                                    }}
+                                                    disabled={!el.copiable}
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                    {t('delete')}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
@@ -504,7 +502,7 @@ useEffect(() => {
                 </div>
             </div>
             <CreateModal datalist={datalist} open={open} setOpen={setOpen} onLoadEnd={setModelNameMap} mode="create"></CreateModal>
-            <CreateModal 
+            <CreateModal
                 datalist={datalist}
                 open={settingsOpen}
                 setOpen={setSettingsOpen}

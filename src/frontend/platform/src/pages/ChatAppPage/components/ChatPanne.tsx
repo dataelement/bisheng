@@ -225,7 +225,7 @@ export default function ChatPanne({ customWsHost = '',chatList,chat, appendHisto
     if (!(flow || assistant || workflow)) {
         return <div
             className="flex-1 chat-box h-full overflow-hidden bs-chat-bg relative"
-            style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}
+            style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}
         > </div>
     }
 

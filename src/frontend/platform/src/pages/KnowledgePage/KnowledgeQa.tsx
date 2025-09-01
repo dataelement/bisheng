@@ -155,8 +155,8 @@ export default function KnowledgeQa(params) {
     const { user } = useContext(userContext);
     const [modelNameMap, setModelNameMap] = useState({})
     const navigate = useNavigate()
-      const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
-          const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
+    const [copyLoadingId, setCopyLoadingId] = useState<string | null>(null);
+    const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) => {
         return readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
@@ -176,17 +176,17 @@ export default function KnowledgeQa(params) {
     }
 
     const toggleMenu = (id: string, e: React.MouseEvent) => {
-  e.stopPropagation();
-  setOpenMenus(prev => ({
-    ...Object.keys(prev).reduce((acc, key) => {
-      acc[key] = false; // 关闭其他所有菜单
-      return acc;
-    }, {} as Record<string, boolean>),
-    [id]: !prev[id] // 切换当前菜单
-  }));
-  // @ts-ignore
-  window.libname = [el.name, el.description];
-};
+        e.stopPropagation();
+        setOpenMenus(prev => ({
+            ...Object.keys(prev).reduce((acc, key) => {
+                acc[key] = false; // 关闭其他所有菜单
+                return acc;
+            }, {} as Record<string, boolean>),
+            [id]: !prev[id] // 切换当前菜单
+        }));
+        // @ts-ignore
+        window.libname = [el.name, el.description];
+    };
     // 进详情页前缓存 page, 临时方案
     const handleCachePage = () => {
         window.LibPage = { page, type: 'qa' }
@@ -227,86 +227,85 @@ export default function KnowledgeQa(params) {
                     {datalist.map((el: any) => (
                         <TableRow key={el.id}
                             onClick={() => {
-                                   window.libname = [el.name, el.description];
-                                    navigate(`/filelib/qalib/${el.id}`)
-                                    handleCachePage()
-                                }}
+                                window.libname = [el.name, el.description];
+                                navigate(`/filelib/qalib/${el.id}`)
+                                handleCachePage()
+                            }}
                         >
                             {/* <TableCell>{el.id}</TableCell> */}
-                      <TableCell className="font-medium max-w-[200px]">
-  <div className="flex items-start gap-2">
-    <img 
-      src="/qa-logo.svg" 
-      alt="知识库图标"
-      className="w-8 h-8 mt-1 flex-shrink-0" 
-    />
-    
-    <div className="min-w-0">
-      <div className="truncate-multiline">{el.name}</div>
-      <div 
-        className="line-clamp-2 relative group"
-        title={el.description.length > 20 ? el.description : undefined}
-      >
-        {el.description.length > 20 ? `${el.description.substring(0, 20)}...` : el.description}
-        {el.description.length > 20 && (
-          <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10">
-            {el.description}
-          </div>
-        )}
-      </div>
-    </div>
-  </div>
-</TableCell>
+                            <TableCell className="font-medium max-w-[200px]">
+                                <div className="flex items-start gap-2">
+                                    <img
+                                        src={`${__APP_ENV__.BASE_URL}/assets/qa-logo.svg`}
+                                        alt="知识库图标"
+                                        className="w-8 h-8 mt-1 flex-shrink-0"
+                                    />
+
+                                    <div className="min-w-0">
+                                        <div className="truncate-multiline">{el.name}</div>
+                                        <div
+                                            className="line-clamp-2 relative group"
+                                            title={el.description.length > 20 ? el.description : undefined}
+                                        >
+                                            {el.description.length > 20 ? `${el.description.substring(0, 20)}...` : el.description}
+                                            {el.description.length > 20 && (
+                                                <div className="absolute hidden group-hover:block bottom-full left-0 bg-blue-500 text-white p-2 rounded whitespace-normal w-48 z-10">
+                                                    {el.description}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </TableCell>
                             {/* <TableCell>{modelNameMap[el.model] || '--'}</TableCell> */}
                             {/* <TableCell>{el.create_time.replace('T', ' ')}</TableCell> */}
                             <TableCell>{el.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="max-w-[300px] break-all">
                                 <div className=" truncate-multiline">{el.user_name || '--'}</div>
                             </TableCell>
-<TableCell className="text-right">
-  <div className="flex items-center justify-end gap-2">
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center
+                            <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <button
+                                                className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center
                     hover:bg-gray-300 transition-colors duration-200
                     focus:outline-none focus:ring-2 focus:ring-gray-400 relative"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
-        </button>
-      </DropdownMenuTrigger>
-      
-      <DropdownMenuContent 
-        align="end" 
-        className="rounded-md shadow-lg py-1 border border-gray-200 z-[100]"
-        style={{
-          backgroundColor: 'white',
-          opacity: 1,
-        }}
-        onInteractOutside={() => setOpenMenus({})}
-      >
-        <DropdownMenuItem
-          className={`flex items-center gap-2 px-4 py-2 ${
-            (el.copiable || user.role === 'admin') 
-              ? 'hover:bg-gray-100 cursor-pointer' 
-              : 'text-gray-400 cursor-not-allowed'
-          }`}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (el.copiable || user.role === 'admin') {
-              handleDelete(el.id);
-            }
-          }}
-          disabled={!(el.copiable || user.role === 'admin')}
-        >
-          <Trash2 className="w-4 h-4" />
-          {t('delete')}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  </div>
-</TableCell>
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <Ellipsis size={24} color="#a69ba2" strokeWidth={1.75} />
+                                            </button>
+                                        </DropdownMenuTrigger>
+
+                                        <DropdownMenuContent
+                                            align="end"
+                                            className="rounded-md shadow-lg py-1 border border-gray-200 z-[100]"
+                                            style={{
+                                                backgroundColor: 'white',
+                                                opacity: 1,
+                                            }}
+                                            onInteractOutside={() => setOpenMenus({})}
+                                        >
+                                            <DropdownMenuItem
+                                                className={`flex items-center gap-2 px-4 py-2 ${(el.copiable || user.role === 'admin')
+                                                    ? 'hover:bg-gray-100 cursor-pointer'
+                                                    : 'text-gray-400 cursor-not-allowed'
+                                                    }`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (el.copiable || user.role === 'admin') {
+                                                        handleDelete(el.id);
+                                                    }
+                                                }}
+                                                disabled={!(el.copiable || user.role === 'admin')}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                                {t('delete')}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </TableCell>
                             {/* <TableCell className="text-right" onClick={() => {
                                 window.libname = el.name;
                             }}>

@@ -40,7 +40,7 @@ export default function MessageUser({ debug, mark = false, useName = '', data, o
             <div className="rounded-2xl px-6 py-4 bg-[#EEF2FF] dark:bg-[#333A48]">
                 <div className="flex gap-2 ">
                     <div className="text-[#0D1638] dark:text-[#CFD5E8] text-sm break-all whitespace-break-spaces">{msg}</div>
-                    <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/user.png'} alt="" /></div>
+                    <div className="w-6 h-6 min-w-6"><img src={__APP_ENV__.BASE_URL + '/assets/user.png'} alt="" /></div>
                 </div>
             </div>
             {/* 附加信息 */}

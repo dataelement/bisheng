@@ -84,7 +84,7 @@ export const ResetPwdPage = () => {
                 ><ArrowLeft /></Button>}
                 <div className='bg-background-login relative'>
                     <div>
-                        <img src={__APP_ENV__.BASE_URL + '/login-logo-small.png'} alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
+                        <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/login-logo-small.png'} alt="small_logo" className='block w-[114px] h-[36px] m-auto mt-[140px]' />
                         <span className='block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]'>{t('resetPassword.slogen')}</span>
                     </div>
                     <div className="grid gap-[12px] mt-[68px]">

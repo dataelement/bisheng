@@ -38,7 +38,7 @@ export default function TestChat({ assisId, guideQuestion, onClear }) {
         return [msgData, inputKey]
     }
 
-    return <div className="relative h-full px-4 bs-chat-bg bg-background-login" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/points.png)` }}>
+    return <div className="relative h-full px-4 bs-chat-bg bg-background-login" style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}>
         <div className="absolute flex w-full left-0 top-0 gap-2 px-4 py-2 items-center z-10 bg-background-login shadow-sm">
             <TitleLogo
                 url={assistantState.logo}
