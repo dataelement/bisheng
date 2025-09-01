@@ -235,12 +235,12 @@ export default function apps() {
                                     user={item.user_name}
                                     currentUser={user}
                                     onClick={() => handleSetting(item)}
-                                    onSwitchClick={() => {
-                                        !item.write && item.status !== 2 && message({
-                                            description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
-                                            variant: 'warning'
-                                        })
-                                    }}
+                                    // onSwitchClick={() => {
+                                    //     !item.write && item.status !== 2 && message({
+                                    //         description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
+                                    //         variant: 'warning'
+                                    //     })
+                                    // }}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
