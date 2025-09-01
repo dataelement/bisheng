@@ -306,7 +306,7 @@ export function AgentGrid({ favorites, onAddToFavorites, onRemoveFromFavorites, 
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-4 gap-2">
                   {section.agents.map((agent) => (
                     <AgentCard
                       key={agent.id}

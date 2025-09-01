@@ -23,7 +23,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { truncateString } from "@/util/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Checkbox } from "@/components/bs-ui/checkbox";
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { FileIcon } from "@/components/bs-icons/file";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 

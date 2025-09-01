@@ -178,7 +178,7 @@ export default function InputFiles({ v, accepts, size, onChange }) {
             </div>}
 
             {/* File Upload Button */}
-            <div className="absolute right-10 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
+            <div className="absolute right-12 top-5 cursor-pointer" onClick={() => fileInputRef.current.click()}>
                 <PaperclipIcon size={18} />
             </div>
 

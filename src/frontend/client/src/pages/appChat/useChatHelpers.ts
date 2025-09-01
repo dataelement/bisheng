@@ -165,7 +165,11 @@ export default function useChatHelpers() {
                             flow_id,
                             chat_id,
                             id: messageId,
-                            files,
+                            files: files.map(el => ({
+                                // 兼容
+                                file_name: el.file_name || el.name,
+                                file_url: el.file_url || el.url
+                            })),
                             is_bot,
                             message,
                             receiver,

@@ -22,6 +22,9 @@ export default function index() {
     const chatState = useRecoilValue(currentChatState)
     const build = useBuild()
 
+    // console.log('[chatState] :>> ', chatState);
+    // console.log('[runningState] :>> ', __);
+
     useConfig()
 
     // 切换会话
@@ -47,8 +50,8 @@ export default function index() {
                     getChatHistoryApi(fid, cid, type)
                 ])
 
-                flowData = { ...flowRes.data, isNew: !messages.length }
                 messages = msgRes.reverse()
+                flowData = { ...flowRes.data, isNew: !messages.length }
 
                 if (flowRes.status_code !== 200) {
                     error = flowRes.status_message

@@ -160,7 +160,6 @@ export const useAreaText = () => {
     useEffect(() => {
         setSubmitDataState({
             input: textareaRef.current?.value || "",
-            action: chatState.messages.length ? ActionType.CHECK_STATUS : ActionType.INIT_DATA,
             chatId,
             flow: chatState.flow,
         })

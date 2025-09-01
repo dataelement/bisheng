@@ -75,10 +75,9 @@ export function TitleLogo({
   type = AppNumType.SKILL, // 默认使用数字类型
   size = 'w-6 h-6'
 }) {
-   console.log(type,'1');
   // 根据类型获取背景颜色
   const getBgColor = () => {
-    switch(type) {
+    switch (type) {
       case AppNumType.SKILL:
         return 'bg-purple-600';
       case AppNumType.ASSISTANT:
@@ -91,10 +90,10 @@ export function TitleLogo({
   };
 
   const getIcon = () => {
-    switch(type) {
-      case AppNumType.ASSISTANT: 
+    switch (type) {
+      case AppNumType.ASSISTANT:
         return <AssistantIcon className="w-4 h-4" />;
-      case AppNumType.FLOW: 
+      case AppNumType.FLOW:
         return <FlowIcon className="w-4 h-4" />;
       default: // AppNumType.SKILL
         return <SkillIcon className="w-4 h-4" />;
@@ -138,7 +137,6 @@ export default function CardComponent<T>({
   onCheckedChange,
   onSetting
 }: IProps<T>) {
-console.log(type,'12322');
 
   const [_checked, setChecked] = useState(checked)
 
@@ -209,15 +207,15 @@ console.log(type,'12322');
   </Card>
 
   // 助手&技能&工作流列表卡片组件
-  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => edit && onClick()}>
+  return <Card className="group w-[320px] hover:bg-card/80 cursor-pointer grid" onClick={() => onClick()}>
     <CardHeader>
       <div className="flex justify-between pb-2">
 
-<TitleLogo
-  url={logo}
-  id={id}
-  type={typeof type === 'string' ? AppTypeToNum[type] : type}
-/>
+        <TitleLogo
+          url={logo}
+          id={id}
+          type={typeof type === 'string' ? AppTypeToNum[type] : type}
+        />
         <div className="flex gap-1 items-center">
           {headSelecter}
           <Switch

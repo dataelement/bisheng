@@ -146,7 +146,7 @@ export default function AgentCenter() {
                 updatedAt: ""
             });
         });
-        navigate(`/chat/${_chatId}/${flowId}/10`);
+        navigate(`/chat/${_chatId}/${flowId}/${agent.type}`);
     }
 
     const { data: bsConfig } = useGetBsConfig()

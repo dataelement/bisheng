@@ -33,7 +33,7 @@ export default function Guide() {
                     <AlertDialogHeader className="relative">
                         <AlertDialogDescription className="text-popover-foreground">
                             <p className="text-left mb-4">{t('modifySelection')}</p>
-                            <img src="/guide.gif" alt="" />
+                            <img src={__APP_ENV__.BASE_URL + "/guide.gif"} alt="" />
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="gap-x-8 mt-6">

@@ -1,7 +1,8 @@
 "use client"
 import { useEffect, useRef } from "react"
 import { useRecoilState } from "recoil"
-import { useToastContext } from "~/Providers"
+import { NotificationSeverity } from "~/common"
+import { useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
 import { ERROR_CODES } from "./store/constants"
@@ -23,7 +24,7 @@ export const enum ActionType {
 }
 
 export const useWebSocket = (helpers) => {
-    const { showToast } = useToastContext();
+    const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
 
     const websocket = wsMap.get(helpers.chatId)
@@ -49,7 +50,7 @@ export const useWebSocket = (helpers) => {
                     // console.log('helpers.flow :>> ', helpers.flow);
                     const { data, ...flow } = helpers.flow
                     const msg = {
-                        action: flow.isNew ? 'init_data' : 'check_status',
+                        action: helpers.flow.isNew ? ActionType.INIT_DATA : ActionType.CHECK_STATUS,
                         chat_id: helpers.chatId,
                         flow_id: helpers.flow.id,
                         data: { ...flow, ...data },
@@ -87,7 +88,8 @@ export const useWebSocket = (helpers) => {
             }
 
             if (data.type === 'begin') {
-                helpers.stopShow(true)
+                // 工作流input会有再begin之前出现的情况
+                // helpers.stopShow(true)
             } else if (data.type === 'close' && data.category === 'processing') {
                 helpers.stopShow(false)
             }
@@ -98,7 +100,10 @@ export const useWebSocket = (helpers) => {
                 helpers.handleMsgError(data.intermediate_steps || '')
 
                 const errorMsg = code == 500 ? message : ERROR_CODES[code]
-                // todo 错误消息写入消息下面 message
+                showToast({
+                    message: errorMsg,
+                    severity: NotificationSeverity.ERROR,
+                })
                 return
             } else if (data.category === 'node_run') {
                 return helpers.message.createNodeMsg(helpers.chatId, data)
@@ -174,7 +179,10 @@ export const useWebSocket = (helpers) => {
         try {
             websocket?.send(JSON.stringify(msg))
         } catch (error: any) {
-            showToast({ message: error.message, status: 'error' });
+            showToast({
+                message: error.message,
+                severity: NotificationSeverity.ERROR,
+            })
         }
     }
 
@@ -191,7 +199,7 @@ export const useWebSocket = (helpers) => {
                     const flow = { ...other, edges: data.edges, nodes: data.nodes, viewport: data.viewport }
                     restartCallBackRef.current = () => {
                         sendWsMsg({
-                            action: 'init_data',
+                            action: ActionType.INIT_DATA,
                             chat_id: submitData.chatId,
                             flow_id: flow.id,
                             data: flow,
@@ -294,7 +302,6 @@ export const useWebSocket = (helpers) => {
                     sendWsMsg({ action: 'stop' })
                     break;
             }
-            // todo 命中缓存不执行'init_data' : 'check_status'
             setSubmitData(null)
         }
     }, [submitData])

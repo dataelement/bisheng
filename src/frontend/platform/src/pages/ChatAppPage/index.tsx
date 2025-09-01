@@ -77,7 +77,7 @@ export default function SkillChatPage() {
             // 会话ID
             const _chatId = generateUUID(32)
             // add list
-            addChat({
+            const chat = {
                 "logo": card.logo || '',
                 "flow_name": card.name,
                 "flow_description": card.desc,
@@ -86,10 +86,12 @@ export default function SkillChatPage() {
                 "create_time": "-",
                 "update_time": Date.now(),
                 "flow_type": card.flow_type
-            })
+            }
+            addChat(chat)
             setSelelctChat({ id: card.id, chatId: _chatId, type: card.flow_type })
             setChatId(_chatId)
             setLocation(false)
+            setTchat(chat)
         } else {
             return message({ title: t('prompt'), variant: 'warning', description: t('chat.pleaseSelectAnApp') })
         }
