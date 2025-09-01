@@ -14,8 +14,8 @@ from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.utils import get_request_ip
 from bisheng.api.v1.chat import chat_manager
-from bisheng.api.v1.schemas import (AssistantInfo, OpenAIChatCompletionReq,
-                                    OpenAIChatCompletionResp, OpenAIChoice, UnifiedResponseModel)
+from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
+                                    OpenAIChatCompletionResp, OpenAIChoice)
 from bisheng.api.v2.utils import get_default_operator
 from bisheng.chat.types import WorkType
 from bisheng.settings import settings
@@ -78,7 +78,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     # 判断模型是否支持流式调用
     model_supports_streaming = _check_model_supports_streaming(agent)
     
-    logger.info(f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}')
+    logger.info(f'act=assistant_chat_completions model_supports_streaming={model_supports_streaming}, stream={req_data.stream}, llm_type={type(agent.llm)}')
     
     # 非流式调用或模型不支持流式
     if not req_data.stream or not model_supports_streaming:
@@ -122,8 +122,10 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         """真实的流式事件生成器"""
         try:
             collected_content = ""
+            last_content_length = 0
             
             # 使用真正的流式调用
+            logger.info(f'act = assistant chat completions streaming question={question}, chat_history={chat_history}')
             async for message_chunk in agent.astream(question, chat_history):
                 if not message_chunk:
                     continue
@@ -132,11 +134,13 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                 latest_message = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
                 
                 if hasattr(latest_message, 'content') and latest_message.content:
-                    # 计算新增的内容
                     new_content = latest_message.content
-                    if new_content.startswith(collected_content):
-                        # 提取新增部分
-                        delta_content = new_content[len(collected_content):]
+                    
+                    # 确保新内容比之前的内容长，避免重复或回退
+                    if len(new_content) > last_content_length:
+                        # 计算增量内容
+                        delta_content = new_content[last_content_length:]
+                        last_content_length = len(new_content)
                         collected_content = new_content
                         
                         if delta_content:
@@ -152,22 +156,23 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                                 }]
                             }
                             yield f'data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n'
-                    else:
-                        # 如果不是增量更新，直接输出全部内容
-                        if new_content != collected_content:
-                            collected_content = new_content
-                            chunk_data = {
-                                "id": openai_resp_id,
-                                "object": "chat.completion.chunk",
-                                "created": int(time.time()),
-                                "model": req_data.model,
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": new_content},
-                                    "finish_reason": None
-                                }]
-                            }
-                            yield f'data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n'
+                    elif new_content != collected_content:
+                        # 如果是全新的内容（不是增量），直接输出
+                        collected_content = new_content
+                        last_content_length = len(new_content)
+                        
+                        chunk_data = {
+                            "id": openai_resp_id,
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": req_data.model,
+                            "choices": [{
+                                "index": 0,
+                                "delta": {"content": new_content},
+                                "finish_reason": None
+                            }]
+                        }
+                        yield f'data: {json.dumps(chunk_data, ensure_ascii=False)}\n\n'
             
             # 发送结束信号
             end_chunk = {
@@ -228,12 +233,12 @@ def _check_model_supports_streaming(agent: AssistantAgent) -> bool:
             elif hasattr(agent.llm, 'llm') and hasattr(agent.llm.llm, 'streaming'):
                 return agent.llm.llm.streaming
         
-        # 如果无法判断，默认支持流式
-        return False
+        # 如果无法判断，默认支持流式（大多数现代LLM都支持）
+        return True
     except Exception as e:
         logger.warning(f'Failed to check streaming support: {e}')
         # 出错时默认支持流式
-        return False
+        return True
 
 
 @router.get('/info/{assistant_id}')
