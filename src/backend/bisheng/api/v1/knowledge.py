@@ -19,14 +19,14 @@ from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk
                                     resp_200, resp_500, resp_501, resp_502, UpdateKnowledgeReq)
 from bisheng.cache.utils import save_uploaded_file
 from bisheng.database.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate)
+from bisheng.database.models.knowledge import KnowledgeState
 from bisheng.database.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                     QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
+from bisheng.database.models.llm_server import LLMDao, LLMModelType
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user import UserDao
 from bisheng.utils.logger import logger
 from bisheng.worker.knowledge.qa import insert_qa_celery
-from bisheng.database.models.knowledge import KnowledgeState
-from bisheng.database.models.llm_server import LLMDao, LLMModelType
 
 # build router
 router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
@@ -128,9 +128,9 @@ async def copy_knowledge(*,
 
     knowledge_count = KnowledgeFileDao.count_file_by_filters(
         knowledge_id,
-        status=KnowledgeFileStatus.PROCESSING.value,
+        status=[KnowledgeFileStatus.PROCESSING.value],
     )
-    if knowledge.state != 1 or knowledge_count > 0:
+    if knowledge.state != KnowledgeState.PUBLISHED.value or knowledge_count > 0:
         return KnowledgeCPError.return_resp()
     knowledge = KnowledgeService.copy_knowledge(request, background_tasks, login_user, knowledge)
     return resp_200(knowledge)
@@ -617,6 +617,7 @@ def post_import_file(*,
 
     return resp_200({"errors": error_result})
 
+
 @router.get('/status', status_code=200)
 def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
     """
@@ -628,20 +629,20 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
     """
     # 查询用户的个人知识库
     user_private_knowledge = KnowledgeDao.get_user_knowledge(
-        login_user.user_id, 
-        None, 
+        login_user.user_id,
+        None,
         KnowledgeTypeEnum.PRIVATE
     )
-    
+
     # 如果用户没有个人知识库，直接返回200
     if not user_private_knowledge:
         return resp_200({"status": "success"})
-    
+
     # 获取第一个个人知识库（通常用户只有一个个人知识库）
     private_knowledge = user_private_knowledge[0]
-    
+
     # 检查知识库状态
-    
+
     if private_knowledge.state == KnowledgeState.REBUILDING.value:
         # 返回502状态码和相应提示信息
         return resp_502(
@@ -662,8 +663,8 @@ def get_knowledge_status(*, login_user: UserPayload = Depends(get_login_user)):
 
 @router.post('/update_knowledge', status_code=200)
 def update_knowledge_model(*,
-                          login_user: UserPayload = Depends(get_login_user),
-                          req_data: UpdateKnowledgeReq):
+                           login_user: UserPayload = Depends(get_login_user),
+                           req_data: UpdateKnowledgeReq):
     """
     更新知识库接口
     更新embedding模型时重建知识库
@@ -677,26 +678,25 @@ def update_knowledge_model(*,
         model_info = LLMDao.get_model_by_id(req_data.model_id)
         if not model_info:
             return resp_501(message="模型不存在")
-        
+
         # 如果前端没有传model_type，使用数据库中的model_type
         model_type = req_data.model_type if req_data.model_type else model_info.model_type
-        
+
         if model_type != LLMModelType.EMBEDDING.value:
             return resp_501(message="不是embedding模型")
-        
 
         # 处理指定的知识库
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             return resp_501(message="指定的知识库不存在")
-        
+
         # 更新知识库状态和模型
         knowledge.state = KnowledgeState.REBUILDING.value
         knowledge.model = str(req_data.model_id)
         knowledge.name = req_data.knowledge_name
         knowledge.description = req_data.description
         KnowledgeDao.update_one(knowledge)
-        
+
         # 发起异步任务
         # 延迟导入以避免循环导入
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
@@ -706,8 +706,7 @@ def update_knowledge_model(*,
         return resp_200(
             message="已开始重建知识库"
         )
-        
+
     except Exception as e:
         logger.exception(f"rebuilding knowledge error: {str(e)}")
         return resp_500(message=f"重建知识库失败: {str(e)}")
-    
