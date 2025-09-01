@@ -8,7 +8,6 @@ from langchain_community.chat_models import ChatVertexAI, MiniMaxChat, ChatTongy
     ChatHunyuan, MoonshotChat
 from langchain_community.utilities import requests
 from langchain_deepseek import ChatDeepSeek
-from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI, OpenAIEmbeddings, AzureOpenAIEmbeddings, OpenAI
 
 from bisheng_langchain import chat_models
@@ -31,7 +30,12 @@ llm_type_to_cls_dict['AzureChatOpenAI'] = AzureChatOpenAI  # type: ignore
 llm_type_to_cls_dict['ChatOpenAI'] = ChatOpenAI  # type: ignore
 llm_type_to_cls_dict['ChatVertexAI'] = ChatVertexAI  # type: ignore
 llm_type_to_cls_dict['MiniMaxChat'] = MiniMaxChat
-llm_type_to_cls_dict['ChatOllama'] = ChatOllama
+# llm_type_to_cls_dict['ChatOllama'] = ChatOllama
+try:
+    from bisheng.interface.llms.custom_ollama import CustomChatOllamaWithReasoning
+    llm_type_to_cls_dict['CustomChatOllamaWithReasoning'] = CustomChatOllamaWithReasoning
+except ImportError:
+    pass
 llm_type_to_cls_dict['ChatTongyi'] = ChatTongyi
 llm_type_to_cls_dict['QianfanChatEndpoint'] = QianfanChatEndpoint
 llm_type_to_cls_dict["OpenAI"] = OpenAI
