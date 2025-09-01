@@ -403,8 +403,8 @@ class WorkFlowService(BaseService):
 
     @classmethod
     def add_frequently_used_flows(cls, user: UserPayload, user_link_type: str, type_detail: str):
-        UserLinkDao.add_user_link(user.user_id, user_link_type, type_detail)
-        return True
+        user_link, is_new = UserLinkDao.add_user_link(user.user_id, user_link_type, type_detail)
+        return is_new
 
     @classmethod
     def get_uncategorized_flows(cls, user: UserPayload, page: int = 1, page_size: int = 8) -> tuple[list, int]:

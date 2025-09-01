@@ -260,10 +260,10 @@ async def webSearch(query: str, web_search_config: WSPrompt):
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
-        raise Exception(f"No web_search tool found in database")
+        raise Exception("No web_search tool found in database")
     web_search_tool = await AssistantAgent.init_tools_by_tool_ids([web_search_info.id], None)
     if not web_search_tool:
-        raise Exception(f"No web_search tool found in gpts tools")
+        raise Exception("No web_search tool found in gpts tools")
     return web_search_tool[0].invoke(input={"query": query})
 
 
@@ -391,9 +391,6 @@ async def chat_completions(
                 extra['prompt'] = prompt
                 message.extra = json.dumps(extra, ensure_ascii=False)
                 ChatMessageDao.insert_one(message)
-        except MessageException as e:
-            error = True
-            final_res = str(e)
         except Exception as e:
             logger.exception(f'Error in processing the prompt')
             error = True
@@ -492,8 +489,11 @@ def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
 def frequently_used_chat(login_user: UserPayload = Depends(get_login_user),
                          data: FrequentlyUsedChat = Body(..., description='添加常用应用')
                          ):
-    WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
-    return resp_200(message='添加成功')
+    is_new = WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
+    if is_new:
+        return resp_200(message='添加成功')
+    else:
+        return resp_500(message='该智能体已被添加')
 
 
 @router.delete('/app/frequently_used')
